@@ -1,0 +1,64 @@
+version: '3'
+
+# Запуск: task <имя>. Требует go-task (https://taskfile.dev).
+
+tasks:
+  default:
+    cmds:
+      - task --list
+
+  spec:
+    desc: Собрать api/bundle.yaml из доменных файлов и проверить
+    dir: api
+    cmds:
+      # join склеивает секции paths и components из фрагментов: стандартный
+      # $ref подставляет один объект, а не сливает карты, поэтому bundle тут
+      # не подходит. Конфликты URL и одноимённых схем join находит сам.
+      - npx --yes @redocly/cli@latest join openapi.yaml paths/*.yaml -o bundle.yaml --without-x-tag-groups
+      - npx --yes @redocly/cli@latest lint bundle.yaml
+
+  spec-docs:
+    desc: Собрать документацию в api/docs.html и открыть
+    dir: api
+    deps: [spec]
+    cmds:
+      - npx --yes @redocly/cli@latest build-docs bundle.yaml -o docs.html
+      - cmd: '{{if eq OS "windows"}}start docs.html{{else}}open docs.html{{end}}'
+        ignore_error: true
+
+  generate-go:
+    desc: Сгенерировать Go-типы и серверные интерфейсы из спеки
+    deps: [spec]
+    dir: packages/contract
+    cmds:
+      - go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@v2.8.0 --config=oapi-codegen.yaml ../../api/bundle.yaml
+
+  generate-ts:
+    desc: Сгенерировать TypeScript-типы для клиента
+    deps: [spec]
+    dir: packages/contract-ts
+    cmds:
+      - npx --yes openapi-typescript@7 ../../api/bundle.yaml -o ./investigations.d.ts
+
+  generate:
+    desc: Перегенерировать всё из спеки (Go + TypeScript)
+    cmds:
+      - task: generate-go
+      - task: generate-ts
+
+  fmt:
+    desc: gofmt по всем модулям
+    cmds:
+      - gofmt -w packages
+
+  tidy:
+    desc: go mod tidy в каждом модуле
+    cmds:
+      - cd packages/contract && go mod tidy
+
+  check:
+    desc: Спека, генерация, сборка контракта — то, что гоняет CI
+    cmds:
+      - task: generate
+      - cd packages/contract && go build ./...
+

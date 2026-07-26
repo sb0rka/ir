@@ -1,0 +1,231 @@
+openapi: 3.0.3
+info:
+  title: IR — расследования
+  version: 0.1.0
+servers:
+  - url: /api/v1
+security:
+  - bearerAuth: []
+
+paths:
+  /investigations:
+    post:
+      tags: [investigations]
+      summary: Создать расследование или под-расследование
+      operationId: createInvestigation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/InvestigationCreate' }
+      responses:
+        '201':
+          description: Создано
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Investigation' }
+        '401': { $ref: '../shared/responses.yaml#/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/Forbidden' }
+        '404':
+          description: parent_id не существует
+          content:
+            application/json:
+              schema: { $ref: '../shared/errors.yaml#/ErrorResponse' }
+        '422': { $ref: '../shared/responses.yaml#/ValidationError' }
+    get:
+      tags: [investigations]
+      summary: Список расследований
+      description: Без parent_id возвращает корневые. parent_id=<uuid> — прямых потомков.
+      operationId: listInvestigations
+      parameters:
+        - { name: parent_id, in: query, schema: { type: string, format: uuid } }
+        - { name: status, in: query, schema: { $ref: '#/components/schemas/InvestigationStatus' } }
+        - { name: severity, in: query, schema: { $ref: '../shared/enums.yaml#/Severity' } }
+        - { name: q, in: query, description: Подстрока в title, schema: { type: string } }
+        - { $ref: '../shared/parameters.yaml#/Limit' }
+        - { $ref: '../shared/parameters.yaml#/Cursor' }
+      responses:
+        '200':
+          description: Страница
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/InvestigationPage' }
+        '401': { $ref: '../shared/responses.yaml#/Unauthorized' }
+        '422': { $ref: '../shared/responses.yaml#/ValidationError' }
+
+  /investigations/{investigation_id}:
+    parameters:
+      - { $ref: '../shared/parameters.yaml#/InvestigationId' }
+    get:
+      tags: [investigations]
+      summary: Карточка расследования
+      operationId: getInvestigation
+      responses:
+        '200':
+          description: Расследование со счётчиками
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Investigation' }
+        '401': { $ref: '../shared/responses.yaml#/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/NotFound' }
+    patch:
+      tags: [investigations]
+      summary: Изменить расследование
+      description: |
+        Закрытие (status=closed) требует verdict; verdict=rejected требует
+        verdict_reason. Для под-расследования verdict=confirmed требует хотя бы
+        одного привязанного события — нарушение возвращает 422 с
+        details.reason=evidence_required. Мутации в закрытом расследовании
+        запрещены (409, code=conflict), кроме переоткрытия: PATCH со
+        status=open очищает verdict/verdict_reason/closed_at и пишется в аудит.
+      operationId: updateInvestigation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/InvestigationPatch' }
+      responses:
+        '200':
+          description: Обновлено
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Investigation' }
+        '401': { $ref: '../shared/responses.yaml#/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/NotFound' }
+        '409': { $ref: '../shared/responses.yaml#/Conflict' }
+        '422': { $ref: '../shared/responses.yaml#/ValidationError' }
+
+  /investigations/{investigation_id}/tree:
+    parameters:
+      - { $ref: '../shared/parameters.yaml#/InvestigationId' }
+    get:
+      tags: [investigations]
+      summary: Поддерево расследования
+      description: Плоский пре-ордер с depth; клиент собирает дерево по parent_id за один проход.
+      operationId: getInvestigationTree
+      responses:
+        '200':
+          description: Поддерево
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/InvestigationTree' }
+        '401': { $ref: '../shared/responses.yaml#/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/NotFound' }
+
+components:
+  schemas:
+    Investigation:
+      type: object
+      required: [id, project_id, title, status, version, created_at, updated_at, counters]
+      properties:
+        id: { type: string, format: uuid }
+        project_id: { type: string }
+        parent_id: { type: string, format: uuid, nullable: true }
+        title: { type: string }
+        description: { type: string, nullable: true }
+        status: { $ref: '#/components/schemas/InvestigationStatus' }
+        # type рядом с nullable обязателен по OpenAPI 3.0: без него ссылка
+        # на словарь не даёт валидатору знать, что именно бывает null.
+        severity:
+          type: string
+          allOf: [{ $ref: '../shared/enums.yaml#/Severity' }]
+          nullable: true
+        verdict:
+          type: string
+          allOf: [{ $ref: '#/components/schemas/Verdict' }]
+          nullable: true
+        verdict_reason: { type: string, nullable: true }
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 1
+          nullable: true
+        origin:
+          allOf: [{ $ref: '../shared/enums.yaml#/Origin' }]
+          description: >-
+            Кто создал: аналитик через API, правило или агент. Ставится сервером
+            по способу создания, клиентом не задаётся.
+        origin_ref:
+          type: string
+          nullable: true
+          description: Кто именно — subject_id аналитика, код правила или id запуска
+        version: { type: integer }
+        counters:
+          type: object
+          required: [children, events, entities, proposed_edges]
+          properties:
+            children: { type: integer }
+            events: { type: integer }
+            entities: { type: integer }
+            proposed_edges: { type: integer }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        closed_at: { type: string, format: date-time, nullable: true }
+    InvestigationCreate:
+      type: object
+      required: [title]
+      properties:
+        title: { type: string, maxLength: 255 }
+        description: { type: string }
+        parent_id:
+          type: string
+          format: uuid
+          description: Родитель. NULL — корневой кейс. Потомок наследует project_id родителя.
+        project_id:
+          type: string
+          description: Тенант sb0rka. Обязателен для корня, запрещён для потомка.
+        severity: { $ref: '../shared/enums.yaml#/Severity' }
+    InvestigationPage:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Investigation' }
+        next_cursor: { type: string, nullable: true }
+    InvestigationPatch:
+      type: object
+      required: [version]
+      properties:
+        version: { type: integer, minimum: 1 }
+        title: { type: string, maxLength: 255 }
+        description: { type: string }
+        status: { $ref: '#/components/schemas/InvestigationStatus' }
+        verdict: { $ref: '#/components/schemas/Verdict' }
+        verdict_reason:
+          type: string
+          description: Обоснование вердикта. Обязателен при verdict=rejected
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: Уверенность в гипотезе. Осмысленна для под-расследования
+        severity: { $ref: '../shared/enums.yaml#/Severity' }
+    InvestigationStatus:
+      type: string
+      enum: [open, closed]
+    InvestigationTree:
+      type: object
+      required: [root_id, items]
+      properties:
+        root_id: { type: string, format: uuid }
+        items:
+          description: Плоский пре-ордер, включая корень (depth=0)
+          type: array
+          items:
+            allOf:
+              - { $ref: '#/components/schemas/Investigation' }
+              - type: object
+                required: [depth]
+                properties:
+                  depth: { type: integer, minimum: 0 }
+    Verdict:
+      type: string
+      description: |
+        Корень: incident | false_positive | not_affected | inconclusive.
+        Под-расследование: confirmed | rejected | inconclusive.
+        Сервис валидирует подмножество по позиции в дереве.
+      enum: [incident, false_positive, not_affected, inconclusive, confirmed, rejected]

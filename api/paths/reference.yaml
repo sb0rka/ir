@@ -1,0 +1,65 @@
+openapi: 3.0.3
+info:
+  title: IR — справочники
+  version: 0.1.0
+servers:
+  - url: /api/v1
+security:
+  - bearerAuth: []
+
+paths:
+  /entity-types:
+    get:
+      tags: [reference]
+      summary: Типы сущностей
+      operationId: listEntityTypes
+      responses:
+        '200':
+          description: Справочник
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/EntityType' }
+        '401': { $ref: '../shared/responses.yaml#/Unauthorized' }
+
+  /relation-types:
+    get:
+      tags: [reference]
+      summary: Типы связей
+      operationId: listRelationTypes
+      responses:
+        '200':
+          description: Справочник
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/RelationType' }
+        '401': { $ref: '../shared/responses.yaml#/Unauthorized' }
+
+components:
+  schemas:
+    EntityType:
+      type: object
+      required: [code, title]
+      properties:
+        code: { type: string }
+        title: { type: string }
+    RelationType:
+      type: object
+      required: [code, title, source_kind, target_kind, directed]
+      properties:
+        code: { type: string }
+        title: { type: string }
+        source_kind: { $ref: '../shared/enums.yaml#/NodeType' }
+        target_kind: { $ref: '../shared/enums.yaml#/NodeType' }
+        directed: { type: boolean }

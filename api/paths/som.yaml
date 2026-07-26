@@ -1,0 +1,127 @@
+openapi: 3.0.3
+info:
+  title: IR — интеграция с SOM
+  version: 0.1.0
+servers:
+  - url: /api/v1
+security:
+  - bearerAuth: []
+
+paths:
+  /graph-nodes/{node_id}/issues:
+    parameters:
+      - { $ref: '../shared/parameters.yaml#/NodeId' }
+    post:
+      tags: [som]
+      summary: Создать исследовательскую задачу по узлу
+      description: |
+        Создаёт issue в SOM («что происходило на узле», «проверить контекст по
+        таймлайну») и связывает с узлом графа. Агенты работают в sub-issues SOM.
+      operationId: createNodeIssue
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/NodeIssueCreate' }
+      responses:
+        '201':
+          description: Связка узел—issue
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NodeIssue' }
+        '401': { $ref: '../shared/responses.yaml#/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/NotFound' }
+        '502': { $ref: '../shared/responses.yaml#/SomUnavailable' }
+    get:
+      tags: [som]
+      summary: Задачи узла
+      operationId: listNodeIssues
+      responses:
+        '200':
+          description: Связки
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NodeIssueList' }
+        '401': { $ref: '../shared/responses.yaml#/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/NotFound' }
+
+  /investigations/{investigation_id}/workflows:
+    parameters:
+      - { $ref: '../shared/parameters.yaml#/InvestigationId' }
+    post:
+      tags: [som]
+      summary: Привязать агентский workflow SOM
+      operationId: linkWorkflow
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/WorkflowLinkCreate' }
+      responses:
+        '201':
+          description: Привязано
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/InvestigationWorkflow' }
+        '401': { $ref: '../shared/responses.yaml#/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/NotFound' }
+        '409': { $ref: '../shared/responses.yaml#/Conflict' }
+    get:
+      tags: [som]
+      summary: Workflows расследования
+      operationId: listWorkflows
+      responses:
+        '200':
+          description: Привязки
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/InvestigationWorkflowList' }
+        '401': { $ref: '../shared/responses.yaml#/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/NotFound' }
+
+components:
+  schemas:
+    InvestigationWorkflow:
+      type: object
+      required: [workflow_id, investigation_id, created_at]
+      properties:
+        workflow_id: { type: string, format: uuid }
+        investigation_id: { type: string, format: uuid }
+        created_at: { type: string, format: date-time }
+    InvestigationWorkflowList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/InvestigationWorkflow' }
+    NodeIssue:
+      type: object
+      required: [issue_id, graph_node_id, created_at]
+      properties:
+        issue_id: { type: string, format: uuid }
+        graph_node_id: { type: string, format: uuid }
+        issue_url: { type: string, nullable: true, description: Ссылка на issue в SOM }
+        created_at: { type: string, format: date-time }
+    NodeIssueCreate:
+      type: object
+      required: [title]
+      properties:
+        title: { type: string, maxLength: 255 }
+        description: { type: string }
+    NodeIssueList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/NodeIssue' }
+    WorkflowLinkCreate:
+      type: object
+      required: [workflow_id]
+      properties:
+        workflow_id: { type: string, format: uuid }

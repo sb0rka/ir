@@ -1,0 +1,156 @@
+openapi: 3.0.3
+info:
+  title: IR — улики
+  version: 0.1.0
+servers:
+  - url: /api/v1
+security:
+  - bearerAuth: []
+
+paths:
+  /investigations/{investigation_id}/events:
+    parameters:
+      - { $ref: '../shared/parameters.yaml#/InvestigationId' }
+    post:
+      tags: [events]
+      summary: Затянуть события в расследование
+      description: |
+        Принимает либо явные ссылки на записи источника, либо параметры выборки.
+        Идемпотентно по dedup_key. Синхронно извлекает сущности, создаёт узлы
+        графа и прогоняет правила связывания (до 500 событий; больше — 422,
+        разбить выборку).
+      operationId: attachEvents
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EventAttachRequest' }
+      responses:
+        '201':
+          description: Итог затяжки
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EventAttachResult' }
+        '401': { $ref: '../shared/responses.yaml#/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/NotFound' }
+        '409': { $ref: '../shared/responses.yaml#/Conflict' }
+        '422': { $ref: '../shared/responses.yaml#/ValidationError' }
+        '502': { $ref: '../shared/responses.yaml#/SourceUnavailable' }
+    get:
+      tags: [events]
+      summary: События расследования (таймлайн)
+      description: Сортировка по occurred_at, id — стабильный keyset-курсор.
+      operationId: listEvents
+      parameters:
+        - { name: event_type, in: query, schema: { type: string } }
+        - { name: source_code, in: query, schema: { type: string } }
+        - { name: entity_id, in: query, description: Только события с участием сущности, schema: { type: string, format: uuid } }
+        - { name: from, in: query, schema: { type: string, format: date-time } }
+        - { name: to, in: query, schema: { type: string, format: date-time } }
+        - { name: q, in: query, description: Подстрока в normalized_data, schema: { type: string } }
+        - { $ref: '../shared/parameters.yaml#/Limit' }
+        - { $ref: '../shared/parameters.yaml#/Cursor' }
+      responses:
+        '200':
+          description: Страница событий
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EventPage' }
+        '401': { $ref: '../shared/responses.yaml#/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/NotFound' }
+        '422': { $ref: '../shared/responses.yaml#/ValidationError' }
+
+  /events/{event_id}:
+    parameters:
+      - { $ref: '../shared/parameters.yaml#/EventId' }
+    get:
+      tags: [events]
+      summary: Событие целиком
+      description: Включая normalized_data, raw_data и source_ref для drill-down в консоль источника.
+      operationId: getEvent
+      responses:
+        '200':
+          description: Событие
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Event' }
+        '401': { $ref: '../shared/responses.yaml#/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/NotFound' }
+
+components:
+  schemas:
+    Event:
+      type: object
+      required: [id, investigation_id, source_code, source_event_id, event_type, occurred_at, ingested_at]
+      properties:
+        id: { type: string, format: uuid }
+        investigation_id: { type: string, format: uuid }
+        source_code: { type: string }
+        source_event_id: { type: string }
+        source_ref: { type: string, nullable: true, description: Ссылка/запрос для drill-down к исходной записи }
+        event_type: { type: string }
+        occurred_at: { type: string, format: date-time }
+        ingested_at: { type: string, format: date-time }
+        normalized_data:
+          type: object
+          additionalProperties: true
+          description: Конверт subject-action-object-status
+        raw_data:
+          type: object
+          additionalProperties: true
+          nullable: true
+        entities:
+          type: array
+          description: Участники события с ролями
+          items:
+            type: object
+            required: [entity_id, relation_code]
+            properties:
+              entity_id: { type: string, format: uuid }
+              relation_code: { type: string }
+    EventAttachRequest:
+      type: object
+      description: Ровно одно из полей refs или query.
+      properties:
+        refs:
+          type: array
+          maxItems: 500
+          items:
+            type: object
+            required: [source_code, source_event_id]
+            properties:
+              source_code: { type: string }
+              source_event_id: { type: string }
+        query:
+          type: object
+          description: Выборка из источника (EvidenceSource.Search)
+          required: [source_code]
+          properties:
+            source_code: { type: string }
+            entity_key: { type: string }
+            from: { type: string, format: date-time }
+            to: { type: string, format: date-time }
+            substring: { type: string }
+            limit: { type: integer, maximum: 500, default: 100 }
+        reason:
+          type: string
+          description: Зачем затянуто — нарратив расследования, идёт в аудит
+    EventAttachResult:
+      type: object
+      required: [attached, duplicates, entities_extracted, edges_created]
+      properties:
+        attached: { type: integer }
+        duplicates: { type: integer, description: Отброшено по dedup_key }
+        entities_extracted: { type: integer }
+        edges_created: { type: integer, description: Рёбра от правил связывания }
+    EventPage:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Event' }
+        next_cursor: { type: string, nullable: true }

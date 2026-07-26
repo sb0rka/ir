@@ -1,0 +1,242 @@
+openapi: 3.0.3
+info:
+  title: IR — граф
+  version: 0.1.0
+servers:
+  - url: /api/v1
+security:
+  - bearerAuth: []
+
+paths:
+  /investigations/{investigation_id}/graph:
+    parameters:
+      - { $ref: '../shared/parameters.yaml#/InvestigationId' }
+    get:
+      tags: [graph]
+      summary: Граф расследования
+      description: |
+        Узлы и рёбра одного расследования. include_subtree=true возвращает
+        объединение подграфов поддерева как есть (узлы пер-кейсовые); клиент
+        группирует дубликаты сущностей по (type_code, canonical_key) из полей
+        узла. Rejected-рёбра по умолчанию скрыты.
+      operationId: getGraph
+      parameters:
+        - { name: include_subtree, in: query, schema: { type: boolean, default: false } }
+        - { name: min_confidence, in: query, schema: { type: number, minimum: 0, maximum: 1 } }
+        - name: statuses
+          in: query
+          description: Фильтр статусов рёбер, по умолчанию proposed,confirmed
+          schema:
+            type: array
+            items: { $ref: '../shared/enums.yaml#/EdgeStatus' }
+          style: form
+          explode: false
+      responses:
+        '200':
+          description: Граф
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Graph' }
+        '401': { $ref: '../shared/responses.yaml#/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/NotFound' }
+        '422': { $ref: '../shared/responses.yaml#/ValidationError' }
+
+  /investigations/{investigation_id}/edges:
+    parameters:
+      - { $ref: '../shared/parameters.yaml#/InvestigationId' }
+    post:
+      tags: [graph]
+      summary: Создать ребро (аналитик)
+      description: |
+        origin=analyst, рождается confirmed. evidence_event_ids необязателен для
+        аналитика, обязателен в internal-контуре агента. relation_code валидируется
+        против RelationTypes (source_kind/target_kind должны совпасть с типами узлов).
+        Повтор той же тройки (source, target, relation_code) — 409.
+      operationId: createEdge
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EdgeCreate' }
+      responses:
+        '201':
+          description: Ребро
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Edge' }
+        '401': { $ref: '../shared/responses.yaml#/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/NotFound' }
+        '409': { $ref: '../shared/responses.yaml#/Conflict' }
+        '422': { $ref: '../shared/responses.yaml#/ValidationError' }
+
+  /edges/{edge_id}:
+    parameters:
+      - { $ref: '../shared/parameters.yaml#/EdgeId' }
+    patch:
+      tags: [graph]
+      summary: Подтвердить или отклонить ребро
+      description: reject требует reject_reason. Версия обязательна (409 при расхождении).
+      operationId: updateEdge
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EdgePatch' }
+      responses:
+        '200':
+          description: Ребро
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Edge' }
+        '401': { $ref: '../shared/responses.yaml#/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/NotFound' }
+        '409': { $ref: '../shared/responses.yaml#/Conflict' }
+        '422': { $ref: '../shared/responses.yaml#/ValidationError' }
+
+  /investigations/{investigation_id}/review:
+    parameters:
+      - { $ref: '../shared/parameters.yaml#/InvestigationId' }
+    post:
+      tags: [graph]
+      summary: Батч-ревизия proposed-рёбер
+      description: |
+        Одна транзакция: либо применяется весь батч, либо ничего.
+        Конфликт версии любого элемента — 409 с details.conflicts=[edge_id,...],
+        состояние БД не меняется.
+      operationId: reviewEdges
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReviewRequest' }
+      responses:
+        '200':
+          description: Итог ревизии
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReviewResult' }
+        '401': { $ref: '../shared/responses.yaml#/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/NotFound' }
+        '409': { $ref: '../shared/responses.yaml#/Conflict' }
+        '422': { $ref: '../shared/responses.yaml#/ValidationError' }
+
+components:
+  schemas:
+    Edge:
+      type: object
+      required: [id, investigation_id, source_node_id, target_node_id, relation_code, status, origin, version, evidence_count]
+      properties:
+        id: { type: string, format: uuid }
+        investigation_id: { type: string, format: uuid }
+        source_node_id: { type: string, format: uuid }
+        target_node_id: { type: string, format: uuid }
+        relation_code: { type: string }
+        status: { $ref: '../shared/enums.yaml#/EdgeStatus' }
+        reject_reason: { type: string, nullable: true }
+        confidence: { type: number, minimum: 0, maximum: 1, nullable: true }
+        why: { type: string, nullable: true, description: Обоснование. Обязательно при origin=agent }
+        origin: { $ref: '../shared/enums.yaml#/Origin' }
+        origin_ref: { type: string, nullable: true, description: subject_id | код правила | id запуска }
+        evidence_count: { type: integer }
+        evidence_event_ids:
+          type: array
+          items: { type: string, format: uuid }
+        metadata:
+          type: object
+          additionalProperties: true
+        version: { type: integer }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    EdgeCreate:
+      type: object
+      required: [source_node_id, target_node_id, relation_code]
+      properties:
+        source_node_id: { type: string, format: uuid }
+        target_node_id: { type: string, format: uuid }
+        relation_code: { type: string }
+        confidence: { type: number, minimum: 0, maximum: 1 }
+        why: { type: string }
+        evidence_event_ids:
+          type: array
+          items: { type: string, format: uuid }
+          description: События-основания того же расследования (иначе 422)
+    EdgePatch:
+      type: object
+      required: [version, status]
+      properties:
+        version: { type: integer, minimum: 1 }
+        status:
+          type: string
+          enum: [confirmed, rejected]
+        reject_reason: { type: string, description: Обязателен при status=rejected }
+    Graph:
+      type: object
+      required: [investigation_id, nodes, edges]
+      properties:
+        investigation_id: { type: string, format: uuid }
+        include_subtree: { type: boolean }
+        nodes:
+          type: array
+          items: { $ref: '#/components/schemas/GraphNode' }
+        edges:
+          type: array
+          items: { $ref: '#/components/schemas/Edge' }
+    GraphNode:
+      type: object
+      required: [id, investigation_id, node_type, origin]
+      properties:
+        id: { type: string, format: uuid }
+        investigation_id: { type: string, format: uuid }
+        node_type: { $ref: '../shared/enums.yaml#/NodeType' }
+        entity_id: { type: string, format: uuid, nullable: true }
+        event_id: { type: string, format: uuid, nullable: true }
+        origin: { $ref: '../shared/enums.yaml#/Origin' }
+        label: { type: string, description: display_name сущности или сводка события }
+        type_code:
+          type: string
+          nullable: true
+          description: Тип сущности (иконка узла). Только для node_type=entity
+        canonical_key:
+          type: string
+          nullable: true
+          description: Ключ для группировки дубликатов при include_subtree
+        occurred_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Только для node_type=event
+    ReviewRequest:
+      type: object
+      description: Хотя бы одно из полей непусто.
+      properties:
+        confirm:
+          type: array
+          items:
+            type: object
+            required: [id, version]
+            properties:
+              id: { type: string, format: uuid }
+              version: { type: integer }
+        reject:
+          type: array
+          items:
+            type: object
+            required: [id, version, reason]
+            properties:
+              id: { type: string, format: uuid }
+              version: { type: integer }
+              reason: { type: string }
+    ReviewResult:
+      type: object
+      required: [confirmed, rejected]
+      properties:
+        confirmed:
+          type: array
+          items: { type: string, format: uuid }
+        rejected:
+          type: array
+          items: { type: string, format: uuid }

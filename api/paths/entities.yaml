@@ -1,0 +1,102 @@
+openapi: 3.0.3
+info:
+  title: IR — сущности
+  version: 0.1.0
+servers:
+  - url: /api/v1
+security:
+  - bearerAuth: []
+
+paths:
+  /investigations/{investigation_id}/entities:
+    parameters:
+      - { $ref: '../shared/parameters.yaml#/InvestigationId' }
+    get:
+      tags: [entities]
+      summary: Сущности расследования
+      operationId: listEntities
+      parameters:
+        - { name: type_code, in: query, schema: { type: string } }
+        - { $ref: '../shared/parameters.yaml#/Limit' }
+        - { $ref: '../shared/parameters.yaml#/Cursor' }
+      responses:
+        '200':
+          description: Страница сущностей
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EntityPage' }
+        '401': { $ref: '../shared/responses.yaml#/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/NotFound' }
+        '422': { $ref: '../shared/responses.yaml#/ValidationError' }
+
+  /entities/{entity_id}:
+    parameters:
+      - { $ref: '../shared/parameters.yaml#/EntityId' }
+    get:
+      tags: [entities]
+      summary: Карточка сущности
+      description: |
+        Историчность и окружение в текущем расследовании плюс кросс-кейсовые
+        вхождения того же (type_code, canonical_key) в других расследованиях тенанта.
+      operationId: getEntityCard
+      responses:
+        '200':
+          description: Карточка
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EntityCard' }
+        '401': { $ref: '../shared/responses.yaml#/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/NotFound' }
+
+components:
+  schemas:
+    Entity:
+      type: object
+      required: [id, investigation_id, type_code, canonical_key]
+      properties:
+        id: { type: string, format: uuid }
+        investigation_id: { type: string, format: uuid }
+        type_code: { type: string }
+        canonical_key: { type: string }
+        display_name: { type: string, nullable: true }
+        metadata:
+          type: object
+          additionalProperties: true
+        first_seen: { type: string, format: date-time, nullable: true }
+        last_seen: { type: string, format: date-time, nullable: true }
+    EntityCard:
+      type: object
+      required: [entity, events_count, occurrences]
+      properties:
+        entity: { $ref: '#/components/schemas/Entity' }
+        events_count: { type: integer, description: Событий с участием в текущем расследовании }
+        occurrences:
+          type: array
+          description: Тот же (type_code, canonical_key) в других расследованиях тенанта
+          items:
+            type: object
+            required: [investigation_id, title, events_count]
+            properties:
+              investigation_id: { type: string, format: uuid }
+              title: { type: string }
+              events_count: { type: integer }
+        neighbors:
+          type: array
+          description: Соседи по подтверждённым рёбрам
+          items:
+            type: object
+            required: [entity_id, relation_code]
+            properties:
+              entity_id: { type: string, format: uuid }
+              display_name: { type: string, nullable: true }
+              relation_code: { type: string }
+    EntityPage:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Entity' }
+        next_cursor: { type: string, nullable: true }

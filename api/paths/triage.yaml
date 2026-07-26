@@ -1,0 +1,151 @@
+openapi: 3.0.3
+info:
+  title: IR — триаж
+  version: 0.1.0
+servers:
+  - url: /api/v1
+security:
+  - bearerAuth: []
+
+paths:
+  /alerts:
+    get:
+      tags: [triage]
+      summary: Лента сработок источников
+      description: |
+        Триаж: сработки всех подключённых источников на лету, без персиста
+        (единственное представление вне расследования). Из сработки заводится
+        расследование через POST /investigations с from_alert.
+      operationId: listAlerts
+      parameters:
+        - { name: source_code, in: query, schema: { type: string } }
+        - { name: severity, in: query, schema: { $ref: '../shared/enums.yaml#/Severity' } }
+        - { name: from, in: query, schema: { type: string, format: date-time } }
+        - { name: to, in: query, schema: { type: string, format: date-time } }
+        - name: only_new
+          in: query
+          description: Скрыть сработки, по которым уже заведено расследование
+          schema: { type: boolean, default: false }
+        - { $ref: '../shared/parameters.yaml#/Limit' }
+        - { $ref: '../shared/parameters.yaml#/Cursor' }
+      responses:
+        '200':
+          description: Лента
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AlertPage' }
+        '401': { $ref: '../shared/responses.yaml#/Unauthorized' }
+        '422': { $ref: '../shared/responses.yaml#/ValidationError' }
+        '502': { $ref: '../shared/responses.yaml#/SourceUnavailable' }
+
+  /search:
+    get:
+      tags: [triage]
+      summary: Сквозной поиск по источникам
+      description: |
+        Поиск вне расследования — pivot по значению (хеш, адрес, имя узла) по всем
+        включённым источникам. Отвечает на вопрос «где ещё это встречалось»
+        до затягивания улик в кейс. Недоступные источники перечислены в partial,
+        результат при этом возвращается.
+      operationId: search
+      parameters:
+        - { name: q, in: query, required: true, description: Значение или подстрока, schema: { type: string, minLength: 2 } }
+        - { name: type_code, in: query, description: Трактовать q как значение сущности этого типа, schema: { type: string } }
+        - name: source_codes
+          in: query
+          description: Ограничить источниками; пусто — все включённые
+          schema:
+            type: array
+            items: { type: string }
+          style: form
+          explode: false
+        - { name: from, in: query, schema: { type: string, format: date-time } }
+        - { name: to, in: query, schema: { type: string, format: date-time } }
+        - { $ref: '../shared/parameters.yaml#/Limit' }
+        - { $ref: '../shared/parameters.yaml#/Cursor' }
+      responses:
+        '200':
+          description: Результаты
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SearchResult' }
+        '401': { $ref: '../shared/responses.yaml#/Unauthorized' }
+        '422': { $ref: '../shared/responses.yaml#/ValidationError' }
+        '502': { $ref: '../shared/responses.yaml#/SourceUnavailable' }
+
+components:
+  schemas:
+    Alert:
+      type: object
+      description: |
+        Сработка источника. Лента триажа — единственное представление вне
+        расследования; не персистится (инвариант И-1), читается из источника на лету.
+      required: [source_code, source_event_id, title, severity, occurred_at]
+      properties:
+        source_code: { type: string }
+        source_event_id: { type: string }
+        source_ref: { type: string, nullable: true, description: Ссылка на сработку в консоли источника }
+        title: { type: string }
+        severity: { $ref: '../shared/enums.yaml#/Severity' }
+        occurred_at: { type: string, format: date-time }
+        entities:
+          type: array
+          description: Извлечённые сущности сработки (превью до затяжки в кейс)
+          items:
+            type: object
+            required: [type_code, canonical_key]
+            properties:
+              type_code: { type: string }
+              canonical_key: { type: string }
+              display_name: { type: string, nullable: true }
+        investigation_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Заполнено, если по сработке уже заведено расследование
+        summary:
+          type: object
+          additionalProperties: true
+          description: Нормализованный конверт сработки
+    AlertPage:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Alert' }
+        next_cursor: { type: string, nullable: true }
+    SearchHit:
+      type: object
+      description: Результат сквозного поиска по источнику (вне расследования)
+      required: [source_code, source_event_id, occurred_at]
+      properties:
+        source_code: { type: string }
+        source_event_id: { type: string }
+        source_ref: { type: string, nullable: true }
+        event_type: { type: string }
+        occurred_at: { type: string, format: date-time }
+        summary:
+          type: object
+          additionalProperties: true
+        attached_to:
+          type: array
+          description: Расследования тенанта, куда событие уже затянуто
+          items: { type: string, format: uuid }
+    SearchResult:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/SearchHit' }
+        next_cursor: { type: string, nullable: true }
+        partial:
+          type: array
+          description: Источники, не ответившие вовремя — результат неполон
+          items:
+            type: object
+            required: [source_code, reason]
+            properties:
+              source_code: { type: string }
+              reason: { type: string }

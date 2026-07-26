@@ -1,0 +1,68 @@
+openapi: 3.0.3
+info:
+  title: Sb0rka Investigations API
+  version: 0.1.0
+  license:
+    name: Apache-2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0
+  description: |
+    REST API SOC-расследований: дерево расследований, улики (события и сущности),
+    граф связей с провенансом, интеграция с SOM (агентские сессии, задачи по узлам).
+
+    Конвенции:
+    - Auth: Bearer JWT платформы sb0rka (Ed25519). Тенант (project_id) проверяется
+      против ролей субъекта; в телах запросов project_id не передаётся, кроме создания
+      корневого расследования.
+    - Ошибки: единый конверт `{"error": {"code", "message", "details?"}}`.
+      400 — не смогли распарсить; 422 — распарсили, но невалидно. Оба с code=validation.
+    - Пагинация: keyset, `?limit=&cursor=` → `{items, next_cursor}`;
+      next_cursor отсутствует на последней странице.
+    - Мутации конкурентно-безопасны через `version` (оптимистичная блокировка, 409).
+    - Ничего не удаляется: reject вместо delete (инвариант «проверено и исключено»).
+
+    Структура спеки — файлы разнесены по доменам:
+      paths/       — ручки вместе с их URL, сгруппированы по ресурсу (= tags)
+      components/  — parameters.yaml, responses.yaml, schemas/<домен>.yaml
+    Каждый файл в paths/ несёт собственную секцию `paths`; сборщик их
+    объединяет. Готовый документ — bundle.yaml, собирается `task spec`.
+
+    Вне этой спеки: internal MCP-инструменты агента (search_events, propose_edge,
+    attach_events) — отдельный контур со scoped-токеном; admin CRUD источников
+    и правил связывания.
+
+    Не вошло в v0.1, кандидаты в v0.2: ручной ввод IOC с ретро-поиском;
+    довешивание оснований к существующему ребру; батч-ревизия вердиктов
+    под-расследований.
+servers:
+  - url: /api/v1
+security:
+  - bearerAuth: []
+
+tags:
+  - name: triage
+    description: Лента сработок и сквозной поиск по источникам — вне расследования
+  - name: investigations
+    description: Дерево расследований (корень = кейс, потомок = гипотеза/под-расследование)
+  - name: events
+    description: Улики — события, затянутые в скоуп расследования
+  - name: entities
+    description: Сущности расследования и карточка сущности
+  - name: graph
+    description: Узлы, рёбра, ревизия proposed
+  - name: artifacts
+    description: Индикаторы компрометации и их обогащение
+  - name: output
+    description: Пакет реагирования и отчёт по инциденту
+  - name: som
+    description: Интеграция с SOM — агентские сессии и задачи по узлам
+  - name: admin
+    description: Источники, расширения, правила связывания, роли, аудит, метрики
+  - name: reference
+    description: Справочники
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

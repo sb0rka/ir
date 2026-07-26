@@ -1,0 +1,15 @@
+# Генерация Go-типов и серверных интерфейсов из OpenAPI.
+# Запуск: task generate-go (или go generate ./packages/contract).
+package: contract
+output: investigations.gen.go
+generate:
+  models: true
+  std-http-server: true
+  strict-server: true
+  embedded-spec: true
+output-options:
+  # Пути в спеке — kebab/snake; в Go имена приводятся к CamelCase автоматически.
+  skip-prune: false
+  # nullable-type выключен намеренно: nullable-поля становятся обычными
+  # указателями. Обёртка nullable.Nullable различала бы «null» и «поля нет»,
+  # но в контракте таких мест нет — отсутствие поля в PATCH значит «не трогать».

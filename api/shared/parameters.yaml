@@ -1,0 +1,70 @@
+InvestigationId:
+  name: investigation_id
+  in: path
+  required: true
+  schema: { type: string, format: uuid }
+
+EventId:
+  name: event_id
+  in: path
+  required: true
+  schema: { type: string, format: uuid }
+
+EntityId:
+  name: entity_id
+  in: path
+  required: true
+  schema: { type: string, format: uuid }
+
+EdgeId:
+  name: edge_id
+  in: path
+  required: true
+  schema: { type: string, format: uuid }
+
+NodeId:
+  name: node_id
+  in: path
+  required: true
+  schema: { type: string, format: uuid }
+
+ArtifactId:
+  name: artifact_id
+  in: path
+  required: true
+  schema: { type: string, format: uuid }
+
+PackageId:
+  name: package_id
+  in: path
+  required: true
+  schema: { type: string, format: uuid }
+
+ReportId:
+  name: report_id
+  in: path
+  required: true
+  schema: { type: string, format: uuid }
+
+SubjectId:
+  name: subject_id
+  in: path
+  required: true
+  schema: { type: string, format: uuid }
+
+RuleCode:
+  name: rule_code
+  in: path
+  required: true
+  schema: { type: string }
+
+Limit:
+  name: limit
+  in: query
+  schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+
+Cursor:
+  name: cursor
+  in: query
+  description: Непрозрачный keyset-курсор из next_cursor предыдущей страницы
+  schema: { type: string }
