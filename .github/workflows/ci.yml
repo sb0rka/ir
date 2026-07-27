@@ -13,8 +13,10 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version-file: packages/contract/go.mod
-          cache-dependency-path: packages/contract/go.sum
+          go-version-file: apps/investigations/go.mod
+          cache-dependency-path: |
+            apps/investigations/go.sum
+            packages/contract/go.sum
 
       - uses: actions/setup-node@v4
         with:
@@ -33,6 +35,9 @@ jobs:
       - name: Сгенерированный код соответствует спеке
         run: task check-generated
 
+      - name: Сборка
+        run: task build
+
       - name: go vet
         run: task vet
 
@@ -43,3 +48,28 @@ jobs:
           --target ES2022 --module ESNext --moduleResolution bundler
           --allowImportingTsExtensions paths.gen.ts domains/*.d.ts
 
+  migrations:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: investigations
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready --health-interval 5s
+          --health-timeout 3s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Миграции применяются на чистую базу
+        env:
+          PGPASSWORD: postgres
+        run: |
+          psql -h localhost -U postgres -d investigations -v ON_ERROR_STOP=1 \
+            -c 'CREATE SCHEMA IF NOT EXISTS inv;'
+          for f in db/migrations/investigations/*.sql; do
+            echo "applying $f"
+            psql -h localhost -U postgres -d investigations -v ON_ERROR_STOP=1 -f "$f"
+          done

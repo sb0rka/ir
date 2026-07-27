@@ -1,0 +1,93 @@
+services:
+  postgres:
+    image: postgres:18
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-irdev}
+      POSTGRES_DB: investigations
+    ports:
+      - "${POSTGRES_PORT:-55432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d investigations"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Одноразовый прогон миграций: контейнер завершается после применения.
+  migrate:
+    image: postgres:18
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD:-irdev}
+    volumes:
+      - ./db/migrations/investigations:/migrations:ro
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        set -e
+        psql -h postgres -U postgres -d investigations -v ON_ERROR_STOP=1 -c 'CREATE SCHEMA IF NOT EXISTS inv;'
+        for f in $$(ls /migrations/*.sql | sort); do
+          echo "applying $$f"
+          psql -h postgres -U postgres -d investigations -v ON_ERROR_STOP=1 -f "$$f"
+        done
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/investigations/Dockerfile
+      args:
+        BINARY: api
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    environment:
+      SERVER_ADDR: "0.0.0.0"
+      SERVER_PORT: "8090"
+      SERVER_CORS_WHITELIST: "*"
+      DATABASE_URI: "postgres://postgres:${POSTGRES_PASSWORD:-irdev}@postgres:5432/investigations?search_path=inv"
+      LOG_FORMAT: "json"
+      # Публичный ключ платформы. Без него сервис поднимется,
+      # но любой запрос с токеном получит 401 — конфиг стенда неполон.
+      ACCESS_TOKEN_PUBLIC_KEY_FILE_PATH: "${ACCESS_TOKEN_PUBLIC_KEY_FILE_PATH:-}"
+      ACCESS_TOKEN_ISSUER: "${ACCESS_TOKEN_ISSUER:-auth.local}"
+      ACCESS_TOKEN_AUDIENCE: "${ACCESS_TOKEN_AUDIENCE:-ir.local}"
+      ACCESS_TOKEN_KID: "${ACCESS_TOKEN_KID:-ed25519-v1}"
+      # В dev любой залогиненный ведёт расследования, чтобы не раздавать роли руками.
+      INV_DEFAULT_ROLE: "l2"
+    ports:
+      - "${API_PORT:-8090}:8090"
+    volumes:
+      - ./keys:/keys:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8090/healthz || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  worker:
+    build:
+      context: .
+      dockerfile: apps/investigations/Dockerfile
+      args:
+        BINARY: worker
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    environment:
+      DATABASE_URI: "postgres://postgres:${POSTGRES_PASSWORD:-irdev}@postgres:5432/investigations?search_path=inv"
+      LOG_FORMAT: "json"
+      WORKER_KINDS: "ingest,linking,enrich,report"
+
+volumes:
+  pgdata:

@@ -4,8 +4,11 @@ version: '3'
 
 vars:
   MODULE: github.com/sb0rka/ir/packages/contract
+  SERVER_DIR: apps/investigations/internal/server
   REDOCLY: npx --yes @redocly/cli@latest
   CODEGEN: go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@v2.8.0
+  IMPL: go run github.com/josharian/impl@v1.5.0
+  GOIMPORTS: go run golang.org/x/tools/cmd/goimports@latest
   OPENAPI_TS: npx --yes openapi-typescript@7
 
 tasks:
@@ -18,8 +21,9 @@ tasks:
     cmds:
       - task: spec
       - task: gen-go
+      - task: gen-stubs
       - task: gen-ts
-      - gofmt -w packages/contract
+      - gofmt -w packages/contract {{.SERVER_DIR}}
 
   spec:
     desc: Собрать спеку и проверить
@@ -50,6 +54,26 @@ tasks:
           '../../{{.ITEM}}'
       - cd packages/contract && {{.CODEGEN}} -package spec -generate embedded-spec -o spec/spec.gen.go ../../api/bundle.yaml
 
+  gen-stubs:
+    desc: Заготовки для новых ручек
+    sources: ['api/paths/*.yaml']
+    method: none
+    cmds:
+      # impl дописывает только отсутствующие методы, готовый код не трогает.
+      - for: sources
+        cmd: >-
+          cd {{.SERVER_DIR}} && {{.IMPL}} 's *Server'
+          {{.MODULE}}/{{trimSuffix ".yaml" (osBase .ITEM)}}.StrictServerInterface
+          >> {{trimSuffix ".yaml" (osBase .ITEM)}}.go
+      # impl пишет panic; нереализованной ручке лучше отвечать 501 с кодом
+      # not_implemented — фронт отличит «ещё не сделано» от поломки.
+      - >-
+        cd {{.SERVER_DIR}} && sed -i
+        's|panic("not implemented") // TODO: Implement|return nil, httperr.ErrNotImplemented|'
+        *.go
+      # goimports сам добавит httperr и уберёт импорты, ставшие ненужными
+      # после того как ручку реализовали.
+      - cd {{.SERVER_DIR}} && {{.GOIMPORTS}} -w .
 
   gen-ts:
     desc: TypeScript — по домену плюс общий api.d.ts для клиента
@@ -79,43 +103,66 @@ tasks:
       # перегенерация что-то изменила — спеку правили, а результат не
       # закоммитили.
       - cmd: |
-          git diff --exit-code -- packages || {
+          git diff --exit-code -- packages {{.SERVER_DIR}} || {
             echo ""
             echo "Сгенерированный код разошёлся со спекой."
             echo "Почините: task gen, затем закоммитьте изменения."
             exit 1
           }
       - cmd: |
-          test -z "$(git status --porcelain -- packages)" || {
+          test -z "$(git status --porcelain -- packages {{.SERVER_DIR}})" || {
             echo ""
             echo "Появились несохранённые сгенерированные файлы:"
-            git status --short -- packages
+            git status --short -- packages {{.SERVER_DIR}}
             exit 1
           }
 
+  build:
+    desc: Собрать сервисы в bin/
+    cmds:
+      - go build -o bin/investigations-api ./apps/investigations/cmd/api
+      - go build -o bin/investigations-worker ./apps/investigations/cmd/worker
 
   fmt:
     desc: gofmt по всем модулям
     cmds:
-      - gofmt -w packages
+      - gofmt -w apps packages
 
   vet:
     desc: go vet помодульно (из-за go.work)
     cmds:
+      - cd apps/investigations && go vet ./...
       - cd packages/contract && go vet ./...
 
   tidy:
     desc: go mod tidy в каждом модуле
     cmds:
+      - cd apps/investigations && go mod tidy
       - cd packages/contract && go mod tidy
 
   check:
     desc: Всё, что гоняет CI
     cmds:
       - task: check-generated
-      - cd packages/contract && go build ./...
+      - task: build
       - task: vet
 
+  dev:
+    desc: Поднять локальный стенд (Postgres + api + worker)
+    cmds:
+      - docker compose -f docker-compose.dev.yml up -d --build
 
+  dev-down:
+    desc: Остановить стенд
+    cmds:
+      - docker compose -f docker-compose.dev.yml down
 
+  dev-logs:
+    desc: Логи стенда
+    cmds:
+      - docker compose -f docker-compose.dev.yml logs -f api worker
 
+  migrate:
+    desc: Применить миграции к локальной базе
+    cmds:
+      - docker compose -f docker-compose.dev.yml up migrate --exit-code-from migrate

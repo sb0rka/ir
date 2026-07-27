@@ -1,3 +1,6 @@
 go 1.25.5
 
-use ./packages/contract
+use (
+	./apps/investigations
+	./packages/contract
+)
