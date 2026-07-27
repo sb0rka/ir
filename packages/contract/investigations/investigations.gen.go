@@ -209,7 +209,7 @@ type Investigation struct {
 	// ProjectId Project that owns the case — the tenant. Every child inherits it unchanged, so a whole tree belongs to one tenant.
 	ProjectId string `json:"project_id"`
 
-	// Severity How bad this looks. Set during triage and revised as evidence arrives; null until someone judges it.
+	// Severity How bad this looks. Set during triage and revised as evidence arrives. Absent until someone judges it.
 	Severity *Severity `json:"severity,omitempty"`
 
 	// Status Whether work is still going on. Independent of the verdict: a case can be open with no verdict yet, and closing requires one.
@@ -221,7 +221,7 @@ type Investigation struct {
 	// UpdatedAt When it last changed.
 	UpdatedAt time.Time `json:"updated_at"`
 
-	// Verdict The conclusion. Null while the investigation is still open, required to close it.
+	// Verdict The conclusion. Absent while the investigation is still open, required to close it. Which values are allowed depends on whether this is a root case or a hypothesis — see Verdict.
 	Verdict *Verdict `json:"verdict,omitempty"`
 
 	// VerdictReason Why that conclusion. Required when rejecting — a rejected hypothesis without a reason teaches nobody anything.
@@ -338,7 +338,7 @@ type InvestigationTree struct {
 		// ProjectId Project that owns the case — the tenant. Every child inherits it unchanged, so a whole tree belongs to one tenant.
 		ProjectId string `json:"project_id"`
 
-		// Severity How bad this looks. Set during triage and revised as evidence arrives; null until someone judges it.
+		// Severity How bad this looks. Set during triage and revised as evidence arrives. Absent until someone judges it.
 		Severity *Severity `json:"severity,omitempty"`
 
 		// Status Whether work is still going on. Independent of the verdict: a case can be open with no verdict yet, and closing requires one.
@@ -350,7 +350,7 @@ type InvestigationTree struct {
 		// UpdatedAt When it last changed.
 		UpdatedAt time.Time `json:"updated_at"`
 
-		// Verdict The conclusion. Null while the investigation is still open, required to close it.
+		// Verdict The conclusion. Absent while the investigation is still open, required to close it. Which values are allowed depends on whether this is a root case or a hypothesis — see Verdict.
 		Verdict *Verdict `json:"verdict,omitempty"`
 
 		// VerdictReason Why that conclusion. Required when rejecting — a rejected hypothesis without a reason teaches nobody anything.

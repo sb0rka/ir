@@ -30,6 +30,31 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Reference' }
+              example:
+                entity_types:
+                  - { code: host, title: Узел, category: asset }
+                  - { code: user, title: Пользователь, category: identity }
+                  - { code: account, title: Учётная запись, category: identity }
+                  - { code: email, title: Email, category: identity }
+                  - { code: process, title: Процесс, category: execution }
+                  - { code: ip, title: IP-адрес, category: network }
+                  - { code: domain, title: Домен, category: network }
+                  - { code: url, title: URL, category: network }
+                  - { code: file_hash, title: Файл / хеш, category: execution }
+                relation_types:
+                  - { code: logged_in, title: Вошёл, source_kind: entity, target_kind: entity, directed: true }
+                  - { code: executed, title: Запустил, source_kind: entity, target_kind: entity, directed: true }
+                  - { code: parent_process, title: Родительский процесс, source_kind: entity, target_kind: entity, directed: true }
+                  - { code: connected_to, title: Соединился с, source_kind: entity, target_kind: entity, directed: true }
+                  - { code: resolved_to, title: Разрешился в, source_kind: entity, target_kind: entity, directed: true }
+                  - { code: same_host, title: Тот же узел, source_kind: entity, target_kind: entity, directed: false }
+                  - { code: subevent_of, title: Часть события, source_kind: event, target_kind: entity, directed: true }
+                  - { code: followed_by, title: Затем, source_kind: event, target_kind: event, directed: true }
+                sources:
+                  - { code: siem, kind: siem, title: MaxPatrol SIEM }
+                  - { code: edr, kind: edr, title: MaxPatrol EDR }
+                  - { code: ndr, kind: ndr, title: PT NAD }
+                  - { code: infra, kind: infra, title: Инфраструктурные логи }
         '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
         '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
 

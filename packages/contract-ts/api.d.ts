@@ -970,10 +970,10 @@ export interface components {
             description?: string | null;
             /** @description Whether work is still going on. Independent of the verdict: a case can be open with no verdict yet, and closing requires one. */
             status: components["schemas"]["InvestigationStatus"];
-            /** @description How bad this looks. Set during triage and revised as evidence arrives; null until someone judges it. */
-            severity?: (string & components["schemas"]["Severity"]) | null;
-            /** @description The conclusion. Null while the investigation is still open, required to close it. */
-            verdict?: (string & components["schemas"]["Verdict"]) | null;
+            /** @description How bad this looks. Set during triage and revised as evidence arrives. Absent until someone judges it. */
+            severity?: components["schemas"]["Severity"];
+            /** @description The conclusion. Absent while the investigation is still open, required to close it. Which values are allowed depends on whether this is a root case or a hypothesis — see Verdict. */
+            verdict?: components["schemas"]["Verdict"];
             /** @description Why that conclusion. Required when rejecting — a rejected hypothesis without a reason teaches nobody anything. */
             verdict_reason?: string | null;
             /** @description How sure the conclusion is. Meaningful for a hypothesis, rarely used on a root case. */
@@ -1240,6 +1240,65 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    /**
+                     * @example {
+                     *       "items": [
+                     *         {
+                     *           "id": "22222222-0000-4000-8000-000000000001",
+                     *           "investigation_id": "1a2b3c4d-0000-4000-8000-000000000001",
+                     *           "type_code": "host",
+                     *           "canonical_key": "dc-01.corp.local",
+                     *           "display_name": "dc-01.corp.local",
+                     *           "metadata": {
+                     *             "os": "Windows Server 2022",
+                     *             "role": "domain_controller"
+                     *           },
+                     *           "first_seen": "2026-07-24T03:12:47Z",
+                     *           "last_seen": "2026-07-24T03:15:02Z"
+                     *         },
+                     *         {
+                     *           "id": "22222222-0000-4000-8000-000000000002",
+                     *           "investigation_id": "1a2b3c4d-0000-4000-8000-000000000001",
+                     *           "type_code": "account",
+                     *           "canonical_key": "S-1-5-21-1004336348-1177238915-682003330-1123",
+                     *           "display_name": "CORP\\svc-backup",
+                     *           "metadata": {
+                     *             "enabled": true,
+                     *             "last_password_set": "2023-02-11T00:00:00Z"
+                     *           },
+                     *           "first_seen": "2026-07-24T03:12:47Z",
+                     *           "last_seen": "2026-07-24T03:14:22Z"
+                     *         },
+                     *         {
+                     *           "id": "22222222-0000-4000-8000-000000000003",
+                     *           "investigation_id": "1a2b3c4d-0000-4000-8000-000000000001",
+                     *           "type_code": "process",
+                     *           "canonical_key": "{6f1c2a90-4d3e-4b7a-9c11-8e2f5a7b0d44}",
+                     *           "display_name": "powershell.exe",
+                     *           "metadata": {
+                     *             "pid": 7412,
+                     *             "integrity": "high"
+                     *           },
+                     *           "first_seen": "2026-07-24T03:14:22Z",
+                     *           "last_seen": "2026-07-24T03:15:02Z"
+                     *         },
+                     *         {
+                     *           "id": "22222222-0000-4000-8000-000000000004",
+                     *           "investigation_id": "1a2b3c4d-0000-4000-8000-000000000001",
+                     *           "type_code": "ip",
+                     *           "canonical_key": "185.220.101.47",
+                     *           "display_name": "185.220.101.47",
+                     *           "metadata": {
+                     *             "asn": 205100,
+                     *             "country": "NL"
+                     *           },
+                     *           "first_seen": "2026-07-24T03:15:02Z",
+                     *           "last_seen": "2026-07-24T03:15:02Z"
+                     *         }
+                     *       ],
+                     *       "next_cursor": null
+                     *     }
+                     */
                     "application/json": components["schemas"]["EntityPage"];
                 };
             };
@@ -1298,6 +1357,48 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    /**
+                     * @example {
+                     *       "entity": {
+                     *         "id": "22222222-0000-4000-8000-000000000001",
+                     *         "investigation_id": "1a2b3c4d-0000-4000-8000-000000000001",
+                     *         "type_code": "host",
+                     *         "canonical_key": "dc-01.corp.local",
+                     *         "display_name": "dc-01.corp.local",
+                     *         "metadata": {
+                     *           "os": "Windows Server 2022",
+                     *           "role": "domain_controller"
+                     *         },
+                     *         "first_seen": "2026-07-24T03:12:47Z",
+                     *         "last_seen": "2026-07-24T03:15:02Z"
+                     *       },
+                     *       "events_count": 3,
+                     *       "occurrences": [
+                     *         {
+                     *           "investigation_id": "1a2b3c4d-0000-4000-8000-000000000004",
+                     *           "title": "Фишинговая рассылка в бухгалтерию",
+                     *           "events_count": 2
+                     *         },
+                     *         {
+                     *           "investigation_id": "1a2b3c4d-0000-4000-8000-000000000005",
+                     *           "title": "Аномальный трафик из сегмента DMZ",
+                     *           "events_count": 9
+                     *         }
+                     *       ],
+                     *       "neighbors": [
+                     *         {
+                     *           "entity_id": "22222222-0000-4000-8000-000000000002",
+                     *           "display_name": "CORP\\svc-backup",
+                     *           "relation_code": "logged_in"
+                     *         },
+                     *         {
+                     *           "entity_id": "22222222-0000-4000-8000-000000000003",
+                     *           "display_name": "powershell.exe",
+                     *           "relation_code": "executed"
+                     *         }
+                     *       ]
+                     *     }
+                     */
                     "application/json": components["schemas"]["EntityCard"];
                 };
             };
@@ -1397,6 +1498,98 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    /**
+                     * @example {
+                     *       "items": [
+                     *         {
+                     *           "id": "33333333-0000-4000-8000-000000000001",
+                     *           "investigation_id": "1a2b3c4d-0000-4000-8000-000000000001",
+                     *           "source_code": "siem",
+                     *           "source_event_id": "4624-8812031",
+                     *           "source_ref": "https://siem.corp.local/events/4624-8812031",
+                     *           "event_type": "logon",
+                     *           "occurred_at": "2026-07-24T03:12:47Z",
+                     *           "ingested_at": "2026-07-24T09:02:09Z",
+                     *           "normalized_data": {
+                     *             "subject": "CORP\\svc-backup",
+                     *             "action": "logon",
+                     *             "object": "dc-01.corp.local",
+                     *             "status": "success",
+                     *             "logon_type": 3
+                     *           },
+                     *           "entities": [
+                     *             {
+                     *               "entity_id": "22222222-0000-4000-8000-000000000002",
+                     *               "relation_code": "actor"
+                     *             },
+                     *             {
+                     *               "entity_id": "22222222-0000-4000-8000-000000000001",
+                     *               "relation_code": "object"
+                     *             }
+                     *           ]
+                     *         },
+                     *         {
+                     *           "id": "33333333-0000-4000-8000-000000000002",
+                     *           "investigation_id": "1a2b3c4d-0000-4000-8000-000000000001",
+                     *           "source_code": "edr",
+                     *           "source_event_id": "proc-9f14c2",
+                     *           "source_ref": "https://edr.corp.local/process/proc-9f14c2",
+                     *           "event_type": "process_start",
+                     *           "occurred_at": "2026-07-24T03:14:22Z",
+                     *           "ingested_at": "2026-07-24T09:02:09Z",
+                     *           "normalized_data": {
+                     *             "subject": "CORP\\svc-backup",
+                     *             "action": "process_start",
+                     *             "object": "powershell.exe",
+                     *             "status": "success",
+                     *             "command_line": "powershell.exe -enc SQBFAFgA"
+                     *           },
+                     *           "entities": [
+                     *             {
+                     *               "entity_id": "22222222-0000-4000-8000-000000000002",
+                     *               "relation_code": "actor"
+                     *             },
+                     *             {
+                     *               "entity_id": "22222222-0000-4000-8000-000000000003",
+                     *               "relation_code": "object"
+                     *             },
+                     *             {
+                     *               "entity_id": "22222222-0000-4000-8000-000000000001",
+                     *               "relation_code": "src"
+                     *             }
+                     *           ]
+                     *         },
+                     *         {
+                     *           "id": "33333333-0000-4000-8000-000000000003",
+                     *           "investigation_id": "1a2b3c4d-0000-4000-8000-000000000001",
+                     *           "source_code": "ndr",
+                     *           "source_event_id": "sess-77201a",
+                     *           "source_ref": "https://nad.corp.local/sessions/sess-77201a",
+                     *           "event_type": "network_session",
+                     *           "occurred_at": "2026-07-24T03:15:02Z",
+                     *           "ingested_at": "2026-07-24T09:38:41Z",
+                     *           "normalized_data": {
+                     *             "subject": "dc-01.corp.local",
+                     *             "action": "connect",
+                     *             "object": "185.220.101.47:443",
+                     *             "status": "established",
+                     *             "bytes_out": 1841302
+                     *           },
+                     *           "entities": [
+                     *             {
+                     *               "entity_id": "22222222-0000-4000-8000-000000000001",
+                     *               "relation_code": "src"
+                     *             },
+                     *             {
+                     *               "entity_id": "22222222-0000-4000-8000-000000000004",
+                     *               "relation_code": "dst"
+                     *             }
+                     *           ]
+                     *         }
+                     *       ],
+                     *       "next_cursor": null
+                     *     }
+                     */
                     "application/json": components["schemas"]["EventPage"];
                 };
             };
@@ -1457,6 +1650,46 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    /**
+                     * @example {
+                     *       "id": "33333333-0000-4000-8000-000000000002",
+                     *       "investigation_id": "1a2b3c4d-0000-4000-8000-000000000001",
+                     *       "source_code": "edr",
+                     *       "source_event_id": "proc-9f14c2",
+                     *       "source_ref": "https://edr.corp.local/process/proc-9f14c2",
+                     *       "event_type": "process_start",
+                     *       "occurred_at": "2026-07-24T03:14:22Z",
+                     *       "ingested_at": "2026-07-24T09:02:09Z",
+                     *       "normalized_data": {
+                     *         "subject": "CORP\\svc-backup",
+                     *         "action": "process_start",
+                     *         "object": "powershell.exe",
+                     *         "status": "success",
+                     *         "command_line": "powershell.exe -enc SQBFAFgA"
+                     *       },
+                     *       "raw_data": {
+                     *         "EventID": 4688,
+                     *         "ParentImage": "C:\\Windows\\System32\\services.exe",
+                     *         "Image": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+                     *         "IntegrityLevel": "High",
+                     *         "ProcessGuid": "{6f1c2a90-4d3e-4b7a-9c11-8e2f5a7b0d44}"
+                     *       },
+                     *       "entities": [
+                     *         {
+                     *           "entity_id": "22222222-0000-4000-8000-000000000002",
+                     *           "relation_code": "actor"
+                     *         },
+                     *         {
+                     *           "entity_id": "22222222-0000-4000-8000-000000000003",
+                     *           "relation_code": "object"
+                     *         },
+                     *         {
+                     *           "entity_id": "22222222-0000-4000-8000-000000000001",
+                     *           "relation_code": "src"
+                     *         }
+                     *       ]
+                     *     }
+                     */
                     "application/json": components["schemas"]["Event"];
                 };
             };
@@ -1515,6 +1748,139 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    /**
+                     * @example {
+                     *       "investigation_id": "1a2b3c4d-0000-4000-8000-000000000001",
+                     *       "include_subtree": false,
+                     *       "nodes": [
+                     *         {
+                     *           "id": "44444444-0000-4000-8000-000000000001",
+                     *           "investigation_id": "1a2b3c4d-0000-4000-8000-000000000001",
+                     *           "node_type": "entity",
+                     *           "entity_id": "22222222-0000-4000-8000-000000000001",
+                     *           "origin": "rule",
+                     *           "label": "dc-01.corp.local",
+                     *           "type_code": "host",
+                     *           "canonical_key": "dc-01.corp.local"
+                     *         },
+                     *         {
+                     *           "id": "44444444-0000-4000-8000-000000000002",
+                     *           "investigation_id": "1a2b3c4d-0000-4000-8000-000000000001",
+                     *           "node_type": "entity",
+                     *           "entity_id": "22222222-0000-4000-8000-000000000002",
+                     *           "origin": "rule",
+                     *           "label": "CORP\\svc-backup",
+                     *           "type_code": "account",
+                     *           "canonical_key": "S-1-5-21-1004336348-1177238915-682003330-1123"
+                     *         },
+                     *         {
+                     *           "id": "44444444-0000-4000-8000-000000000003",
+                     *           "investigation_id": "1a2b3c4d-0000-4000-8000-000000000001",
+                     *           "node_type": "entity",
+                     *           "entity_id": "22222222-0000-4000-8000-000000000003",
+                     *           "origin": "rule",
+                     *           "label": "powershell.exe",
+                     *           "type_code": "process",
+                     *           "canonical_key": "{6f1c2a90-4d3e-4b7a-9c11-8e2f5a7b0d44}"
+                     *         },
+                     *         {
+                     *           "id": "44444444-0000-4000-8000-000000000004",
+                     *           "investigation_id": "1a2b3c4d-0000-4000-8000-000000000001",
+                     *           "node_type": "entity",
+                     *           "entity_id": "22222222-0000-4000-8000-000000000004",
+                     *           "origin": "agent",
+                     *           "label": "185.220.101.47",
+                     *           "type_code": "ip",
+                     *           "canonical_key": "185.220.101.47"
+                     *         },
+                     *         {
+                     *           "id": "44444444-0000-4000-8000-000000000005",
+                     *           "investigation_id": "1a2b3c4d-0000-4000-8000-000000000001",
+                     *           "node_type": "event",
+                     *           "event_id": "33333333-0000-4000-8000-000000000002",
+                     *           "origin": "analyst",
+                     *           "label": "process_start: powershell.exe -enc SQBFAFgA",
+                     *           "occurred_at": "2026-07-24T03:14:22Z"
+                     *         }
+                     *       ],
+                     *       "edges": [
+                     *         {
+                     *           "id": "55555555-0000-4000-8000-000000000001",
+                     *           "investigation_id": "1a2b3c4d-0000-4000-8000-000000000001",
+                     *           "source_node_id": "44444444-0000-4000-8000-000000000002",
+                     *           "target_node_id": "44444444-0000-4000-8000-000000000001",
+                     *           "relation_code": "logged_in",
+                     *           "status": "confirmed",
+                     *           "confidence": 1,
+                     *           "origin": "rule",
+                     *           "origin_ref": "logon-to-host",
+                     *           "evidence_count": 1,
+                     *           "evidence_event_ids": [
+                     *             "33333333-0000-4000-8000-000000000001"
+                     *           ],
+                     *           "version": 2,
+                     *           "created_at": "2026-07-24T09:02:10Z",
+                     *           "updated_at": "2026-07-24T09:40:03Z"
+                     *         },
+                     *         {
+                     *           "id": "55555555-0000-4000-8000-000000000002",
+                     *           "investigation_id": "1a2b3c4d-0000-4000-8000-000000000001",
+                     *           "source_node_id": "44444444-0000-4000-8000-000000000001",
+                     *           "target_node_id": "44444444-0000-4000-8000-000000000003",
+                     *           "relation_code": "executed",
+                     *           "status": "confirmed",
+                     *           "confidence": 1,
+                     *           "origin": "rule",
+                     *           "origin_ref": "host-executed-process",
+                     *           "evidence_count": 1,
+                     *           "evidence_event_ids": [
+                     *             "33333333-0000-4000-8000-000000000002"
+                     *           ],
+                     *           "version": 2,
+                     *           "created_at": "2026-07-24T09:02:11Z",
+                     *           "updated_at": "2026-07-24T09:40:03Z"
+                     *         },
+                     *         {
+                     *           "id": "55555555-0000-4000-8000-000000000003",
+                     *           "investigation_id": "1a2b3c4d-0000-4000-8000-000000000001",
+                     *           "source_node_id": "44444444-0000-4000-8000-000000000003",
+                     *           "target_node_id": "44444444-0000-4000-8000-000000000004",
+                     *           "relation_code": "connected_to",
+                     *           "status": "proposed",
+                     *           "confidence": 0.72,
+                     *           "why": "Исходящая сессия открыта тем же процессом в пределах 40 секунд после запуска; адрес отсутствует в baseline узла.",
+                     *           "origin": "agent",
+                     *           "origin_ref": "run-4c81f0",
+                     *           "evidence_count": 1,
+                     *           "evidence_event_ids": [
+                     *             "33333333-0000-4000-8000-000000000003"
+                     *           ],
+                     *           "version": 1,
+                     *           "created_at": "2026-07-24T09:41:55Z",
+                     *           "updated_at": "2026-07-24T09:41:55Z"
+                     *         },
+                     *         {
+                     *           "id": "55555555-0000-4000-8000-000000000004",
+                     *           "investigation_id": "1a2b3c4d-0000-4000-8000-000000000001",
+                     *           "source_node_id": "44444444-0000-4000-8000-000000000005",
+                     *           "target_node_id": "44444444-0000-4000-8000-000000000003",
+                     *           "relation_code": "subevent_of",
+                     *           "status": "rejected",
+                     *           "reject_reason": "Совпадение по времени случайное: процесс запущен плановой задачей резервного копирования.",
+                     *           "confidence": 0.31,
+                     *           "origin": "agent",
+                     *           "origin_ref": "run-4c81f0",
+                     *           "evidence_count": 1,
+                     *           "evidence_event_ids": [
+                     *             "33333333-0000-4000-8000-000000000002"
+                     *           ],
+                     *           "version": 2,
+                     *           "created_at": "2026-07-24T09:41:56Z",
+                     *           "updated_at": "2026-07-24T10:15:20Z"
+                     *         }
+                     *       ]
+                     *     }
+                     */
                     "application/json": components["schemas"]["Graph"];
                 };
             };
@@ -1941,6 +2307,54 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    /**
+                     * @example {
+                     *       "items": [
+                     *         {
+                     *           "id": "1a2b3c4d-0000-4000-8000-000000000001",
+                     *           "project_id": "9f3c1a7b2e",
+                     *           "parent_id": null,
+                     *           "title": "Подозрительная активность на dc-01",
+                     *           "description": "Сервисная учётка svc-backup залогинилась на контроллер домена вне окна резервного копирования.",
+                     *           "status": "open",
+                     *           "severity": "high",
+                     *           "origin": "analyst",
+                     *           "origin_ref": "7c9e6b21-0000-4000-8000-0000000000aa",
+                     *           "version": 3,
+                     *           "counters": {
+                     *             "children": 2,
+                     *             "events": 3,
+                     *             "entities": 4,
+                     *             "proposed_edges": 1
+                     *           },
+                     *           "created_at": "2026-07-24T08:55:00Z",
+                     *           "updated_at": "2026-07-24T10:15:20Z"
+                     *         },
+                     *         {
+                     *           "id": "1a2b3c4d-0000-4000-8000-000000000004",
+                     *           "project_id": "9f3c1a7b2e",
+                     *           "parent_id": null,
+                     *           "title": "Фишинговая рассылка в бухгалтерию",
+                     *           "status": "closed",
+                     *           "severity": "medium",
+                     *           "verdict": "false_positive",
+                     *           "verdict_reason": "Рассылка легитимная, отправитель подтверждён по телефону.",
+                     *           "origin": "analyst",
+                     *           "version": 5,
+                     *           "counters": {
+                     *             "children": 0,
+                     *             "events": 12,
+                     *             "entities": 6,
+                     *             "proposed_edges": 0
+                     *           },
+                     *           "created_at": "2026-07-22T11:20:00Z",
+                     *           "updated_at": "2026-07-22T16:04:12Z",
+                     *           "closed_at": "2026-07-22T16:04:12Z"
+                     *         }
+                     *       ],
+                     *       "next_cursor": null
+                     *     }
+                     */
                     "application/json": components["schemas"]["InvestigationPage"];
                 };
             };
@@ -2002,6 +2416,28 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    /**
+                     * @example {
+                     *       "id": "1a2b3c4d-0000-4000-8000-000000000001",
+                     *       "project_id": "9f3c1a7b2e",
+                     *       "parent_id": null,
+                     *       "title": "Подозрительная активность на dc-01",
+                     *       "description": "Сервисная учётка svc-backup залогинилась на контроллер домена вне окна резервного копирования.",
+                     *       "status": "open",
+                     *       "severity": "high",
+                     *       "origin": "analyst",
+                     *       "origin_ref": "7c9e6b21-0000-4000-8000-0000000000aa",
+                     *       "version": 3,
+                     *       "counters": {
+                     *         "children": 2,
+                     *         "events": 3,
+                     *         "entities": 4,
+                     *         "proposed_edges": 1
+                     *       },
+                     *       "created_at": "2026-07-24T08:55:00Z",
+                     *       "updated_at": "2026-07-24T10:15:20Z"
+                     *     }
+                     */
                     "application/json": components["schemas"]["Investigation"];
                 };
             };
@@ -2084,6 +2520,76 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    /**
+                     * @example {
+                     *       "root_id": "1a2b3c4d-0000-4000-8000-000000000001",
+                     *       "items": [
+                     *         {
+                     *           "id": "1a2b3c4d-0000-4000-8000-000000000001",
+                     *           "project_id": "9f3c1a7b2e",
+                     *           "parent_id": null,
+                     *           "title": "Подозрительная активность на dc-01",
+                     *           "status": "open",
+                     *           "severity": "high",
+                     *           "origin": "analyst",
+                     *           "version": 3,
+                     *           "counters": {
+                     *             "children": 2,
+                     *             "events": 3,
+                     *             "entities": 4,
+                     *             "proposed_edges": 1
+                     *           },
+                     *           "created_at": "2026-07-24T08:55:00Z",
+                     *           "updated_at": "2026-07-24T10:15:20Z",
+                     *           "depth": 0
+                     *         },
+                     *         {
+                     *           "id": "1a2b3c4d-0000-4000-8000-000000000002",
+                     *           "project_id": "9f3c1a7b2e",
+                     *           "parent_id": "1a2b3c4d-0000-4000-8000-000000000001",
+                     *           "title": "Гипотеза: учётка svc-backup скомпрометирована",
+                     *           "status": "open",
+                     *           "severity": "high",
+                     *           "confidence": 0.6,
+                     *           "origin": "agent",
+                     *           "origin_ref": "run-4c81f0",
+                     *           "version": 1,
+                     *           "counters": {
+                     *             "children": 0,
+                     *             "events": 2,
+                     *             "entities": 3,
+                     *             "proposed_edges": 1
+                     *           },
+                     *           "created_at": "2026-07-24T09:41:50Z",
+                     *           "updated_at": "2026-07-24T09:41:50Z",
+                     *           "depth": 1
+                     *         },
+                     *         {
+                     *           "id": "1a2b3c4d-0000-4000-8000-000000000003",
+                     *           "project_id": "9f3c1a7b2e",
+                     *           "parent_id": "1a2b3c4d-0000-4000-8000-000000000001",
+                     *           "title": "Гипотеза: powershell запущен плановой задачей",
+                     *           "status": "closed",
+                     *           "severity": "low",
+                     *           "verdict": "rejected",
+                     *           "verdict_reason": "Расписание задачи не совпадает со временем запуска, аргументы отличаются от эталонных.",
+                     *           "confidence": 0.15,
+                     *           "origin": "analyst",
+                     *           "version": 2,
+                     *           "counters": {
+                     *             "children": 0,
+                     *             "events": 1,
+                     *             "entities": 2,
+                     *             "proposed_edges": 0
+                     *           },
+                     *           "created_at": "2026-07-24T09:50:00Z",
+                     *           "updated_at": "2026-07-24T10:15:20Z",
+                     *           "closed_at": "2026-07-24T10:15:20Z",
+                     *           "depth": 1
+                     *         }
+                     *       ]
+                     *     }
+                     */
                     "application/json": components["schemas"]["InvestigationTree"];
                 };
             };
@@ -2107,6 +2613,137 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    /**
+                     * @example {
+                     *       "entity_types": [
+                     *         {
+                     *           "code": "host",
+                     *           "title": "Узел",
+                     *           "category": "asset"
+                     *         },
+                     *         {
+                     *           "code": "user",
+                     *           "title": "Пользователь",
+                     *           "category": "identity"
+                     *         },
+                     *         {
+                     *           "code": "account",
+                     *           "title": "Учётная запись",
+                     *           "category": "identity"
+                     *         },
+                     *         {
+                     *           "code": "email",
+                     *           "title": "Email",
+                     *           "category": "identity"
+                     *         },
+                     *         {
+                     *           "code": "process",
+                     *           "title": "Процесс",
+                     *           "category": "execution"
+                     *         },
+                     *         {
+                     *           "code": "ip",
+                     *           "title": "IP-адрес",
+                     *           "category": "network"
+                     *         },
+                     *         {
+                     *           "code": "domain",
+                     *           "title": "Домен",
+                     *           "category": "network"
+                     *         },
+                     *         {
+                     *           "code": "url",
+                     *           "title": "URL",
+                     *           "category": "network"
+                     *         },
+                     *         {
+                     *           "code": "file_hash",
+                     *           "title": "Файл / хеш",
+                     *           "category": "execution"
+                     *         }
+                     *       ],
+                     *       "relation_types": [
+                     *         {
+                     *           "code": "logged_in",
+                     *           "title": "Вошёл",
+                     *           "source_kind": "entity",
+                     *           "target_kind": "entity",
+                     *           "directed": true
+                     *         },
+                     *         {
+                     *           "code": "executed",
+                     *           "title": "Запустил",
+                     *           "source_kind": "entity",
+                     *           "target_kind": "entity",
+                     *           "directed": true
+                     *         },
+                     *         {
+                     *           "code": "parent_process",
+                     *           "title": "Родительский процесс",
+                     *           "source_kind": "entity",
+                     *           "target_kind": "entity",
+                     *           "directed": true
+                     *         },
+                     *         {
+                     *           "code": "connected_to",
+                     *           "title": "Соединился с",
+                     *           "source_kind": "entity",
+                     *           "target_kind": "entity",
+                     *           "directed": true
+                     *         },
+                     *         {
+                     *           "code": "resolved_to",
+                     *           "title": "Разрешился в",
+                     *           "source_kind": "entity",
+                     *           "target_kind": "entity",
+                     *           "directed": true
+                     *         },
+                     *         {
+                     *           "code": "same_host",
+                     *           "title": "Тот же узел",
+                     *           "source_kind": "entity",
+                     *           "target_kind": "entity",
+                     *           "directed": false
+                     *         },
+                     *         {
+                     *           "code": "subevent_of",
+                     *           "title": "Часть события",
+                     *           "source_kind": "event",
+                     *           "target_kind": "entity",
+                     *           "directed": true
+                     *         },
+                     *         {
+                     *           "code": "followed_by",
+                     *           "title": "Затем",
+                     *           "source_kind": "event",
+                     *           "target_kind": "event",
+                     *           "directed": true
+                     *         }
+                     *       ],
+                     *       "sources": [
+                     *         {
+                     *           "code": "siem",
+                     *           "kind": "siem",
+                     *           "title": "MaxPatrol SIEM"
+                     *         },
+                     *         {
+                     *           "code": "edr",
+                     *           "kind": "edr",
+                     *           "title": "MaxPatrol EDR"
+                     *         },
+                     *         {
+                     *           "code": "ndr",
+                     *           "kind": "ndr",
+                     *           "title": "PT NAD"
+                     *         },
+                     *         {
+                     *           "code": "infra",
+                     *           "kind": "infra",
+                     *           "title": "Инфраструктурные логи"
+                     *         }
+                     *       ]
+                     *     }
+                     */
                     "application/json": components["schemas"]["Reference"];
                 };
             };

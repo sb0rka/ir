@@ -49,6 +49,116 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Graph' }
+              # Один связный инцидент на все примеры в спеке: сервисная учётка
+              # логинится на контроллер домена, запускает powershell, тот
+              # стучится наружу. Идентификаторы сквозные — мок отдаёт граф,
+              # который реально сходится.
+              example:
+                investigation_id: 1a2b3c4d-0000-4000-8000-000000000001
+                include_subtree: false
+                nodes:
+                  - id: 44444444-0000-4000-8000-000000000001
+                    investigation_id: 1a2b3c4d-0000-4000-8000-000000000001
+                    node_type: entity
+                    entity_id: 22222222-0000-4000-8000-000000000001
+                    origin: rule
+                    label: dc-01.corp.local
+                    type_code: host
+                    canonical_key: dc-01.corp.local
+                  - id: 44444444-0000-4000-8000-000000000002
+                    investigation_id: 1a2b3c4d-0000-4000-8000-000000000001
+                    node_type: entity
+                    entity_id: 22222222-0000-4000-8000-000000000002
+                    origin: rule
+                    label: CORP\svc-backup
+                    type_code: account
+                    canonical_key: S-1-5-21-1004336348-1177238915-682003330-1123
+                  - id: 44444444-0000-4000-8000-000000000003
+                    investigation_id: 1a2b3c4d-0000-4000-8000-000000000001
+                    node_type: entity
+                    entity_id: 22222222-0000-4000-8000-000000000003
+                    origin: rule
+                    label: powershell.exe
+                    type_code: process
+                    canonical_key: '{6f1c2a90-4d3e-4b7a-9c11-8e2f5a7b0d44}'
+                  - id: 44444444-0000-4000-8000-000000000004
+                    investigation_id: 1a2b3c4d-0000-4000-8000-000000000001
+                    node_type: entity
+                    entity_id: 22222222-0000-4000-8000-000000000004
+                    origin: agent
+                    label: 185.220.101.47
+                    type_code: ip
+                    canonical_key: 185.220.101.47
+                  - id: 44444444-0000-4000-8000-000000000005
+                    investigation_id: 1a2b3c4d-0000-4000-8000-000000000001
+                    node_type: event
+                    event_id: 33333333-0000-4000-8000-000000000002
+                    origin: analyst
+                    label: 'process_start: powershell.exe -enc SQBFAFgA'
+                    occurred_at: '2026-07-24T03:14:22Z'
+                edges:
+                  - id: 55555555-0000-4000-8000-000000000001
+                    investigation_id: 1a2b3c4d-0000-4000-8000-000000000001
+                    source_node_id: 44444444-0000-4000-8000-000000000002
+                    target_node_id: 44444444-0000-4000-8000-000000000001
+                    relation_code: logged_in
+                    status: confirmed
+                    confidence: 1
+                    origin: rule
+                    origin_ref: logon-to-host
+                    evidence_count: 1
+                    evidence_event_ids: [33333333-0000-4000-8000-000000000001]
+                    version: 2
+                    created_at: '2026-07-24T09:02:10Z'
+                    updated_at: '2026-07-24T09:40:03Z'
+                  - id: 55555555-0000-4000-8000-000000000002
+                    investigation_id: 1a2b3c4d-0000-4000-8000-000000000001
+                    source_node_id: 44444444-0000-4000-8000-000000000001
+                    target_node_id: 44444444-0000-4000-8000-000000000003
+                    relation_code: executed
+                    status: confirmed
+                    confidence: 1
+                    origin: rule
+                    origin_ref: host-executed-process
+                    evidence_count: 1
+                    evidence_event_ids: [33333333-0000-4000-8000-000000000002]
+                    version: 2
+                    created_at: '2026-07-24T09:02:11Z'
+                    updated_at: '2026-07-24T09:40:03Z'
+                  - id: 55555555-0000-4000-8000-000000000003
+                    investigation_id: 1a2b3c4d-0000-4000-8000-000000000001
+                    source_node_id: 44444444-0000-4000-8000-000000000003
+                    target_node_id: 44444444-0000-4000-8000-000000000004
+                    relation_code: connected_to
+                    status: proposed
+                    confidence: 0.72
+                    why: >-
+                      Исходящая сессия открыта тем же процессом в пределах 40
+                      секунд после запуска; адрес отсутствует в baseline узла.
+                    origin: agent
+                    origin_ref: run-4c81f0
+                    evidence_count: 1
+                    evidence_event_ids: [33333333-0000-4000-8000-000000000003]
+                    version: 1
+                    created_at: '2026-07-24T09:41:55Z'
+                    updated_at: '2026-07-24T09:41:55Z'
+                  - id: 55555555-0000-4000-8000-000000000004
+                    investigation_id: 1a2b3c4d-0000-4000-8000-000000000001
+                    source_node_id: 44444444-0000-4000-8000-000000000005
+                    target_node_id: 44444444-0000-4000-8000-000000000003
+                    relation_code: subevent_of
+                    status: rejected
+                    reject_reason: >-
+                      Совпадение по времени случайное: процесс запущен
+                      плановой задачей резервного копирования.
+                    confidence: 0.31
+                    origin: agent
+                    origin_ref: run-4c81f0
+                    evidence_count: 1
+                    evidence_event_ids: [33333333-0000-4000-8000-000000000002]
+                    version: 2
+                    created_at: '2026-07-24T09:41:56Z'
+                    updated_at: '2026-07-24T10:15:20Z'
         '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
         '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
         '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }

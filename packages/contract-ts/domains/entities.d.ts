@@ -268,6 +268,65 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    /**
+                     * @example {
+                     *       "items": [
+                     *         {
+                     *           "id": "22222222-0000-4000-8000-000000000001",
+                     *           "investigation_id": "1a2b3c4d-0000-4000-8000-000000000001",
+                     *           "type_code": "host",
+                     *           "canonical_key": "dc-01.corp.local",
+                     *           "display_name": "dc-01.corp.local",
+                     *           "metadata": {
+                     *             "os": "Windows Server 2022",
+                     *             "role": "domain_controller"
+                     *           },
+                     *           "first_seen": "2026-07-24T03:12:47Z",
+                     *           "last_seen": "2026-07-24T03:15:02Z"
+                     *         },
+                     *         {
+                     *           "id": "22222222-0000-4000-8000-000000000002",
+                     *           "investigation_id": "1a2b3c4d-0000-4000-8000-000000000001",
+                     *           "type_code": "account",
+                     *           "canonical_key": "S-1-5-21-1004336348-1177238915-682003330-1123",
+                     *           "display_name": "CORP\\svc-backup",
+                     *           "metadata": {
+                     *             "enabled": true,
+                     *             "last_password_set": "2023-02-11T00:00:00Z"
+                     *           },
+                     *           "first_seen": "2026-07-24T03:12:47Z",
+                     *           "last_seen": "2026-07-24T03:14:22Z"
+                     *         },
+                     *         {
+                     *           "id": "22222222-0000-4000-8000-000000000003",
+                     *           "investigation_id": "1a2b3c4d-0000-4000-8000-000000000001",
+                     *           "type_code": "process",
+                     *           "canonical_key": "{6f1c2a90-4d3e-4b7a-9c11-8e2f5a7b0d44}",
+                     *           "display_name": "powershell.exe",
+                     *           "metadata": {
+                     *             "pid": 7412,
+                     *             "integrity": "high"
+                     *           },
+                     *           "first_seen": "2026-07-24T03:14:22Z",
+                     *           "last_seen": "2026-07-24T03:15:02Z"
+                     *         },
+                     *         {
+                     *           "id": "22222222-0000-4000-8000-000000000004",
+                     *           "investigation_id": "1a2b3c4d-0000-4000-8000-000000000001",
+                     *           "type_code": "ip",
+                     *           "canonical_key": "185.220.101.47",
+                     *           "display_name": "185.220.101.47",
+                     *           "metadata": {
+                     *             "asn": 205100,
+                     *             "country": "NL"
+                     *           },
+                     *           "first_seen": "2026-07-24T03:15:02Z",
+                     *           "last_seen": "2026-07-24T03:15:02Z"
+                     *         }
+                     *       ],
+                     *       "next_cursor": null
+                     *     }
+                     */
                     "application/json": components["schemas"]["EntityPage"];
                 };
             };
@@ -326,6 +385,48 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    /**
+                     * @example {
+                     *       "entity": {
+                     *         "id": "22222222-0000-4000-8000-000000000001",
+                     *         "investigation_id": "1a2b3c4d-0000-4000-8000-000000000001",
+                     *         "type_code": "host",
+                     *         "canonical_key": "dc-01.corp.local",
+                     *         "display_name": "dc-01.corp.local",
+                     *         "metadata": {
+                     *           "os": "Windows Server 2022",
+                     *           "role": "domain_controller"
+                     *         },
+                     *         "first_seen": "2026-07-24T03:12:47Z",
+                     *         "last_seen": "2026-07-24T03:15:02Z"
+                     *       },
+                     *       "events_count": 3,
+                     *       "occurrences": [
+                     *         {
+                     *           "investigation_id": "1a2b3c4d-0000-4000-8000-000000000004",
+                     *           "title": "Фишинговая рассылка в бухгалтерию",
+                     *           "events_count": 2
+                     *         },
+                     *         {
+                     *           "investigation_id": "1a2b3c4d-0000-4000-8000-000000000005",
+                     *           "title": "Аномальный трафик из сегмента DMZ",
+                     *           "events_count": 9
+                     *         }
+                     *       ],
+                     *       "neighbors": [
+                     *         {
+                     *           "entity_id": "22222222-0000-4000-8000-000000000002",
+                     *           "display_name": "CORP\\svc-backup",
+                     *           "relation_code": "logged_in"
+                     *         },
+                     *         {
+                     *           "entity_id": "22222222-0000-4000-8000-000000000003",
+                     *           "display_name": "powershell.exe",
+                     *           "relation_code": "executed"
+                     *         }
+                     *       ]
+                     *     }
+                     */
                     "application/json": components["schemas"]["EntityCard"];
                 };
             };

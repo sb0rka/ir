@@ -85,6 +85,61 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/EventPage' }
+              example:
+                items:
+                  - id: 33333333-0000-4000-8000-000000000001
+                    investigation_id: 1a2b3c4d-0000-4000-8000-000000000001
+                    source_code: siem
+                    source_event_id: '4624-8812031'
+                    source_ref: https://siem.corp.local/events/4624-8812031
+                    event_type: logon
+                    occurred_at: '2026-07-24T03:12:47Z'
+                    ingested_at: '2026-07-24T09:02:09Z'
+                    normalized_data:
+                      subject: CORP\svc-backup
+                      action: logon
+                      object: dc-01.corp.local
+                      status: success
+                      logon_type: 3
+                    entities:
+                      - { entity_id: 22222222-0000-4000-8000-000000000002, relation_code: actor }
+                      - { entity_id: 22222222-0000-4000-8000-000000000001, relation_code: object }
+                  - id: 33333333-0000-4000-8000-000000000002
+                    investigation_id: 1a2b3c4d-0000-4000-8000-000000000001
+                    source_code: edr
+                    source_event_id: proc-9f14c2
+                    source_ref: https://edr.corp.local/process/proc-9f14c2
+                    event_type: process_start
+                    occurred_at: '2026-07-24T03:14:22Z'
+                    ingested_at: '2026-07-24T09:02:09Z'
+                    normalized_data:
+                      subject: CORP\svc-backup
+                      action: process_start
+                      object: powershell.exe
+                      status: success
+                      command_line: powershell.exe -enc SQBFAFgA
+                    entities:
+                      - { entity_id: 22222222-0000-4000-8000-000000000002, relation_code: actor }
+                      - { entity_id: 22222222-0000-4000-8000-000000000003, relation_code: object }
+                      - { entity_id: 22222222-0000-4000-8000-000000000001, relation_code: src }
+                  - id: 33333333-0000-4000-8000-000000000003
+                    investigation_id: 1a2b3c4d-0000-4000-8000-000000000001
+                    source_code: ndr
+                    source_event_id: sess-77201a
+                    source_ref: https://nad.corp.local/sessions/sess-77201a
+                    event_type: network_session
+                    occurred_at: '2026-07-24T03:15:02Z'
+                    ingested_at: '2026-07-24T09:38:41Z'
+                    normalized_data:
+                      subject: dc-01.corp.local
+                      action: connect
+                      object: 185.220.101.47:443
+                      status: established
+                      bytes_out: 1841302
+                    entities:
+                      - { entity_id: 22222222-0000-4000-8000-000000000001, relation_code: src }
+                      - { entity_id: 22222222-0000-4000-8000-000000000004, relation_code: dst }
+                next_cursor: null
         '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
         '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
         '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
@@ -107,6 +162,31 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Event' }
+              example:
+                id: 33333333-0000-4000-8000-000000000002
+                investigation_id: 1a2b3c4d-0000-4000-8000-000000000001
+                source_code: edr
+                source_event_id: proc-9f14c2
+                source_ref: https://edr.corp.local/process/proc-9f14c2
+                event_type: process_start
+                occurred_at: '2026-07-24T03:14:22Z'
+                ingested_at: '2026-07-24T09:02:09Z'
+                normalized_data:
+                  subject: CORP\svc-backup
+                  action: process_start
+                  object: powershell.exe
+                  status: success
+                  command_line: powershell.exe -enc SQBFAFgA
+                raw_data:
+                  EventID: 4688
+                  ParentImage: C:\Windows\System32\services.exe
+                  Image: C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe
+                  IntegrityLevel: High
+                  ProcessGuid: '{6f1c2a90-4d3e-4b7a-9c11-8e2f5a7b0d44}'
+                entities:
+                  - { entity_id: 22222222-0000-4000-8000-000000000002, relation_code: actor }
+                  - { entity_id: 22222222-0000-4000-8000-000000000003, relation_code: object }
+                  - { entity_id: 22222222-0000-4000-8000-000000000001, relation_code: src }
         '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
         '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
         '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }

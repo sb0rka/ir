@@ -106,10 +106,10 @@ export interface components {
             description?: string | null;
             /** @description Whether work is still going on. Independent of the verdict: a case can be open with no verdict yet, and closing requires one. */
             status: components["schemas"]["InvestigationStatus"];
-            /** @description How bad this looks. Set during triage and revised as evidence arrives; null until someone judges it. */
-            severity?: (string & components["schemas"]["Severity"]) | null;
-            /** @description The conclusion. Null while the investigation is still open, required to close it. */
-            verdict?: (string & components["schemas"]["Verdict"]) | null;
+            /** @description How bad this looks. Set during triage and revised as evidence arrives. Absent until someone judges it. */
+            severity?: components["schemas"]["Severity"];
+            /** @description The conclusion. Absent while the investigation is still open, required to close it. Which values are allowed depends on whether this is a root case or a hypothesis — see Verdict. */
+            verdict?: components["schemas"]["Verdict"];
             /** @description Why that conclusion. Required when rejecting — a rejected hypothesis without a reason teaches nobody anything. */
             verdict_reason?: string | null;
             /** @description How sure the conclusion is. Meaningful for a hypothesis, rarely used on a root case. */
@@ -332,6 +332,54 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    /**
+                     * @example {
+                     *       "items": [
+                     *         {
+                     *           "id": "1a2b3c4d-0000-4000-8000-000000000001",
+                     *           "project_id": "9f3c1a7b2e",
+                     *           "parent_id": null,
+                     *           "title": "Подозрительная активность на dc-01",
+                     *           "description": "Сервисная учётка svc-backup залогинилась на контроллер домена вне окна резервного копирования.",
+                     *           "status": "open",
+                     *           "severity": "high",
+                     *           "origin": "analyst",
+                     *           "origin_ref": "7c9e6b21-0000-4000-8000-0000000000aa",
+                     *           "version": 3,
+                     *           "counters": {
+                     *             "children": 2,
+                     *             "events": 3,
+                     *             "entities": 4,
+                     *             "proposed_edges": 1
+                     *           },
+                     *           "created_at": "2026-07-24T08:55:00Z",
+                     *           "updated_at": "2026-07-24T10:15:20Z"
+                     *         },
+                     *         {
+                     *           "id": "1a2b3c4d-0000-4000-8000-000000000004",
+                     *           "project_id": "9f3c1a7b2e",
+                     *           "parent_id": null,
+                     *           "title": "Фишинговая рассылка в бухгалтерию",
+                     *           "status": "closed",
+                     *           "severity": "medium",
+                     *           "verdict": "false_positive",
+                     *           "verdict_reason": "Рассылка легитимная, отправитель подтверждён по телефону.",
+                     *           "origin": "analyst",
+                     *           "version": 5,
+                     *           "counters": {
+                     *             "children": 0,
+                     *             "events": 12,
+                     *             "entities": 6,
+                     *             "proposed_edges": 0
+                     *           },
+                     *           "created_at": "2026-07-22T11:20:00Z",
+                     *           "updated_at": "2026-07-22T16:04:12Z",
+                     *           "closed_at": "2026-07-22T16:04:12Z"
+                     *         }
+                     *       ],
+                     *       "next_cursor": null
+                     *     }
+                     */
                     "application/json": components["schemas"]["InvestigationPage"];
                 };
             };
@@ -393,6 +441,28 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    /**
+                     * @example {
+                     *       "id": "1a2b3c4d-0000-4000-8000-000000000001",
+                     *       "project_id": "9f3c1a7b2e",
+                     *       "parent_id": null,
+                     *       "title": "Подозрительная активность на dc-01",
+                     *       "description": "Сервисная учётка svc-backup залогинилась на контроллер домена вне окна резервного копирования.",
+                     *       "status": "open",
+                     *       "severity": "high",
+                     *       "origin": "analyst",
+                     *       "origin_ref": "7c9e6b21-0000-4000-8000-0000000000aa",
+                     *       "version": 3,
+                     *       "counters": {
+                     *         "children": 2,
+                     *         "events": 3,
+                     *         "entities": 4,
+                     *         "proposed_edges": 1
+                     *       },
+                     *       "created_at": "2026-07-24T08:55:00Z",
+                     *       "updated_at": "2026-07-24T10:15:20Z"
+                     *     }
+                     */
                     "application/json": components["schemas"]["Investigation"];
                 };
             };
@@ -475,6 +545,76 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    /**
+                     * @example {
+                     *       "root_id": "1a2b3c4d-0000-4000-8000-000000000001",
+                     *       "items": [
+                     *         {
+                     *           "id": "1a2b3c4d-0000-4000-8000-000000000001",
+                     *           "project_id": "9f3c1a7b2e",
+                     *           "parent_id": null,
+                     *           "title": "Подозрительная активность на dc-01",
+                     *           "status": "open",
+                     *           "severity": "high",
+                     *           "origin": "analyst",
+                     *           "version": 3,
+                     *           "counters": {
+                     *             "children": 2,
+                     *             "events": 3,
+                     *             "entities": 4,
+                     *             "proposed_edges": 1
+                     *           },
+                     *           "created_at": "2026-07-24T08:55:00Z",
+                     *           "updated_at": "2026-07-24T10:15:20Z",
+                     *           "depth": 0
+                     *         },
+                     *         {
+                     *           "id": "1a2b3c4d-0000-4000-8000-000000000002",
+                     *           "project_id": "9f3c1a7b2e",
+                     *           "parent_id": "1a2b3c4d-0000-4000-8000-000000000001",
+                     *           "title": "Гипотеза: учётка svc-backup скомпрометирована",
+                     *           "status": "open",
+                     *           "severity": "high",
+                     *           "confidence": 0.6,
+                     *           "origin": "agent",
+                     *           "origin_ref": "run-4c81f0",
+                     *           "version": 1,
+                     *           "counters": {
+                     *             "children": 0,
+                     *             "events": 2,
+                     *             "entities": 3,
+                     *             "proposed_edges": 1
+                     *           },
+                     *           "created_at": "2026-07-24T09:41:50Z",
+                     *           "updated_at": "2026-07-24T09:41:50Z",
+                     *           "depth": 1
+                     *         },
+                     *         {
+                     *           "id": "1a2b3c4d-0000-4000-8000-000000000003",
+                     *           "project_id": "9f3c1a7b2e",
+                     *           "parent_id": "1a2b3c4d-0000-4000-8000-000000000001",
+                     *           "title": "Гипотеза: powershell запущен плановой задачей",
+                     *           "status": "closed",
+                     *           "severity": "low",
+                     *           "verdict": "rejected",
+                     *           "verdict_reason": "Расписание задачи не совпадает со временем запуска, аргументы отличаются от эталонных.",
+                     *           "confidence": 0.15,
+                     *           "origin": "analyst",
+                     *           "version": 2,
+                     *           "counters": {
+                     *             "children": 0,
+                     *             "events": 1,
+                     *             "entities": 2,
+                     *             "proposed_edges": 0
+                     *           },
+                     *           "created_at": "2026-07-24T09:50:00Z",
+                     *           "updated_at": "2026-07-24T10:15:20Z",
+                     *           "closed_at": "2026-07-24T10:15:20Z",
+                     *           "depth": 1
+                     *         }
+                     *       ]
+                     *     }
+                     */
                     "application/json": components["schemas"]["InvestigationTree"];
                 };
             };
