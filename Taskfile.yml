@@ -179,7 +179,7 @@ tasks:
       - cd packages/contract && go mod tidy
 
   check:
-    desc: Всё, что гоняет CI
+    desc: Всё разом — генерация сходится со спекой, собирается, проходит vet
     cmds:
       - task: check-generated
       - task: build
