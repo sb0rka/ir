@@ -1,6 +1,6 @@
 openapi: 3.0.3
 info:
-  title: IR — улики
+  title: IR — evidence
   version: 0.1.0
 servers:
   - url: /api/v1
@@ -13,12 +13,14 @@ paths:
       - { $ref: '../shared/parameters.yaml#/components/parameters/InvestigationId' }
     post:
       tags: [events]
-      summary: Затянуть события в расследование
-      description: |
-        Принимает либо явные ссылки на записи источника, либо параметры выборки.
-        Идемпотентно по dedup_key. Синхронно извлекает сущности, создаёт узлы
-        графа и прогоняет правила связывания (до 500 событий; больше — 422,
-        разбить выборку).
+      summary: Pull events into the investigation
+      description: >-
+        The way data enters the product. Takes either explicit references to
+        source records or a query to run against a source. Each event is
+        normalised, its entities are extracted, graph nodes are created and
+        linking rules run — so the graph grows without an agent being involved.
+        Idempotent: re-pulling the same record is a no-op. Up to 500 events per
+        call; a larger selection has to be split.
       operationId: attachEvents
       requestBody:
         required: true
@@ -27,7 +29,7 @@ paths:
             schema: { $ref: '#/components/schemas/EventAttachRequest' }
       responses:
         '201':
-          description: Итог затяжки
+          description: What the pull produced
           content:
             application/json:
               schema: { $ref: '#/components/schemas/EventAttachResult' }
@@ -39,21 +41,47 @@ paths:
         '502': { $ref: '../shared/responses.yaml#/components/responses/SourceUnavailable' }
     get:
       tags: [events]
-      summary: События расследования (таймлайн)
-      description: Сортировка по occurred_at, id — стабильный keyset-курсор.
+      summary: Timeline of the investigation
+      description: >-
+        Events already pulled into the case, oldest first. Ordered by
+        occurred_at then id, which is what makes the cursor stable when several
+        events share a timestamp. Raw payloads are omitted here — fetch a single
+        event for those.
       operationId: listEvents
       parameters:
-        - { name: event_type, in: query, schema: { type: string } }
-        - { name: source_code, in: query, schema: { type: string } }
-        - { name: entity_id, in: query, description: Только события с участием сущности, schema: { type: string, format: uuid } }
-        - { name: from, in: query, schema: { type: string, format: date-time } }
-        - { name: to, in: query, schema: { type: string, format: date-time } }
-        - { name: q, in: query, description: Подстрока в normalized_data, schema: { type: string } }
+        - name: event_type
+          in: query
+          description: Keep only events of this kind, e.g. process_start or network_session.
+          schema: { type: string }
+        - name: source_code
+          in: query
+          description: Keep only events from one source — siem, edr, ndr, infra.
+          schema: { type: string }
+        - name: entity_id
+          in: query
+          description: >-
+            Keep only events this entity takes part in. This is how the UI
+            answers "what happened on that host".
+          schema: { type: string, format: uuid }
+        - name: from
+          in: query
+          description: Lower bound on occurred_at, inclusive.
+          schema: { type: string, format: date-time }
+        - name: to
+          in: query
+          description: Upper bound on occurred_at, exclusive.
+          schema: { type: string, format: date-time }
+        - name: q
+          in: query
+          description: >-
+            Substring match over the normalised payload — command lines,
+            paths, addresses.
+          schema: { type: string }
         - { $ref: '../shared/parameters.yaml#/components/parameters/Limit' }
         - { $ref: '../shared/parameters.yaml#/components/parameters/Cursor' }
       responses:
         '200':
-          description: Страница событий
+          description: One page of the timeline
           content:
             application/json:
               schema: { $ref: '#/components/schemas/EventPage' }
@@ -67,12 +95,15 @@ paths:
       - { $ref: '../shared/parameters.yaml#/components/parameters/EventId' }
     get:
       tags: [events]
-      summary: Событие целиком
-      description: Включая normalized_data, raw_data и source_ref для drill-down в консоль источника.
+      summary: One event in full
+      description: >-
+        The whole record, including the raw source payload and the link back to
+        the originating console. This is the end of the provenance chain: every
+        finding leads here, and here leads to the source system.
       operationId: getEvent
       responses:
         '200':
-          description: Событие
+          description: The event
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Event' }
@@ -84,99 +115,238 @@ components:
   schemas:
     Event:
       type: object
+      description: >-
+        A fact from a security tool, pulled into an investigation. Events are
+        never edited and carry no status: a fact cannot be confirmed or
+        rejected, only cited.
       required: [id, investigation_id, source_code, source_event_id, event_type, occurred_at, ingested_at]
       properties:
-        id: { type: string, format: uuid }
-        investigation_id: { type: string, format: uuid }
-        source_code: { type: string }
-        source_event_id: { type: string }
-        source_ref: { type: string, nullable: true, description: Ссылка/запрос для drill-down к исходной записи }
-        event_type: { type: string }
-        occurred_at: { type: string, format: date-time }
-        ingested_at: { type: string, format: date-time }
+        id:
+          type: string
+          format: uuid
+          description: Identifier of this event inside the investigation.
+        investigation_id:
+          type: string
+          format: uuid
+          description: >-
+            Investigation the event was pulled into. The same source record
+            pulled into two cases yields two rows, so each case owns its
+            evidence outright.
+        source_code:
+          type: string
+          description: Which tool it came from — siem, edr, ndr, infra.
+        source_event_id:
+          type: string
+          description: >-
+            Identifier of the record in that tool. Stable address for going
+            back to the original.
+        source_ref:
+          type: string
+          nullable: true
+          description: >-
+            Ready-made link or query that opens the record in the source
+            console. What turns "we claim" into "go and check".
+        event_type:
+          type: string
+          description: >-
+            What happened, in the product's vocabulary — process_start,
+            network_session, logon, detection.
+        occurred_at:
+          type: string
+          format: date-time
+          description: When it happened, per the source. This is what the timeline sorts by.
+        ingested_at:
+          type: string
+          format: date-time
+          description: >-
+            When it was pulled in. Differs from occurred_at whenever an analyst
+            reaches back in time, which is most of the time.
         normalized_data:
           type: object
+          description: >-
+            The event mapped onto the common envelope — subject, action, object,
+            status — so events from different tools can be compared and searched.
           additionalProperties: true
-          description: Конверт subject-action-object-status
         raw_data:
           type: object
-          additionalProperties: true
           nullable: true
+          description: >-
+            Original payload as the source returned it. Kept for the cases where
+            normalisation lost something. Omitted from list responses.
+          additionalProperties: true
         entities:
           type: array
-          description: Участники события с ролями
+          description: >-
+            Who took part and in what capacity. Extracted during ingestion by
+            the source's mapping profile.
           items:
             type: object
             required: [entity_id, relation_code]
             properties:
-              entity_id: { type: string, format: uuid }
-              relation_code: { type: string }
+              entity_id:
+                type: string
+                format: uuid
+                description: The participating entity.
+              relation_code:
+                type: string
+                description: >-
+                  Its role in the event — actor, object, src, dst. The same
+                  entity may appear twice with different roles.
+
+    EventSummary:
+      type: object
+      description: >-
+        Event without the raw payload. A timeline page carries hundreds of
+        events and raw payloads run to kilobytes each; the full record is
+        available one at a time.
+      required: [id, investigation_id, source_code, source_event_id, event_type, occurred_at, ingested_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Identifier of this event.
+        investigation_id:
+          type: string
+          format: uuid
+          description: Investigation it belongs to.
+        source_code:
+          type: string
+          description: Which tool it came from.
+        source_event_id:
+          type: string
+          description: Identifier of the record in that tool.
+        source_ref:
+          type: string
+          nullable: true
+          description: Link that opens the record in the source console.
+        event_type:
+          type: string
+          description: What happened, in the product's vocabulary.
+        occurred_at:
+          type: string
+          format: date-time
+          description: When it happened, per the source.
+        ingested_at:
+          type: string
+          format: date-time
+          description: When it was pulled into the investigation.
+        normalized_data:
+          type: object
+          description: The event mapped onto the common envelope.
+          additionalProperties: true
+        entities:
+          type: array
+          description: Who took part and in what capacity.
+          items:
+            type: object
+            required: [entity_id, relation_code]
+            properties:
+              entity_id:
+                type: string
+                format: uuid
+                description: The participating entity.
+              relation_code:
+                type: string
+                description: Its role in the event.
+
     EventAttachRequest:
       type: object
-      description: Ровно одно из полей refs или query.
+      description: >-
+        What to pull. Give either refs, when the records are already known, or
+        query, to let the source find them — exactly one of the two.
       properties:
         refs:
           type: array
           maxItems: 500
+          description: >-
+            Records addressed directly. Used when the analyst has already picked
+            them out, or when an agent cites what it found.
           items:
             type: object
             required: [source_code, source_event_id]
             properties:
-              source_code: { type: string }
-              source_event_id: { type: string }
+              source_code:
+                type: string
+                description: Which tool holds the record.
+
+              source_event_id:
+                type: string
+                description: Its identifier in that tool.
         query:
           type: object
-          description: Выборка из источника (EvidenceSource.Search)
+          description: >-
+            A selection to run against one source. This is the pivot: give it an
+            entity key and a window, and whatever the source returns lands in
+            the case.
           required: [source_code]
           properties:
-            source_code: { type: string }
-            entity_key: { type: string }
-            from: { type: string, format: date-time }
-            to: { type: string, format: date-time }
-            substring: { type: string }
-            limit: { type: integer, maximum: 500, default: 100 }
+            source_code:
+              type: string
+              description: Which source to query.
+            entity_key:
+              type: string
+              description: >-
+                Value to pivot on — a hostname, account, address or hash.
+                Matched against the source's own fields.
+            from:
+              type: string
+              format: date-time
+              description: Lower bound of the time window, inclusive.
+            to:
+              type: string
+              format: date-time
+              description: Upper bound of the time window, exclusive.
+            substring:
+              type: string
+              description: Free-text fragment to match, for cases a key cannot express.
+            limit:
+              type: integer
+              maximum: 500
+              default: 100
+              description: Cap on records to pull. The hard ceiling is 500 per call.
         reason:
           type: string
-          description: Зачем затянуто — нарратив расследования, идёт в аудит
+          description: >-
+            Why this was pulled. Goes into the audit log and into the case
+            narrative — the record of what the analyst was thinking.
+
     EventAttachResult:
       type: object
+      description: What the pull changed in the investigation.
       required: [attached, duplicates, entities_extracted, edges_created]
       properties:
-        attached: { type: integer }
-        duplicates: { type: integer, description: Отброшено по dedup_key }
-        entities_extracted: { type: integer }
-        edges_created: { type: integer, description: Рёбра от правил связывания }
-    EventSummary:
-      type: object
-      description: |
-        Событие без сырья: список тянет сотни записей, а raw_data у каждой —
-        килобайты. Полное событие отдаёт GET /events/{event_id}.
-      required: [id, investigation_id, source_code, source_event_id, event_type, occurred_at, ingested_at]
-      properties:
-        id: { type: string, format: uuid }
-        investigation_id: { type: string, format: uuid }
-        source_code: { type: string }
-        source_event_id: { type: string }
-        source_ref: { type: string, nullable: true }
-        event_type: { type: string }
-        occurred_at: { type: string, format: date-time }
-        ingested_at: { type: string, format: date-time }
-        normalized_data:
-          type: object
-          additionalProperties: true
-        entities:
-          type: array
-          items:
-            type: object
-            required: [entity_id, relation_code]
-            properties:
-              entity_id: { type: string, format: uuid }
-              relation_code: { type: string }
+        attached:
+          type: integer
+          description: Events newly added to the case.
+        duplicates:
+          type: integer
+          description: >-
+            Events already present and therefore skipped. A non-zero count is
+            normal, not an error — overlapping pulls are expected.
+        entities_extracted:
+          type: integer
+          description: >-
+            Entities created or updated from the new events. Counts entities,
+            not mentions.
+        edges_created:
+          type: integer
+          description: >-
+            Edges linking rules produced from the new events. This is the graph
+            growing without an agent: rules alone connect what obviously belongs
+            together.
+
     EventPage:
       type: object
+      description: One page of the timeline.
       required: [items]
       properties:
         items:
           type: array
+          description: Events, oldest first.
           items: { $ref: '#/components/schemas/EventSummary' }
-        next_cursor: { type: string, nullable: true }
+        next_cursor:
+          type: string
+          nullable: true
+          description: >-
+            Pass as `cursor` to get the next page. Absent on the last page —
+            that, not an empty page, is how iteration ends.

@@ -61,10 +61,5 @@ INSERT INTO linking_rules (code, title, kind, rule, born_status) VALUES
      '{"match": ["account", "host"], "window_sec": 300, "relation_code": "executed", "confidence": 0.6}'::jsonb, 'proposed')
 ON CONFLICT (code) DO NOTHING;
 
-INSERT INTO extensions (code, kind, title, is_allowed, sends_data_externally) VALUES
-    ('ip-reputation',   'mcp', 'Репутация IP-адресов', false, true),
-    ('hash-reputation', 'mcp', 'Репутация хешей',      false, true),
-    ('decoder',         'mcp', 'Декодирование base64 и URL', true, false)
-ON CONFLICT (code) DO NOTHING;
 
 COMMIT;

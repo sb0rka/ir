@@ -4,206 +4,19 @@
  */
 
 export interface paths {
-    "/sources": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Источники улик
-         * @description Доступно всем ролям — фронту нужен список для фильтров и лейблов.
-         */
-        get: operations["listSources"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/extensions": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Расширения обогащения
-         * @description Allowlist. Фронт показывает только разрешённые в карточке артефакта.
-         */
-        get: operations["listExtensions"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/linking-rules": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Правила связывания */
-        get: operations["listLinkingRules"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/audit": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Журнал действий
-         * @description Действия пользователей, агентов и системы. Append-only, только чтение.
-         *     Фильтр по investigation_id — журнал одного расследования.
-         */
-        get: operations["listAudit"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/investigations/{investigation_id}/metrics": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                investigation_id: components["parameters"]["InvestigationId"];
-            };
-            cookie?: never;
-        };
-        /**
-         * Метрики расследования
-         * @description Счётчики из журнала действий для оценки сокращения ручных шагов.
-         */
-        get: operations["getInvestigationMetrics"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/health": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Состояние источников и расширений
-         * @description Плашка в интерфейсе — недоступность источника видна аналитику, а не молча ломает выборку.
-         */
-        get: operations["getHealth"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/investigations/{investigation_id}/artifacts": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                investigation_id: components["parameters"]["InvestigationId"];
-            };
-            cookie?: never;
-        };
-        /** Артефакты расследования */
-        get: operations["listArtifacts"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/artifacts/{artifact_id}/enrich": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                artifact_id: components["parameters"]["ArtifactId"];
-            };
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Обогатить артефакт расширением
-         * @description Репутация, декодирование, песочница. Расширение берётся из allowlist;
-         *     каждый внешний вызов помечается в аудите как передача данных наружу.
-         *     Недоступность расширения не ошибка запроса — вернётся вердикт status=error.
-         */
-        post: operations["enrichArtifact"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/investigations/{investigation_id}/iocs": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                investigation_id: components["parameters"]["InvestigationId"];
-            };
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Массовый ввод индикаторов
-         * @description Создаёт артефакты и сущности из списка индикаторов. С retro_search=true
-         *     ищет их по источникам и затягивает найденное — оценка распространения
-         *     по узлам инфраструктуры. Большая выборка уходит в фон (job_id).
-         */
-        post: operations["importIocs"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/entities/{entity_id}": {
         parameters: {
             query?: never;
             header?: never;
             path: {
+                /** @description Identifier of an entity — a host, account, process, address or hash. */
                 entity_id: components["parameters"]["EntityId"];
             };
             cookie?: never;
         };
         /**
-         * Карточка сущности
-         * @description Историчность и окружение в текущем расследовании плюс кросс-кейсовые
-         *     вхождения того же (type_code, canonical_key) в других расследованиях тенанта.
+         * Entity card
+         * @description Everything known about one host, account, process, address or hash: how often it shows up in this investigation, which other investigations of the tenant it appears in, and what it is connected to. The cross-case part is what answers "have we seen this before".
          */
         get: operations["getEntityCard"];
         put?: never;
@@ -219,22 +32,20 @@ export interface paths {
             query?: never;
             header?: never;
             path: {
+                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
                 investigation_id: components["parameters"]["InvestigationId"];
             };
             cookie?: never;
         };
         /**
-         * События расследования (таймлайн)
-         * @description Сортировка по occurred_at, id — стабильный keyset-курсор.
+         * Timeline of the investigation
+         * @description Events already pulled into the case, oldest first. Ordered by occurred_at then id, which is what makes the cursor stable when several events share a timestamp. Raw payloads are omitted here — fetch a single event for those.
          */
         get: operations["listEvents"];
         put?: never;
         /**
-         * Затянуть события в расследование
-         * @description Принимает либо явные ссылки на записи источника, либо параметры выборки.
-         *     Идемпотентно по dedup_key. Синхронно извлекает сущности, создаёт узлы
-         *     графа и прогоняет правила связывания (до 500 событий; больше — 422,
-         *     разбить выборку).
+         * Pull events into the investigation
+         * @description The way data enters the product. Takes either explicit references to source records or a query to run against a source. Each event is normalised, its entities are extracted, graph nodes are created and linking rules run — so the graph grows without an agent being involved. Idempotent: re-pulling the same record is a no-op. Up to 500 events per call; a larger selection has to be split.
          */
         post: operations["attachEvents"];
         delete?: never;
@@ -248,13 +59,14 @@ export interface paths {
             query?: never;
             header?: never;
             path: {
+                /** @description Identifier of an event already pulled into an investigation. */
                 event_id: components["parameters"]["EventId"];
             };
             cookie?: never;
         };
         /**
-         * Событие целиком
-         * @description Включая normalized_data, raw_data и source_ref для drill-down в консоль источника.
+         * One event in full
+         * @description The whole record, including the raw source payload and the link back to the originating console. This is the end of the provenance chain: every finding leads here, and here leads to the source system.
          */
         get: operations["getEvent"];
         put?: never;
@@ -270,16 +82,14 @@ export interface paths {
             query?: never;
             header?: never;
             path: {
+                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
                 investigation_id: components["parameters"]["InvestigationId"];
             };
             cookie?: never;
         };
         /**
-         * Граф расследования
-         * @description Узлы и рёбра одного расследования. include_subtree=true возвращает
-         *     объединение подграфов поддерева как есть (узлы пер-кейсовые); клиент
-         *     группирует дубликаты сущностей по (type_code, canonical_key) из полей
-         *     узла. Rejected-рёбра по умолчанию скрыты.
+         * Graph of the investigation
+         * @description Nodes and edges of one case — the main working surface for both the analyst and the agent. Rejected edges are hidden by default: they stay in the data as "checked and excluded" but do not clutter the picture.
          */
         get: operations["getGraph"];
         put?: never;
@@ -295,6 +105,7 @@ export interface paths {
             query?: never;
             header?: never;
             path: {
+                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
                 investigation_id: components["parameters"]["InvestigationId"];
             };
             cookie?: never;
@@ -302,11 +113,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Создать ребро (аналитик)
-         * @description origin=analyst, рождается confirmed. evidence_event_ids необязателен для
-         *     аналитика, обязателен в internal-контуре агента. relation_code валидируется
-         *     против RelationTypes (source_kind/target_kind должны совпасть с типами узлов).
-         *     Повтор той же тройки (source, target, relation_code) — 409.
+         * Draw an edge by hand
+         * @description The analyst's manual correction of the graph. An edge created here is born confirmed — a human asserting it is the assertion. The relation must exist in the dictionary and its declared endpoints must match the node kinds, so an event-to-event relation cannot be hung between two entities. Re-creating the same triple returns 409 rather than a duplicate.
          */
         post: operations["createEdge"];
         delete?: never;
@@ -320,6 +128,7 @@ export interface paths {
             query?: never;
             header?: never;
             path: {
+                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
                 investigation_id: components["parameters"]["InvestigationId"];
             };
             cookie?: never;
@@ -327,10 +136,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Батч-ревизия proposed-рёбер
-         * @description Одна транзакция: либо применяется весь батч, либо ничего.
-         *     Конфликт версии любого элемента — 409 с details.conflicts=[edge_id,...],
-         *     состояние БД не меняется.
+         * Review proposed edges in bulk
+         * @description Where a human accepts or rules out what rules and agents suggested. All or nothing: if any item carries a stale version the whole batch is refused with 409 and `details.conflicts` naming the ids, and nothing is written — so an optimistic UI can roll back precisely.
          */
         post: operations["reviewEdges"];
         delete?: never;
@@ -347,12 +154,15 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Список расследований
-         * @description Без parent_id возвращает корневые. parent_id=<uuid> — прямых потомков.
+         * List investigations
+         * @description Root cases by default, or the direct children of one. Only one level at a time — fetch the tree endpoint when the whole subtree is needed.
          */
         get: operations["listInvestigations"];
         put?: never;
-        /** Создать расследование или под-расследование */
+        /**
+         * Open an investigation or a hypothesis under one
+         * @description A root investigation is a case. A child is a hypothesis inside it — "the account was compromised", "this was the initial access". The tree is the same object at every level, so a hypothesis that grows can carry its own children without being converted into anything.
+         */
         post: operations["createInvestigation"];
         delete?: never;
         options?: never;
@@ -365,11 +175,15 @@ export interface paths {
             query?: never;
             header?: never;
             path: {
+                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
                 investigation_id: components["parameters"]["InvestigationId"];
             };
             cookie?: never;
         };
-        /** Карточка расследования */
+        /**
+         * One investigation
+         * @description The investigation with its counters — how much evidence it holds and how much still waits for review.
+         */
         get: operations["getInvestigation"];
         put?: never;
         post?: never;
@@ -377,13 +191,8 @@ export interface paths {
         options?: never;
         head?: never;
         /**
-         * Изменить расследование
-         * @description Закрытие (status=closed) требует verdict; verdict=rejected требует
-         *     verdict_reason. Для под-расследования verdict=confirmed требует хотя бы
-         *     одного привязанного события — нарушение возвращает 422 с
-         *     details.reason=evidence_required. Мутации в закрытом расследовании
-         *     запрещены (409, code=conflict), кроме переоткрытия: PATCH со
-         *     status=open очищает verdict/verdict_reason/closed_at и пишется в аудит.
+         * Update an investigation
+         * @description Edits the fields sent and nothing else. Closing requires a verdict, and rejecting requires a stated reason — a case cannot be closed silently. Confirming a hypothesis requires at least one attached event, which is the invariant the whole product rests on; violating it returns 422 with `details.reason=evidence_required`. A closed investigation refuses further changes with 409, except reopening it: sending status=open clears the verdict and is written to the audit log.
          */
         patch: operations["updateInvestigation"];
         trace?: never;
@@ -393,202 +202,16 @@ export interface paths {
             query?: never;
             header?: never;
             path: {
+                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
                 investigation_id: components["parameters"]["InvestigationId"];
             };
             cookie?: never;
         };
         /**
-         * Поддерево расследования
-         * @description Плоский пре-ордер с depth; клиент собирает дерево по parent_id за один проход.
+         * The whole subtree
+         * @description This investigation and everything under it, flattened in pre-order with a depth on each item. The client rebuilds the tree in one pass — no recursive fetching.
          */
         get: operations["getInvestigationTree"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/investigations/{investigation_id}/response-packages": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                investigation_id: components["parameters"]["InvestigationId"];
-            };
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Собрать пакет реагирования
-         * @description Включаются только подтверждённые артефакты. Пустой artifact_ids — все
-         *     подтверждённые артефакты расследования и его поддерева.
-         */
-        post: operations["createResponsePackage"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/response-packages/{package_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                package_id: components["parameters"]["PackageId"];
-            };
-            cookie?: never;
-        };
-        /** Пакет реагирования */
-        get: operations["getResponsePackage"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        /**
-         * Зафиксировать пакет
-         * @description Перевод в final. Финальный пакет неизменяем — повторный PATCH вернёт 409.
-         */
-        patch: operations["finalizeResponsePackage"];
-        trace?: never;
-    };
-    "/investigations/{investigation_id}/reports": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                investigation_id: components["parameters"]["InvestigationId"];
-            };
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Сгенерировать отчёт по инциденту
-         * @description Генерация асинхронная: возвращается запись со status=pending, файл
-         *     появляется в storage_ref. Содержимое собирается из подтверждённых данных;
-         *     отклонённые ветки входят как «проверено и исключено».
-         */
-        post: operations["createReport"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/reports/{report_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                report_id: components["parameters"]["ReportId"];
-            };
-            cookie?: never;
-        };
-        /** Статус отчёта */
-        get: operations["getReport"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/reports/{report_id}/content": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                report_id: components["parameters"]["ReportId"];
-            };
-            cookie?: never;
-        };
-        /** Скачать отчёт */
-        get: operations["downloadReport"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/entity-types": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Типы сущностей */
-        get: operations["listEntityTypes"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/relation-types": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Типы связей */
-        get: operations["listRelationTypes"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/alerts": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Лента сработок источников
-         * @description Триаж: сработки всех подключённых источников на лету, без персиста
-         *     (единственное представление вне расследования). Из сработки заводится
-         *     расследование через POST /investigations с from_alert.
-         */
-        get: operations["listAlerts"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/search": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Сквозной поиск по источникам
-         * @description Поиск вне расследования — pivot по значению (хеш, адрес, имя узла) по всем
-         *     включённым источникам. Отвечает на вопрос «где ещё это встречалось»
-         *     до затягивания улик в кейс. Недоступные источники перечислены в partial,
-         *     результат при этом возвращается.
-         */
-        get: operations["search"];
         put?: never;
         post?: never;
         delete?: never;
@@ -601,655 +224,546 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        /**
-         * @description Журнал действий пользователя, агента и системы. Append-only.
-         *     Источник метрики сокращения числа шагов.
-         */
-        AuditEntry: {
-            /** Format: int64 */
-            id: number;
-            /** Format: uuid */
-            investigation_id?: string | null;
-            /** @enum {string} */
-            actor_type: "user" | "agent" | "system";
-            actor_id: string;
-            action: string;
-            payload?: {
-                [key: string]: unknown;
-            };
-            /** @description Данные ушли во внешний сервис */
-            external_call?: boolean;
-            /** Format: date-time */
-            ts: string;
-        };
-        AuditPage: {
-            items: components["schemas"]["AuditEntry"][];
-            next_cursor?: string | null;
-        };
-        /** @description Расширение обогащения (MCP/skill). По умолчанию выключено — allowlist. */
-        Extension: {
-            code: string;
-            /** @enum {string} */
-            kind: "mcp" | "skill" | "a2a";
-            title: string;
-            is_allowed: boolean;
-            /** @description Признак «данные уходят наружу» — требует согласования (п.6.4 ТЗ) */
-            sends_data_externally: boolean;
-        };
-        /**
-         * @description Счётчики из журнала действий для метрики сокращения ручных шагов.
-         *     baseline_steps задаётся при фиксации эталонного прогона.
-         */
-        InvestigationMetrics: {
-            /** Format: uuid */
+        /** @description A named thing an incident revolves around, extracted from source events during ingestion. Entities are scoped to one investigation; the same real-world host appears as a separate row in each case it touches. */
+        Entity: {
+            /**
+             * Format: uuid
+             * @description Server-assigned identifier of this entity.
+             */
+            id: string;
+            /**
+             * Format: uuid
+             * @description Investigation this entity belongs to.
+             */
             investigation_id: string;
-            /** @description Действий аналитика в расследовании */
-            actions: number;
-            elapsed_seconds: number;
-            agent_actions?: number;
-            events_attached?: number;
-            edges_proposed?: number;
-            edges_confirmed?: number;
-            /** @description Шагов в исходных консолях, если эталон зафиксирован */
-            baseline_steps?: number | null;
-            /** @description (baseline_steps − actions) / baseline_steps */
-            reduction?: number | null;
-        };
-        /**
-         * @description Правило связывания — детерминированный не-LLM путь построения рёбер.
-         *     Система строит граф без агента (инвариант И-4).
-         */
-        LinkingRule: {
-            code: string;
-            title: string;
-            /** @enum {string} */
-            kind: "chain-join" | "identity-join" | "temporal-join" | "pair-join";
-            /** @description match, window_sec, relation_code, confidence */
-            rule?: {
+            /** @description Kind of thing this is — host, user, account, email, process, ip, domain, url, file_hash. The core set is fixed; peripheral kinds are added as dictionary rows without a migration. */
+            type_code: string;
+            /** @description Normalised identity used for matching: fqdn for a host, SID for an account, GUID for a process, sha256 for a file. Two records with the same type and key are the same thing, so linking rules join on it. */
+            canonical_key: string;
+            /** @description Label for the UI. Falls back to canonical_key when absent. */
+            display_name?: string | null;
+            /** @description Extra attributes carried over from the source — OS version, owner, geolocation. Free-form on purpose: sources differ. */
+            metadata?: {
                 [key: string]: unknown;
             };
-            born_status: components["schemas"]["EdgeStatus"];
-            is_enabled: boolean;
+            /**
+             * Format: date-time
+             * @description Earliest event in this investigation that mentions the entity.
+             */
+            first_seen?: string | null;
+            /**
+             * Format: date-time
+             * @description Latest event that mentions it. Together with first_seen this bounds the window the entity was active in.
+             */
+            last_seen?: string | null;
         };
-        /** @description Источник улик. Секреты не возвращаются — только ссылка secret_ref. */
-        Source: {
-            code: string;
-            /** @enum {string} */
-            kind: "siem" | "edr" | "ndr" | "infra" | "sandbox" | "other";
-            title: string;
-            secret_ref?: string | null;
-            is_enabled: boolean;
+        /** @description Entity plus the context an analyst needs to judge it: how much of this case it touches, where else it has surfaced, and who it talks to. */
+        EntityCard: {
+            /** @description The entity this card is about. */
+            entity: components["schemas"]["Entity"];
+            /** @description Events in this investigation the entity takes part in. A rough measure of how central it is to the case. */
+            events_count: number;
+            /** @description Other investigations of the same tenant where an entity with the same type and key shows up. This is the spread assessment: a hash seen in five cases means five hosts to check. */
+            occurrences: {
+                /**
+                 * Format: uuid
+                 * @description The other investigation.
+                 */
+                investigation_id: string;
+                /** @description Its title, so the analyst can judge relevance without opening it. */
+                title: string;
+                /** @description How many of its events involve the entity. */
+                events_count: number;
+            }[];
+            /** @description Entities reachable over confirmed edges only. Proposed links are left out — a card should show what is established, not what is suspected. */
+            neighbors?: {
+                /**
+                 * Format: uuid
+                 * @description The neighbouring entity.
+                 */
+                entity_id: string;
+                /** @description Its label for the UI. */
+                display_name?: string | null;
+                /** @description How they are related — parent_process, logged_in, connected_to, executed, resolved_to, same_host. */
+                relation_code: string;
+            }[];
         };
-        SourceHealth: {
-            code: string;
-            /** @enum {string} */
-            status: "ok" | "degraded" | "unavailable";
-            /** Format: date-time */
-            last_ok_at?: string | null;
-            last_error?: string | null;
-            /** Format: date-time */
-            checked_at?: string;
-        };
+        /** @description Body of every non-2xx response. Clients branch on `code`, not on the HTTP status: the status says what happened at the protocol level, the code says what happened in the domain. */
         ErrorResponse: {
+            /** @description The failure itself. Never carries internal details of a 500. */
             error: {
                 /**
-                 * @description not_implemented — ручка объявлена в контракте, но ещё не реализована.
-                 *     Клиент может отличить её от настоящей поломки сервера и скрыть
-                 *     элемент интерфейса, а не показывать ошибку.
+                 * @description Machine-readable reason, stable across releases. `validation` covers both a malformed body (400) and a well-formed but invalid one (422). `not_implemented` means the operation exists in the contract but has no implementation yet — a client can hide the control instead of showing an error.
                  * @enum {string}
                  */
-                code: "unauthorized" | "forbidden" | "not_found" | "conflict" | "validation" | "source_unavailable" | "som_unavailable" | "not_implemented" | "internal";
+                code: "unauthorized" | "forbidden" | "not_found" | "conflict" | "validation" | "source_unavailable" | "not_implemented" | "internal";
+                /** @description Human-readable explanation, safe to show. For an internal error it is deliberately generic — the real cause goes to the log. */
                 message: string;
+                /** @description Extra context tied to the code. Version conflicts list the clashing ids in `conflicts`; validation failures name the field. */
                 details?: {
                     [key: string]: unknown;
                 };
             };
         };
-        /** @enum {string} */
-        EdgeStatus: "proposed" | "confirmed" | "rejected";
-        /**
-         * @description Индикатор компрометации в скоупе расследования: хеш, адрес, домен, файл.
-         *     Накапливает вердикты обогащений от внешних расширений.
-         */
-        Artifact: {
-            /** Format: uuid */
-            id: string;
-            /** Format: uuid */
-            investigation_id: string;
-            /** @description Тип из справочника EntityType */
-            type_code: string;
-            value: string;
-            /**
-             * Format: uuid
-             * @description Связанная сущность графа
-             */
-            entity_id?: string | null;
-            /** @description Файл в object storage */
-            storage_ref?: string | null;
-            media_type?: string | null;
-            checksum?: string | null;
-            is_bundle?: boolean;
-            /** @description Ключ — код расширения */
-            enrichment_verdicts?: {
-                [key: string]: components["schemas"]["EnrichmentVerdict"];
-            };
-            metadata?: {
-                [key: string]: unknown;
-            };
-            /** Format: date-time */
-            created_at: string;
-        };
-        ArtifactPage: {
-            items: components["schemas"]["Artifact"][];
-            next_cursor?: string | null;
-        };
-        EnrichRequest: {
-            /** @description Код расширения из allowlist. Недоступность не валит запрос — вернётся status=error */
-            extension_code: string;
-        };
-        EnrichmentVerdict: {
-            extension_code: string;
-            /** @enum {string} */
-            status: "clean" | "suspicious" | "malicious" | "unknown" | "error";
-            score?: number | null;
-            detail?: {
-                [key: string]: unknown;
-            };
-            /** @description Данные уходили наружу — отражено в аудите (п.6.4 ТЗ) */
-            external_call?: boolean;
-            cached?: boolean;
-            /** Format: date-time */
-            enriched_at: string;
-        };
-        /**
-         * @description Массовый ввод индикаторов. Создаёт артефакты и сущности, запускает
-         *     ретро-поиск по источникам — закрывает задачу оценки распространения.
-         */
-        IocImportRequest: {
-            items: {
-                type_code: string;
-                value: string;
-            }[];
-            /**
-             * @description Искать индикаторы по источникам и затягивать найденное в расследование
-             * @default false
-             */
-            retro_search: boolean;
-            /** Format: date-time */
-            from?: string;
-            /** Format: date-time */
-            to?: string;
-        };
-        IocImportResult: {
-            created: number;
-            duplicates: number;
-            /** @description Затянуто событий ретро-поиском */
-            retro_events_attached?: number;
-            /**
-             * Format: uuid
-             * @description Если ретро-поиск ушёл в фон
-             */
-            job_id?: string | null;
-        };
-        Entity: {
-            /** Format: uuid */
-            id: string;
-            /** Format: uuid */
-            investigation_id: string;
-            type_code: string;
-            canonical_key: string;
-            display_name?: string | null;
-            metadata?: {
-                [key: string]: unknown;
-            };
-            /** Format: date-time */
-            first_seen?: string | null;
-            /** Format: date-time */
-            last_seen?: string | null;
-        };
-        EntityCard: {
-            entity: components["schemas"]["Entity"];
-            /** @description Событий с участием в текущем расследовании */
-            events_count: number;
-            /** @description Тот же (type_code, canonical_key) в других расследованиях тенанта */
-            occurrences: {
-                /** Format: uuid */
-                investigation_id: string;
-                title: string;
-                events_count: number;
-            }[];
-            /** @description Соседи по подтверждённым рёбрам */
-            neighbors?: {
-                /** Format: uuid */
-                entity_id: string;
-                display_name?: string | null;
-                relation_code: string;
-            }[];
-        };
-        EntityPage: {
-            items: components["schemas"]["Entity"][];
-            next_cursor?: string | null;
-        };
+        /** @description A fact from a security tool, pulled into an investigation. Events are never edited and carry no status: a fact cannot be confirmed or rejected, only cited. */
         Event: {
-            /** Format: uuid */
+            /**
+             * Format: uuid
+             * @description Identifier of this event inside the investigation.
+             */
             id: string;
-            /** Format: uuid */
+            /**
+             * Format: uuid
+             * @description Investigation the event was pulled into. The same source record pulled into two cases yields two rows, so each case owns its evidence outright.
+             */
             investigation_id: string;
+            /** @description Which tool it came from — siem, edr, ndr, infra. */
             source_code: string;
+            /** @description Identifier of the record in that tool. Stable address for going back to the original. */
             source_event_id: string;
-            /** @description Ссылка/запрос для drill-down к исходной записи */
+            /** @description Ready-made link or query that opens the record in the source console. What turns "we claim" into "go and check". */
             source_ref?: string | null;
+            /** @description What happened, in the product's vocabulary — process_start, network_session, logon, detection. */
             event_type: string;
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description When it happened, per the source. This is what the timeline sorts by.
+             */
             occurred_at: string;
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description When it was pulled in. Differs from occurred_at whenever an analyst reaches back in time, which is most of the time.
+             */
             ingested_at: string;
-            /** @description Конверт subject-action-object-status */
+            /** @description The event mapped onto the common envelope — subject, action, object, status — so events from different tools can be compared and searched. */
             normalized_data?: {
                 [key: string]: unknown;
             };
+            /** @description Original payload as the source returned it. Kept for the cases where normalisation lost something. Omitted from list responses. */
             raw_data?: {
                 [key: string]: unknown;
             } | null;
-            /** @description Участники события с ролями */
+            /** @description Who took part and in what capacity. Extracted during ingestion by the source's mapping profile. */
             entities?: {
-                /** Format: uuid */
+                /**
+                 * Format: uuid
+                 * @description The participating entity.
+                 */
                 entity_id: string;
+                /** @description Its role in the event — actor, object, src, dst. The same entity may appear twice with different roles. */
                 relation_code: string;
             }[];
         };
-        /** @description Ровно одно из полей refs или query. */
-        EventAttachRequest: {
-            refs?: {
-                source_code: string;
-                source_event_id: string;
-            }[];
-            /** @description Выборка из источника (EvidenceSource.Search) */
-            query?: {
-                source_code: string;
-                entity_key?: string;
-                /** Format: date-time */
-                from?: string;
-                /** Format: date-time */
-                to?: string;
-                substring?: string;
-                /** @default 100 */
-                limit: number;
-            };
-            /** @description Зачем затянуто — нарратив расследования, идёт в аудит */
-            reason?: string;
-        };
-        EventAttachResult: {
-            attached: number;
-            /** @description Отброшено по dedup_key */
-            duplicates: number;
-            entities_extracted: number;
-            /** @description Рёбра от правил связывания */
-            edges_created: number;
-        };
-        /**
-         * @description Событие без сырья: список тянет сотни записей, а raw_data у каждой —
-         *     килобайты. Полное событие отдаёт GET /events/{event_id}.
-         */
+        /** @description Event without the raw payload. A timeline page carries hundreds of events and raw payloads run to kilobytes each; the full record is available one at a time. */
         EventSummary: {
-            /** Format: uuid */
+            /**
+             * Format: uuid
+             * @description Identifier of this event.
+             */
             id: string;
-            /** Format: uuid */
+            /**
+             * Format: uuid
+             * @description Investigation it belongs to.
+             */
             investigation_id: string;
+            /** @description Which tool it came from. */
             source_code: string;
+            /** @description Identifier of the record in that tool. */
             source_event_id: string;
+            /** @description Link that opens the record in the source console. */
             source_ref?: string | null;
+            /** @description What happened, in the product's vocabulary. */
             event_type: string;
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description When it happened, per the source.
+             */
             occurred_at: string;
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description When it was pulled into the investigation.
+             */
             ingested_at: string;
+            /** @description The event mapped onto the common envelope. */
             normalized_data?: {
                 [key: string]: unknown;
             };
+            /** @description Who took part and in what capacity. */
             entities?: {
-                /** Format: uuid */
+                /**
+                 * Format: uuid
+                 * @description The participating entity.
+                 */
                 entity_id: string;
+                /** @description Its role in the event. */
                 relation_code: string;
             }[];
         };
+        /** @description What to pull. Give either refs, when the records are already known, or query, to let the source find them — exactly one of the two. */
+        EventAttachRequest: {
+            /** @description Records addressed directly. Used when the analyst has already picked them out, or when an agent cites what it found. */
+            refs?: {
+                /** @description Which tool holds the record. */
+                source_code: string;
+                /** @description Its identifier in that tool. */
+                source_event_id: string;
+            }[];
+            /** @description A selection to run against one source. This is the pivot: give it an entity key and a window, and whatever the source returns lands in the case. */
+            query?: {
+                /** @description Which source to query. */
+                source_code: string;
+                /** @description Value to pivot on — a hostname, account, address or hash. Matched against the source's own fields. */
+                entity_key?: string;
+                /**
+                 * Format: date-time
+                 * @description Lower bound of the time window, inclusive.
+                 */
+                from?: string;
+                /**
+                 * Format: date-time
+                 * @description Upper bound of the time window, exclusive.
+                 */
+                to?: string;
+                /** @description Free-text fragment to match, for cases a key cannot express. */
+                substring?: string;
+                /**
+                 * @description Cap on records to pull. The hard ceiling is 500 per call.
+                 * @default 100
+                 */
+                limit: number;
+            };
+            /** @description Why this was pulled. Goes into the audit log and into the case narrative — the record of what the analyst was thinking. */
+            reason?: string;
+        };
+        /** @description What the pull changed in the investigation. */
+        EventAttachResult: {
+            /** @description Events newly added to the case. */
+            attached: number;
+            /** @description Events already present and therefore skipped. A non-zero count is normal, not an error — overlapping pulls are expected. */
+            duplicates: number;
+            /** @description Entities created or updated from the new events. Counts entities, not mentions. */
+            entities_extracted: number;
+            /** @description Edges linking rules produced from the new events. This is the graph growing without an agent: rules alone connect what obviously belongs together. */
+            edges_created: number;
+        };
+        /** @description One page of the timeline. */
         EventPage: {
+            /** @description Events, oldest first. */
             items: components["schemas"]["EventSummary"][];
+            /** @description Pass as `cursor` to get the next page. Absent on the last page — that, not an empty page, is how iteration ends. */
             next_cursor?: string | null;
         };
-        Edge: {
-            /** Format: uuid */
-            id: string;
-            /** Format: uuid */
-            investigation_id: string;
-            /** Format: uuid */
-            source_node_id: string;
-            /** Format: uuid */
-            target_node_id: string;
-            relation_code: string;
-            status: components["schemas"]["EdgeStatus"];
-            reject_reason?: string | null;
-            confidence?: number | null;
-            /** @description Обоснование. Обязательно при origin=agent */
-            why?: string | null;
-            origin: components["schemas"]["Origin"];
-            /** @description subject_id | код правила | id запуска */
-            origin_ref?: string | null;
-            evidence_count: number;
-            evidence_event_ids?: string[];
-            metadata?: {
-                [key: string]: unknown;
-            };
-            version: number;
-            /** Format: date-time */
-            created_at?: string;
-            /** Format: date-time */
-            updated_at?: string;
-        };
-        EdgeCreate: {
-            /** Format: uuid */
-            source_node_id: string;
-            /** Format: uuid */
-            target_node_id: string;
-            relation_code: string;
-            confidence?: number;
-            why?: string;
-            /** @description События-основания того же расследования (иначе 422) */
-            evidence_event_ids?: string[];
-        };
-        EdgePatch: {
-            version: number;
-            /** @enum {string} */
-            status: "confirmed" | "rejected";
-            /** @description Обязателен при status=rejected */
-            reject_reason?: string;
-        };
+        /** @description Nodes and edges as one payload, ready to render. */
         Graph: {
-            /** Format: uuid */
+            /**
+             * Format: uuid
+             * @description Investigation this graph belongs to.
+             */
             investigation_id: string;
+            /** @description Whether child investigations were merged into this response. */
             include_subtree?: boolean;
+            /** @description Every node referenced by the edges below, plus isolated ones. */
             nodes: components["schemas"]["GraphNode"][];
+            /** @description Edges surviving the status and confidence filters. */
             edges: components["schemas"]["Edge"][];
         };
+        /** @description A point on the graph. Stands for exactly one entity or one event — never both, never neither. */
         GraphNode: {
-            /** Format: uuid */
+            /**
+             * Format: uuid
+             * @description Identifier of the node. Edges reference this, not the entity or event.
+             */
             id: string;
-            /** Format: uuid */
+            /**
+             * Format: uuid
+             * @description Investigation the node belongs to.
+             */
             investigation_id: string;
+            /** @description Which of the two fields below is filled. */
             node_type: components["schemas"]["NodeType"];
-            /** Format: uuid */
+            /**
+             * Format: uuid
+             * @description The entity, when node_type is entity.
+             */
             entity_id?: string | null;
-            /** Format: uuid */
+            /**
+             * Format: uuid
+             * @description The event, when node_type is event. Only events promoted onto the graph get a node — the rest live on the timeline.
+             */
             event_id?: string | null;
+            /** @description Who put this node on the graph. */
             origin: components["schemas"]["Origin"];
-            /** @description display_name сущности или сводка события */
+            /** @description Text to draw on the node — the entity's display name or a short summary of the event. */
             label?: string;
-            /** @description Тип сущности (иконка узла). Только для node_type=entity */
+            /** @description Kind of entity, which is what picks the icon. Entity nodes only. */
             type_code?: string | null;
-            /** @description Ключ для группировки дубликатов при include_subtree */
+            /** @description Entity's normalised identity. Lets the client fold duplicates of the same host across a merged subtree. */
             canonical_key?: string | null;
             /**
              * Format: date-time
-             * @description Только для node_type=event
+             * @description When the event happened. Event nodes only.
              */
             occurred_at?: string | null;
         };
-        /** @description Хотя бы одно из полей непусто. */
+        /** @description A claim that two nodes are related. Unlike an event, an edge can be wrong — hence a status, a stated reason, and the events it rests on. */
+        Edge: {
+            /**
+             * Format: uuid
+             * @description Identifier of the edge.
+             */
+            id: string;
+            /**
+             * Format: uuid
+             * @description Investigation the edge belongs to.
+             */
+            investigation_id: string;
+            /**
+             * Format: uuid
+             * @description Node the relation starts from.
+             */
+            source_node_id: string;
+            /**
+             * Format: uuid
+             * @description Node it points to. For an undirected relation the order carries no meaning.
+             */
+            target_node_id: string;
+            /** @description What the relation is — parent_process, logged_in, connected_to, executed, resolved_to, same_host, subevent_of, followed_by. */
+            relation_code: string;
+            /** @description Where the claim stands in review. */
+            status: components["schemas"]["EdgeStatus"];
+            /** @description Why it was ruled out. Required when rejecting, and it is what makes a rejected branch useful in the report. */
+            reject_reason?: string | null;
+            /** @description How sure the producer was. Rules carry a fixed value per rule; an agent estimates its own. */
+            confidence?: number | null;
+            /** @description Plain-language justification. Mandatory for an agent: an unexplained machine suggestion is not reviewable. */
+            why?: string | null;
+            /** @description Who produced the claim. Never changes, unlike status. */
+            origin: components["schemas"]["Origin"];
+            /** @description Which one exactly — the analyst's subject id, the rule's code, or the agent run's identifier. Together with origin this is how a claim is traced back to its author. */
+            origin_ref?: string | null;
+            /** @description How many events the edge cites. Zero is allowed for an analyst, never for an agent. */
+            evidence_count: number;
+            /** @description The cited events. All belong to the same investigation — the database enforces it, so a claim cannot lean on another case's data. */
+            evidence_event_ids?: string[];
+            /** @description Producer-specific extras, e.g. which rule field matched. */
+            metadata?: {
+                [key: string]: unknown;
+            };
+            /** @description Bumped on every change. Send the value you last read when reviewing; a mismatch means someone else got there first. */
+            version: number;
+            /**
+             * Format: date-time
+             * @description When the edge was created.
+             */
+            created_at?: string;
+            /**
+             * Format: date-time
+             * @description When it last changed — in practice, when it was reviewed.
+             */
+            updated_at?: string;
+        };
+        /** @description A relation the analyst asserts between two existing nodes. */
+        EdgeCreate: {
+            /**
+             * Format: uuid
+             * @description Node the relation starts from.
+             */
+            source_node_id: string;
+            /**
+             * Format: uuid
+             * @description Node it points to.
+             */
+            target_node_id: string;
+            /** @description Relation from the dictionary. Its declared endpoint kinds must match the two nodes, otherwise the request is rejected. */
+            relation_code: string;
+            /** @description Optional degree of certainty. A manual edge is normally certain. */
+            confidence?: number;
+            /** @description Justification, for the record. Optional here, required of agents. */
+            why?: string;
+            /** @description Events backing the claim. Each must belong to this investigation — citing another case's event is refused. */
+            evidence_event_ids?: string[];
+        };
+        /** @description Edges to accept and edges to rule out, applied as one transaction. At least one of the two lists must be non-empty. */
         ReviewRequest: {
+            /** @description Edges the analyst accepts as established. */
             confirm?: {
-                /** Format: uuid */
+                /**
+                 * Format: uuid
+                 * @description The edge.
+                 */
                 id: string;
+                /** @description Version the client last saw. Guards against a concurrent edit. */
                 version: number;
             }[];
+            /** @description Edges the analyst rules out. They are kept, not deleted — a checked and excluded lead is a result too. */
             reject?: {
-                /** Format: uuid */
+                /**
+                 * Format: uuid
+                 * @description The edge.
+                 */
                 id: string;
+                /** @description Version the client last saw. */
                 version: number;
+                /** @description Why it does not hold. Required — an unexplained rejection is worthless in the report. */
                 reason: string;
             }[];
         };
+        /** @description Ids the batch actually changed, split by outcome. */
         ReviewResult: {
+            /** @description Edges that became confirmed. */
             confirmed: string[];
+            /** @description Edges that became rejected. */
             rejected: string[];
         };
-        /** @enum {string} */
+        /**
+         * @description Where an edge stands in review. Proposed until a human accepts it. Rejected edges are kept rather than deleted, so that "checked and excluded" survives into the report.
+         * @enum {string}
+         */
+        EdgeStatus: "proposed" | "confirmed" | "rejected";
+        /**
+         * @description What a graph node stands for. An entity node is a host, account, process, address or hash; an event node is a source record promoted onto the graph.
+         * @enum {string}
+         */
         NodeType: "entity" | "event";
-        /** @enum {string} */
+        /**
+         * @description Who produced the record: a human acting through the API, a deterministic linking rule, or an agent run. Anything not produced by a human is born unconfirmed and has to be reviewed.
+         * @enum {string}
+         */
         Origin: "analyst" | "rule" | "agent";
+        /** @description A case or a hypothesis within one — the same shape at every level of the tree. It owns its evidence, its entities and its graph; nothing crosses from one investigation to another. */
         Investigation: {
-            /** Format: uuid */
+            /**
+             * Format: uuid
+             * @description Identifier of the investigation.
+             */
             id: string;
+            /** @description Sb0rka project that owns the case — the tenant. Taken from the verified token, never from the request body, and inherited unchanged by every child. */
             project_id: string;
-            /** Format: uuid */
+            /**
+             * Format: uuid
+             * @description The investigation this one refines. Null means it is a root case; anything else means it is a hypothesis inside a larger case.
+             */
             parent_id?: string | null;
+            /** @description What is being investigated. For a hypothesis this is the claim being tested, phrased so a verdict makes sense against it. */
             title: string;
+            /** @description Free-form context — what is known, what is being checked and why. */
             description?: string | null;
+            /** @description Whether work is still going on. Independent of the verdict: a case can be open with no verdict yet, and closing requires one. */
             status: components["schemas"]["InvestigationStatus"];
+            /** @description How bad this looks. Set during triage and revised as evidence arrives; null until someone judges it. */
             severity?: (string & components["schemas"]["Severity"]) | null;
+            /** @description The conclusion. Null while the investigation is still open, required to close it. */
             verdict?: (string & components["schemas"]["Verdict"]) | null;
+            /** @description Why that conclusion. Required when rejecting — a rejected hypothesis without a reason teaches nobody anything. */
             verdict_reason?: string | null;
+            /** @description How sure the conclusion is. Meaningful for a hypothesis, rarely used on a root case. */
             confidence?: number | null;
-            /** @description Кто создал: аналитик через API, правило или агент. Ставится сервером по способу создания, клиентом не задаётся. */
+            /** @description Who opened it — an analyst through the API, a linking rule, or an agent. Set by the server from how the request arrived; a client cannot claim it. */
             origin?: components["schemas"]["Origin"];
-            /** @description Кто именно — subject_id аналитика, код правила или id запуска */
+            /** @description Which one exactly — the analyst's subject id, the rule's code, or the agent run's identifier. */
             origin_ref?: string | null;
+            /** @description Bumped on every change. Send the value you last read when updating; a mismatch means someone else edited it first. */
             version: number;
+            /** @description Size of the case at a glance, so the list does not need a query per row. */
             counters: {
+                /** @description Direct child investigations — the open hypotheses under this one. */
                 children: number;
+                /** @description Events pulled into this investigation. */
                 events: number;
+                /** @description Distinct entities extracted from those events. */
                 entities: number;
+                /** @description Edges still waiting for review. This is the analyst's queue — non-zero means there is work to do here. */
                 proposed_edges: number;
             };
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description When the investigation was opened.
+             */
             created_at: string;
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description When it last changed.
+             */
             updated_at: string;
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description When it was closed. Cleared if the investigation is reopened.
+             */
             closed_at?: string | null;
         };
+        /** @description A new case, or a new hypothesis inside an existing one. */
         InvestigationCreate: {
+            /** @description What is being investigated, or the claim being tested. */
             title: string;
+            /** @description Context — what is known so far and what needs checking. */
             description?: string;
             /**
              * Format: uuid
-             * @description Родитель. NULL — корневой кейс. Потомок наследует project_id родителя.
+             * @description The investigation this one refines. Omit it to open a root case. A child inherits the parent's tenant.
              */
             parent_id?: string;
-            /** @description Тенант sb0rka. Обязателен для корня, запрещён для потомка. */
+            /** @description Sb0rka project that owns the case. Required for a root, refused for a child — a hypothesis cannot belong to a different tenant than its parent. */
             project_id?: string;
+            /** @description Initial assessment. Can be revised later. */
             severity?: components["schemas"]["Severity"];
         };
+        /** @description Fields to change. Anything omitted stays as it is; `version` is always required so concurrent edits cannot overwrite each other silently. */
+        InvestigationPatch: {
+            /** @description Version the client last read. A mismatch is a 409. */
+            version: number;
+            /** @description New title. */
+            title?: string;
+            /** @description New description. */
+            description?: string;
+            /** @description Close the investigation, or reopen a closed one. Closing needs a verdict; reopening clears it. */
+            status?: components["schemas"]["InvestigationStatus"];
+            /** @description The conclusion. Which values are allowed depends on whether this is a root case or a hypothesis. */
+            verdict?: components["schemas"]["Verdict"];
+            /** @description Why. Required when the verdict is rejected. */
+            verdict_reason?: string;
+            /** @description How sure the conclusion is. Meaningful for a hypothesis. */
+            confidence?: number;
+            /** @description Revised assessment of how bad this is. */
+            severity?: components["schemas"]["Severity"];
+        };
+        /**
+         * @description Whether work is still going on. Says nothing about the outcome — that is the verdict.
+         * @enum {string}
+         */
+        InvestigationStatus: "open" | "closed";
+        /**
+         * @description The conclusion, drawn from two vocabularies that share one field. A root case ends as incident, false_positive, not_affected or inconclusive. A hypothesis ends as confirmed, rejected or inconclusive. The server checks the value against the investigation's position in the tree, so a hypothesis cannot be closed as an incident.
+         * @enum {string}
+         */
+        Verdict: "incident" | "false_positive" | "not_affected" | "inconclusive" | "confirmed" | "rejected";
+        /** @description One page of investigations. */
         InvestigationPage: {
+            /** @description The investigations on this page. */
             items: components["schemas"]["Investigation"][];
+            /** @description Pass as `cursor` to get the next page. Absent on the last page. */
             next_cursor?: string | null;
         };
-        InvestigationPatch: {
-            version: number;
-            title?: string;
-            description?: string;
-            status?: components["schemas"]["InvestigationStatus"];
-            verdict?: components["schemas"]["Verdict"];
-            /** @description Обоснование вердикта. Обязателен при verdict=rejected */
-            verdict_reason?: string;
-            /** @description Уверенность в гипотезе. Осмысленна для под-расследования */
-            confidence?: number;
-            severity?: components["schemas"]["Severity"];
-        };
-        /** @enum {string} */
-        InvestigationStatus: "open" | "closed";
+        /** @description A subtree flattened for one-pass rendering. */
         InvestigationTree: {
-            /** Format: uuid */
+            /**
+             * Format: uuid
+             * @description The investigation the subtree was requested for.
+             */
             root_id: string;
-            /** @description Плоский пре-ордер, включая корень (depth=0) */
+            /** @description Every investigation in the subtree in pre-order, starting with the root itself. Each carries its depth, so the client can indent without walking parent links. */
             items: (components["schemas"]["Investigation"] & {
+                /** @description Distance from the root. Zero for the root itself. */
                 depth: number;
             })[];
         };
         /**
-         * @description Корень: incident | false_positive | not_affected | inconclusive.
-         *     Под-расследование: confirmed | rejected | inconclusive.
-         *     Сервис валидирует подмножество по позиции в дереве.
+         * @description How much damage the case could cause. Set on triage and adjusted as evidence accumulates.
          * @enum {string}
          */
-        Verdict: "incident" | "false_positive" | "not_affected" | "inconclusive" | "confirmed" | "rejected";
-        /** @enum {string} */
         Severity: "low" | "medium" | "high" | "critical";
-        /**
-         * @description Отчёт по инциденту. Формируется из подтверждённых данных; отклонённые ветки
-         *     входят как «проверено и исключено». snapshot фиксирует данные на момент
-         *     генерации — отчёт воспроизводим.
-         */
-        Report: {
-            /** Format: uuid */
-            id: string;
-            /** Format: uuid */
-            investigation_id: string;
-            /** @enum {string} */
-            format: "markdown" | "pdf";
-            /** @enum {string} */
-            status: "pending" | "ready" | "failed";
-            /** @description Ссылка на файл в object storage */
-            storage_ref?: string | null;
-            error?: string | null;
-            /** Format: uuid */
-            created_by_subject_id?: string;
-            /** Format: date-time */
-            created_at: string;
-            /** Format: date-time */
-            completed_at?: string | null;
-        };
-        ReportCreate: {
-            /**
-             * @default markdown
-             * @enum {string}
-             */
-            format: "markdown" | "pdf";
-            /**
-             * @description Включить под-расследования с их вердиктами
-             * @default true
-             */
-            include_subtree: boolean;
-            /**
-             * @description «Проверено и исключено» — отклонённые ветки с причинами
-             * @default true
-             */
-            include_rejected: boolean;
-        };
-        /**
-         * @description Пакет реагирования: только подтверждённые артефакты расследования,
-         *     в формате, пригодном для загрузки в EDR заказчика.
-         */
-        ResponsePackage: {
-            /** Format: uuid */
-            id: string;
-            /** Format: uuid */
-            investigation_id: string;
-            /** @enum {string} */
-            status: "draft" | "final";
-            /** @enum {string} */
-            format: "json" | "csv" | "stix";
-            items?: components["schemas"]["ResponsePackageItem"][];
-            /** Format: uuid */
-            created_by_subject_id?: string;
-            /** Format: date-time */
-            created_at: string;
-            /** Format: date-time */
-            exported_at?: string | null;
-        };
-        ResponsePackageCreate: {
-            /**
-             * @default json
-             * @enum {string}
-             */
-            format: "json" | "csv" | "stix";
-            /** @description Пусто — включить все подтверждённые артефакты расследования */
-            artifact_ids?: string[];
-        };
-        ResponsePackageItem: {
-            /** Format: uuid */
-            artifact_id: string;
-            type_code: string;
-            value: string;
-            /** @description Узел, на котором индикатор наблюдался */
-            node?: string | null;
-        };
-        ResponsePackagePatch: {
-            /**
-             * @description Фиксация пакета. Final неизменяем
-             * @enum {string}
-             */
-            status: "final";
-        };
-        EntityType: {
-            code: string;
-            title: string;
-        };
-        RelationType: {
-            code: string;
-            title: string;
-            source_kind: components["schemas"]["NodeType"];
-            target_kind: components["schemas"]["NodeType"];
-            directed: boolean;
-        };
-        /**
-         * @description Сработка источника. Лента триажа — единственное представление вне
-         *     расследования; не персистится (инвариант И-1), читается из источника на лету.
-         */
-        Alert: {
-            source_code: string;
-            source_event_id: string;
-            /** @description Ссылка на сработку в консоли источника */
-            source_ref?: string | null;
-            title: string;
-            severity: components["schemas"]["Severity"];
-            /** Format: date-time */
-            occurred_at: string;
-            /** @description Извлечённые сущности сработки (превью до затяжки в кейс) */
-            entities?: {
-                type_code: string;
-                canonical_key: string;
-                display_name?: string | null;
-            }[];
-            /**
-             * Format: uuid
-             * @description Заполнено, если по сработке уже заведено расследование
-             */
-            investigation_id?: string | null;
-            /** @description Нормализованный конверт сработки */
-            summary?: {
-                [key: string]: unknown;
-            };
-        };
-        AlertPage: {
-            items: components["schemas"]["Alert"][];
-            next_cursor?: string | null;
-        };
-        /** @description Результат сквозного поиска по источнику (вне расследования) */
-        SearchHit: {
-            source_code: string;
-            source_event_id: string;
-            source_ref?: string | null;
-            event_type?: string;
-            /** Format: date-time */
-            occurred_at: string;
-            summary?: {
-                [key: string]: unknown;
-            };
-            /** @description Расследования тенанта, куда событие уже затянуто */
-            attached_to?: string[];
-        };
-        SearchResult: {
-            items: components["schemas"]["SearchHit"][];
-            next_cursor?: string | null;
-            /** @description Источники, не ответившие вовремя — результат неполон */
-            partial?: {
-                source_code: string;
-                reason: string;
-            }[];
-        };
     };
     responses: {
-        /** @description Нет или невалиден токен (code=unauthorized) */
+        /** @description Token is missing, malformed, expired or signed by an unknown key (code=unauthorized). */
         Unauthorized: {
             headers: {
                 [name: string]: unknown;
@@ -1258,7 +772,7 @@ export interface components {
                 "application/json": components["schemas"]["ErrorResponse"];
             };
         };
-        /** @description Роль не даёт действия или чужой тенант (code=forbidden) */
+        /** @description Caller is authenticated but holds no role in the tenant, or the role does not grant this action (code=forbidden). */
         Forbidden: {
             headers: {
                 [name: string]: unknown;
@@ -1267,16 +781,7 @@ export interface components {
                 "application/json": components["schemas"]["ErrorResponse"];
             };
         };
-        /** @description Невалидные данные (code=validation) */
-        ValidationError: {
-            headers: {
-                [name: string]: unknown;
-            };
-            content: {
-                "application/json": components["schemas"]["ErrorResponse"];
-            };
-        };
-        /** @description Не найдено в тенанте субъекта (code=not_found) */
+        /** @description No such record in the caller's tenant. Returned instead of 403 for records that exist elsewhere, so the response does not reveal them (code=not_found). */
         NotFound: {
             headers: {
                 [name: string]: unknown;
@@ -1285,7 +790,16 @@ export interface components {
                 "application/json": components["schemas"]["ErrorResponse"];
             };
         };
-        /** @description Конфликт версии, дубликат или закрытое расследование (code=conflict) */
+        /** @description Request parsed but violates a rule of the domain — an impossible status transition, a confirmation without evidence, a malformed cursor (code=validation). */
+        ValidationError: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
+        /** @description The record changed since the version the client sent, the write would duplicate an existing one, or the investigation is already closed. `details.conflicts` lists the ids that clashed (code=conflict). */
         Conflict: {
             headers: {
                 [name: string]: unknown;
@@ -1294,7 +808,7 @@ export interface components {
                 "application/json": components["schemas"]["ErrorResponse"];
             };
         };
-        /** @description Источник улик недоступен (code=source_unavailable) */
+        /** @description An upstream security tool did not answer. The investigation itself is intact — retry, or narrow the query (code=source_unavailable). */
         SourceUnavailable: {
             headers: {
                 [name: string]: unknown;
@@ -1305,15 +819,16 @@ export interface components {
         };
     };
     parameters: {
-        Limit: number;
-        /** @description Непрозрачный keyset-курсор из next_cursor предыдущей страницы */
-        Cursor: string;
-        InvestigationId: string;
-        ArtifactId: string;
+        /** @description Identifier of an entity — a host, account, process, address or hash. */
         EntityId: string;
+        /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
+        InvestigationId: string;
+        /** @description How many items to return. The server may return fewer, never more. */
+        Limit: number;
+        /** @description Opaque keyset cursor taken from `next_cursor` of the previous page. Encodes a position, not a query — do not build one by hand. Omit it to start from the beginning. */
+        Cursor: string;
+        /** @description Identifier of an event already pulled into an investigation. */
         EventId: string;
-        PackageId: string;
-        ReportId: string;
     };
     requestBodies: never;
     headers: never;
@@ -1321,271 +836,19 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
-    listSources: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Источники */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        items: components["schemas"]["Source"][];
-                    };
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-        };
-    };
-    listExtensions: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Расширения */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        items: components["schemas"]["Extension"][];
-                    };
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-        };
-    };
-    listLinkingRules: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Правила */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        items: components["schemas"]["LinkingRule"][];
-                    };
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-        };
-    };
-    listAudit: {
-        parameters: {
-            query?: {
-                investigation_id?: string;
-                actor_type?: "user" | "agent" | "system";
-                action?: string;
-                /** @description Только вызовы наружу */
-                external_call?: boolean;
-                from?: string;
-                to?: string;
-                limit?: components["parameters"]["Limit"];
-                /** @description Непрозрачный keyset-курсор из next_cursor предыдущей страницы */
-                cursor?: components["parameters"]["Cursor"];
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Страница журнала */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AuditPage"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            422: components["responses"]["ValidationError"];
-        };
-    };
-    getInvestigationMetrics: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                investigation_id: components["parameters"]["InvestigationId"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Метрики */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["InvestigationMetrics"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-        };
-    };
-    getHealth: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Состояние */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        sources: components["schemas"]["SourceHealth"][];
-                    };
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-        };
-    };
-    listArtifacts: {
-        parameters: {
-            query?: {
-                type_code?: string;
-                limit?: components["parameters"]["Limit"];
-                /** @description Непрозрачный keyset-курсор из next_cursor предыдущей страницы */
-                cursor?: components["parameters"]["Cursor"];
-            };
-            header?: never;
-            path: {
-                investigation_id: components["parameters"]["InvestigationId"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Страница артефактов */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ArtifactPage"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-            422: components["responses"]["ValidationError"];
-        };
-    };
-    enrichArtifact: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                artifact_id: components["parameters"]["ArtifactId"];
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["EnrichRequest"];
-            };
-        };
-        responses: {
-            /** @description Вердикт */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["EnrichmentVerdict"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            /** @description Расширение не в allowlist или роль не даёт действия (code=forbidden) */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            404: components["responses"]["NotFound"];
-            422: components["responses"]["ValidationError"];
-        };
-    };
-    importIocs: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                investigation_id: components["parameters"]["InvestigationId"];
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["IocImportRequest"];
-            };
-        };
-        responses: {
-            /** @description Итог импорта */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["IocImportResult"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
-            422: components["responses"]["ValidationError"];
-            502: components["responses"]["SourceUnavailable"];
-        };
-    };
     getEntityCard: {
         parameters: {
             query?: never;
             header?: never;
             path: {
+                /** @description Identifier of an entity — a host, account, process, address or hash. */
                 entity_id: components["parameters"]["EntityId"];
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Карточка */
+            /** @description The card */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -1602,27 +865,33 @@ export interface operations {
     listEvents: {
         parameters: {
             query?: {
+                /** @description Keep only events of this kind, e.g. process_start or network_session. */
                 event_type?: string;
+                /** @description Keep only events from one source — siem, edr, ndr, infra. */
                 source_code?: string;
-                /** @description Только события с участием сущности */
+                /** @description Keep only events this entity takes part in. This is how the UI answers "what happened on that host". */
                 entity_id?: string;
+                /** @description Lower bound on occurred_at, inclusive. */
                 from?: string;
+                /** @description Upper bound on occurred_at, exclusive. */
                 to?: string;
-                /** @description Подстрока в normalized_data */
+                /** @description Substring match over the normalised payload — command lines, paths, addresses. */
                 q?: string;
+                /** @description How many items to return. The server may return fewer, never more. */
                 limit?: components["parameters"]["Limit"];
-                /** @description Непрозрачный keyset-курсор из next_cursor предыдущей страницы */
+                /** @description Opaque keyset cursor taken from `next_cursor` of the previous page. Encodes a position, not a query — do not build one by hand. Omit it to start from the beginning. */
                 cursor?: components["parameters"]["Cursor"];
             };
             header?: never;
             path: {
+                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
                 investigation_id: components["parameters"]["InvestigationId"];
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Страница событий */
+            /** @description One page of the timeline */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -1642,6 +911,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
+                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
                 investigation_id: components["parameters"]["InvestigationId"];
             };
             cookie?: never;
@@ -1652,7 +922,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Итог затяжки */
+            /** @description What the pull produced */
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -1674,13 +944,14 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
+                /** @description Identifier of an event already pulled into an investigation. */
                 event_id: components["parameters"]["EventId"];
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Событие */
+            /** @description The event */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -1697,20 +968,23 @@ export interface operations {
     getGraph: {
         parameters: {
             query?: {
+                /** @description Also return the graphs of child investigations. Nodes stay per-case, so the same host appears once per investigation — group them client-side by type_code and canonical_key. */
                 include_subtree?: boolean;
+                /** @description Drop edges the producer was less sure about than this. Useful for thinning out an agent's suggestions. */
                 min_confidence?: number;
-                /** @description Фильтр статусов рёбер, по умолчанию proposed,confirmed */
+                /** @description Which edge states to include. Defaults to proposed and confirmed; pass rejected explicitly to see what was ruled out. */
                 statuses?: components["schemas"]["EdgeStatus"][];
             };
             header?: never;
             path: {
+                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
                 investigation_id: components["parameters"]["InvestigationId"];
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Граф */
+            /** @description The graph */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -1730,6 +1004,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
+                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
                 investigation_id: components["parameters"]["InvestigationId"];
             };
             cookie?: never;
@@ -1740,7 +1015,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Ребро */
+            /** @description The new edge */
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -1761,6 +1036,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
+                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
                 investigation_id: components["parameters"]["InvestigationId"];
             };
             cookie?: never;
@@ -1771,7 +1047,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Итог ревизии */
+            /** @description What the batch changed */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -1790,13 +1066,17 @@ export interface operations {
     listInvestigations: {
         parameters: {
             query?: {
+                /** @description Return the direct children of this investigation instead of the roots. Omit it for the case list. */
                 parent_id?: string;
+                /** @description Keep only open or only closed investigations. */
                 status?: components["schemas"]["InvestigationStatus"];
+                /** @description Keep only investigations of this severity. */
                 severity?: components["schemas"]["Severity"];
-                /** @description Подстрока в title */
+                /** @description Substring match on the title. */
                 q?: string;
+                /** @description How many items to return. The server may return fewer, never more. */
                 limit?: components["parameters"]["Limit"];
-                /** @description Непрозрачный keyset-курсор из next_cursor предыдущей страницы */
+                /** @description Opaque keyset cursor taken from `next_cursor` of the previous page. Encodes a position, not a query — do not build one by hand. Omit it to start from the beginning. */
                 cursor?: components["parameters"]["Cursor"];
             };
             header?: never;
@@ -1805,7 +1085,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Страница */
+            /** @description One page of investigations */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -1831,7 +1111,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Создано */
+            /** @description The new investigation */
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -1842,7 +1122,7 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
-            /** @description parent_id не существует */
+            /** @description The parent named in parent_id does not exist in this tenant. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -1859,13 +1139,14 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
+                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
                 investigation_id: components["parameters"]["InvestigationId"];
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Расследование со счётчиками */
+            /** @description The investigation */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -1884,6 +1165,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
+                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
                 investigation_id: components["parameters"]["InvestigationId"];
             };
             cookie?: never;
@@ -1894,7 +1176,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Обновлено */
+            /** @description The updated investigation */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -1915,13 +1197,14 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
+                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
                 investigation_id: components["parameters"]["InvestigationId"];
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Поддерево */
+            /** @description The subtree */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -1933,296 +1216,6 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
-        };
-    };
-    createResponsePackage: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                investigation_id: components["parameters"]["InvestigationId"];
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ResponsePackageCreate"];
-            };
-        };
-        responses: {
-            /** @description Черновик пакета */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ResponsePackage"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-            422: components["responses"]["ValidationError"];
-        };
-    };
-    getResponsePackage: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                package_id: components["parameters"]["PackageId"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Пакет */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ResponsePackage"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-        };
-    };
-    finalizeResponsePackage: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                package_id: components["parameters"]["PackageId"];
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ResponsePackagePatch"];
-            };
-        };
-        responses: {
-            /** @description Пакет */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ResponsePackage"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
-            422: components["responses"]["ValidationError"];
-        };
-    };
-    createReport: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                investigation_id: components["parameters"]["InvestigationId"];
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ReportCreate"];
-            };
-        };
-        responses: {
-            /** @description Принято в работу */
-            202: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Report"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-            422: components["responses"]["ValidationError"];
-        };
-    };
-    getReport: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                report_id: components["parameters"]["ReportId"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Отчёт */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Report"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-        };
-    };
-    downloadReport: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                report_id: components["parameters"]["ReportId"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Файл отчёта */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "text/markdown": string;
-                    "application/pdf": string;
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-            /** @description Отчёт ещё не готов или сборка упала (code=conflict) */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    listEntityTypes: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Справочник */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        items: components["schemas"]["EntityType"][];
-                    };
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-        };
-    };
-    listRelationTypes: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Справочник */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        items: components["schemas"]["RelationType"][];
-                    };
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-        };
-    };
-    listAlerts: {
-        parameters: {
-            query?: {
-                source_code?: string;
-                severity?: components["schemas"]["Severity"];
-                from?: string;
-                to?: string;
-                /** @description Скрыть сработки, по которым уже заведено расследование */
-                only_new?: boolean;
-                limit?: components["parameters"]["Limit"];
-                /** @description Непрозрачный keyset-курсор из next_cursor предыдущей страницы */
-                cursor?: components["parameters"]["Cursor"];
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Лента */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AlertPage"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            422: components["responses"]["ValidationError"];
-            502: components["responses"]["SourceUnavailable"];
-        };
-    };
-    search: {
-        parameters: {
-            query: {
-                /** @description Значение или подстрока */
-                q: string;
-                /** @description Трактовать q как значение сущности этого типа */
-                type_code?: string;
-                /** @description Ограничить источниками; пусто — все включённые */
-                source_codes?: string[];
-                from?: string;
-                to?: string;
-                limit?: components["parameters"]["Limit"];
-                /** @description Непрозрачный keyset-курсор из next_cursor предыдущей страницы */
-                cursor?: components["parameters"]["Cursor"];
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Результаты */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SearchResult"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            422: components["responses"]["ValidationError"];
-            502: components["responses"]["SourceUnavailable"];
         };
     };
 }

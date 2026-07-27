@@ -88,12 +88,13 @@ tasks:
       - '{{.OPENAPI_TS}} api/bundle.yaml -o packages/contract-ts/api.d.ts'
 
   spec-docs:
-    desc: Собрать документацию в api/docs.html и открыть
+    desc: Собрать документацию API в api/docs.html
     deps: [spec]
     cmds:
       - '{{.REDOCLY}} build-docs api/bundle.yaml -o api/docs.html'
-      - cmd: '{{if eq OS "windows"}}start api/docs.html{{else}}open api/docs.html{{end}}'
-        ignore_error: true
+      # Сами не открываем: у Task свой шелл, а `start` — не исполняемый файл,
+      # а встроенная команда cmd.exe, и вызов через неё ведёт себя непредсказуемо.
+      - cmd: echo "готово, откройте api/docs.html"
 
   check-generated:
     desc: Проверить, что сгенерированное соответствует спеке

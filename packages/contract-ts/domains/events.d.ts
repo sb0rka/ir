@@ -9,22 +9,20 @@ export interface paths {
             query?: never;
             header?: never;
             path: {
+                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
                 investigation_id: components["parameters"]["InvestigationId"];
             };
             cookie?: never;
         };
         /**
-         * События расследования (таймлайн)
-         * @description Сортировка по occurred_at, id — стабильный keyset-курсор.
+         * Timeline of the investigation
+         * @description Events already pulled into the case, oldest first. Ordered by occurred_at then id, which is what makes the cursor stable when several events share a timestamp. Raw payloads are omitted here — fetch a single event for those.
          */
         get: operations["listEvents"];
         put?: never;
         /**
-         * Затянуть события в расследование
-         * @description Принимает либо явные ссылки на записи источника, либо параметры выборки.
-         *     Идемпотентно по dedup_key. Синхронно извлекает сущности, создаёт узлы
-         *     графа и прогоняет правила связывания (до 500 событий; больше — 422,
-         *     разбить выборку).
+         * Pull events into the investigation
+         * @description The way data enters the product. Takes either explicit references to source records or a query to run against a source. Each event is normalised, its entities are extracted, graph nodes are created and linking rules run — so the graph grows without an agent being involved. Idempotent: re-pulling the same record is a no-op. Up to 500 events per call; a larger selection has to be split.
          */
         post: operations["attachEvents"];
         delete?: never;
@@ -38,13 +36,14 @@ export interface paths {
             query?: never;
             header?: never;
             path: {
+                /** @description Identifier of an event already pulled into an investigation. */
                 event_id: components["parameters"]["EventId"];
             };
             cookie?: never;
         };
         /**
-         * Событие целиком
-         * @description Включая normalized_data, raw_data и source_ref для drill-down в консоль источника.
+         * One event in full
+         * @description The whole record, including the raw source payload and the link back to the originating console. This is the end of the provenance chain: every finding leads here, and here leads to the source system.
          */
         get: operations["getEvent"];
         put?: never;
@@ -59,103 +58,166 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** @description A fact from a security tool, pulled into an investigation. Events are never edited and carry no status: a fact cannot be confirmed or rejected, only cited. */
         Event: {
-            /** Format: uuid */
+            /**
+             * Format: uuid
+             * @description Identifier of this event inside the investigation.
+             */
             id: string;
-            /** Format: uuid */
+            /**
+             * Format: uuid
+             * @description Investigation the event was pulled into. The same source record pulled into two cases yields two rows, so each case owns its evidence outright.
+             */
             investigation_id: string;
+            /** @description Which tool it came from — siem, edr, ndr, infra. */
             source_code: string;
+            /** @description Identifier of the record in that tool. Stable address for going back to the original. */
             source_event_id: string;
-            /** @description Ссылка/запрос для drill-down к исходной записи */
+            /** @description Ready-made link or query that opens the record in the source console. What turns "we claim" into "go and check". */
             source_ref?: string | null;
+            /** @description What happened, in the product's vocabulary — process_start, network_session, logon, detection. */
             event_type: string;
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description When it happened, per the source. This is what the timeline sorts by.
+             */
             occurred_at: string;
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description When it was pulled in. Differs from occurred_at whenever an analyst reaches back in time, which is most of the time.
+             */
             ingested_at: string;
-            /** @description Конверт subject-action-object-status */
+            /** @description The event mapped onto the common envelope — subject, action, object, status — so events from different tools can be compared and searched. */
             normalized_data?: {
                 [key: string]: unknown;
             };
+            /** @description Original payload as the source returned it. Kept for the cases where normalisation lost something. Omitted from list responses. */
             raw_data?: {
                 [key: string]: unknown;
             } | null;
-            /** @description Участники события с ролями */
+            /** @description Who took part and in what capacity. Extracted during ingestion by the source's mapping profile. */
             entities?: {
-                /** Format: uuid */
+                /**
+                 * Format: uuid
+                 * @description The participating entity.
+                 */
                 entity_id: string;
+                /** @description Its role in the event — actor, object, src, dst. The same entity may appear twice with different roles. */
                 relation_code: string;
             }[];
         };
-        /** @description Ровно одно из полей refs или query. */
-        EventAttachRequest: {
-            refs?: {
-                source_code: string;
-                source_event_id: string;
-            }[];
-            /** @description Выборка из источника (EvidenceSource.Search) */
-            query?: {
-                source_code: string;
-                entity_key?: string;
-                /** Format: date-time */
-                from?: string;
-                /** Format: date-time */
-                to?: string;
-                substring?: string;
-                /** @default 100 */
-                limit: number;
-            };
-            /** @description Зачем затянуто — нарратив расследования, идёт в аудит */
-            reason?: string;
-        };
-        EventAttachResult: {
-            attached: number;
-            /** @description Отброшено по dedup_key */
-            duplicates: number;
-            entities_extracted: number;
-            /** @description Рёбра от правил связывания */
-            edges_created: number;
-        };
-        /**
-         * @description Событие без сырья: список тянет сотни записей, а raw_data у каждой —
-         *     килобайты. Полное событие отдаёт GET /events/{event_id}.
-         */
+        /** @description Event without the raw payload. A timeline page carries hundreds of events and raw payloads run to kilobytes each; the full record is available one at a time. */
         EventSummary: {
-            /** Format: uuid */
+            /**
+             * Format: uuid
+             * @description Identifier of this event.
+             */
             id: string;
-            /** Format: uuid */
+            /**
+             * Format: uuid
+             * @description Investigation it belongs to.
+             */
             investigation_id: string;
+            /** @description Which tool it came from. */
             source_code: string;
+            /** @description Identifier of the record in that tool. */
             source_event_id: string;
+            /** @description Link that opens the record in the source console. */
             source_ref?: string | null;
+            /** @description What happened, in the product's vocabulary. */
             event_type: string;
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description When it happened, per the source.
+             */
             occurred_at: string;
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description When it was pulled into the investigation.
+             */
             ingested_at: string;
+            /** @description The event mapped onto the common envelope. */
             normalized_data?: {
                 [key: string]: unknown;
             };
+            /** @description Who took part and in what capacity. */
             entities?: {
-                /** Format: uuid */
+                /**
+                 * Format: uuid
+                 * @description The participating entity.
+                 */
                 entity_id: string;
+                /** @description Its role in the event. */
                 relation_code: string;
             }[];
         };
+        /** @description What to pull. Give either refs, when the records are already known, or query, to let the source find them — exactly one of the two. */
+        EventAttachRequest: {
+            /** @description Records addressed directly. Used when the analyst has already picked them out, or when an agent cites what it found. */
+            refs?: {
+                /** @description Which tool holds the record. */
+                source_code: string;
+                /** @description Its identifier in that tool. */
+                source_event_id: string;
+            }[];
+            /** @description A selection to run against one source. This is the pivot: give it an entity key and a window, and whatever the source returns lands in the case. */
+            query?: {
+                /** @description Which source to query. */
+                source_code: string;
+                /** @description Value to pivot on — a hostname, account, address or hash. Matched against the source's own fields. */
+                entity_key?: string;
+                /**
+                 * Format: date-time
+                 * @description Lower bound of the time window, inclusive.
+                 */
+                from?: string;
+                /**
+                 * Format: date-time
+                 * @description Upper bound of the time window, exclusive.
+                 */
+                to?: string;
+                /** @description Free-text fragment to match, for cases a key cannot express. */
+                substring?: string;
+                /**
+                 * @description Cap on records to pull. The hard ceiling is 500 per call.
+                 * @default 100
+                 */
+                limit: number;
+            };
+            /** @description Why this was pulled. Goes into the audit log and into the case narrative — the record of what the analyst was thinking. */
+            reason?: string;
+        };
+        /** @description What the pull changed in the investigation. */
+        EventAttachResult: {
+            /** @description Events newly added to the case. */
+            attached: number;
+            /** @description Events already present and therefore skipped. A non-zero count is normal, not an error — overlapping pulls are expected. */
+            duplicates: number;
+            /** @description Entities created or updated from the new events. Counts entities, not mentions. */
+            entities_extracted: number;
+            /** @description Edges linking rules produced from the new events. This is the graph growing without an agent: rules alone connect what obviously belongs together. */
+            edges_created: number;
+        };
+        /** @description One page of the timeline. */
         EventPage: {
+            /** @description Events, oldest first. */
             items: components["schemas"]["EventSummary"][];
+            /** @description Pass as `cursor` to get the next page. Absent on the last page — that, not an empty page, is how iteration ends. */
             next_cursor?: string | null;
         };
+        /** @description Body of every non-2xx response. Clients branch on `code`, not on the HTTP status: the status says what happened at the protocol level, the code says what happened in the domain. */
         ErrorResponse: {
+            /** @description The failure itself. Never carries internal details of a 500. */
             error: {
                 /**
-                 * @description not_implemented — ручка объявлена в контракте, но ещё не реализована.
-                 *     Клиент может отличить её от настоящей поломки сервера и скрыть
-                 *     элемент интерфейса, а не показывать ошибку.
+                 * @description Machine-readable reason, stable across releases. `validation` covers both a malformed body (400) and a well-formed but invalid one (422). `not_implemented` means the operation exists in the contract but has no implementation yet — a client can hide the control instead of showing an error.
                  * @enum {string}
                  */
-                code: "unauthorized" | "forbidden" | "not_found" | "conflict" | "validation" | "source_unavailable" | "som_unavailable" | "not_implemented" | "internal";
+                code: "unauthorized" | "forbidden" | "not_found" | "conflict" | "validation" | "source_unavailable" | "not_implemented" | "internal";
+                /** @description Human-readable explanation, safe to show. For an internal error it is deliberately generic — the real cause goes to the log. */
                 message: string;
+                /** @description Extra context tied to the code. Version conflicts list the clashing ids in `conflicts`; validation failures name the field. */
                 details?: {
                     [key: string]: unknown;
                 };
@@ -163,7 +225,7 @@ export interface components {
         };
     };
     responses: {
-        /** @description Нет или невалиден токен (code=unauthorized) */
+        /** @description Token is missing, malformed, expired or signed by an unknown key (code=unauthorized). */
         Unauthorized: {
             headers: {
                 [name: string]: unknown;
@@ -172,7 +234,7 @@ export interface components {
                 "application/json": components["schemas"]["ErrorResponse"];
             };
         };
-        /** @description Роль не даёт действия или чужой тенант (code=forbidden) */
+        /** @description Caller is authenticated but holds no role in the tenant, or the role does not grant this action (code=forbidden). */
         Forbidden: {
             headers: {
                 [name: string]: unknown;
@@ -181,7 +243,7 @@ export interface components {
                 "application/json": components["schemas"]["ErrorResponse"];
             };
         };
-        /** @description Не найдено в тенанте субъекта (code=not_found) */
+        /** @description No such record in the caller's tenant. Returned instead of 403 for records that exist elsewhere, so the response does not reveal them (code=not_found). */
         NotFound: {
             headers: {
                 [name: string]: unknown;
@@ -190,7 +252,7 @@ export interface components {
                 "application/json": components["schemas"]["ErrorResponse"];
             };
         };
-        /** @description Невалидные данные (code=validation) */
+        /** @description Request parsed but violates a rule of the domain — an impossible status transition, a confirmation without evidence, a malformed cursor (code=validation). */
         ValidationError: {
             headers: {
                 [name: string]: unknown;
@@ -199,7 +261,7 @@ export interface components {
                 "application/json": components["schemas"]["ErrorResponse"];
             };
         };
-        /** @description Конфликт версии, дубликат или закрытое расследование (code=conflict) */
+        /** @description The record changed since the version the client sent, the write would duplicate an existing one, or the investigation is already closed. `details.conflicts` lists the ids that clashed (code=conflict). */
         Conflict: {
             headers: {
                 [name: string]: unknown;
@@ -208,7 +270,7 @@ export interface components {
                 "application/json": components["schemas"]["ErrorResponse"];
             };
         };
-        /** @description Источник улик недоступен (code=source_unavailable) */
+        /** @description An upstream security tool did not answer. The investigation itself is intact — retry, or narrow the query (code=source_unavailable). */
         SourceUnavailable: {
             headers: {
                 [name: string]: unknown;
@@ -219,10 +281,13 @@ export interface components {
         };
     };
     parameters: {
+        /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
         InvestigationId: string;
+        /** @description How many items to return. The server may return fewer, never more. */
         Limit: number;
-        /** @description Непрозрачный keyset-курсор из next_cursor предыдущей страницы */
+        /** @description Opaque keyset cursor taken from `next_cursor` of the previous page. Encodes a position, not a query — do not build one by hand. Omit it to start from the beginning. */
         Cursor: string;
+        /** @description Identifier of an event already pulled into an investigation. */
         EventId: string;
     };
     requestBodies: never;
@@ -234,27 +299,33 @@ export interface operations {
     listEvents: {
         parameters: {
             query?: {
+                /** @description Keep only events of this kind, e.g. process_start or network_session. */
                 event_type?: string;
+                /** @description Keep only events from one source — siem, edr, ndr, infra. */
                 source_code?: string;
-                /** @description Только события с участием сущности */
+                /** @description Keep only events this entity takes part in. This is how the UI answers "what happened on that host". */
                 entity_id?: string;
+                /** @description Lower bound on occurred_at, inclusive. */
                 from?: string;
+                /** @description Upper bound on occurred_at, exclusive. */
                 to?: string;
-                /** @description Подстрока в normalized_data */
+                /** @description Substring match over the normalised payload — command lines, paths, addresses. */
                 q?: string;
+                /** @description How many items to return. The server may return fewer, never more. */
                 limit?: components["parameters"]["Limit"];
-                /** @description Непрозрачный keyset-курсор из next_cursor предыдущей страницы */
+                /** @description Opaque keyset cursor taken from `next_cursor` of the previous page. Encodes a position, not a query — do not build one by hand. Omit it to start from the beginning. */
                 cursor?: components["parameters"]["Cursor"];
             };
             header?: never;
             path: {
+                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
                 investigation_id: components["parameters"]["InvestigationId"];
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Страница событий */
+            /** @description One page of the timeline */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -274,6 +345,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
+                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
                 investigation_id: components["parameters"]["InvestigationId"];
             };
             cookie?: never;
@@ -284,7 +356,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Итог затяжки */
+            /** @description What the pull produced */
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -306,13 +378,14 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
+                /** @description Identifier of an event already pulled into an investigation. */
                 event_id: components["parameters"]["EventId"];
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Событие */
+            /** @description The event */
             200: {
                 headers: {
                     [name: string]: unknown;

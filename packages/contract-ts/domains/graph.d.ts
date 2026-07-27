@@ -9,16 +9,14 @@ export interface paths {
             query?: never;
             header?: never;
             path: {
+                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
                 investigation_id: components["parameters"]["InvestigationId"];
             };
             cookie?: never;
         };
         /**
-         * Граф расследования
-         * @description Узлы и рёбра одного расследования. include_subtree=true возвращает
-         *     объединение подграфов поддерева как есть (узлы пер-кейсовые); клиент
-         *     группирует дубликаты сущностей по (type_code, canonical_key) из полей
-         *     узла. Rejected-рёбра по умолчанию скрыты.
+         * Graph of the investigation
+         * @description Nodes and edges of one case — the main working surface for both the analyst and the agent. Rejected edges are hidden by default: they stay in the data as "checked and excluded" but do not clutter the picture.
          */
         get: operations["getGraph"];
         put?: never;
@@ -34,6 +32,7 @@ export interface paths {
             query?: never;
             header?: never;
             path: {
+                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
                 investigation_id: components["parameters"]["InvestigationId"];
             };
             cookie?: never;
@@ -41,11 +40,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Создать ребро (аналитик)
-         * @description origin=analyst, рождается confirmed. evidence_event_ids необязателен для
-         *     аналитика, обязателен в internal-контуре агента. relation_code валидируется
-         *     против RelationTypes (source_kind/target_kind должны совпасть с типами узлов).
-         *     Повтор той же тройки (source, target, relation_code) — 409.
+         * Draw an edge by hand
+         * @description The analyst's manual correction of the graph. An edge created here is born confirmed — a human asserting it is the assertion. The relation must exist in the dictionary and its declared endpoints must match the node kinds, so an event-to-event relation cannot be hung between two entities. Re-creating the same triple returns 409 rather than a duplicate.
          */
         post: operations["createEdge"];
         delete?: never;
@@ -59,6 +55,7 @@ export interface paths {
             query?: never;
             header?: never;
             path: {
+                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
                 investigation_id: components["parameters"]["InvestigationId"];
             };
             cookie?: never;
@@ -66,10 +63,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Батч-ревизия proposed-рёбер
-         * @description Одна транзакция: либо применяется весь батч, либо ничего.
-         *     Конфликт версии любого элемента — 409 с details.conflicts=[edge_id,...],
-         *     состояние БД не меняется.
+         * Review proposed edges in bulk
+         * @description Where a human accepts or rules out what rules and agents suggested. All or nothing: if any item carries a stale version the whole batch is refused with 409 and `details.conflicts` naming the ids, and nothing is written — so an optimistic UI can roll back precisely.
          */
         post: operations["reviewEdges"];
         delete?: never;
@@ -82,117 +77,195 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        Edge: {
-            /** Format: uuid */
-            id: string;
-            /** Format: uuid */
-            investigation_id: string;
-            /** Format: uuid */
-            source_node_id: string;
-            /** Format: uuid */
-            target_node_id: string;
-            relation_code: string;
-            status: components["schemas"]["EdgeStatus"];
-            reject_reason?: string | null;
-            confidence?: number | null;
-            /** @description Обоснование. Обязательно при origin=agent */
-            why?: string | null;
-            origin: components["schemas"]["Origin"];
-            /** @description subject_id | код правила | id запуска */
-            origin_ref?: string | null;
-            evidence_count: number;
-            evidence_event_ids?: string[];
-            metadata?: {
-                [key: string]: unknown;
-            };
-            version: number;
-            /** Format: date-time */
-            created_at?: string;
-            /** Format: date-time */
-            updated_at?: string;
-        };
-        EdgeCreate: {
-            /** Format: uuid */
-            source_node_id: string;
-            /** Format: uuid */
-            target_node_id: string;
-            relation_code: string;
-            confidence?: number;
-            why?: string;
-            /** @description События-основания того же расследования (иначе 422) */
-            evidence_event_ids?: string[];
-        };
-        EdgePatch: {
-            version: number;
-            /** @enum {string} */
-            status: "confirmed" | "rejected";
-            /** @description Обязателен при status=rejected */
-            reject_reason?: string;
-        };
+        /** @description Nodes and edges as one payload, ready to render. */
         Graph: {
-            /** Format: uuid */
+            /**
+             * Format: uuid
+             * @description Investigation this graph belongs to.
+             */
             investigation_id: string;
+            /** @description Whether child investigations were merged into this response. */
             include_subtree?: boolean;
+            /** @description Every node referenced by the edges below, plus isolated ones. */
             nodes: components["schemas"]["GraphNode"][];
+            /** @description Edges surviving the status and confidence filters. */
             edges: components["schemas"]["Edge"][];
         };
+        /** @description A point on the graph. Stands for exactly one entity or one event — never both, never neither. */
         GraphNode: {
-            /** Format: uuid */
+            /**
+             * Format: uuid
+             * @description Identifier of the node. Edges reference this, not the entity or event.
+             */
             id: string;
-            /** Format: uuid */
+            /**
+             * Format: uuid
+             * @description Investigation the node belongs to.
+             */
             investigation_id: string;
+            /** @description Which of the two fields below is filled. */
             node_type: components["schemas"]["NodeType"];
-            /** Format: uuid */
+            /**
+             * Format: uuid
+             * @description The entity, when node_type is entity.
+             */
             entity_id?: string | null;
-            /** Format: uuid */
+            /**
+             * Format: uuid
+             * @description The event, when node_type is event. Only events promoted onto the graph get a node — the rest live on the timeline.
+             */
             event_id?: string | null;
+            /** @description Who put this node on the graph. */
             origin: components["schemas"]["Origin"];
-            /** @description display_name сущности или сводка события */
+            /** @description Text to draw on the node — the entity's display name or a short summary of the event. */
             label?: string;
-            /** @description Тип сущности (иконка узла). Только для node_type=entity */
+            /** @description Kind of entity, which is what picks the icon. Entity nodes only. */
             type_code?: string | null;
-            /** @description Ключ для группировки дубликатов при include_subtree */
+            /** @description Entity's normalised identity. Lets the client fold duplicates of the same host across a merged subtree. */
             canonical_key?: string | null;
             /**
              * Format: date-time
-             * @description Только для node_type=event
+             * @description When the event happened. Event nodes only.
              */
             occurred_at?: string | null;
         };
-        /** @description Хотя бы одно из полей непусто. */
+        /** @description A claim that two nodes are related. Unlike an event, an edge can be wrong — hence a status, a stated reason, and the events it rests on. */
+        Edge: {
+            /**
+             * Format: uuid
+             * @description Identifier of the edge.
+             */
+            id: string;
+            /**
+             * Format: uuid
+             * @description Investigation the edge belongs to.
+             */
+            investigation_id: string;
+            /**
+             * Format: uuid
+             * @description Node the relation starts from.
+             */
+            source_node_id: string;
+            /**
+             * Format: uuid
+             * @description Node it points to. For an undirected relation the order carries no meaning.
+             */
+            target_node_id: string;
+            /** @description What the relation is — parent_process, logged_in, connected_to, executed, resolved_to, same_host, subevent_of, followed_by. */
+            relation_code: string;
+            /** @description Where the claim stands in review. */
+            status: components["schemas"]["EdgeStatus"];
+            /** @description Why it was ruled out. Required when rejecting, and it is what makes a rejected branch useful in the report. */
+            reject_reason?: string | null;
+            /** @description How sure the producer was. Rules carry a fixed value per rule; an agent estimates its own. */
+            confidence?: number | null;
+            /** @description Plain-language justification. Mandatory for an agent: an unexplained machine suggestion is not reviewable. */
+            why?: string | null;
+            /** @description Who produced the claim. Never changes, unlike status. */
+            origin: components["schemas"]["Origin"];
+            /** @description Which one exactly — the analyst's subject id, the rule's code, or the agent run's identifier. Together with origin this is how a claim is traced back to its author. */
+            origin_ref?: string | null;
+            /** @description How many events the edge cites. Zero is allowed for an analyst, never for an agent. */
+            evidence_count: number;
+            /** @description The cited events. All belong to the same investigation — the database enforces it, so a claim cannot lean on another case's data. */
+            evidence_event_ids?: string[];
+            /** @description Producer-specific extras, e.g. which rule field matched. */
+            metadata?: {
+                [key: string]: unknown;
+            };
+            /** @description Bumped on every change. Send the value you last read when reviewing; a mismatch means someone else got there first. */
+            version: number;
+            /**
+             * Format: date-time
+             * @description When the edge was created.
+             */
+            created_at?: string;
+            /**
+             * Format: date-time
+             * @description When it last changed — in practice, when it was reviewed.
+             */
+            updated_at?: string;
+        };
+        /** @description A relation the analyst asserts between two existing nodes. */
+        EdgeCreate: {
+            /**
+             * Format: uuid
+             * @description Node the relation starts from.
+             */
+            source_node_id: string;
+            /**
+             * Format: uuid
+             * @description Node it points to.
+             */
+            target_node_id: string;
+            /** @description Relation from the dictionary. Its declared endpoint kinds must match the two nodes, otherwise the request is rejected. */
+            relation_code: string;
+            /** @description Optional degree of certainty. A manual edge is normally certain. */
+            confidence?: number;
+            /** @description Justification, for the record. Optional here, required of agents. */
+            why?: string;
+            /** @description Events backing the claim. Each must belong to this investigation — citing another case's event is refused. */
+            evidence_event_ids?: string[];
+        };
+        /** @description Edges to accept and edges to rule out, applied as one transaction. At least one of the two lists must be non-empty. */
         ReviewRequest: {
+            /** @description Edges the analyst accepts as established. */
             confirm?: {
-                /** Format: uuid */
+                /**
+                 * Format: uuid
+                 * @description The edge.
+                 */
                 id: string;
+                /** @description Version the client last saw. Guards against a concurrent edit. */
                 version: number;
             }[];
+            /** @description Edges the analyst rules out. They are kept, not deleted — a checked and excluded lead is a result too. */
             reject?: {
-                /** Format: uuid */
+                /**
+                 * Format: uuid
+                 * @description The edge.
+                 */
                 id: string;
+                /** @description Version the client last saw. */
                 version: number;
+                /** @description Why it does not hold. Required — an unexplained rejection is worthless in the report. */
                 reason: string;
             }[];
         };
+        /** @description Ids the batch actually changed, split by outcome. */
         ReviewResult: {
+            /** @description Edges that became confirmed. */
             confirmed: string[];
+            /** @description Edges that became rejected. */
             rejected: string[];
         };
-        /** @enum {string} */
+        /**
+         * @description Where an edge stands in review. Proposed until a human accepts it. Rejected edges are kept rather than deleted, so that "checked and excluded" survives into the report.
+         * @enum {string}
+         */
         EdgeStatus: "proposed" | "confirmed" | "rejected";
-        /** @enum {string} */
+        /**
+         * @description What a graph node stands for. An entity node is a host, account, process, address or hash; an event node is a source record promoted onto the graph.
+         * @enum {string}
+         */
         NodeType: "entity" | "event";
-        /** @enum {string} */
+        /**
+         * @description Who produced the record: a human acting through the API, a deterministic linking rule, or an agent run. Anything not produced by a human is born unconfirmed and has to be reviewed.
+         * @enum {string}
+         */
         Origin: "analyst" | "rule" | "agent";
+        /** @description Body of every non-2xx response. Clients branch on `code`, not on the HTTP status: the status says what happened at the protocol level, the code says what happened in the domain. */
         ErrorResponse: {
+            /** @description The failure itself. Never carries internal details of a 500. */
             error: {
                 /**
-                 * @description not_implemented — ручка объявлена в контракте, но ещё не реализована.
-                 *     Клиент может отличить её от настоящей поломки сервера и скрыть
-                 *     элемент интерфейса, а не показывать ошибку.
+                 * @description Machine-readable reason, stable across releases. `validation` covers both a malformed body (400) and a well-formed but invalid one (422). `not_implemented` means the operation exists in the contract but has no implementation yet — a client can hide the control instead of showing an error.
                  * @enum {string}
                  */
-                code: "unauthorized" | "forbidden" | "not_found" | "conflict" | "validation" | "source_unavailable" | "som_unavailable" | "not_implemented" | "internal";
+                code: "unauthorized" | "forbidden" | "not_found" | "conflict" | "validation" | "source_unavailable" | "not_implemented" | "internal";
+                /** @description Human-readable explanation, safe to show. For an internal error it is deliberately generic — the real cause goes to the log. */
                 message: string;
+                /** @description Extra context tied to the code. Version conflicts list the clashing ids in `conflicts`; validation failures name the field. */
                 details?: {
                     [key: string]: unknown;
                 };
@@ -200,7 +273,7 @@ export interface components {
         };
     };
     responses: {
-        /** @description Нет или невалиден токен (code=unauthorized) */
+        /** @description Token is missing, malformed, expired or signed by an unknown key (code=unauthorized). */
         Unauthorized: {
             headers: {
                 [name: string]: unknown;
@@ -209,7 +282,7 @@ export interface components {
                 "application/json": components["schemas"]["ErrorResponse"];
             };
         };
-        /** @description Роль не даёт действия или чужой тенант (code=forbidden) */
+        /** @description Caller is authenticated but holds no role in the tenant, or the role does not grant this action (code=forbidden). */
         Forbidden: {
             headers: {
                 [name: string]: unknown;
@@ -218,7 +291,7 @@ export interface components {
                 "application/json": components["schemas"]["ErrorResponse"];
             };
         };
-        /** @description Не найдено в тенанте субъекта (code=not_found) */
+        /** @description No such record in the caller's tenant. Returned instead of 403 for records that exist elsewhere, so the response does not reveal them (code=not_found). */
         NotFound: {
             headers: {
                 [name: string]: unknown;
@@ -227,7 +300,7 @@ export interface components {
                 "application/json": components["schemas"]["ErrorResponse"];
             };
         };
-        /** @description Невалидные данные (code=validation) */
+        /** @description Request parsed but violates a rule of the domain — an impossible status transition, a confirmation without evidence, a malformed cursor (code=validation). */
         ValidationError: {
             headers: {
                 [name: string]: unknown;
@@ -236,7 +309,7 @@ export interface components {
                 "application/json": components["schemas"]["ErrorResponse"];
             };
         };
-        /** @description Конфликт версии, дубликат или закрытое расследование (code=conflict) */
+        /** @description The record changed since the version the client sent, the write would duplicate an existing one, or the investigation is already closed. `details.conflicts` lists the ids that clashed (code=conflict). */
         Conflict: {
             headers: {
                 [name: string]: unknown;
@@ -247,6 +320,7 @@ export interface components {
         };
     };
     parameters: {
+        /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
         InvestigationId: string;
     };
     requestBodies: never;
@@ -258,20 +332,23 @@ export interface operations {
     getGraph: {
         parameters: {
             query?: {
+                /** @description Also return the graphs of child investigations. Nodes stay per-case, so the same host appears once per investigation — group them client-side by type_code and canonical_key. */
                 include_subtree?: boolean;
+                /** @description Drop edges the producer was less sure about than this. Useful for thinning out an agent's suggestions. */
                 min_confidence?: number;
-                /** @description Фильтр статусов рёбер, по умолчанию proposed,confirmed */
+                /** @description Which edge states to include. Defaults to proposed and confirmed; pass rejected explicitly to see what was ruled out. */
                 statuses?: components["schemas"]["EdgeStatus"][];
             };
             header?: never;
             path: {
+                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
                 investigation_id: components["parameters"]["InvestigationId"];
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Граф */
+            /** @description The graph */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -291,6 +368,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
+                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
                 investigation_id: components["parameters"]["InvestigationId"];
             };
             cookie?: never;
@@ -301,7 +379,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Ребро */
+            /** @description The new edge */
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -322,6 +400,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
+                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
                 investigation_id: components["parameters"]["InvestigationId"];
             };
             cookie?: never;
@@ -332,7 +411,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Итог ревизии */
+            /** @description What the batch changed */
             200: {
                 headers: {
                     [name: string]: unknown;

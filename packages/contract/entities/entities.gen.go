@@ -24,7 +24,6 @@ const (
 	ErrorResponseErrorCodeInternal          ErrorResponseErrorCode = "internal"
 	ErrorResponseErrorCodeNotFound          ErrorResponseErrorCode = "not_found"
 	ErrorResponseErrorCodeNotImplemented    ErrorResponseErrorCode = "not_implemented"
-	ErrorResponseErrorCodeSomUnavailable    ErrorResponseErrorCode = "som_unavailable"
 	ErrorResponseErrorCodeSourceUnavailable ErrorResponseErrorCode = "source_unavailable"
 	ErrorResponseErrorCodeUnauthorized      ErrorResponseErrorCode = "unauthorized"
 	ErrorResponseErrorCodeValidation        ErrorResponseErrorCode = "validation"
@@ -43,8 +42,6 @@ func (e ErrorResponseErrorCode) Valid() bool {
 		return true
 	case ErrorResponseErrorCodeNotImplemented:
 		return true
-	case ErrorResponseErrorCodeSomUnavailable:
-		return true
 	case ErrorResponseErrorCodeSourceUnavailable:
 		return true
 	case ErrorResponseErrorCodeUnauthorized:
@@ -56,72 +53,99 @@ func (e ErrorResponseErrorCode) Valid() bool {
 	}
 }
 
-// Entity defines model for Entity.
+// Entity A named thing an incident revolves around, extracted from source events during ingestion. Entities are scoped to one investigation; the same real-world host appears as a separate row in each case it touches.
 type Entity struct {
-	CanonicalKey    string                  `json:"canonical_key"`
-	DisplayName     *string                 `json:"display_name,omitempty"`
-	FirstSeen       *time.Time              `json:"first_seen,omitempty"`
-	Id              openapi_types.UUID      `json:"id"`
-	InvestigationId openapi_types.UUID      `json:"investigation_id"`
-	LastSeen        *time.Time              `json:"last_seen,omitempty"`
-	Metadata        *map[string]interface{} `json:"metadata,omitempty"`
-	TypeCode        string                  `json:"type_code"`
+	// CanonicalKey Normalised identity used for matching: fqdn for a host, SID for an account, GUID for a process, sha256 for a file. Two records with the same type and key are the same thing, so linking rules join on it.
+	CanonicalKey string `json:"canonical_key"`
+
+	// DisplayName Label for the UI. Falls back to canonical_key when absent.
+	DisplayName *string `json:"display_name,omitempty"`
+
+	// FirstSeen Earliest event in this investigation that mentions the entity.
+	FirstSeen *time.Time `json:"first_seen,omitempty"`
+
+	// Id Server-assigned identifier of this entity.
+	Id openapi_types.UUID `json:"id"`
+
+	// InvestigationId Investigation this entity belongs to.
+	InvestigationId openapi_types.UUID `json:"investigation_id"`
+
+	// LastSeen Latest event that mentions it. Together with first_seen this bounds the window the entity was active in.
+	LastSeen *time.Time `json:"last_seen,omitempty"`
+
+	// Metadata Extra attributes carried over from the source — OS version, owner, geolocation. Free-form on purpose: sources differ.
+	Metadata *map[string]interface{} `json:"metadata,omitempty"`
+
+	// TypeCode Kind of thing this is — host, user, account, email, process, ip, domain, url, file_hash. The core set is fixed; peripheral kinds are added as dictionary rows without a migration.
+	TypeCode string `json:"type_code"`
 }
 
-// EntityCard defines model for EntityCard.
+// EntityCard Entity plus the context an analyst needs to judge it: how much of this case it touches, where else it has surfaced, and who it talks to.
 type EntityCard struct {
+	// Entity The entity this card is about.
 	Entity Entity `json:"entity"`
 
-	// EventsCount Событий с участием в текущем расследовании
+	// EventsCount Events in this investigation the entity takes part in. A rough measure of how central it is to the case.
 	EventsCount int `json:"events_count"`
 
-	// Neighbors Соседи по подтверждённым рёбрам
+	// Neighbors Entities reachable over confirmed edges only. Proposed links are left out — a card should show what is established, not what is suspected.
 	Neighbors *[]struct {
-		DisplayName  *string            `json:"display_name,omitempty"`
-		EntityId     openapi_types.UUID `json:"entity_id"`
-		RelationCode string             `json:"relation_code"`
+		// DisplayName Its label for the UI.
+		DisplayName *string `json:"display_name,omitempty"`
+
+		// EntityId The neighbouring entity.
+		EntityId openapi_types.UUID `json:"entity_id"`
+
+		// RelationCode How they are related — parent_process, logged_in, connected_to, executed, resolved_to, same_host.
+		RelationCode string `json:"relation_code"`
 	} `json:"neighbors,omitempty"`
 
-	// Occurrences Тот же (type_code, canonical_key) в других расследованиях тенанта
+	// Occurrences Other investigations of the same tenant where an entity with the same type and key shows up. This is the spread assessment: a hash seen in five cases means five hosts to check.
 	Occurrences []struct {
-		EventsCount     int                `json:"events_count"`
+		// EventsCount How many of its events involve the entity.
+		EventsCount int `json:"events_count"`
+
+		// InvestigationId The other investigation.
 		InvestigationId openapi_types.UUID `json:"investigation_id"`
-		Title           string             `json:"title"`
+
+		// Title Its title, so the analyst can judge relevance without opening it.
+		Title string `json:"title"`
 	} `json:"occurrences"`
 }
 
-// ErrorResponse defines model for ErrorResponse.
+// ErrorResponse Body of every non-2xx response. Clients branch on `code`, not on the HTTP status: the status says what happened at the protocol level, the code says what happened in the domain.
 type ErrorResponse struct {
+	// Error The failure itself. Never carries internal details of a 500.
 	Error struct {
-		// Code not_implemented — ручка объявлена в контракте, но ещё не реализована.
-		// Клиент может отличить её от настоящей поломки сервера и скрыть
-		// элемент интерфейса, а не показывать ошибку.
-		Code    ErrorResponseErrorCode  `json:"code"`
+		// Code Machine-readable reason, stable across releases. `validation` covers both a malformed body (400) and a well-formed but invalid one (422). `not_implemented` means the operation exists in the contract but has no implementation yet — a client can hide the control instead of showing an error.
+		Code ErrorResponseErrorCode `json:"code"`
+
+		// Details Extra context tied to the code. Version conflicts list the clashing ids in `conflicts`; validation failures name the field.
 		Details *map[string]interface{} `json:"details,omitempty"`
-		Message string                  `json:"message"`
+
+		// Message Human-readable explanation, safe to show. For an internal error it is deliberately generic — the real cause goes to the log.
+		Message string `json:"message"`
 	} `json:"error"`
 }
 
-// ErrorResponseErrorCode not_implemented — ручка объявлена в контракте, но ещё не реализована.
-// Клиент может отличить её от настоящей поломки сервера и скрыть
-// элемент интерфейса, а не показывать ошибку.
+// ErrorResponseErrorCode Machine-readable reason, stable across releases. `validation` covers both a malformed body (400) and a well-formed but invalid one (422). `not_implemented` means the operation exists in the contract but has no implementation yet — a client can hide the control instead of showing an error.
 type ErrorResponseErrorCode string
 
 // EntityId defines model for EntityId.
 type EntityId = openapi_types.UUID
 
-// Forbidden defines model for Forbidden.
+// Forbidden Body of every non-2xx response. Clients branch on `code`, not on the HTTP status: the status says what happened at the protocol level, the code says what happened in the domain.
 type Forbidden = ErrorResponse
 
-// NotFound defines model for NotFound.
+// NotFound Body of every non-2xx response. Clients branch on `code`, not on the HTTP status: the status says what happened at the protocol level, the code says what happened in the domain.
 type NotFound = ErrorResponse
 
-// Unauthorized defines model for Unauthorized.
+// Unauthorized Body of every non-2xx response. Clients branch on `code`, not on the HTTP status: the status says what happened at the protocol level, the code says what happened in the domain.
 type Unauthorized = ErrorResponse
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
-	// GetEntityCard Карточка сущности
+	// GetEntityCard Entity card
 	// (GET /entities/{entity_id})
 	GetEntityCard(w http.ResponseWriter, r *http.Request, entityId EntityId)
 }
@@ -358,7 +382,7 @@ func (response GetEntityCard404JSONResponse) VisitGetEntityCardResponse(w http.R
 
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
-	// GetEntityCard Карточка сущности
+	// GetEntityCard Entity card
 	// (GET /entities/{entity_id})
 	GetEntityCard(ctx context.Context, request GetEntityCardRequestObject) (GetEntityCardResponseObject, error)
 }

@@ -1,21 +1,28 @@
-# Единый конверт ошибки для всех ручек.
+# One error envelope for every operation.
 
 components:
   schemas:
     ErrorResponse:
       type: object
+      description: >-
+        Body of every non-2xx response. Clients branch on `code`, not on the
+        HTTP status: the status says what happened at the protocol level, the
+        code says what happened in the domain.
       required: [error]
       properties:
         error:
           type: object
+          description: The failure itself. Never carries internal details of a 500.
           required: [code, message]
           properties:
             code:
               type: string
-              description: |
-                not_implemented — ручка объявлена в контракте, но ещё не реализована.
-                Клиент может отличить её от настоящей поломки сервера и скрыть
-                элемент интерфейса, а не показывать ошибку.
+              description: >-
+                Machine-readable reason, stable across releases. `validation`
+                covers both a malformed body (400) and a well-formed but invalid
+                one (422). `not_implemented` means the operation exists in the
+                contract but has no implementation yet — a client can hide the
+                control instead of showing an error.
               enum:
                 - unauthorized
                 - forbidden
@@ -23,10 +30,16 @@ components:
                 - conflict
                 - validation
                 - source_unavailable
-                - som_unavailable
                 - not_implemented
                 - internal
-            message: { type: string }
+            message:
+              type: string
+              description: >-
+                Human-readable explanation, safe to show. For an internal error
+                it is deliberately generic — the real cause goes to the log.
             details:
               type: object
+              description: >-
+                Extra context tied to the code. Version conflicts list the
+                clashing ids in `conflicts`; validation failures name the field.
               additionalProperties: true

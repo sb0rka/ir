@@ -96,28 +96,7 @@ BEFORE UPDATE ON linking_rules
 FOR EACH ROW
 EXECUTE FUNCTION set_updated_at();
 
-CREATE TABLE IF NOT EXISTS extensions (
-    code VARCHAR(64) NOT NULL,
 
-    kind VARCHAR(8) NOT NULL CHECK (kind IN ('mcp', 'skill', 'a2a')),
-    title VARCHAR NOT NULL,
-    endpoint VARCHAR,
-    config JSONB DEFAULT '{}'::jsonb NOT NULL,
-    secret_ref VARCHAR,
-    is_allowed BOOLEAN DEFAULT false NOT NULL,
-    sends_data_externally BOOLEAN DEFAULT true NOT NULL,
-
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
-
-    CONSTRAINT pk_extensions PRIMARY KEY (code)
-);
-
-DROP TRIGGER IF EXISTS trg_extensions_set_updated_at ON extensions;
-CREATE TRIGGER trg_extensions_set_updated_at
-BEFORE UPDATE ON extensions
-FOR EACH ROW
-EXECUTE FUNCTION set_updated_at();
 
 -- Ядро типов фиксировано кодом; периферия (ja3, registry_key) добавляется
 -- строкой справочника, без миграции.
@@ -408,93 +387,12 @@ CREATE TABLE IF NOT EXISTS edge_evidence (
 
 CREATE INDEX IF NOT EXISTS ix_edge_evidence_event ON edge_evidence (event_id);
 
--- АРТЕФАКТЫ И ВЫХОД
 
-CREATE TABLE IF NOT EXISTS artifacts (
-    id UUID DEFAULT gen_random_uuid() NOT NULL,
-    project_id VARCHAR(12) NOT NULL,
-    investigation_id UUID NOT NULL,
-    entity_id UUID,
 
-    type_code VARCHAR(64) NOT NULL,
-    value VARCHAR NOT NULL,
-    storage_ref VARCHAR,
-    media_type VARCHAR(64),
-    checksum VARCHAR(80),
-    enrichment_verdicts JSONB DEFAULT '{}'::jsonb NOT NULL,
-    is_bundle BOOLEAN DEFAULT false NOT NULL,
-    metadata JSONB DEFAULT '{}'::jsonb NOT NULL,
 
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
 
-    CONSTRAINT pk_artifacts PRIMARY KEY (id),
-    CONSTRAINT uq_artifacts_dedup UNIQUE (investigation_id, type_code, value),
-    CONSTRAINT fk_artifacts_investigation_id_investigations FOREIGN KEY (investigation_id)
-        REFERENCES investigations (id) ON DELETE CASCADE,
-    CONSTRAINT fk_artifacts_entity_id_entities FOREIGN KEY (entity_id)
-        REFERENCES entities (id) ON DELETE SET NULL,
-    CONSTRAINT fk_artifacts_type_code_entity_types FOREIGN KEY (type_code)
-        REFERENCES entity_types (code)
-);
 
-DROP TRIGGER IF EXISTS trg_artifacts_set_updated_at ON artifacts;
-CREATE TRIGGER trg_artifacts_set_updated_at
-BEFORE UPDATE ON artifacts
-FOR EACH ROW
-EXECUTE FUNCTION set_updated_at();
 
-CREATE TABLE IF NOT EXISTS response_packages (
-    id UUID DEFAULT gen_random_uuid() NOT NULL,
-    project_id VARCHAR(12) NOT NULL,
-    investigation_id UUID NOT NULL,
-
-    status VARCHAR(8) DEFAULT 'draft' NOT NULL CHECK (status IN ('draft', 'final')),
-    format VARCHAR(8) DEFAULT 'json' NOT NULL CHECK (format IN ('json', 'csv', 'stix')),
-    created_by_subject_id UUID NOT NULL,
-
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
-    exported_at TIMESTAMP WITH TIME ZONE,
-
-    CONSTRAINT pk_response_packages PRIMARY KEY (id),
-    CONSTRAINT fk_resp_packages_investigation_id_investigations FOREIGN KEY (investigation_id)
-        REFERENCES investigations (id) ON DELETE CASCADE
-);
-
-CREATE TABLE IF NOT EXISTS response_package_items (
-    package_id UUID NOT NULL,
-    artifact_id UUID NOT NULL,
-
-    CONSTRAINT pk_response_package_items PRIMARY KEY (package_id, artifact_id),
-    CONSTRAINT fk_rpi_package_id_resp_packages FOREIGN KEY (package_id)
-        REFERENCES response_packages (id) ON DELETE CASCADE,
-    CONSTRAINT fk_rpi_artifact_id_artifacts FOREIGN KEY (artifact_id)
-        REFERENCES artifacts (id) ON DELETE CASCADE
-);
-
-CREATE TABLE IF NOT EXISTS reports (
-    id UUID DEFAULT gen_random_uuid() NOT NULL,
-    project_id VARCHAR(12) NOT NULL,
-    investigation_id UUID NOT NULL,
-
-    format VARCHAR(16) DEFAULT 'markdown' NOT NULL CHECK (format IN ('markdown', 'pdf')),
-    status VARCHAR(8) DEFAULT 'pending' NOT NULL CHECK (status IN ('pending', 'ready', 'failed')),
-    storage_ref VARCHAR,
-    error VARCHAR,
-    -- Данные на момент генерации: отчёт воспроизводим
-    snapshot JSONB,
-    created_by_subject_id UUID NOT NULL,
-
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
-    completed_at TIMESTAMP WITH TIME ZONE,
-
-    CONSTRAINT pk_reports PRIMARY KEY (id),
-    CONSTRAINT fk_reports_investigation_id_investigations FOREIGN KEY (investigation_id)
-        REFERENCES investigations (id) ON DELETE CASCADE
-);
-
-CREATE INDEX IF NOT EXISTS ix_reports_investigation
-    ON reports (investigation_id, created_at DESC);
 
 -- ДОСТУП, АУДИТ, ОЧЕРЕДЬ
 

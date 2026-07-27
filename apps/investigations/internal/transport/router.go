@@ -7,15 +7,10 @@ import (
 
 	"github.com/sb0rka/ir/apps/investigations/internal/config"
 	"github.com/sb0rka/ir/apps/investigations/internal/transport/httperr"
-	"github.com/sb0rka/ir/packages/contract/admin"
-	"github.com/sb0rka/ir/packages/contract/artifacts"
 	"github.com/sb0rka/ir/packages/contract/entities"
 	"github.com/sb0rka/ir/packages/contract/events"
 	"github.com/sb0rka/ir/packages/contract/graph"
 	"github.com/sb0rka/ir/packages/contract/investigations"
-	"github.com/sb0rka/ir/packages/contract/output"
-	"github.com/sb0rka/ir/packages/contract/reference"
-	"github.com/sb0rka/ir/packages/contract/triage"
 )
 
 const baseURL = "/api/v1"
@@ -34,15 +29,10 @@ type Roles struct {
 // API — реализация контракта. Интерфейс на домен, а не один на 46 методов:
 // компилятор всё равно не даст забыть ручку, но забытый домен виден сразу.
 type API interface {
-	admin.StrictServerInterface
-	artifacts.StrictServerInterface
 	entities.StrictServerInterface
 	events.StrictServerInterface
 	graph.StrictServerInterface
 	investigations.StrictServerInterface
-	output.StrictServerInterface
-	reference.StrictServerInterface
-	triage.StrictServerInterface
 }
 
 type Dependencies struct {
@@ -83,23 +73,7 @@ func registerDomains(mux *http.ServeMux, deps Dependencies) {
 		httperr.Write(w, deps.Log, err)
 	}
 
-	admin.HandlerWithOptions(
-		admin.NewStrictHandlerWithOptions(deps.Server, nil, admin.StrictHTTPServerOptions{
-			RequestErrorHandlerFunc:  onRequestError,
-			ResponseErrorHandlerFunc: onResponseError,
-		}),
-		admin.StdHTTPServerOptions{
-			BaseURL: baseURL, BaseRouter: mux, ErrorHandlerFunc: onRequestError,
-		})
 
-	artifacts.HandlerWithOptions(
-		artifacts.NewStrictHandlerWithOptions(deps.Server, nil, artifacts.StrictHTTPServerOptions{
-			RequestErrorHandlerFunc:  onRequestError,
-			ResponseErrorHandlerFunc: onResponseError,
-		}),
-		artifacts.StdHTTPServerOptions{
-			BaseURL: baseURL, BaseRouter: mux, ErrorHandlerFunc: onRequestError,
-		})
 
 	entities.HandlerWithOptions(
 		entities.NewStrictHandlerWithOptions(deps.Server, nil, entities.StrictHTTPServerOptions{
@@ -137,33 +111,9 @@ func registerDomains(mux *http.ServeMux, deps Dependencies) {
 			BaseURL: baseURL, BaseRouter: mux, ErrorHandlerFunc: onRequestError,
 		})
 
-	output.HandlerWithOptions(
-		output.NewStrictHandlerWithOptions(deps.Server, nil, output.StrictHTTPServerOptions{
-			RequestErrorHandlerFunc:  onRequestError,
-			ResponseErrorHandlerFunc: onResponseError,
-		}),
-		output.StdHTTPServerOptions{
-			BaseURL: baseURL, BaseRouter: mux, ErrorHandlerFunc: onRequestError,
-		})
-
-	reference.HandlerWithOptions(
-		reference.NewStrictHandlerWithOptions(deps.Server, nil, reference.StrictHTTPServerOptions{
-			RequestErrorHandlerFunc:  onRequestError,
-			ResponseErrorHandlerFunc: onResponseError,
-		}),
-		reference.StdHTTPServerOptions{
-			BaseURL: baseURL, BaseRouter: mux, ErrorHandlerFunc: onRequestError,
-		})
 
 
-	triage.HandlerWithOptions(
-		triage.NewStrictHandlerWithOptions(deps.Server, nil, triage.StrictHTTPServerOptions{
-			RequestErrorHandlerFunc:  onRequestError,
-			ResponseErrorHandlerFunc: onResponseError,
-		}),
-		triage.StdHTTPServerOptions{
-			BaseURL: baseURL, BaseRouter: mux, ErrorHandlerFunc: onRequestError,
-		})
+
 }
 
 // liveness отвечает без авторизации: на него смотрит docker healthcheck

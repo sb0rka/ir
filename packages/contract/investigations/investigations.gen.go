@@ -25,7 +25,6 @@ const (
 	ErrorResponseErrorCodeInternal          ErrorResponseErrorCode = "internal"
 	ErrorResponseErrorCodeNotFound          ErrorResponseErrorCode = "not_found"
 	ErrorResponseErrorCodeNotImplemented    ErrorResponseErrorCode = "not_implemented"
-	ErrorResponseErrorCodeSomUnavailable    ErrorResponseErrorCode = "som_unavailable"
 	ErrorResponseErrorCodeSourceUnavailable ErrorResponseErrorCode = "source_unavailable"
 	ErrorResponseErrorCodeUnauthorized      ErrorResponseErrorCode = "unauthorized"
 	ErrorResponseErrorCodeValidation        ErrorResponseErrorCode = "validation"
@@ -43,8 +42,6 @@ func (e ErrorResponseErrorCode) Valid() bool {
 	case ErrorResponseErrorCodeNotFound:
 		return true
 	case ErrorResponseErrorCodeNotImplemented:
-		return true
-	case ErrorResponseErrorCodeSomUnavailable:
 		return true
 	case ErrorResponseErrorCodeSourceUnavailable:
 		return true
@@ -150,138 +147,229 @@ func (e Verdict) Valid() bool {
 	}
 }
 
-// ErrorResponse defines model for ErrorResponse.
+// ErrorResponse Body of every non-2xx response. Clients branch on `code`, not on the HTTP status: the status says what happened at the protocol level, the code says what happened in the domain.
 type ErrorResponse struct {
+	// Error The failure itself. Never carries internal details of a 500.
 	Error struct {
-		// Code not_implemented — ручка объявлена в контракте, но ещё не реализована.
-		// Клиент может отличить её от настоящей поломки сервера и скрыть
-		// элемент интерфейса, а не показывать ошибку.
-		Code    ErrorResponseErrorCode  `json:"code"`
+		// Code Machine-readable reason, stable across releases. `validation` covers both a malformed body (400) and a well-formed but invalid one (422). `not_implemented` means the operation exists in the contract but has no implementation yet — a client can hide the control instead of showing an error.
+		Code ErrorResponseErrorCode `json:"code"`
+
+		// Details Extra context tied to the code. Version conflicts list the clashing ids in `conflicts`; validation failures name the field.
 		Details *map[string]interface{} `json:"details,omitempty"`
-		Message string                  `json:"message"`
+
+		// Message Human-readable explanation, safe to show. For an internal error it is deliberately generic — the real cause goes to the log.
+		Message string `json:"message"`
 	} `json:"error"`
 }
 
-// ErrorResponseErrorCode not_implemented — ручка объявлена в контракте, но ещё не реализована.
-// Клиент может отличить её от настоящей поломки сервера и скрыть
-// элемент интерфейса, а не показывать ошибку.
+// ErrorResponseErrorCode Machine-readable reason, stable across releases. `validation` covers both a malformed body (400) and a well-formed but invalid one (422). `not_implemented` means the operation exists in the contract but has no implementation yet — a client can hide the control instead of showing an error.
 type ErrorResponseErrorCode string
 
-// Investigation defines model for Investigation.
+// Investigation A case or a hypothesis within one — the same shape at every level of the tree. It owns its evidence, its entities and its graph; nothing crosses from one investigation to another.
 type Investigation struct {
-	ClosedAt   *time.Time `json:"closed_at,omitempty"`
-	Confidence *float32   `json:"confidence,omitempty"`
-	Counters   struct {
-		Children      int `json:"children"`
-		Entities      int `json:"entities"`
-		Events        int `json:"events"`
+	// ClosedAt When it was closed. Cleared if the investigation is reopened.
+	ClosedAt *time.Time `json:"closed_at,omitempty"`
+
+	// Confidence How sure the conclusion is. Meaningful for a hypothesis, rarely used on a root case.
+	Confidence *float32 `json:"confidence,omitempty"`
+
+	// Counters Size of the case at a glance, so the list does not need a query per row.
+	Counters struct {
+		// Children Direct child investigations — the open hypotheses under this one.
+		Children int `json:"children"`
+
+		// Entities Distinct entities extracted from those events.
+		Entities int `json:"entities"`
+
+		// Events Events pulled into this investigation.
+		Events int `json:"events"`
+
+		// ProposedEdges Edges still waiting for review. This is the analyst's queue — non-zero means there is work to do here.
 		ProposedEdges int `json:"proposed_edges"`
 	} `json:"counters"`
-	CreatedAt   time.Time          `json:"created_at"`
-	Description *string            `json:"description,omitempty"`
-	Id          openapi_types.UUID `json:"id"`
 
-	// Origin Кто создал: аналитик через API, правило или агент. Ставится сервером по способу создания, клиентом не задаётся.
-	Origin *Origin `json:"origin,omitempty"`
+	// CreatedAt When the investigation was opened.
+	CreatedAt time.Time `json:"created_at"`
 
-	// OriginRef Кто именно — subject_id аналитика, код правила или id запуска
-	OriginRef     *string             `json:"origin_ref,omitempty"`
-	ParentId      *openapi_types.UUID `json:"parent_id,omitempty"`
-	ProjectId     string              `json:"project_id"`
-	Severity      *Severity           `json:"severity,omitempty"`
-	Status        InvestigationStatus `json:"status"`
-	Title         string              `json:"title"`
-	UpdatedAt     time.Time           `json:"updated_at"`
-	Verdict       *Verdict            `json:"verdict,omitempty"`
-	VerdictReason *string             `json:"verdict_reason,omitempty"`
-	Version       int                 `json:"version"`
-}
-
-// InvestigationCreate defines model for InvestigationCreate.
-type InvestigationCreate struct {
+	// Description Free-form context — what is known, what is being checked and why.
 	Description *string `json:"description,omitempty"`
 
-	// ParentId Родитель. NULL — корневой кейс. Потомок наследует project_id родителя.
+	// Id Identifier of the investigation.
+	Id openapi_types.UUID `json:"id"`
+
+	// Origin Who opened it — an analyst through the API, a linking rule, or an agent. Set by the server from how the request arrived; a client cannot claim it.
+	Origin *Origin `json:"origin,omitempty"`
+
+	// OriginRef Which one exactly — the analyst's subject id, the rule's code, or the agent run's identifier.
+	OriginRef *string `json:"origin_ref,omitempty"`
+
+	// ParentId The investigation this one refines. Null means it is a root case; anything else means it is a hypothesis inside a larger case.
 	ParentId *openapi_types.UUID `json:"parent_id,omitempty"`
 
-	// ProjectId Тенант sb0rka. Обязателен для корня, запрещён для потомка.
-	ProjectId *string   `json:"project_id,omitempty"`
-	Severity  *Severity `json:"severity,omitempty"`
-	Title     string    `json:"title"`
-}
+	// ProjectId Sb0rka project that owns the case — the tenant. Taken from the verified token, never from the request body, and inherited unchanged by every child.
+	ProjectId string `json:"project_id"`
 
-// InvestigationPage defines model for InvestigationPage.
-type InvestigationPage struct {
-	Items      []Investigation `json:"items"`
-	NextCursor *string         `json:"next_cursor,omitempty"`
-}
+	// Severity How bad this looks. Set during triage and revised as evidence arrives; null until someone judges it.
+	Severity *Severity `json:"severity,omitempty"`
 
-// InvestigationPatch defines model for InvestigationPatch.
-type InvestigationPatch struct {
-	// Confidence Уверенность в гипотезе. Осмысленна для под-расследования
-	Confidence  *float32             `json:"confidence,omitempty"`
-	Description *string              `json:"description,omitempty"`
-	Severity    *Severity            `json:"severity,omitempty"`
-	Status      *InvestigationStatus `json:"status,omitempty"`
-	Title       *string              `json:"title,omitempty"`
+	// Status Whether work is still going on. Independent of the verdict: a case can be open with no verdict yet, and closing requires one.
+	Status InvestigationStatus `json:"status"`
 
-	// Verdict Корень: incident | false_positive | not_affected | inconclusive.
-	// Под-расследование: confirmed | rejected | inconclusive.
-	// Сервис валидирует подмножество по позиции в дереве.
+	// Title What is being investigated. For a hypothesis this is the claim being tested, phrased so a verdict makes sense against it.
+	Title string `json:"title"`
+
+	// UpdatedAt When it last changed.
+	UpdatedAt time.Time `json:"updated_at"`
+
+	// Verdict The conclusion. Null while the investigation is still open, required to close it.
 	Verdict *Verdict `json:"verdict,omitempty"`
 
-	// VerdictReason Обоснование вердикта. Обязателен при verdict=rejected
+	// VerdictReason Why that conclusion. Required when rejecting — a rejected hypothesis without a reason teaches nobody anything.
 	VerdictReason *string `json:"verdict_reason,omitempty"`
-	Version       int     `json:"version"`
+
+	// Version Bumped on every change. Send the value you last read when updating; a mismatch means someone else edited it first.
+	Version int `json:"version"`
 }
 
-// InvestigationStatus defines model for InvestigationStatus.
+// InvestigationCreate A new case, or a new hypothesis inside an existing one.
+type InvestigationCreate struct {
+	// Description Context — what is known so far and what needs checking.
+	Description *string `json:"description,omitempty"`
+
+	// ParentId The investigation this one refines. Omit it to open a root case. A child inherits the parent's tenant.
+	ParentId *openapi_types.UUID `json:"parent_id,omitempty"`
+
+	// ProjectId Sb0rka project that owns the case. Required for a root, refused for a child — a hypothesis cannot belong to a different tenant than its parent.
+	ProjectId *string `json:"project_id,omitempty"`
+
+	// Severity Initial assessment. Can be revised later.
+	Severity *Severity `json:"severity,omitempty"`
+
+	// Title What is being investigated, or the claim being tested.
+	Title string `json:"title"`
+}
+
+// InvestigationPage One page of investigations.
+type InvestigationPage struct {
+	// Items The investigations on this page.
+	Items []Investigation `json:"items"`
+
+	// NextCursor Pass as `cursor` to get the next page. Absent on the last page.
+	NextCursor *string `json:"next_cursor,omitempty"`
+}
+
+// InvestigationPatch Fields to change. Anything omitted stays as it is; `version` is always required so concurrent edits cannot overwrite each other silently.
+type InvestigationPatch struct {
+	// Confidence How sure the conclusion is. Meaningful for a hypothesis.
+	Confidence *float32 `json:"confidence,omitempty"`
+
+	// Description New description.
+	Description *string `json:"description,omitempty"`
+
+	// Severity Revised assessment of how bad this is.
+	Severity *Severity `json:"severity,omitempty"`
+
+	// Status Close the investigation, or reopen a closed one. Closing needs a verdict; reopening clears it.
+	Status *InvestigationStatus `json:"status,omitempty"`
+
+	// Title New title.
+	Title *string `json:"title,omitempty"`
+
+	// Verdict The conclusion. Which values are allowed depends on whether this is a root case or a hypothesis.
+	Verdict *Verdict `json:"verdict,omitempty"`
+
+	// VerdictReason Why. Required when the verdict is rejected.
+	VerdictReason *string `json:"verdict_reason,omitempty"`
+
+	// Version Version the client last read. A mismatch is a 409.
+	Version int `json:"version"`
+}
+
+// InvestigationStatus Whether work is still going on. Says nothing about the outcome — that is the verdict.
 type InvestigationStatus string
 
-// InvestigationTree defines model for InvestigationTree.
+// InvestigationTree A subtree flattened for one-pass rendering.
 type InvestigationTree struct {
-	// Items Плоский пре-ордер, включая корень (depth=0)
+	// Items Every investigation in the subtree in pre-order, starting with the root itself. Each carries its depth, so the client can indent without walking parent links.
 	Items []struct {
-		ClosedAt   *time.Time `json:"closed_at,omitempty"`
-		Confidence *float32   `json:"confidence,omitempty"`
-		Counters   struct {
-			Children      int `json:"children"`
-			Entities      int `json:"entities"`
-			Events        int `json:"events"`
+		// ClosedAt When it was closed. Cleared if the investigation is reopened.
+		ClosedAt *time.Time `json:"closed_at,omitempty"`
+
+		// Confidence How sure the conclusion is. Meaningful for a hypothesis, rarely used on a root case.
+		Confidence *float32 `json:"confidence,omitempty"`
+
+		// Counters Size of the case at a glance, so the list does not need a query per row.
+		Counters struct {
+			// Children Direct child investigations — the open hypotheses under this one.
+			Children int `json:"children"`
+
+			// Entities Distinct entities extracted from those events.
+			Entities int `json:"entities"`
+
+			// Events Events pulled into this investigation.
+			Events int `json:"events"`
+
+			// ProposedEdges Edges still waiting for review. This is the analyst's queue — non-zero means there is work to do here.
 			ProposedEdges int `json:"proposed_edges"`
 		} `json:"counters"`
-		CreatedAt   time.Time          `json:"created_at"`
-		Depth       int                `json:"depth"`
-		Description *string            `json:"description,omitempty"`
-		Id          openapi_types.UUID `json:"id"`
 
-		// Origin Кто создал: аналитик через API, правило или агент. Ставится сервером по способу создания, клиентом не задаётся.
+		// CreatedAt When the investigation was opened.
+		CreatedAt time.Time `json:"created_at"`
+
+		// Depth Distance from the root. Zero for the root itself.
+		Depth int `json:"depth"`
+
+		// Description Free-form context — what is known, what is being checked and why.
+		Description *string `json:"description,omitempty"`
+
+		// Id Identifier of the investigation.
+		Id openapi_types.UUID `json:"id"`
+
+		// Origin Who opened it — an analyst through the API, a linking rule, or an agent. Set by the server from how the request arrived; a client cannot claim it.
 		Origin *Origin `json:"origin,omitempty"`
 
-		// OriginRef Кто именно — subject_id аналитика, код правила или id запуска
-		OriginRef     *string             `json:"origin_ref,omitempty"`
-		ParentId      *openapi_types.UUID `json:"parent_id,omitempty"`
-		ProjectId     string              `json:"project_id"`
-		Severity      *Severity           `json:"severity,omitempty"`
-		Status        InvestigationStatus `json:"status"`
-		Title         string              `json:"title"`
-		UpdatedAt     time.Time           `json:"updated_at"`
-		Verdict       *Verdict            `json:"verdict,omitempty"`
-		VerdictReason *string             `json:"verdict_reason,omitempty"`
-		Version       int                 `json:"version"`
+		// OriginRef Which one exactly — the analyst's subject id, the rule's code, or the agent run's identifier.
+		OriginRef *string `json:"origin_ref,omitempty"`
+
+		// ParentId The investigation this one refines. Null means it is a root case; anything else means it is a hypothesis inside a larger case.
+		ParentId *openapi_types.UUID `json:"parent_id,omitempty"`
+
+		// ProjectId Sb0rka project that owns the case — the tenant. Taken from the verified token, never from the request body, and inherited unchanged by every child.
+		ProjectId string `json:"project_id"`
+
+		// Severity How bad this looks. Set during triage and revised as evidence arrives; null until someone judges it.
+		Severity *Severity `json:"severity,omitempty"`
+
+		// Status Whether work is still going on. Independent of the verdict: a case can be open with no verdict yet, and closing requires one.
+		Status InvestigationStatus `json:"status"`
+
+		// Title What is being investigated. For a hypothesis this is the claim being tested, phrased so a verdict makes sense against it.
+		Title string `json:"title"`
+
+		// UpdatedAt When it last changed.
+		UpdatedAt time.Time `json:"updated_at"`
+
+		// Verdict The conclusion. Null while the investigation is still open, required to close it.
+		Verdict *Verdict `json:"verdict,omitempty"`
+
+		// VerdictReason Why that conclusion. Required when rejecting — a rejected hypothesis without a reason teaches nobody anything.
+		VerdictReason *string `json:"verdict_reason,omitempty"`
+
+		// Version Bumped on every change. Send the value you last read when updating; a mismatch means someone else edited it first.
+		Version int `json:"version"`
 	} `json:"items"`
+
+	// RootId The investigation the subtree was requested for.
 	RootId openapi_types.UUID `json:"root_id"`
 }
 
-// Origin defines model for Origin.
+// Origin Who produced the record: a human acting through the API, a deterministic linking rule, or an agent run. Anything not produced by a human is born unconfirmed and has to be reviewed.
 type Origin string
 
-// Severity defines model for Severity.
+// Severity How much damage the case could cause. Set on triage and adjusted as evidence accumulates.
 type Severity string
 
-// Verdict Корень: incident | false_positive | not_affected | inconclusive.
-// Под-расследование: confirmed | rejected | inconclusive.
-// Сервис валидирует подмножество по позиции в дереве.
+// Verdict The conclusion, drawn from two vocabularies that share one field. A root case ends as incident, false_positive, not_affected or inconclusive. A hypothesis ends as confirmed, rejected or inconclusive. The server checks the value against the investigation's position in the tree, so a hypothesis cannot be closed as an incident.
 type Verdict string
 
 // Cursor defines model for Cursor.
@@ -293,32 +381,39 @@ type InvestigationId = openapi_types.UUID
 // Limit defines model for Limit.
 type Limit = int
 
-// Conflict defines model for Conflict.
+// Conflict Body of every non-2xx response. Clients branch on `code`, not on the HTTP status: the status says what happened at the protocol level, the code says what happened in the domain.
 type Conflict = ErrorResponse
 
-// Forbidden defines model for Forbidden.
+// Forbidden Body of every non-2xx response. Clients branch on `code`, not on the HTTP status: the status says what happened at the protocol level, the code says what happened in the domain.
 type Forbidden = ErrorResponse
 
-// NotFound defines model for NotFound.
+// NotFound Body of every non-2xx response. Clients branch on `code`, not on the HTTP status: the status says what happened at the protocol level, the code says what happened in the domain.
 type NotFound = ErrorResponse
 
-// Unauthorized defines model for Unauthorized.
+// Unauthorized Body of every non-2xx response. Clients branch on `code`, not on the HTTP status: the status says what happened at the protocol level, the code says what happened in the domain.
 type Unauthorized = ErrorResponse
 
-// ValidationError defines model for ValidationError.
+// ValidationError Body of every non-2xx response. Clients branch on `code`, not on the HTTP status: the status says what happened at the protocol level, the code says what happened in the domain.
 type ValidationError = ErrorResponse
 
 // ListInvestigationsParams defines parameters for ListInvestigations.
 type ListInvestigationsParams struct {
-	ParentId *openapi_types.UUID  `form:"parent_id,omitempty" json:"parent_id,omitempty"`
-	Status   *InvestigationStatus `form:"status,omitempty" json:"status,omitempty"`
-	Severity *Severity            `form:"severity,omitempty" json:"severity,omitempty"`
+	// ParentId Return the direct children of this investigation instead of the roots. Omit it for the case list.
+	ParentId *openapi_types.UUID `form:"parent_id,omitempty" json:"parent_id,omitempty"`
 
-	// Q Подстрока в title
-	Q     *string `form:"q,omitempty" json:"q,omitempty"`
-	Limit *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
+	// Status Keep only open or only closed investigations.
+	Status *InvestigationStatus `form:"status,omitempty" json:"status,omitempty"`
 
-	// Cursor Непрозрачный keyset-курсор из next_cursor предыдущей страницы
+	// Severity Keep only investigations of this severity.
+	Severity *Severity `form:"severity,omitempty" json:"severity,omitempty"`
+
+	// Q Substring match on the title.
+	Q *string `form:"q,omitempty" json:"q,omitempty"`
+
+	// Limit How many items to return. The server may return fewer, never more.
+	Limit *Limit `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// Cursor Opaque keyset cursor taken from `next_cursor` of the previous page. Encodes a position, not a query — do not build one by hand. Omit it to start from the beginning.
 	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
 }
 
@@ -330,19 +425,19 @@ type UpdateInvestigationJSONRequestBody = InvestigationPatch
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
-	// ListInvestigations Список расследований
+	// ListInvestigations List investigations
 	// (GET /investigations)
 	ListInvestigations(w http.ResponseWriter, r *http.Request, params ListInvestigationsParams)
-	// CreateInvestigation Создать расследование или под-расследование
+	// CreateInvestigation Open an investigation or a hypothesis under one
 	// (POST /investigations)
 	CreateInvestigation(w http.ResponseWriter, r *http.Request)
-	// GetInvestigation Карточка расследования
+	// GetInvestigation One investigation
 	// (GET /investigations/{investigation_id})
 	GetInvestigation(w http.ResponseWriter, r *http.Request, investigationId InvestigationId)
-	// UpdateInvestigation Изменить расследование
+	// UpdateInvestigation Update an investigation
 	// (PATCH /investigations/{investigation_id})
 	UpdateInvestigation(w http.ResponseWriter, r *http.Request, investigationId InvestigationId)
-	// GetInvestigationTree Поддерево расследования
+	// GetInvestigationTree The whole subtree
 	// (GET /investigations/{investigation_id}/tree)
 	GetInvestigationTree(w http.ResponseWriter, r *http.Request, investigationId InvestigationId)
 }
@@ -1036,19 +1131,19 @@ func (response GetInvestigationTree404JSONResponse) VisitGetInvestigationTreeRes
 
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
-	// ListInvestigations Список расследований
+	// ListInvestigations List investigations
 	// (GET /investigations)
 	ListInvestigations(ctx context.Context, request ListInvestigationsRequestObject) (ListInvestigationsResponseObject, error)
-	// CreateInvestigation Создать расследование или под-расследование
+	// CreateInvestigation Open an investigation or a hypothesis under one
 	// (POST /investigations)
 	CreateInvestigation(ctx context.Context, request CreateInvestigationRequestObject) (CreateInvestigationResponseObject, error)
-	// GetInvestigation Карточка расследования
+	// GetInvestigation One investigation
 	// (GET /investigations/{investigation_id})
 	GetInvestigation(ctx context.Context, request GetInvestigationRequestObject) (GetInvestigationResponseObject, error)
-	// UpdateInvestigation Изменить расследование
+	// UpdateInvestigation Update an investigation
 	// (PATCH /investigations/{investigation_id})
 	UpdateInvestigation(ctx context.Context, request UpdateInvestigationRequestObject) (UpdateInvestigationResponseObject, error)
-	// GetInvestigationTree Поддерево расследования
+	// GetInvestigationTree The whole subtree
 	// (GET /investigations/{investigation_id}/tree)
 	GetInvestigationTree(ctx context.Context, request GetInvestigationTreeRequestObject) (GetInvestigationTreeResponseObject, error)
 }

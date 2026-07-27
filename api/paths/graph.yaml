@@ -1,6 +1,6 @@
 openapi: 3.0.3
 info:
-  title: IR — граф
+  title: IR — graph
   version: 0.1.0
 servers:
   - url: /api/v1
@@ -13,19 +13,31 @@ paths:
       - { $ref: '../shared/parameters.yaml#/components/parameters/InvestigationId' }
     get:
       tags: [graph]
-      summary: Граф расследования
-      description: |
-        Узлы и рёбра одного расследования. include_subtree=true возвращает
-        объединение подграфов поддерева как есть (узлы пер-кейсовые); клиент
-        группирует дубликаты сущностей по (type_code, canonical_key) из полей
-        узла. Rejected-рёбра по умолчанию скрыты.
+      summary: Graph of the investigation
+      description: >-
+        Nodes and edges of one case — the main working surface for both the
+        analyst and the agent. Rejected edges are hidden by default: they stay
+        in the data as "checked and excluded" but do not clutter the picture.
       operationId: getGraph
       parameters:
-        - { name: include_subtree, in: query, schema: { type: boolean, default: false } }
-        - { name: min_confidence, in: query, schema: { type: number, minimum: 0, maximum: 1 } }
+        - name: include_subtree
+          in: query
+          description: >-
+            Also return the graphs of child investigations. Nodes stay
+            per-case, so the same host appears once per investigation — group
+            them client-side by type_code and canonical_key.
+          schema: { type: boolean, default: false }
+        - name: min_confidence
+          in: query
+          description: >-
+            Drop edges the producer was less sure about than this. Useful for
+            thinning out an agent's suggestions.
+          schema: { type: number, minimum: 0, maximum: 1 }
         - name: statuses
           in: query
-          description: Фильтр статусов рёбер, по умолчанию proposed,confirmed
+          description: >-
+            Which edge states to include. Defaults to proposed and confirmed;
+            pass rejected explicitly to see what was ruled out.
           schema:
             type: array
             items: { $ref: '../shared/enums.yaml#/components/schemas/EdgeStatus' }
@@ -33,7 +45,7 @@ paths:
           explode: false
       responses:
         '200':
-          description: Граф
+          description: The graph
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Graph' }
@@ -47,12 +59,14 @@ paths:
       - { $ref: '../shared/parameters.yaml#/components/parameters/InvestigationId' }
     post:
       tags: [graph]
-      summary: Создать ребро (аналитик)
-      description: |
-        origin=analyst, рождается confirmed. evidence_event_ids необязателен для
-        аналитика, обязателен в internal-контуре агента. relation_code валидируется
-        против RelationTypes (source_kind/target_kind должны совпасть с типами узлов).
-        Повтор той же тройки (source, target, relation_code) — 409.
+      summary: Draw an edge by hand
+      description: >-
+        The analyst's manual correction of the graph. An edge created here is
+        born confirmed — a human asserting it is the assertion. The relation
+        must exist in the dictionary and its declared endpoints must match the
+        node kinds, so an event-to-event relation cannot be hung between two
+        entities. Re-creating the same triple returns 409 rather than a
+        duplicate.
       operationId: createEdge
       requestBody:
         required: true
@@ -61,7 +75,7 @@ paths:
             schema: { $ref: '#/components/schemas/EdgeCreate' }
       responses:
         '201':
-          description: Ребро
+          description: The new edge
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Edge' }
@@ -76,11 +90,12 @@ paths:
       - { $ref: '../shared/parameters.yaml#/components/parameters/InvestigationId' }
     post:
       tags: [graph]
-      summary: Батч-ревизия proposed-рёбер
-      description: |
-        Одна транзакция: либо применяется весь батч, либо ничего.
-        Конфликт версии любого элемента — 409 с details.conflicts=[edge_id,...],
-        состояние БД не меняется.
+      summary: Review proposed edges in bulk
+      description: >-
+        Where a human accepts or rules out what rules and agents suggested.
+        All or nothing: if any item carries a stale version the whole batch is
+        refused with 409 and `details.conflicts` naming the ids, and nothing is
+        written — so an optimistic UI can roll back precisely.
       operationId: reviewEdges
       requestBody:
         required: true
@@ -89,7 +104,7 @@ paths:
             schema: { $ref: '#/components/schemas/ReviewRequest' }
       responses:
         '200':
-          description: Итог ревизии
+          description: What the batch changed
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ReviewResult' }
@@ -101,117 +116,259 @@ paths:
 
 components:
   schemas:
-    Edge:
-      type: object
-      required: [id, investigation_id, source_node_id, target_node_id, relation_code, status, origin, version, evidence_count]
-      properties:
-        id: { type: string, format: uuid }
-        investigation_id: { type: string, format: uuid }
-        source_node_id: { type: string, format: uuid }
-        target_node_id: { type: string, format: uuid }
-        relation_code: { type: string }
-        status: { $ref: '../shared/enums.yaml#/components/schemas/EdgeStatus' }
-        reject_reason: { type: string, nullable: true }
-        confidence: { type: number, minimum: 0, maximum: 1, nullable: true }
-        why: { type: string, nullable: true, description: Обоснование. Обязательно при origin=agent }
-        origin: { $ref: '../shared/enums.yaml#/components/schemas/Origin' }
-        origin_ref: { type: string, nullable: true, description: subject_id | код правила | id запуска }
-        evidence_count: { type: integer }
-        evidence_event_ids:
-          type: array
-          items: { type: string, format: uuid }
-        metadata:
-          type: object
-          additionalProperties: true
-        version: { type: integer }
-        created_at: { type: string, format: date-time }
-        updated_at: { type: string, format: date-time }
-    EdgeCreate:
-      type: object
-      required: [source_node_id, target_node_id, relation_code]
-      properties:
-        source_node_id: { type: string, format: uuid }
-        target_node_id: { type: string, format: uuid }
-        relation_code: { type: string }
-        confidence: { type: number, minimum: 0, maximum: 1 }
-        why: { type: string }
-        evidence_event_ids:
-          type: array
-          items: { type: string, format: uuid }
-          description: События-основания того же расследования (иначе 422)
-    EdgePatch:
-      type: object
-      required: [version, status]
-      properties:
-        version: { type: integer, minimum: 1 }
-        status:
-          type: string
-          enum: [confirmed, rejected]
-        reject_reason: { type: string, description: Обязателен при status=rejected }
     Graph:
       type: object
+      description: Nodes and edges as one payload, ready to render.
       required: [investigation_id, nodes, edges]
       properties:
-        investigation_id: { type: string, format: uuid }
-        include_subtree: { type: boolean }
+        investigation_id:
+          type: string
+          format: uuid
+          description: Investigation this graph belongs to.
+        include_subtree:
+          type: boolean
+          description: Whether child investigations were merged into this response.
         nodes:
           type: array
+          description: Every node referenced by the edges below, plus isolated ones.
           items: { $ref: '#/components/schemas/GraphNode' }
         edges:
           type: array
+          description: Edges surviving the status and confidence filters.
           items: { $ref: '#/components/schemas/Edge' }
+
     GraphNode:
       type: object
+      description: >-
+        A point on the graph. Stands for exactly one entity or one event —
+        never both, never neither.
       required: [id, investigation_id, node_type, origin]
       properties:
-        id: { type: string, format: uuid }
-        investigation_id: { type: string, format: uuid }
-        node_type: { $ref: '../shared/enums.yaml#/components/schemas/NodeType' }
-        entity_id: { type: string, format: uuid, nullable: true }
-        event_id: { type: string, format: uuid, nullable: true }
-        origin: { $ref: '../shared/enums.yaml#/components/schemas/Origin' }
-        label: { type: string, description: display_name сущности или сводка события }
+        id:
+          type: string
+          format: uuid
+          description: Identifier of the node. Edges reference this, not the entity or event.
+        investigation_id:
+          type: string
+          format: uuid
+          description: Investigation the node belongs to.
+        node_type:
+          allOf: [{ $ref: '../shared/enums.yaml#/components/schemas/NodeType' }]
+          description: Which of the two fields below is filled.
+        entity_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: The entity, when node_type is entity.
+        event_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: >-
+            The event, when node_type is event. Only events promoted onto the
+            graph get a node — the rest live on the timeline.
+        origin:
+          allOf: [{ $ref: '../shared/enums.yaml#/components/schemas/Origin' }]
+          description: Who put this node on the graph.
+        label:
+          type: string
+          description: >-
+            Text to draw on the node — the entity's display name or a short
+            summary of the event.
         type_code:
           type: string
           nullable: true
-          description: Тип сущности (иконка узла). Только для node_type=entity
+          description: >-
+            Kind of entity, which is what picks the icon. Entity nodes only.
         canonical_key:
           type: string
           nullable: true
-          description: Ключ для группировки дубликатов при include_subtree
+          description: >-
+            Entity's normalised identity. Lets the client fold duplicates of the
+            same host across a merged subtree.
         occurred_at:
           type: string
           format: date-time
           nullable: true
-          description: Только для node_type=event
+          description: When the event happened. Event nodes only.
+
+    Edge:
+      type: object
+      description: >-
+        A claim that two nodes are related. Unlike an event, an edge can be
+        wrong — hence a status, a stated reason, and the events it rests on.
+      required: [id, investigation_id, source_node_id, target_node_id, relation_code, status, origin, version, evidence_count]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Identifier of the edge.
+        investigation_id:
+          type: string
+          format: uuid
+          description: Investigation the edge belongs to.
+        source_node_id:
+          type: string
+          format: uuid
+          description: Node the relation starts from.
+        target_node_id:
+          type: string
+          format: uuid
+          description: >-
+            Node it points to. For an undirected relation the order carries no
+            meaning.
+        relation_code:
+          type: string
+          description: >-
+            What the relation is — parent_process, logged_in, connected_to,
+            executed, resolved_to, same_host, subevent_of, followed_by.
+        status:
+          allOf: [{ $ref: '../shared/enums.yaml#/components/schemas/EdgeStatus' }]
+          description: Where the claim stands in review.
+        reject_reason:
+          type: string
+          nullable: true
+          description: >-
+            Why it was ruled out. Required when rejecting, and it is what makes
+            a rejected branch useful in the report.
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 1
+          nullable: true
+          description: >-
+            How sure the producer was. Rules carry a fixed value per rule;
+            an agent estimates its own.
+        why:
+          type: string
+          nullable: true
+          description: >-
+            Plain-language justification. Mandatory for an agent: an unexplained
+            machine suggestion is not reviewable.
+        origin:
+          allOf: [{ $ref: '../shared/enums.yaml#/components/schemas/Origin' }]
+          description: Who produced the claim. Never changes, unlike status.
+        origin_ref:
+          type: string
+          nullable: true
+          description: >-
+            Which one exactly — the analyst's subject id, the rule's code, or
+            the agent run's identifier. Together with origin this is how a claim
+            is traced back to its author.
+        evidence_count:
+          type: integer
+          description: >-
+            How many events the edge cites. Zero is allowed for an analyst,
+            never for an agent.
+        evidence_event_ids:
+          type: array
+          description: >-
+            The cited events. All belong to the same investigation — the
+            database enforces it, so a claim cannot lean on another case's data.
+          items: { type: string, format: uuid }
+        metadata:
+          type: object
+          description: Producer-specific extras, e.g. which rule field matched.
+          additionalProperties: true
+        version:
+          type: integer
+          description: >-
+            Bumped on every change. Send the value you last read when reviewing;
+            a mismatch means someone else got there first.
+        created_at:
+          type: string
+          format: date-time
+          description: When the edge was created.
+        updated_at:
+          type: string
+          format: date-time
+          description: When it last changed — in practice, when it was reviewed.
+
+    EdgeCreate:
+      type: object
+      description: A relation the analyst asserts between two existing nodes.
+      required: [source_node_id, target_node_id, relation_code]
+      properties:
+        source_node_id:
+          type: string
+          format: uuid
+          description: Node the relation starts from.
+        target_node_id:
+          type: string
+          format: uuid
+          description: Node it points to.
+        relation_code:
+          type: string
+          description: >-
+            Relation from the dictionary. Its declared endpoint kinds must match
+            the two nodes, otherwise the request is rejected.
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: Optional degree of certainty. A manual edge is normally certain.
+        why:
+          type: string
+          description: Justification, for the record. Optional here, required of agents.
+        evidence_event_ids:
+          type: array
+          description: >-
+            Events backing the claim. Each must belong to this investigation —
+            citing another case's event is refused.
+          items: { type: string, format: uuid }
+
     ReviewRequest:
       type: object
-      description: Хотя бы одно из полей непусто.
+      description: >-
+        Edges to accept and edges to rule out, applied as one transaction.
+        At least one of the two lists must be non-empty.
       properties:
         confirm:
           type: array
+          description: Edges the analyst accepts as established.
           items:
             type: object
             required: [id, version]
             properties:
-              id: { type: string, format: uuid }
-              version: { type: integer }
+              id:
+                type: string
+                format: uuid
+                description: The edge.
+              version:
+                type: integer
+                description: Version the client last saw. Guards against a concurrent edit.
         reject:
           type: array
+          description: >-
+            Edges the analyst rules out. They are kept, not deleted — a checked
+            and excluded lead is a result too.
           items:
             type: object
             required: [id, version, reason]
             properties:
-              id: { type: string, format: uuid }
-              version: { type: integer }
-              reason: { type: string }
+              id:
+                type: string
+                format: uuid
+                description: The edge.
+              version:
+                type: integer
+                description: Version the client last saw.
+              reason:
+                type: string
+                description: >-
+                  Why it does not hold. Required — an unexplained rejection is
+                  worthless in the report.
+
     ReviewResult:
       type: object
+      description: Ids the batch actually changed, split by outcome.
       required: [confirmed, rejected]
       properties:
         confirmed:
           type: array
+          description: Edges that became confirmed.
           items: { type: string, format: uuid }
         rejected:
           type: array
+          description: Edges that became rejected.
           items: { type: string, format: uuid }

@@ -6,34 +6,40 @@ info:
     name: Apache-2.0
     url: https://www.apache.org/licenses/LICENSE-2.0
   description: |
-    REST API SOC-расследований: дерево расследований, улики (события и сущности),
-    граф связей с провенансом, интеграция с SOM (агентские сессии, задачи по узлам).
+    REST API for SOC incident investigation.
+
+    The product is one graph of evidence per case. Events are pulled in from
+    security tools, entities are extracted from them, and edges claim how those
+    things are related. Everything a machine proposes is born unconfirmed and
+    must be reviewed by a human, and every claim that survives review cites the
+    source events it rests on — so any conclusion can be traced back to a record
+    in the customer's own system.
+
+    Investigations form a tree: a root is a case, a child is a hypothesis inside
+    it. There is no separate "finding" type — a hypothesis that holds up is
+    simply a closed child with a confirmed verdict.
 servers:
   - url: /api/v1
 security:
   - bearerAuth: []
 
 tags:
-  - name: triage
-    description: Лента сработок и сквозной поиск по источникам — вне расследования
   - name: investigations
-    description: Дерево расследований (корень = кейс, потомок = гипотеза/под-расследование)
+    description: >-
+      The tree of cases and hypotheses. A root is an incident under
+      investigation; a child is a claim being tested inside it.
   - name: events
-    description: Улики — события, затянутые в скоуп расследования
+    description: >-
+      Evidence — records pulled from security tools into one investigation.
+      Facts, never edited, never given a status.
   - name: entities
-    description: Сущности расследования и карточка сущности
+    description: >-
+      Hosts, accounts, processes, addresses and hashes extracted from events,
+      with the cross-case history that answers "have we seen this before".
   - name: graph
-    description: Узлы, рёбра, ревизия proposed
-  - name: artifacts
-    description: Индикаторы компрометации и их обогащение
-  - name: output
-    description: Пакет реагирования и отчёт по инциденту
-  - name: som
-    description: Интеграция с SOM — агентские сессии и задачи по узлам
-  - name: admin
-    description: Источники, расширения, правила связывания, роли, аудит, метрики
-  - name: reference
-    description: Справочники
+    description: >-
+      Nodes, the edges claiming how they relate, and the review that turns a
+      machine's suggestion into an established fact.
 
 components:
   securitySchemes:
@@ -41,3 +47,8 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
+      description: >-
+        Ed25519-signed access token issued by sb0rka auth. The service verifies
+        it with the public key only — it never holds signing material. The
+        tenant comes from the token, so no request body can widen a caller's
+        scope.

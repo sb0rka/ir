@@ -1,4 +1,4 @@
-# Параметры, повторяющиеся в нескольких доменах.
+# Parameters shared by more than one domain.
 
 components:
   parameters:
@@ -6,51 +6,36 @@ components:
       name: investigation_id
       in: path
       required: true
+      description: >-
+        Investigation the request works in. Every piece of evidence, entity and
+        edge belongs to exactly one, and nothing crosses that boundary.
       schema: { type: string, format: uuid }
 
     EventId:
       name: event_id
       in: path
       required: true
+      description: Identifier of an event already pulled into an investigation.
       schema: { type: string, format: uuid }
 
     EntityId:
       name: entity_id
       in: path
       required: true
-      schema: { type: string, format: uuid }
-
-    EdgeId:
-      name: edge_id
-      in: path
-      required: true
-      schema: { type: string, format: uuid }
-
-    ArtifactId:
-      name: artifact_id
-      in: path
-      required: true
-      schema: { type: string, format: uuid }
-
-    PackageId:
-      name: package_id
-      in: path
-      required: true
-      schema: { type: string, format: uuid }
-
-    ReportId:
-      name: report_id
-      in: path
-      required: true
+      description: Identifier of an entity — a host, account, process, address or hash.
       schema: { type: string, format: uuid }
 
     Limit:
       name: limit
       in: query
+      description: How many items to return. The server may return fewer, never more.
       schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
 
     Cursor:
       name: cursor
       in: query
-      description: Непрозрачный keyset-курсор из next_cursor предыдущей страницы
+      description: >-
+        Opaque keyset cursor taken from `next_cursor` of the previous page.
+        Encodes a position, not a query — do not build one by hand. Omit it to
+        start from the beginning.
       schema: { type: string }

@@ -9,14 +9,14 @@ export interface paths {
             query?: never;
             header?: never;
             path: {
+                /** @description Identifier of an entity — a host, account, process, address or hash. */
                 entity_id: components["parameters"]["EntityId"];
             };
             cookie?: never;
         };
         /**
-         * Карточка сущности
-         * @description Историчность и окружение в текущем расследовании плюс кросс-кейсовые
-         *     вхождения того же (type_code, canonical_key) в других расследованиях тенанта.
+         * Entity card
+         * @description Everything known about one host, account, process, address or hash: how often it shows up in this investigation, which other investigations of the tenant it appears in, and what it is connected to. The cross-case part is what answers "have we seen this before".
          */
         get: operations["getEntityCard"];
         put?: never;
@@ -31,55 +31,82 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** @description A named thing an incident revolves around, extracted from source events during ingestion. Entities are scoped to one investigation; the same real-world host appears as a separate row in each case it touches. */
         Entity: {
-            /** Format: uuid */
+            /**
+             * Format: uuid
+             * @description Server-assigned identifier of this entity.
+             */
             id: string;
-            /** Format: uuid */
+            /**
+             * Format: uuid
+             * @description Investigation this entity belongs to.
+             */
             investigation_id: string;
+            /** @description Kind of thing this is — host, user, account, email, process, ip, domain, url, file_hash. The core set is fixed; peripheral kinds are added as dictionary rows without a migration. */
             type_code: string;
+            /** @description Normalised identity used for matching: fqdn for a host, SID for an account, GUID for a process, sha256 for a file. Two records with the same type and key are the same thing, so linking rules join on it. */
             canonical_key: string;
+            /** @description Label for the UI. Falls back to canonical_key when absent. */
             display_name?: string | null;
+            /** @description Extra attributes carried over from the source — OS version, owner, geolocation. Free-form on purpose: sources differ. */
             metadata?: {
                 [key: string]: unknown;
             };
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description Earliest event in this investigation that mentions the entity.
+             */
             first_seen?: string | null;
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description Latest event that mentions it. Together with first_seen this bounds the window the entity was active in.
+             */
             last_seen?: string | null;
         };
+        /** @description Entity plus the context an analyst needs to judge it: how much of this case it touches, where else it has surfaced, and who it talks to. */
         EntityCard: {
+            /** @description The entity this card is about. */
             entity: components["schemas"]["Entity"];
-            /** @description Событий с участием в текущем расследовании */
+            /** @description Events in this investigation the entity takes part in. A rough measure of how central it is to the case. */
             events_count: number;
-            /** @description Тот же (type_code, canonical_key) в других расследованиях тенанта */
+            /** @description Other investigations of the same tenant where an entity with the same type and key shows up. This is the spread assessment: a hash seen in five cases means five hosts to check. */
             occurrences: {
-                /** Format: uuid */
+                /**
+                 * Format: uuid
+                 * @description The other investigation.
+                 */
                 investigation_id: string;
+                /** @description Its title, so the analyst can judge relevance without opening it. */
                 title: string;
+                /** @description How many of its events involve the entity. */
                 events_count: number;
             }[];
-            /** @description Соседи по подтверждённым рёбрам */
+            /** @description Entities reachable over confirmed edges only. Proposed links are left out — a card should show what is established, not what is suspected. */
             neighbors?: {
-                /** Format: uuid */
+                /**
+                 * Format: uuid
+                 * @description The neighbouring entity.
+                 */
                 entity_id: string;
+                /** @description Its label for the UI. */
                 display_name?: string | null;
+                /** @description How they are related — parent_process, logged_in, connected_to, executed, resolved_to, same_host. */
                 relation_code: string;
             }[];
         };
-        EntityPage: {
-            items: components["schemas"]["Entity"][];
-            next_cursor?: string | null;
-        };
+        /** @description Body of every non-2xx response. Clients branch on `code`, not on the HTTP status: the status says what happened at the protocol level, the code says what happened in the domain. */
         ErrorResponse: {
+            /** @description The failure itself. Never carries internal details of a 500. */
             error: {
                 /**
-                 * @description not_implemented — ручка объявлена в контракте, но ещё не реализована.
-                 *     Клиент может отличить её от настоящей поломки сервера и скрыть
-                 *     элемент интерфейса, а не показывать ошибку.
+                 * @description Machine-readable reason, stable across releases. `validation` covers both a malformed body (400) and a well-formed but invalid one (422). `not_implemented` means the operation exists in the contract but has no implementation yet — a client can hide the control instead of showing an error.
                  * @enum {string}
                  */
-                code: "unauthorized" | "forbidden" | "not_found" | "conflict" | "validation" | "source_unavailable" | "som_unavailable" | "not_implemented" | "internal";
+                code: "unauthorized" | "forbidden" | "not_found" | "conflict" | "validation" | "source_unavailable" | "not_implemented" | "internal";
+                /** @description Human-readable explanation, safe to show. For an internal error it is deliberately generic — the real cause goes to the log. */
                 message: string;
+                /** @description Extra context tied to the code. Version conflicts list the clashing ids in `conflicts`; validation failures name the field. */
                 details?: {
                     [key: string]: unknown;
                 };
@@ -87,7 +114,7 @@ export interface components {
         };
     };
     responses: {
-        /** @description Нет или невалиден токен (code=unauthorized) */
+        /** @description Token is missing, malformed, expired or signed by an unknown key (code=unauthorized). */
         Unauthorized: {
             headers: {
                 [name: string]: unknown;
@@ -96,7 +123,7 @@ export interface components {
                 "application/json": components["schemas"]["ErrorResponse"];
             };
         };
-        /** @description Роль не даёт действия или чужой тенант (code=forbidden) */
+        /** @description Caller is authenticated but holds no role in the tenant, or the role does not grant this action (code=forbidden). */
         Forbidden: {
             headers: {
                 [name: string]: unknown;
@@ -105,7 +132,7 @@ export interface components {
                 "application/json": components["schemas"]["ErrorResponse"];
             };
         };
-        /** @description Не найдено в тенанте субъекта (code=not_found) */
+        /** @description No such record in the caller's tenant. Returned instead of 403 for records that exist elsewhere, so the response does not reveal them (code=not_found). */
         NotFound: {
             headers: {
                 [name: string]: unknown;
@@ -116,6 +143,7 @@ export interface components {
         };
     };
     parameters: {
+        /** @description Identifier of an entity — a host, account, process, address or hash. */
         EntityId: string;
     };
     requestBodies: never;
@@ -129,13 +157,14 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
+                /** @description Identifier of an entity — a host, account, process, address or hash. */
                 entity_id: components["parameters"]["EntityId"];
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Карточка */
+            /** @description The card */
             200: {
                 headers: {
                     [name: string]: unknown;

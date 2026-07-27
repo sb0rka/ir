@@ -1,6 +1,6 @@
 openapi: 3.0.3
 info:
-  title: IR — сущности
+  title: IR — entities
   version: 0.1.0
 servers:
   - url: /api/v1
@@ -13,14 +13,16 @@ paths:
       - { $ref: '../shared/parameters.yaml#/components/parameters/EntityId' }
     get:
       tags: [entities]
-      summary: Карточка сущности
-      description: |
-        Историчность и окружение в текущем расследовании плюс кросс-кейсовые
-        вхождения того же (type_code, canonical_key) в других расследованиях тенанта.
+      summary: Entity card
+      description: >-
+        Everything known about one host, account, process, address or hash: how
+        often it shows up in this investigation, which other investigations of
+        the tenant it appears in, and what it is connected to. The cross-case
+        part is what answers "have we seen this before".
       operationId: getEntityCard
       responses:
         '200':
-          description: Карточка
+          description: The card
           content:
             application/json:
               schema: { $ref: '#/components/schemas/EntityCard' }
@@ -32,49 +34,110 @@ components:
   schemas:
     Entity:
       type: object
+      description: >-
+        A named thing an incident revolves around, extracted from source events
+        during ingestion. Entities are scoped to one investigation; the same
+        real-world host appears as a separate row in each case it touches.
       required: [id, investigation_id, type_code, canonical_key]
       properties:
-        id: { type: string, format: uuid }
-        investigation_id: { type: string, format: uuid }
-        type_code: { type: string }
-        canonical_key: { type: string }
-        display_name: { type: string, nullable: true }
+        id:
+          type: string
+          format: uuid
+          description: Server-assigned identifier of this entity.
+        investigation_id:
+          type: string
+          format: uuid
+          description: Investigation this entity belongs to.
+        type_code:
+          type: string
+          description: >-
+            Kind of thing this is — host, user, account, email, process, ip,
+            domain, url, file_hash. The core set is fixed; peripheral kinds are
+            added as dictionary rows without a migration.
+        canonical_key:
+          type: string
+          description: >-
+            Normalised identity used for matching: fqdn for a host, SID for an
+            account, GUID for a process, sha256 for a file. Two records with the
+            same type and key are the same thing, so linking rules join on it.
+        display_name:
+          type: string
+          nullable: true
+          description: Label for the UI. Falls back to canonical_key when absent.
         metadata:
           type: object
+          description: >-
+            Extra attributes carried over from the source — OS version, owner,
+            geolocation. Free-form on purpose: sources differ.
           additionalProperties: true
-        first_seen: { type: string, format: date-time, nullable: true }
-        last_seen: { type: string, format: date-time, nullable: true }
+        first_seen:
+          type: string
+          format: date-time
+          nullable: true
+          description: Earliest event in this investigation that mentions the entity.
+        last_seen:
+          type: string
+          format: date-time
+          nullable: true
+          description: >-
+            Latest event that mentions it. Together with first_seen this bounds
+            the window the entity was active in.
+
     EntityCard:
       type: object
+      description: >-
+        Entity plus the context an analyst needs to judge it: how much of this
+        case it touches, where else it has surfaced, and who it talks to.
       required: [entity, events_count, occurrences]
       properties:
-        entity: { $ref: '#/components/schemas/Entity' }
-        events_count: { type: integer, description: Событий с участием в текущем расследовании }
+        entity:
+          allOf: [{ $ref: '#/components/schemas/Entity' }]
+          description: The entity this card is about.
+        events_count:
+          type: integer
+          description: >-
+            Events in this investigation the entity takes part in. A rough
+            measure of how central it is to the case.
         occurrences:
           type: array
-          description: Тот же (type_code, canonical_key) в других расследованиях тенанта
+          description: >-
+            Other investigations of the same tenant where an entity with the
+            same type and key shows up. This is the spread assessment: a hash
+            seen in five cases means five hosts to check.
           items:
             type: object
             required: [investigation_id, title, events_count]
             properties:
-              investigation_id: { type: string, format: uuid }
-              title: { type: string }
-              events_count: { type: integer }
+              investigation_id:
+                type: string
+                format: uuid
+                description: The other investigation.
+              title:
+                type: string
+                description: Its title, so the analyst can judge relevance without opening it.
+              events_count:
+                type: integer
+                description: How many of its events involve the entity.
         neighbors:
           type: array
-          description: Соседи по подтверждённым рёбрам
+          description: >-
+            Entities reachable over confirmed edges only. Proposed links are
+            left out — a card should show what is established, not what is
+            suspected.
           items:
             type: object
             required: [entity_id, relation_code]
             properties:
-              entity_id: { type: string, format: uuid }
-              display_name: { type: string, nullable: true }
-              relation_code: { type: string }
-    EntityPage:
-      type: object
-      required: [items]
-      properties:
-        items:
-          type: array
-          items: { $ref: '#/components/schemas/Entity' }
-        next_cursor: { type: string, nullable: true }
+              entity_id:
+                type: string
+                format: uuid
+                description: The neighbouring entity.
+              display_name:
+                type: string
+                nullable: true
+                description: Its label for the UI.
+              relation_code:
+                type: string
+                description: >-
+                  How they are related — parent_process, logged_in,
+                  connected_to, executed, resolved_to, same_host.

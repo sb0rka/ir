@@ -1,6 +1,6 @@
 openapi: 3.0.3
 info:
-  title: IR — расследования
+  title: IR — investigations
   version: 0.1.0
 servers:
   - url: /api/v1
@@ -11,7 +11,12 @@ paths:
   /investigations:
     post:
       tags: [investigations]
-      summary: Создать расследование или под-расследование
+      summary: Open an investigation or a hypothesis under one
+      description: >-
+        A root investigation is a case. A child is a hypothesis inside it —
+        "the account was compromised", "this was the initial access". The tree
+        is the same object at every level, so a hypothesis that grows can carry
+        its own children without being converted into anything.
       operationId: createInvestigation
       requestBody:
         required: true
@@ -20,33 +25,49 @@ paths:
             schema: { $ref: '#/components/schemas/InvestigationCreate' }
       responses:
         '201':
-          description: Создано
+          description: The new investigation
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Investigation' }
         '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
         '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
         '404':
-          description: parent_id не существует
+          description: The parent named in parent_id does not exist in this tenant.
           content:
             application/json:
               schema: { $ref: '../shared/errors.yaml#/components/schemas/ErrorResponse' }
         '422': { $ref: '../shared/responses.yaml#/components/responses/ValidationError' }
     get:
       tags: [investigations]
-      summary: Список расследований
-      description: Без parent_id возвращает корневые. parent_id=<uuid> — прямых потомков.
+      summary: List investigations
+      description: >-
+        Root cases by default, or the direct children of one. Only one level at
+        a time — fetch the tree endpoint when the whole subtree is needed.
       operationId: listInvestigations
       parameters:
-        - { name: parent_id, in: query, schema: { type: string, format: uuid } }
-        - { name: status, in: query, schema: { $ref: '#/components/schemas/InvestigationStatus' } }
-        - { name: severity, in: query, schema: { $ref: '../shared/enums.yaml#/components/schemas/Severity' } }
-        - { name: q, in: query, description: Подстрока в title, schema: { type: string } }
+        - name: parent_id
+          in: query
+          description: >-
+            Return the direct children of this investigation instead of the
+            roots. Omit it for the case list.
+          schema: { type: string, format: uuid }
+        - name: status
+          in: query
+          description: Keep only open or only closed investigations.
+          schema: { $ref: '#/components/schemas/InvestigationStatus' }
+        - name: severity
+          in: query
+          description: Keep only investigations of this severity.
+          schema: { $ref: '../shared/enums.yaml#/components/schemas/Severity' }
+        - name: q
+          in: query
+          description: Substring match on the title.
+          schema: { type: string }
         - { $ref: '../shared/parameters.yaml#/components/parameters/Limit' }
         - { $ref: '../shared/parameters.yaml#/components/parameters/Cursor' }
       responses:
         '200':
-          description: Страница
+          description: One page of investigations
           content:
             application/json:
               schema: { $ref: '#/components/schemas/InvestigationPage' }
@@ -58,11 +79,14 @@ paths:
       - { $ref: '../shared/parameters.yaml#/components/parameters/InvestigationId' }
     get:
       tags: [investigations]
-      summary: Карточка расследования
+      summary: One investigation
+      description: >-
+        The investigation with its counters — how much evidence it holds and how
+        much still waits for review.
       operationId: getInvestigation
       responses:
         '200':
-          description: Расследование со счётчиками
+          description: The investigation
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Investigation' }
@@ -71,14 +95,15 @@ paths:
         '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
     patch:
       tags: [investigations]
-      summary: Изменить расследование
-      description: |
-        Закрытие (status=closed) требует verdict; verdict=rejected требует
-        verdict_reason. Для под-расследования verdict=confirmed требует хотя бы
-        одного привязанного события — нарушение возвращает 422 с
-        details.reason=evidence_required. Мутации в закрытом расследовании
-        запрещены (409, code=conflict), кроме переоткрытия: PATCH со
-        status=open очищает verdict/verdict_reason/closed_at и пишется в аудит.
+      summary: Update an investigation
+      description: >-
+        Edits the fields sent and nothing else. Closing requires a verdict, and
+        rejecting requires a stated reason — a case cannot be closed silently.
+        Confirming a hypothesis requires at least one attached event, which is
+        the invariant the whole product rests on; violating it returns 422 with
+        `details.reason=evidence_required`. A closed investigation refuses
+        further changes with 409, except reopening it: sending status=open
+        clears the verdict and is written to the audit log.
       operationId: updateInvestigation
       requestBody:
         required: true
@@ -87,7 +112,7 @@ paths:
             schema: { $ref: '#/components/schemas/InvestigationPatch' }
       responses:
         '200':
-          description: Обновлено
+          description: The updated investigation
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Investigation' }
@@ -102,12 +127,15 @@ paths:
       - { $ref: '../shared/parameters.yaml#/components/parameters/InvestigationId' }
     get:
       tags: [investigations]
-      summary: Поддерево расследования
-      description: Плоский пре-ордер с depth; клиент собирает дерево по parent_id за один проход.
+      summary: The whole subtree
+      description: >-
+        This investigation and everything under it, flattened in pre-order with
+        a depth on each item. The client rebuilds the tree in one pass — no
+        recursive fetching.
       operationId: getInvestigationTree
       responses:
         '200':
-          description: Поддерево
+          description: The subtree
           content:
             application/json:
               schema: { $ref: '#/components/schemas/InvestigationTree' }
@@ -119,113 +147,245 @@ components:
   schemas:
     Investigation:
       type: object
+      description: >-
+        A case or a hypothesis within one — the same shape at every level of the
+        tree. It owns its evidence, its entities and its graph; nothing crosses
+        from one investigation to another.
       required: [id, project_id, title, status, version, created_at, updated_at, counters]
       properties:
-        id: { type: string, format: uuid }
-        project_id: { type: string }
-        parent_id: { type: string, format: uuid, nullable: true }
-        title: { type: string }
-        description: { type: string, nullable: true }
-        status: { $ref: '#/components/schemas/InvestigationStatus' }
-        # type рядом с nullable обязателен по OpenAPI 3.0: без него ссылка
-        # на словарь не даёт валидатору знать, что именно бывает null.
+        id:
+          type: string
+          format: uuid
+          description: Identifier of the investigation.
+        project_id:
+          type: string
+          description: >-
+            Sb0rka project that owns the case — the tenant. Taken from the
+            verified token, never from the request body, and inherited unchanged
+            by every child.
+        parent_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: >-
+            The investigation this one refines. Null means it is a root case;
+            anything else means it is a hypothesis inside a larger case.
+        title:
+          type: string
+          description: >-
+            What is being investigated. For a hypothesis this is the claim being
+            tested, phrased so a verdict makes sense against it.
+        description:
+          type: string
+          nullable: true
+          description: Free-form context — what is known, what is being checked and why.
+        status:
+          allOf: [{ $ref: '#/components/schemas/InvestigationStatus' }]
+          description: >-
+            Whether work is still going on. Independent of the verdict: a case
+            can be open with no verdict yet, and closing requires one.
         severity:
           type: string
           allOf: [{ $ref: '../shared/enums.yaml#/components/schemas/Severity' }]
           nullable: true
+          description: >-
+            How bad this looks. Set during triage and revised as evidence
+            arrives; null until someone judges it.
         verdict:
           type: string
           allOf: [{ $ref: '#/components/schemas/Verdict' }]
           nullable: true
-        verdict_reason: { type: string, nullable: true }
+          description: >-
+            The conclusion. Null while the investigation is still open, required
+            to close it.
+        verdict_reason:
+          type: string
+          nullable: true
+          description: >-
+            Why that conclusion. Required when rejecting — a rejected hypothesis
+            without a reason teaches nobody anything.
         confidence:
           type: number
           minimum: 0
           maximum: 1
           nullable: true
+          description: >-
+            How sure the conclusion is. Meaningful for a hypothesis, rarely used
+            on a root case.
         origin:
           allOf: [{ $ref: '../shared/enums.yaml#/components/schemas/Origin' }]
           description: >-
-            Кто создал: аналитик через API, правило или агент. Ставится сервером
-            по способу создания, клиентом не задаётся.
+            Who opened it — an analyst through the API, a linking rule, or an
+            agent. Set by the server from how the request arrived; a client
+            cannot claim it.
         origin_ref:
           type: string
           nullable: true
-          description: Кто именно — subject_id аналитика, код правила или id запуска
-        version: { type: integer }
+          description: >-
+            Which one exactly — the analyst's subject id, the rule's code, or the
+            agent run's identifier.
+        version:
+          type: integer
+          description: >-
+            Bumped on every change. Send the value you last read when updating;
+            a mismatch means someone else edited it first.
         counters:
           type: object
+          description: >-
+            Size of the case at a glance, so the list does not need a query per
+            row.
           required: [children, events, entities, proposed_edges]
           properties:
-            children: { type: integer }
-            events: { type: integer }
-            entities: { type: integer }
-            proposed_edges: { type: integer }
-        created_at: { type: string, format: date-time }
-        updated_at: { type: string, format: date-time }
-        closed_at: { type: string, format: date-time, nullable: true }
+            children:
+              type: integer
+              description: Direct child investigations — the open hypotheses under this one.
+            events:
+              type: integer
+              description: Events pulled into this investigation.
+            entities:
+              type: integer
+              description: Distinct entities extracted from those events.
+            proposed_edges:
+              type: integer
+              description: >-
+                Edges still waiting for review. This is the analyst's queue —
+                non-zero means there is work to do here.
+        created_at:
+          type: string
+          format: date-time
+          description: When the investigation was opened.
+        updated_at:
+          type: string
+          format: date-time
+          description: When it last changed.
+        closed_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: When it was closed. Cleared if the investigation is reopened.
+
     InvestigationCreate:
       type: object
+      description: A new case, or a new hypothesis inside an existing one.
       required: [title]
       properties:
-        title: { type: string, maxLength: 255 }
-        description: { type: string }
+        title:
+          type: string
+          maxLength: 255
+          description: What is being investigated, or the claim being tested.
+        description:
+          type: string
+          description: Context — what is known so far and what needs checking.
         parent_id:
           type: string
           format: uuid
-          description: Родитель. NULL — корневой кейс. Потомок наследует project_id родителя.
+          description: >-
+            The investigation this one refines. Omit it to open a root case.
+            A child inherits the parent's tenant.
         project_id:
           type: string
-          description: Тенант sb0rka. Обязателен для корня, запрещён для потомка.
-        severity: { $ref: '../shared/enums.yaml#/components/schemas/Severity' }
+          description: >-
+            Sb0rka project that owns the case. Required for a root, refused for
+            a child — a hypothesis cannot belong to a different tenant than its
+            parent.
+        severity:
+          allOf: [{ $ref: '../shared/enums.yaml#/components/schemas/Severity' }]
+          description: Initial assessment. Can be revised later.
+
+    InvestigationPatch:
+      type: object
+      description: >-
+        Fields to change. Anything omitted stays as it is; `version` is always
+        required so concurrent edits cannot overwrite each other silently.
+      required: [version]
+      properties:
+        version:
+          type: integer
+          minimum: 1
+          description: Version the client last read. A mismatch is a 409.
+        title:
+          type: string
+          maxLength: 255
+          description: New title.
+        description:
+          type: string
+          description: New description.
+        status:
+          allOf: [{ $ref: '#/components/schemas/InvestigationStatus' }]
+          description: >-
+            Close the investigation, or reopen a closed one. Closing needs a
+            verdict; reopening clears it.
+        verdict:
+          allOf: [{ $ref: '#/components/schemas/Verdict' }]
+          description: >-
+            The conclusion. Which values are allowed depends on whether this is
+            a root case or a hypothesis.
+        verdict_reason:
+          type: string
+          description: Why. Required when the verdict is rejected.
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: How sure the conclusion is. Meaningful for a hypothesis.
+        severity:
+          allOf: [{ $ref: '../shared/enums.yaml#/components/schemas/Severity' }]
+          description: Revised assessment of how bad this is.
+
+    InvestigationStatus:
+      type: string
+      description: >-
+        Whether work is still going on. Says nothing about the outcome — that is
+        the verdict.
+      enum: [open, closed]
+
+    Verdict:
+      type: string
+      description: >-
+        The conclusion, drawn from two vocabularies that share one field.
+        A root case ends as incident, false_positive, not_affected or
+        inconclusive. A hypothesis ends as confirmed, rejected or inconclusive.
+        The server checks the value against the investigation's position in the
+        tree, so a hypothesis cannot be closed as an incident.
+      enum: [incident, false_positive, not_affected, inconclusive, confirmed, rejected]
+
     InvestigationPage:
       type: object
+      description: One page of investigations.
       required: [items]
       properties:
         items:
           type: array
+          description: The investigations on this page.
           items: { $ref: '#/components/schemas/Investigation' }
-        next_cursor: { type: string, nullable: true }
-    InvestigationPatch:
-      type: object
-      required: [version]
-      properties:
-        version: { type: integer, minimum: 1 }
-        title: { type: string, maxLength: 255 }
-        description: { type: string }
-        status: { $ref: '#/components/schemas/InvestigationStatus' }
-        verdict: { $ref: '#/components/schemas/Verdict' }
-        verdict_reason:
+        next_cursor:
           type: string
-          description: Обоснование вердикта. Обязателен при verdict=rejected
-        confidence:
-          type: number
-          minimum: 0
-          maximum: 1
-          description: Уверенность в гипотезе. Осмысленна для под-расследования
-        severity: { $ref: '../shared/enums.yaml#/components/schemas/Severity' }
-    InvestigationStatus:
-      type: string
-      enum: [open, closed]
+          nullable: true
+          description: >-
+            Pass as `cursor` to get the next page. Absent on the last page.
+
     InvestigationTree:
       type: object
+      description: A subtree flattened for one-pass rendering.
       required: [root_id, items]
       properties:
-        root_id: { type: string, format: uuid }
+        root_id:
+          type: string
+          format: uuid
+          description: The investigation the subtree was requested for.
         items:
-          description: Плоский пре-ордер, включая корень (depth=0)
           type: array
+          description: >-
+            Every investigation in the subtree in pre-order, starting with the
+            root itself. Each carries its depth, so the client can indent
+            without walking parent links.
           items:
             allOf:
               - { $ref: '#/components/schemas/Investigation' }
               - type: object
                 required: [depth]
                 properties:
-                  depth: { type: integer, minimum: 0 }
-    Verdict:
-      type: string
-      description: |
-        Корень: incident | false_positive | not_affected | inconclusive.
-        Под-расследование: confirmed | rejected | inconclusive.
-        Сервис валидирует подмножество по позиции в дереве.
-      enum: [incident, false_positive, not_affected, inconclusive, confirmed, rejected]
+                  depth:
+                    type: integer
+                    minimum: 0
+                    description: Distance from the root. Zero for the root itself.

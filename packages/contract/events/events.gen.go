@@ -25,7 +25,6 @@ const (
 	ErrorResponseErrorCodeInternal          ErrorResponseErrorCode = "internal"
 	ErrorResponseErrorCodeNotFound          ErrorResponseErrorCode = "not_found"
 	ErrorResponseErrorCodeNotImplemented    ErrorResponseErrorCode = "not_implemented"
-	ErrorResponseErrorCodeSomUnavailable    ErrorResponseErrorCode = "som_unavailable"
 	ErrorResponseErrorCodeSourceUnavailable ErrorResponseErrorCode = "source_unavailable"
 	ErrorResponseErrorCodeUnauthorized      ErrorResponseErrorCode = "unauthorized"
 	ErrorResponseErrorCodeValidation        ErrorResponseErrorCode = "validation"
@@ -44,8 +43,6 @@ func (e ErrorResponseErrorCode) Valid() bool {
 		return true
 	case ErrorResponseErrorCodeNotImplemented:
 		return true
-	case ErrorResponseErrorCodeSomUnavailable:
-		return true
 	case ErrorResponseErrorCodeSourceUnavailable:
 		return true
 	case ErrorResponseErrorCodeUnauthorized:
@@ -57,100 +54,163 @@ func (e ErrorResponseErrorCode) Valid() bool {
 	}
 }
 
-// ErrorResponse defines model for ErrorResponse.
+// ErrorResponse Body of every non-2xx response. Clients branch on `code`, not on the HTTP status: the status says what happened at the protocol level, the code says what happened in the domain.
 type ErrorResponse struct {
+	// Error The failure itself. Never carries internal details of a 500.
 	Error struct {
-		// Code not_implemented — ручка объявлена в контракте, но ещё не реализована.
-		// Клиент может отличить её от настоящей поломки сервера и скрыть
-		// элемент интерфейса, а не показывать ошибку.
-		Code    ErrorResponseErrorCode  `json:"code"`
+		// Code Machine-readable reason, stable across releases. `validation` covers both a malformed body (400) and a well-formed but invalid one (422). `not_implemented` means the operation exists in the contract but has no implementation yet — a client can hide the control instead of showing an error.
+		Code ErrorResponseErrorCode `json:"code"`
+
+		// Details Extra context tied to the code. Version conflicts list the clashing ids in `conflicts`; validation failures name the field.
 		Details *map[string]interface{} `json:"details,omitempty"`
-		Message string                  `json:"message"`
+
+		// Message Human-readable explanation, safe to show. For an internal error it is deliberately generic — the real cause goes to the log.
+		Message string `json:"message"`
 	} `json:"error"`
 }
 
-// ErrorResponseErrorCode not_implemented — ручка объявлена в контракте, но ещё не реализована.
-// Клиент может отличить её от настоящей поломки сервера и скрыть
-// элемент интерфейса, а не показывать ошибку.
+// ErrorResponseErrorCode Machine-readable reason, stable across releases. `validation` covers both a malformed body (400) and a well-formed but invalid one (422). `not_implemented` means the operation exists in the contract but has no implementation yet — a client can hide the control instead of showing an error.
 type ErrorResponseErrorCode string
 
-// Event defines model for Event.
+// Event A fact from a security tool, pulled into an investigation. Events are never edited and carry no status: a fact cannot be confirmed or rejected, only cited.
 type Event struct {
-	// Entities Участники события с ролями
+	// Entities Who took part and in what capacity. Extracted during ingestion by the source's mapping profile.
 	Entities *[]struct {
-		EntityId     openapi_types.UUID `json:"entity_id"`
-		RelationCode string             `json:"relation_code"`
+		// EntityId The participating entity.
+		EntityId openapi_types.UUID `json:"entity_id"`
+
+		// RelationCode Its role in the event — actor, object, src, dst. The same entity may appear twice with different roles.
+		RelationCode string `json:"relation_code"`
 	} `json:"entities,omitempty"`
-	EventType       string             `json:"event_type"`
-	Id              openapi_types.UUID `json:"id"`
-	IngestedAt      time.Time          `json:"ingested_at"`
+
+	// EventType What happened, in the product's vocabulary — process_start, network_session, logon, detection.
+	EventType string `json:"event_type"`
+
+	// Id Identifier of this event inside the investigation.
+	Id openapi_types.UUID `json:"id"`
+
+	// IngestedAt When it was pulled in. Differs from occurred_at whenever an analyst reaches back in time, which is most of the time.
+	IngestedAt time.Time `json:"ingested_at"`
+
+	// InvestigationId Investigation the event was pulled into. The same source record pulled into two cases yields two rows, so each case owns its evidence outright.
 	InvestigationId openapi_types.UUID `json:"investigation_id"`
 
-	// NormalizedData Конверт subject-action-object-status
+	// NormalizedData The event mapped onto the common envelope — subject, action, object, status — so events from different tools can be compared and searched.
 	NormalizedData *map[string]interface{} `json:"normalized_data,omitempty"`
-	OccurredAt     time.Time               `json:"occurred_at"`
-	RawData        *map[string]interface{} `json:"raw_data,omitempty"`
-	SourceCode     string                  `json:"source_code"`
-	SourceEventId  string                  `json:"source_event_id"`
 
-	// SourceRef Ссылка/запрос для drill-down к исходной записи
+	// OccurredAt When it happened, per the source. This is what the timeline sorts by.
+	OccurredAt time.Time `json:"occurred_at"`
+
+	// RawData Original payload as the source returned it. Kept for the cases where normalisation lost something. Omitted from list responses.
+	RawData *map[string]interface{} `json:"raw_data,omitempty"`
+
+	// SourceCode Which tool it came from — siem, edr, ndr, infra.
+	SourceCode string `json:"source_code"`
+
+	// SourceEventId Identifier of the record in that tool. Stable address for going back to the original.
+	SourceEventId string `json:"source_event_id"`
+
+	// SourceRef Ready-made link or query that opens the record in the source console. What turns "we claim" into "go and check".
 	SourceRef *string `json:"source_ref,omitempty"`
 }
 
-// EventAttachRequest Ровно одно из полей refs или query.
+// EventAttachRequest What to pull. Give either refs, when the records are already known, or query, to let the source find them — exactly one of the two.
 type EventAttachRequest struct {
-	// Query Выборка из источника (EvidenceSource.Search)
+	// Query A selection to run against one source. This is the pivot: give it an entity key and a window, and whatever the source returns lands in the case.
 	Query *struct {
-		EntityKey  *string    `json:"entity_key,omitempty"`
-		From       *time.Time `json:"from,omitempty"`
-		Limit      *int       `json:"limit,omitempty"`
-		SourceCode string     `json:"source_code"`
-		Substring  *string    `json:"substring,omitempty"`
-		To         *time.Time `json:"to,omitempty"`
+		// EntityKey Value to pivot on — a hostname, account, address or hash. Matched against the source's own fields.
+		EntityKey *string `json:"entity_key,omitempty"`
+
+		// From Lower bound of the time window, inclusive.
+		From *time.Time `json:"from,omitempty"`
+
+		// Limit Cap on records to pull. The hard ceiling is 500 per call.
+		Limit *int `json:"limit,omitempty"`
+
+		// SourceCode Which source to query.
+		SourceCode string `json:"source_code"`
+
+		// Substring Free-text fragment to match, for cases a key cannot express.
+		Substring *string `json:"substring,omitempty"`
+
+		// To Upper bound of the time window, exclusive.
+		To *time.Time `json:"to,omitempty"`
 	} `json:"query,omitempty"`
 
-	// Reason Зачем затянуто — нарратив расследования, идёт в аудит
+	// Reason Why this was pulled. Goes into the audit log and into the case narrative — the record of what the analyst was thinking.
 	Reason *string `json:"reason,omitempty"`
-	Refs   *[]struct {
-		SourceCode    string `json:"source_code"`
+
+	// Refs Records addressed directly. Used when the analyst has already picked them out, or when an agent cites what it found.
+	Refs *[]struct {
+		// SourceCode Which tool holds the record.
+		SourceCode string `json:"source_code"`
+
+		// SourceEventId Its identifier in that tool.
 		SourceEventId string `json:"source_event_id"`
 	} `json:"refs,omitempty"`
 }
 
-// EventAttachResult defines model for EventAttachResult.
+// EventAttachResult What the pull changed in the investigation.
 type EventAttachResult struct {
+	// Attached Events newly added to the case.
 	Attached int `json:"attached"`
 
-	// Duplicates Отброшено по dedup_key
+	// Duplicates Events already present and therefore skipped. A non-zero count is normal, not an error — overlapping pulls are expected.
 	Duplicates int `json:"duplicates"`
 
-	// EdgesCreated Рёбра от правил связывания
-	EdgesCreated      int `json:"edges_created"`
+	// EdgesCreated Edges linking rules produced from the new events. This is the graph growing without an agent: rules alone connect what obviously belongs together.
+	EdgesCreated int `json:"edges_created"`
+
+	// EntitiesExtracted Entities created or updated from the new events. Counts entities, not mentions.
 	EntitiesExtracted int `json:"entities_extracted"`
 }
 
-// EventPage defines model for EventPage.
+// EventPage One page of the timeline.
 type EventPage struct {
-	Items      []EventSummary `json:"items"`
-	NextCursor *string        `json:"next_cursor,omitempty"`
+	// Items Events, oldest first.
+	Items []EventSummary `json:"items"`
+
+	// NextCursor Pass as `cursor` to get the next page. Absent on the last page — that, not an empty page, is how iteration ends.
+	NextCursor *string `json:"next_cursor,omitempty"`
 }
 
-// EventSummary Событие без сырья: список тянет сотни записей, а raw_data у каждой —
-// килобайты. Полное событие отдаёт GET /events/{event_id}.
+// EventSummary Event without the raw payload. A timeline page carries hundreds of events and raw payloads run to kilobytes each; the full record is available one at a time.
 type EventSummary struct {
+	// Entities Who took part and in what capacity.
 	Entities *[]struct {
-		EntityId     openapi_types.UUID `json:"entity_id"`
-		RelationCode string             `json:"relation_code"`
+		// EntityId The participating entity.
+		EntityId openapi_types.UUID `json:"entity_id"`
+
+		// RelationCode Its role in the event.
+		RelationCode string `json:"relation_code"`
 	} `json:"entities,omitempty"`
-	EventType       string                  `json:"event_type"`
-	Id              openapi_types.UUID      `json:"id"`
-	IngestedAt      time.Time               `json:"ingested_at"`
-	InvestigationId openapi_types.UUID      `json:"investigation_id"`
-	NormalizedData  *map[string]interface{} `json:"normalized_data,omitempty"`
-	OccurredAt      time.Time               `json:"occurred_at"`
-	SourceCode      string                  `json:"source_code"`
-	SourceEventId   string                  `json:"source_event_id"`
-	SourceRef       *string                 `json:"source_ref,omitempty"`
+
+	// EventType What happened, in the product's vocabulary.
+	EventType string `json:"event_type"`
+
+	// Id Identifier of this event.
+	Id openapi_types.UUID `json:"id"`
+
+	// IngestedAt When it was pulled into the investigation.
+	IngestedAt time.Time `json:"ingested_at"`
+
+	// InvestigationId Investigation it belongs to.
+	InvestigationId openapi_types.UUID `json:"investigation_id"`
+
+	// NormalizedData The event mapped onto the common envelope.
+	NormalizedData *map[string]interface{} `json:"normalized_data,omitempty"`
+
+	// OccurredAt When it happened, per the source.
+	OccurredAt time.Time `json:"occurred_at"`
+
+	// SourceCode Which tool it came from.
+	SourceCode string `json:"source_code"`
+
+	// SourceEventId Identifier of the record in that tool.
+	SourceEventId string `json:"source_event_id"`
+
+	// SourceRef Link that opens the record in the source console.
+	SourceRef *string `json:"source_ref,omitempty"`
 }
 
 // Cursor defines model for Cursor.
@@ -165,39 +225,48 @@ type InvestigationId = openapi_types.UUID
 // Limit defines model for Limit.
 type Limit = int
 
-// Conflict defines model for Conflict.
+// Conflict Body of every non-2xx response. Clients branch on `code`, not on the HTTP status: the status says what happened at the protocol level, the code says what happened in the domain.
 type Conflict = ErrorResponse
 
-// Forbidden defines model for Forbidden.
+// Forbidden Body of every non-2xx response. Clients branch on `code`, not on the HTTP status: the status says what happened at the protocol level, the code says what happened in the domain.
 type Forbidden = ErrorResponse
 
-// NotFound defines model for NotFound.
+// NotFound Body of every non-2xx response. Clients branch on `code`, not on the HTTP status: the status says what happened at the protocol level, the code says what happened in the domain.
 type NotFound = ErrorResponse
 
-// SourceUnavailable defines model for SourceUnavailable.
+// SourceUnavailable Body of every non-2xx response. Clients branch on `code`, not on the HTTP status: the status says what happened at the protocol level, the code says what happened in the domain.
 type SourceUnavailable = ErrorResponse
 
-// Unauthorized defines model for Unauthorized.
+// Unauthorized Body of every non-2xx response. Clients branch on `code`, not on the HTTP status: the status says what happened at the protocol level, the code says what happened in the domain.
 type Unauthorized = ErrorResponse
 
-// ValidationError defines model for ValidationError.
+// ValidationError Body of every non-2xx response. Clients branch on `code`, not on the HTTP status: the status says what happened at the protocol level, the code says what happened in the domain.
 type ValidationError = ErrorResponse
 
 // ListEventsParams defines parameters for ListEvents.
 type ListEventsParams struct {
-	EventType  *string `form:"event_type,omitempty" json:"event_type,omitempty"`
+	// EventType Keep only events of this kind, e.g. process_start or network_session.
+	EventType *string `form:"event_type,omitempty" json:"event_type,omitempty"`
+
+	// SourceCode Keep only events from one source — siem, edr, ndr, infra.
 	SourceCode *string `form:"source_code,omitempty" json:"source_code,omitempty"`
 
-	// EntityId Только события с участием сущности
+	// EntityId Keep only events this entity takes part in. This is how the UI answers "what happened on that host".
 	EntityId *openapi_types.UUID `form:"entity_id,omitempty" json:"entity_id,omitempty"`
-	From     *time.Time          `form:"from,omitempty" json:"from,omitempty"`
-	To       *time.Time          `form:"to,omitempty" json:"to,omitempty"`
 
-	// Q Подстрока в normalized_data
-	Q     *string `form:"q,omitempty" json:"q,omitempty"`
-	Limit *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
+	// From Lower bound on occurred_at, inclusive.
+	From *time.Time `form:"from,omitempty" json:"from,omitempty"`
 
-	// Cursor Непрозрачный keyset-курсор из next_cursor предыдущей страницы
+	// To Upper bound on occurred_at, exclusive.
+	To *time.Time `form:"to,omitempty" json:"to,omitempty"`
+
+	// Q Substring match over the normalised payload — command lines, paths, addresses.
+	Q *string `form:"q,omitempty" json:"q,omitempty"`
+
+	// Limit How many items to return. The server may return fewer, never more.
+	Limit *Limit `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// Cursor Opaque keyset cursor taken from `next_cursor` of the previous page. Encodes a position, not a query — do not build one by hand. Omit it to start from the beginning.
 	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
 }
 
@@ -206,13 +275,13 @@ type AttachEventsJSONRequestBody = EventAttachRequest
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
-	// GetEvent Событие целиком
+	// GetEvent One event in full
 	// (GET /events/{event_id})
 	GetEvent(w http.ResponseWriter, r *http.Request, eventId EventId)
-	// ListEvents События расследования (таймлайн)
+	// ListEvents Timeline of the investigation
 	// (GET /investigations/{investigation_id}/events)
 	ListEvents(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, params ListEventsParams)
-	// AttachEvents Затянуть события в расследование
+	// AttachEvents Pull events into the investigation
 	// (POST /investigations/{investigation_id}/events)
 	AttachEvents(w http.ResponseWriter, r *http.Request, investigationId InvestigationId)
 }
@@ -802,13 +871,13 @@ func (response AttachEvents502JSONResponse) VisitAttachEventsResponse(w http.Res
 
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
-	// GetEvent Событие целиком
+	// GetEvent One event in full
 	// (GET /events/{event_id})
 	GetEvent(ctx context.Context, request GetEventRequestObject) (GetEventResponseObject, error)
-	// ListEvents События расследования (таймлайн)
+	// ListEvents Timeline of the investigation
 	// (GET /investigations/{investigation_id}/events)
 	ListEvents(ctx context.Context, request ListEventsRequestObject) (ListEventsResponseObject, error)
-	// AttachEvents Затянуть события в расследование
+	// AttachEvents Pull events into the investigation
 	// (POST /investigations/{investigation_id}/events)
 	AttachEvents(ctx context.Context, request AttachEventsRequestObject) (AttachEventsResponseObject, error)
 }

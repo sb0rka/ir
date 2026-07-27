@@ -12,12 +12,15 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Список расследований
-         * @description Без parent_id возвращает корневые. parent_id=<uuid> — прямых потомков.
+         * List investigations
+         * @description Root cases by default, or the direct children of one. Only one level at a time — fetch the tree endpoint when the whole subtree is needed.
          */
         get: operations["listInvestigations"];
         put?: never;
-        /** Создать расследование или под-расследование */
+        /**
+         * Open an investigation or a hypothesis under one
+         * @description A root investigation is a case. A child is a hypothesis inside it — "the account was compromised", "this was the initial access". The tree is the same object at every level, so a hypothesis that grows can carry its own children without being converted into anything.
+         */
         post: operations["createInvestigation"];
         delete?: never;
         options?: never;
@@ -30,11 +33,15 @@ export interface paths {
             query?: never;
             header?: never;
             path: {
+                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
                 investigation_id: components["parameters"]["InvestigationId"];
             };
             cookie?: never;
         };
-        /** Карточка расследования */
+        /**
+         * One investigation
+         * @description The investigation with its counters — how much evidence it holds and how much still waits for review.
+         */
         get: operations["getInvestigation"];
         put?: never;
         post?: never;
@@ -42,13 +49,8 @@ export interface paths {
         options?: never;
         head?: never;
         /**
-         * Изменить расследование
-         * @description Закрытие (status=closed) требует verdict; verdict=rejected требует
-         *     verdict_reason. Для под-расследования verdict=confirmed требует хотя бы
-         *     одного привязанного события — нарушение возвращает 422 с
-         *     details.reason=evidence_required. Мутации в закрытом расследовании
-         *     запрещены (409, code=conflict), кроме переоткрытия: PATCH со
-         *     status=open очищает verdict/verdict_reason/closed_at и пишется в аудит.
+         * Update an investigation
+         * @description Edits the fields sent and nothing else. Closing requires a verdict, and rejecting requires a stated reason — a case cannot be closed silently. Confirming a hypothesis requires at least one attached event, which is the invariant the whole product rests on; violating it returns 422 with `details.reason=evidence_required`. A closed investigation refuses further changes with 409, except reopening it: sending status=open clears the verdict and is written to the audit log.
          */
         patch: operations["updateInvestigation"];
         trace?: never;
@@ -58,13 +60,14 @@ export interface paths {
             query?: never;
             header?: never;
             path: {
+                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
                 investigation_id: components["parameters"]["InvestigationId"];
             };
             cookie?: never;
         };
         /**
-         * Поддерево расследования
-         * @description Плоский пре-ордер с depth; клиент собирает дерево по parent_id за один проход.
+         * The whole subtree
+         * @description This investigation and everything under it, flattened in pre-order with a depth on each item. The client rebuilds the tree in one pass — no recursive fetching.
          */
         get: operations["getInvestigationTree"];
         put?: never;
@@ -79,96 +82,154 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** @description A case or a hypothesis within one — the same shape at every level of the tree. It owns its evidence, its entities and its graph; nothing crosses from one investigation to another. */
         Investigation: {
-            /** Format: uuid */
+            /**
+             * Format: uuid
+             * @description Identifier of the investigation.
+             */
             id: string;
+            /** @description Sb0rka project that owns the case — the tenant. Taken from the verified token, never from the request body, and inherited unchanged by every child. */
             project_id: string;
-            /** Format: uuid */
+            /**
+             * Format: uuid
+             * @description The investigation this one refines. Null means it is a root case; anything else means it is a hypothesis inside a larger case.
+             */
             parent_id?: string | null;
+            /** @description What is being investigated. For a hypothesis this is the claim being tested, phrased so a verdict makes sense against it. */
             title: string;
+            /** @description Free-form context — what is known, what is being checked and why. */
             description?: string | null;
+            /** @description Whether work is still going on. Independent of the verdict: a case can be open with no verdict yet, and closing requires one. */
             status: components["schemas"]["InvestigationStatus"];
+            /** @description How bad this looks. Set during triage and revised as evidence arrives; null until someone judges it. */
             severity?: (string & components["schemas"]["Severity"]) | null;
+            /** @description The conclusion. Null while the investigation is still open, required to close it. */
             verdict?: (string & components["schemas"]["Verdict"]) | null;
+            /** @description Why that conclusion. Required when rejecting — a rejected hypothesis without a reason teaches nobody anything. */
             verdict_reason?: string | null;
+            /** @description How sure the conclusion is. Meaningful for a hypothesis, rarely used on a root case. */
             confidence?: number | null;
-            /** @description Кто создал: аналитик через API, правило или агент. Ставится сервером по способу создания, клиентом не задаётся. */
+            /** @description Who opened it — an analyst through the API, a linking rule, or an agent. Set by the server from how the request arrived; a client cannot claim it. */
             origin?: components["schemas"]["Origin"];
-            /** @description Кто именно — subject_id аналитика, код правила или id запуска */
+            /** @description Which one exactly — the analyst's subject id, the rule's code, or the agent run's identifier. */
             origin_ref?: string | null;
+            /** @description Bumped on every change. Send the value you last read when updating; a mismatch means someone else edited it first. */
             version: number;
+            /** @description Size of the case at a glance, so the list does not need a query per row. */
             counters: {
+                /** @description Direct child investigations — the open hypotheses under this one. */
                 children: number;
+                /** @description Events pulled into this investigation. */
                 events: number;
+                /** @description Distinct entities extracted from those events. */
                 entities: number;
+                /** @description Edges still waiting for review. This is the analyst's queue — non-zero means there is work to do here. */
                 proposed_edges: number;
             };
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description When the investigation was opened.
+             */
             created_at: string;
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description When it last changed.
+             */
             updated_at: string;
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description When it was closed. Cleared if the investigation is reopened.
+             */
             closed_at?: string | null;
         };
+        /** @description A new case, or a new hypothesis inside an existing one. */
         InvestigationCreate: {
+            /** @description What is being investigated, or the claim being tested. */
             title: string;
+            /** @description Context — what is known so far and what needs checking. */
             description?: string;
             /**
              * Format: uuid
-             * @description Родитель. NULL — корневой кейс. Потомок наследует project_id родителя.
+             * @description The investigation this one refines. Omit it to open a root case. A child inherits the parent's tenant.
              */
             parent_id?: string;
-            /** @description Тенант sb0rka. Обязателен для корня, запрещён для потомка. */
+            /** @description Sb0rka project that owns the case. Required for a root, refused for a child — a hypothesis cannot belong to a different tenant than its parent. */
             project_id?: string;
+            /** @description Initial assessment. Can be revised later. */
             severity?: components["schemas"]["Severity"];
         };
+        /** @description Fields to change. Anything omitted stays as it is; `version` is always required so concurrent edits cannot overwrite each other silently. */
+        InvestigationPatch: {
+            /** @description Version the client last read. A mismatch is a 409. */
+            version: number;
+            /** @description New title. */
+            title?: string;
+            /** @description New description. */
+            description?: string;
+            /** @description Close the investigation, or reopen a closed one. Closing needs a verdict; reopening clears it. */
+            status?: components["schemas"]["InvestigationStatus"];
+            /** @description The conclusion. Which values are allowed depends on whether this is a root case or a hypothesis. */
+            verdict?: components["schemas"]["Verdict"];
+            /** @description Why. Required when the verdict is rejected. */
+            verdict_reason?: string;
+            /** @description How sure the conclusion is. Meaningful for a hypothesis. */
+            confidence?: number;
+            /** @description Revised assessment of how bad this is. */
+            severity?: components["schemas"]["Severity"];
+        };
+        /**
+         * @description Whether work is still going on. Says nothing about the outcome — that is the verdict.
+         * @enum {string}
+         */
+        InvestigationStatus: "open" | "closed";
+        /**
+         * @description The conclusion, drawn from two vocabularies that share one field. A root case ends as incident, false_positive, not_affected or inconclusive. A hypothesis ends as confirmed, rejected or inconclusive. The server checks the value against the investigation's position in the tree, so a hypothesis cannot be closed as an incident.
+         * @enum {string}
+         */
+        Verdict: "incident" | "false_positive" | "not_affected" | "inconclusive" | "confirmed" | "rejected";
+        /** @description One page of investigations. */
         InvestigationPage: {
+            /** @description The investigations on this page. */
             items: components["schemas"]["Investigation"][];
+            /** @description Pass as `cursor` to get the next page. Absent on the last page. */
             next_cursor?: string | null;
         };
-        InvestigationPatch: {
-            version: number;
-            title?: string;
-            description?: string;
-            status?: components["schemas"]["InvestigationStatus"];
-            verdict?: components["schemas"]["Verdict"];
-            /** @description Обоснование вердикта. Обязателен при verdict=rejected */
-            verdict_reason?: string;
-            /** @description Уверенность в гипотезе. Осмысленна для под-расследования */
-            confidence?: number;
-            severity?: components["schemas"]["Severity"];
-        };
-        /** @enum {string} */
-        InvestigationStatus: "open" | "closed";
+        /** @description A subtree flattened for one-pass rendering. */
         InvestigationTree: {
-            /** Format: uuid */
+            /**
+             * Format: uuid
+             * @description The investigation the subtree was requested for.
+             */
             root_id: string;
-            /** @description Плоский пре-ордер, включая корень (depth=0) */
+            /** @description Every investigation in the subtree in pre-order, starting with the root itself. Each carries its depth, so the client can indent without walking parent links. */
             items: (components["schemas"]["Investigation"] & {
+                /** @description Distance from the root. Zero for the root itself. */
                 depth: number;
             })[];
         };
         /**
-         * @description Корень: incident | false_positive | not_affected | inconclusive.
-         *     Под-расследование: confirmed | rejected | inconclusive.
-         *     Сервис валидирует подмножество по позиции в дереве.
+         * @description How much damage the case could cause. Set on triage and adjusted as evidence accumulates.
          * @enum {string}
          */
-        Verdict: "incident" | "false_positive" | "not_affected" | "inconclusive" | "confirmed" | "rejected";
-        /** @enum {string} */
         Severity: "low" | "medium" | "high" | "critical";
-        /** @enum {string} */
+        /**
+         * @description Who produced the record: a human acting through the API, a deterministic linking rule, or an agent run. Anything not produced by a human is born unconfirmed and has to be reviewed.
+         * @enum {string}
+         */
         Origin: "analyst" | "rule" | "agent";
+        /** @description Body of every non-2xx response. Clients branch on `code`, not on the HTTP status: the status says what happened at the protocol level, the code says what happened in the domain. */
         ErrorResponse: {
+            /** @description The failure itself. Never carries internal details of a 500. */
             error: {
                 /**
-                 * @description not_implemented — ручка объявлена в контракте, но ещё не реализована.
-                 *     Клиент может отличить её от настоящей поломки сервера и скрыть
-                 *     элемент интерфейса, а не показывать ошибку.
+                 * @description Machine-readable reason, stable across releases. `validation` covers both a malformed body (400) and a well-formed but invalid one (422). `not_implemented` means the operation exists in the contract but has no implementation yet — a client can hide the control instead of showing an error.
                  * @enum {string}
                  */
-                code: "unauthorized" | "forbidden" | "not_found" | "conflict" | "validation" | "source_unavailable" | "som_unavailable" | "not_implemented" | "internal";
+                code: "unauthorized" | "forbidden" | "not_found" | "conflict" | "validation" | "source_unavailable" | "not_implemented" | "internal";
+                /** @description Human-readable explanation, safe to show. For an internal error it is deliberately generic — the real cause goes to the log. */
                 message: string;
+                /** @description Extra context tied to the code. Version conflicts list the clashing ids in `conflicts`; validation failures name the field. */
                 details?: {
                     [key: string]: unknown;
                 };
@@ -176,7 +237,7 @@ export interface components {
         };
     };
     responses: {
-        /** @description Нет или невалиден токен (code=unauthorized) */
+        /** @description Token is missing, malformed, expired or signed by an unknown key (code=unauthorized). */
         Unauthorized: {
             headers: {
                 [name: string]: unknown;
@@ -185,7 +246,7 @@ export interface components {
                 "application/json": components["schemas"]["ErrorResponse"];
             };
         };
-        /** @description Невалидные данные (code=validation) */
+        /** @description Request parsed but violates a rule of the domain — an impossible status transition, a confirmation without evidence, a malformed cursor (code=validation). */
         ValidationError: {
             headers: {
                 [name: string]: unknown;
@@ -194,7 +255,7 @@ export interface components {
                 "application/json": components["schemas"]["ErrorResponse"];
             };
         };
-        /** @description Роль не даёт действия или чужой тенант (code=forbidden) */
+        /** @description Caller is authenticated but holds no role in the tenant, or the role does not grant this action (code=forbidden). */
         Forbidden: {
             headers: {
                 [name: string]: unknown;
@@ -203,7 +264,7 @@ export interface components {
                 "application/json": components["schemas"]["ErrorResponse"];
             };
         };
-        /** @description Не найдено в тенанте субъекта (code=not_found) */
+        /** @description No such record in the caller's tenant. Returned instead of 403 for records that exist elsewhere, so the response does not reveal them (code=not_found). */
         NotFound: {
             headers: {
                 [name: string]: unknown;
@@ -212,7 +273,7 @@ export interface components {
                 "application/json": components["schemas"]["ErrorResponse"];
             };
         };
-        /** @description Конфликт версии, дубликат или закрытое расследование (code=conflict) */
+        /** @description The record changed since the version the client sent, the write would duplicate an existing one, or the investigation is already closed. `details.conflicts` lists the ids that clashed (code=conflict). */
         Conflict: {
             headers: {
                 [name: string]: unknown;
@@ -223,9 +284,11 @@ export interface components {
         };
     };
     parameters: {
+        /** @description How many items to return. The server may return fewer, never more. */
         Limit: number;
-        /** @description Непрозрачный keyset-курсор из next_cursor предыдущей страницы */
+        /** @description Opaque keyset cursor taken from `next_cursor` of the previous page. Encodes a position, not a query — do not build one by hand. Omit it to start from the beginning. */
         Cursor: string;
+        /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
         InvestigationId: string;
     };
     requestBodies: never;
@@ -237,13 +300,17 @@ export interface operations {
     listInvestigations: {
         parameters: {
             query?: {
+                /** @description Return the direct children of this investigation instead of the roots. Omit it for the case list. */
                 parent_id?: string;
+                /** @description Keep only open or only closed investigations. */
                 status?: components["schemas"]["InvestigationStatus"];
+                /** @description Keep only investigations of this severity. */
                 severity?: components["schemas"]["Severity"];
-                /** @description Подстрока в title */
+                /** @description Substring match on the title. */
                 q?: string;
+                /** @description How many items to return. The server may return fewer, never more. */
                 limit?: components["parameters"]["Limit"];
-                /** @description Непрозрачный keyset-курсор из next_cursor предыдущей страницы */
+                /** @description Opaque keyset cursor taken from `next_cursor` of the previous page. Encodes a position, not a query — do not build one by hand. Omit it to start from the beginning. */
                 cursor?: components["parameters"]["Cursor"];
             };
             header?: never;
@@ -252,7 +319,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Страница */
+            /** @description One page of investigations */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -278,7 +345,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Создано */
+            /** @description The new investigation */
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -289,7 +356,7 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
-            /** @description parent_id не существует */
+            /** @description The parent named in parent_id does not exist in this tenant. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -306,13 +373,14 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
+                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
                 investigation_id: components["parameters"]["InvestigationId"];
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Расследование со счётчиками */
+            /** @description The investigation */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -331,6 +399,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
+                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
                 investigation_id: components["parameters"]["InvestigationId"];
             };
             cookie?: never;
@@ -341,7 +410,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Обновлено */
+            /** @description The updated investigation */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -362,13 +431,14 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
+                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
                 investigation_id: components["parameters"]["InvestigationId"];
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Поддерево */
+            /** @description The subtree */
             200: {
                 headers: {
                     [name: string]: unknown;

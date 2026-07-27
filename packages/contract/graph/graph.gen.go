@@ -46,7 +46,6 @@ const (
 	ErrorResponseErrorCodeInternal          ErrorResponseErrorCode = "internal"
 	ErrorResponseErrorCodeNotFound          ErrorResponseErrorCode = "not_found"
 	ErrorResponseErrorCodeNotImplemented    ErrorResponseErrorCode = "not_implemented"
-	ErrorResponseErrorCodeSomUnavailable    ErrorResponseErrorCode = "som_unavailable"
 	ErrorResponseErrorCodeSourceUnavailable ErrorResponseErrorCode = "source_unavailable"
 	ErrorResponseErrorCodeUnauthorized      ErrorResponseErrorCode = "unauthorized"
 	ErrorResponseErrorCodeValidation        ErrorResponseErrorCode = "validation"
@@ -64,8 +63,6 @@ func (e ErrorResponseErrorCode) Valid() bool {
 	case ErrorResponseErrorCodeNotFound:
 		return true
 	case ErrorResponseErrorCodeNotImplemented:
-		return true
-	case ErrorResponseErrorCodeSomUnavailable:
 		return true
 	case ErrorResponseErrorCodeSourceUnavailable:
 		return true
@@ -117,141 +114,216 @@ func (e Origin) Valid() bool {
 	}
 }
 
-// Edge defines model for Edge.
+// Edge A claim that two nodes are related. Unlike an event, an edge can be wrong — hence a status, a stated reason, and the events it rests on.
 type Edge struct {
-	Confidence       *float32                `json:"confidence,omitempty"`
-	CreatedAt        *time.Time              `json:"created_at,omitempty"`
-	EvidenceCount    int                     `json:"evidence_count"`
-	EvidenceEventIds *[]openapi_types.UUID   `json:"evidence_event_ids,omitempty"`
-	Id               openapi_types.UUID      `json:"id"`
-	InvestigationId  openapi_types.UUID      `json:"investigation_id"`
-	Metadata         *map[string]interface{} `json:"metadata,omitempty"`
-	Origin           Origin                  `json:"origin"`
+	// Confidence How sure the producer was. Rules carry a fixed value per rule; an agent estimates its own.
+	Confidence *float32 `json:"confidence,omitempty"`
 
-	// OriginRef subject_id | код правила | id запуска
-	OriginRef    *string            `json:"origin_ref,omitempty"`
-	RejectReason *string            `json:"reject_reason,omitempty"`
-	RelationCode string             `json:"relation_code"`
+	// CreatedAt When the edge was created.
+	CreatedAt *time.Time `json:"created_at,omitempty"`
+
+	// EvidenceCount How many events the edge cites. Zero is allowed for an analyst, never for an agent.
+	EvidenceCount int `json:"evidence_count"`
+
+	// EvidenceEventIds The cited events. All belong to the same investigation — the database enforces it, so a claim cannot lean on another case's data.
+	EvidenceEventIds *[]openapi_types.UUID `json:"evidence_event_ids,omitempty"`
+
+	// Id Identifier of the edge.
+	Id openapi_types.UUID `json:"id"`
+
+	// InvestigationId Investigation the edge belongs to.
+	InvestigationId openapi_types.UUID `json:"investigation_id"`
+
+	// Metadata Producer-specific extras, e.g. which rule field matched.
+	Metadata *map[string]interface{} `json:"metadata,omitempty"`
+
+	// Origin Who produced the claim. Never changes, unlike status.
+	Origin Origin `json:"origin"`
+
+	// OriginRef Which one exactly — the analyst's subject id, the rule's code, or the agent run's identifier. Together with origin this is how a claim is traced back to its author.
+	OriginRef *string `json:"origin_ref,omitempty"`
+
+	// RejectReason Why it was ruled out. Required when rejecting, and it is what makes a rejected branch useful in the report.
+	RejectReason *string `json:"reject_reason,omitempty"`
+
+	// RelationCode What the relation is — parent_process, logged_in, connected_to, executed, resolved_to, same_host, subevent_of, followed_by.
+	RelationCode string `json:"relation_code"`
+
+	// SourceNodeId Node the relation starts from.
 	SourceNodeId openapi_types.UUID `json:"source_node_id"`
-	Status       EdgeStatus         `json:"status"`
-	TargetNodeId openapi_types.UUID `json:"target_node_id"`
-	UpdatedAt    *time.Time         `json:"updated_at,omitempty"`
-	Version      int                `json:"version"`
 
-	// Why Обоснование. Обязательно при origin=agent
+	// Status Where the claim stands in review.
+	Status EdgeStatus `json:"status"`
+
+	// TargetNodeId Node it points to. For an undirected relation the order carries no meaning.
+	TargetNodeId openapi_types.UUID `json:"target_node_id"`
+
+	// UpdatedAt When it last changed — in practice, when it was reviewed.
+	UpdatedAt *time.Time `json:"updated_at,omitempty"`
+
+	// Version Bumped on every change. Send the value you last read when reviewing; a mismatch means someone else got there first.
+	Version int `json:"version"`
+
+	// Why Plain-language justification. Mandatory for an agent: an unexplained machine suggestion is not reviewable.
 	Why *string `json:"why,omitempty"`
 }
 
-// EdgeCreate defines model for EdgeCreate.
+// EdgeCreate A relation the analyst asserts between two existing nodes.
 type EdgeCreate struct {
+	// Confidence Optional degree of certainty. A manual edge is normally certain.
 	Confidence *float32 `json:"confidence,omitempty"`
 
-	// EvidenceEventIds События-основания того же расследования (иначе 422)
+	// EvidenceEventIds Events backing the claim. Each must belong to this investigation — citing another case's event is refused.
 	EvidenceEventIds *[]openapi_types.UUID `json:"evidence_event_ids,omitempty"`
-	RelationCode     string                `json:"relation_code"`
-	SourceNodeId     openapi_types.UUID    `json:"source_node_id"`
-	TargetNodeId     openapi_types.UUID    `json:"target_node_id"`
-	Why              *string               `json:"why,omitempty"`
+
+	// RelationCode Relation from the dictionary. Its declared endpoint kinds must match the two nodes, otherwise the request is rejected.
+	RelationCode string `json:"relation_code"`
+
+	// SourceNodeId Node the relation starts from.
+	SourceNodeId openapi_types.UUID `json:"source_node_id"`
+
+	// TargetNodeId Node it points to.
+	TargetNodeId openapi_types.UUID `json:"target_node_id"`
+
+	// Why Justification, for the record. Optional here, required of agents.
+	Why *string `json:"why,omitempty"`
 }
 
-// EdgeStatus defines model for EdgeStatus.
+// EdgeStatus Where an edge stands in review. Proposed until a human accepts it. Rejected edges are kept rather than deleted, so that "checked and excluded" survives into the report.
 type EdgeStatus string
 
-// ErrorResponse defines model for ErrorResponse.
+// ErrorResponse Body of every non-2xx response. Clients branch on `code`, not on the HTTP status: the status says what happened at the protocol level, the code says what happened in the domain.
 type ErrorResponse struct {
+	// Error The failure itself. Never carries internal details of a 500.
 	Error struct {
-		// Code not_implemented — ручка объявлена в контракте, но ещё не реализована.
-		// Клиент может отличить её от настоящей поломки сервера и скрыть
-		// элемент интерфейса, а не показывать ошибку.
-		Code    ErrorResponseErrorCode  `json:"code"`
+		// Code Machine-readable reason, stable across releases. `validation` covers both a malformed body (400) and a well-formed but invalid one (422). `not_implemented` means the operation exists in the contract but has no implementation yet — a client can hide the control instead of showing an error.
+		Code ErrorResponseErrorCode `json:"code"`
+
+		// Details Extra context tied to the code. Version conflicts list the clashing ids in `conflicts`; validation failures name the field.
 		Details *map[string]interface{} `json:"details,omitempty"`
-		Message string                  `json:"message"`
+
+		// Message Human-readable explanation, safe to show. For an internal error it is deliberately generic — the real cause goes to the log.
+		Message string `json:"message"`
 	} `json:"error"`
 }
 
-// ErrorResponseErrorCode not_implemented — ручка объявлена в контракте, но ещё не реализована.
-// Клиент может отличить её от настоящей поломки сервера и скрыть
-// элемент интерфейса, а не показывать ошибку.
+// ErrorResponseErrorCode Machine-readable reason, stable across releases. `validation` covers both a malformed body (400) and a well-formed but invalid one (422). `not_implemented` means the operation exists in the contract but has no implementation yet — a client can hide the control instead of showing an error.
 type ErrorResponseErrorCode string
 
-// Graph defines model for Graph.
+// Graph Nodes and edges as one payload, ready to render.
 type Graph struct {
-	Edges           []Edge             `json:"edges"`
-	IncludeSubtree  *bool              `json:"include_subtree,omitempty"`
+	// Edges Edges surviving the status and confidence filters.
+	Edges []Edge `json:"edges"`
+
+	// IncludeSubtree Whether child investigations were merged into this response.
+	IncludeSubtree *bool `json:"include_subtree,omitempty"`
+
+	// InvestigationId Investigation this graph belongs to.
 	InvestigationId openapi_types.UUID `json:"investigation_id"`
-	Nodes           []GraphNode        `json:"nodes"`
+
+	// Nodes Every node referenced by the edges below, plus isolated ones.
+	Nodes []GraphNode `json:"nodes"`
 }
 
-// GraphNode defines model for GraphNode.
+// GraphNode A point on the graph. Stands for exactly one entity or one event — never both, never neither.
 type GraphNode struct {
-	// CanonicalKey Ключ для группировки дубликатов при include_subtree
-	CanonicalKey    *string             `json:"canonical_key,omitempty"`
-	EntityId        *openapi_types.UUID `json:"entity_id,omitempty"`
-	EventId         *openapi_types.UUID `json:"event_id,omitempty"`
-	Id              openapi_types.UUID  `json:"id"`
-	InvestigationId openapi_types.UUID  `json:"investigation_id"`
+	// CanonicalKey Entity's normalised identity. Lets the client fold duplicates of the same host across a merged subtree.
+	CanonicalKey *string `json:"canonical_key,omitempty"`
 
-	// Label display_name сущности или сводка события
-	Label    *string  `json:"label,omitempty"`
+	// EntityId The entity, when node_type is entity.
+	EntityId *openapi_types.UUID `json:"entity_id,omitempty"`
+
+	// EventId The event, when node_type is event. Only events promoted onto the graph get a node — the rest live on the timeline.
+	EventId *openapi_types.UUID `json:"event_id,omitempty"`
+
+	// Id Identifier of the node. Edges reference this, not the entity or event.
+	Id openapi_types.UUID `json:"id"`
+
+	// InvestigationId Investigation the node belongs to.
+	InvestigationId openapi_types.UUID `json:"investigation_id"`
+
+	// Label Text to draw on the node — the entity's display name or a short summary of the event.
+	Label *string `json:"label,omitempty"`
+
+	// NodeType Which of the two fields below is filled.
 	NodeType NodeType `json:"node_type"`
 
-	// OccurredAt Только для node_type=event
+	// OccurredAt When the event happened. Event nodes only.
 	OccurredAt *time.Time `json:"occurred_at,omitempty"`
-	Origin     Origin     `json:"origin"`
 
-	// TypeCode Тип сущности (иконка узла). Только для node_type=entity
+	// Origin Who put this node on the graph.
+	Origin Origin `json:"origin"`
+
+	// TypeCode Kind of entity, which is what picks the icon. Entity nodes only.
 	TypeCode *string `json:"type_code,omitempty"`
 }
 
-// NodeType defines model for NodeType.
+// NodeType What a graph node stands for. An entity node is a host, account, process, address or hash; an event node is a source record promoted onto the graph.
 type NodeType string
 
-// Origin defines model for Origin.
+// Origin Who produced the record: a human acting through the API, a deterministic linking rule, or an agent run. Anything not produced by a human is born unconfirmed and has to be reviewed.
 type Origin string
 
-// ReviewRequest Хотя бы одно из полей непусто.
+// ReviewRequest Edges to accept and edges to rule out, applied as one transaction. At least one of the two lists must be non-empty.
 type ReviewRequest struct {
+	// Confirm Edges the analyst accepts as established.
 	Confirm *[]struct {
-		Id      openapi_types.UUID `json:"id"`
-		Version int                `json:"version"`
+		// Id The edge.
+		Id openapi_types.UUID `json:"id"`
+
+		// Version Version the client last saw. Guards against a concurrent edit.
+		Version int `json:"version"`
 	} `json:"confirm,omitempty"`
+
+	// Reject Edges the analyst rules out. They are kept, not deleted — a checked and excluded lead is a result too.
 	Reject *[]struct {
-		Id      openapi_types.UUID `json:"id"`
-		Reason  string             `json:"reason"`
-		Version int                `json:"version"`
+		// Id The edge.
+		Id openapi_types.UUID `json:"id"`
+
+		// Reason Why it does not hold. Required — an unexplained rejection is worthless in the report.
+		Reason string `json:"reason"`
+
+		// Version Version the client last saw.
+		Version int `json:"version"`
 	} `json:"reject,omitempty"`
 }
 
-// ReviewResult defines model for ReviewResult.
+// ReviewResult Ids the batch actually changed, split by outcome.
 type ReviewResult struct {
+	// Confirmed Edges that became confirmed.
 	Confirmed []openapi_types.UUID `json:"confirmed"`
-	Rejected  []openapi_types.UUID `json:"rejected"`
+
+	// Rejected Edges that became rejected.
+	Rejected []openapi_types.UUID `json:"rejected"`
 }
 
 // InvestigationId defines model for InvestigationId.
 type InvestigationId = openapi_types.UUID
 
-// Conflict defines model for Conflict.
+// Conflict Body of every non-2xx response. Clients branch on `code`, not on the HTTP status: the status says what happened at the protocol level, the code says what happened in the domain.
 type Conflict = ErrorResponse
 
-// Forbidden defines model for Forbidden.
+// Forbidden Body of every non-2xx response. Clients branch on `code`, not on the HTTP status: the status says what happened at the protocol level, the code says what happened in the domain.
 type Forbidden = ErrorResponse
 
-// NotFound defines model for NotFound.
+// NotFound Body of every non-2xx response. Clients branch on `code`, not on the HTTP status: the status says what happened at the protocol level, the code says what happened in the domain.
 type NotFound = ErrorResponse
 
-// Unauthorized defines model for Unauthorized.
+// Unauthorized Body of every non-2xx response. Clients branch on `code`, not on the HTTP status: the status says what happened at the protocol level, the code says what happened in the domain.
 type Unauthorized = ErrorResponse
 
-// ValidationError defines model for ValidationError.
+// ValidationError Body of every non-2xx response. Clients branch on `code`, not on the HTTP status: the status says what happened at the protocol level, the code says what happened in the domain.
 type ValidationError = ErrorResponse
 
 // GetGraphParams defines parameters for GetGraph.
 type GetGraphParams struct {
-	IncludeSubtree *bool    `form:"include_subtree,omitempty" json:"include_subtree,omitempty"`
-	MinConfidence  *float32 `form:"min_confidence,omitempty" json:"min_confidence,omitempty"`
+	// IncludeSubtree Also return the graphs of child investigations. Nodes stay per-case, so the same host appears once per investigation — group them client-side by type_code and canonical_key.
+	IncludeSubtree *bool `form:"include_subtree,omitempty" json:"include_subtree,omitempty"`
 
-	// Statuses Фильтр статусов рёбер, по умолчанию proposed,confirmed
+	// MinConfidence Drop edges the producer was less sure about than this. Useful for thinning out an agent's suggestions.
+	MinConfidence *float32 `form:"min_confidence,omitempty" json:"min_confidence,omitempty"`
+
+	// Statuses Which edge states to include. Defaults to proposed and confirmed; pass rejected explicitly to see what was ruled out.
 	Statuses *[]EdgeStatus `form:"statuses,omitempty" json:"statuses,omitempty"`
 }
 
@@ -263,13 +335,13 @@ type ReviewEdgesJSONRequestBody = ReviewRequest
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
-	// CreateEdge Создать ребро (аналитик)
+	// CreateEdge Draw an edge by hand
 	// (POST /investigations/{investigation_id}/edges)
 	CreateEdge(w http.ResponseWriter, r *http.Request, investigationId InvestigationId)
-	// GetGraph Граф расследования
+	// GetGraph Graph of the investigation
 	// (GET /investigations/{investigation_id}/graph)
 	GetGraph(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, params GetGraphParams)
-	// ReviewEdges Батч-ревизия proposed-рёбер
+	// ReviewEdges Review proposed edges in bulk
 	// (POST /investigations/{investigation_id}/review)
 	ReviewEdges(w http.ResponseWriter, r *http.Request, investigationId InvestigationId)
 }
@@ -807,13 +879,13 @@ func (response ReviewEdges422JSONResponse) VisitReviewEdgesResponse(w http.Respo
 
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
-	// CreateEdge Создать ребро (аналитик)
+	// CreateEdge Draw an edge by hand
 	// (POST /investigations/{investigation_id}/edges)
 	CreateEdge(ctx context.Context, request CreateEdgeRequestObject) (CreateEdgeResponseObject, error)
-	// GetGraph Граф расследования
+	// GetGraph Graph of the investigation
 	// (GET /investigations/{investigation_id}/graph)
 	GetGraph(ctx context.Context, request GetGraphRequestObject) (GetGraphResponseObject, error)
-	// ReviewEdges Батч-ревизия proposed-рёбер
+	// ReviewEdges Review proposed edges in bulk
 	// (POST /investigations/{investigation_id}/review)
 	ReviewEdges(ctx context.Context, request ReviewEdgesRequestObject) (ReviewEdgesResponseObject, error)
 }
