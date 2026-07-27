@@ -17,7 +17,6 @@ const (
 	CodeConflict          Code = "conflict"
 	CodeValidation        Code = "validation"
 	CodeSourceUnavailable Code = "source_unavailable"
-	CodeSomUnavailable    Code = "som_unavailable"
 	CodeNotImplemented    Code = "not_implemented"
 	CodeInternal          Code = "internal"
 )
@@ -37,9 +36,13 @@ func New(status int, code Code, message string) *Error {
 	return &Error{Status: status, Code: code, Message: message}
 }
 
+// WithDetails возвращает копию. Мутировать приёмник нельзя: сентинелы ниже —
+// общие на весь процесс, и один вызов на ErrNotFound подмешал бы свои детали
+// во все последующие 404.
 func (e *Error) WithDetails(details map[string]any) *Error {
-	e.Details = details
-	return e
+	clone := *e
+	clone.Details = details
+	return &clone
 }
 
 var (

@@ -411,6 +411,9 @@ type Forbidden = ErrorResponse
 // NotFound Body of every non-2xx response. Clients branch on `code`, not on the HTTP status: the status says what happened at the protocol level, the code says what happened in the domain.
 type NotFound = ErrorResponse
 
+// NotImplemented Body of every non-2xx response. Clients branch on `code`, not on the HTTP status: the status says what happened at the protocol level, the code says what happened in the domain.
+type NotImplemented = ErrorResponse
+
 // Unauthorized Body of every non-2xx response. Clients branch on `code`, not on the HTTP status: the status says what happened at the protocol level, the code says what happened in the domain.
 type Unauthorized = ErrorResponse
 
@@ -1246,6 +1249,8 @@ type ForbiddenJSONResponse ErrorResponse
 
 type NotFoundJSONResponse ErrorResponse
 
+type NotImplementedJSONResponse ErrorResponse
+
 type UnauthorizedJSONResponse ErrorResponse
 
 type ValidationErrorJSONResponse ErrorResponse
@@ -1304,6 +1309,20 @@ func (response DeleteEdge404JSONResponse) VisitDeleteEdgeResponse(w http.Respons
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteEdge501JSONResponse struct{ NotImplementedJSONResponse }
+
+func (response DeleteEdge501JSONResponse) VisitDeleteEdgeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(501)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -1368,6 +1387,20 @@ func (response GetEdge404JSONResponse) VisitGetEdgeResponse(w http.ResponseWrite
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetEdge501JSONResponse struct{ NotImplementedJSONResponse }
+
+func (response GetEdge501JSONResponse) VisitGetEdgeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(501)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -1465,6 +1498,20 @@ func (response UpdateEdge422JSONResponse) VisitUpdateEdgeResponse(w http.Respons
 	return err
 }
 
+type UpdateEdge501JSONResponse struct{ NotImplementedJSONResponse }
+
+func (response UpdateEdge501JSONResponse) VisitUpdateEdgeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(501)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type ListEdgeEvidenceRequestObject struct {
 	EdgeId EdgeId `json:"edge_id"`
 }
@@ -1525,6 +1572,20 @@ func (response ListEdgeEvidence404JSONResponse) VisitListEdgeEvidenceResponse(w 
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListEdgeEvidence501JSONResponse struct{ NotImplementedJSONResponse }
+
+func (response ListEdgeEvidence501JSONResponse) VisitListEdgeEvidenceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(501)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -1608,6 +1669,20 @@ func (response AddEdgeEvidence422JSONResponse) VisitAddEdgeEvidenceResponse(w ht
 	return err
 }
 
+type AddEdgeEvidence501JSONResponse struct{ NotImplementedJSONResponse }
+
+func (response AddEdgeEvidence501JSONResponse) VisitAddEdgeEvidenceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(501)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type DeleteEdgeEvidenceRequestObject struct {
 	EdgeId  EdgeId  `json:"edge_id"`
 	EventId EventId `json:"event_id"`
@@ -1677,6 +1752,20 @@ func (response DeleteEdgeEvidence422JSONResponse) VisitDeleteEdgeEvidenceRespons
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteEdgeEvidence501JSONResponse struct{ NotImplementedJSONResponse }
+
+func (response DeleteEdgeEvidence501JSONResponse) VisitDeleteEdgeEvidenceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(501)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -1756,6 +1845,20 @@ func (response ListEdges422JSONResponse) VisitListEdgesResponse(w http.ResponseW
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListEdges501JSONResponse struct{ NotImplementedJSONResponse }
+
+func (response ListEdges501JSONResponse) VisitListEdgesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(501)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -1853,6 +1956,20 @@ func (response CreateEdge422JSONResponse) VisitCreateEdgeResponse(w http.Respons
 	return err
 }
 
+type CreateEdge501JSONResponse struct{ NotImplementedJSONResponse }
+
+func (response CreateEdge501JSONResponse) VisitCreateEdgeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(501)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type GetGraphRequestObject struct {
 	InvestigationId InvestigationId `json:"investigation_id"`
 	Params          GetGraphParams
@@ -1928,6 +2045,20 @@ func (response GetGraph422JSONResponse) VisitGetGraphResponse(w http.ResponseWri
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetGraph501JSONResponse struct{ NotImplementedJSONResponse }
+
+func (response GetGraph501JSONResponse) VisitGetGraphResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(501)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -2011,6 +2142,20 @@ func (response ListNodes422JSONResponse) VisitListNodesResponse(w http.ResponseW
 	return err
 }
 
+type ListNodes501JSONResponse struct{ NotImplementedJSONResponse }
+
+func (response ListNodes501JSONResponse) VisitListNodesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(501)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type CreateNodeRequestObject struct {
 	InvestigationId InvestigationId `json:"investigation_id"`
 	Body            *CreateNodeJSONRequestBody
@@ -2086,6 +2231,20 @@ func (response CreateNode422JSONResponse) VisitCreateNodeResponse(w http.Respons
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateNode501JSONResponse struct{ NotImplementedJSONResponse }
+
+func (response CreateNode501JSONResponse) VisitCreateNodeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(501)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -2183,6 +2342,20 @@ func (response ReviewEdges422JSONResponse) VisitReviewEdgesResponse(w http.Respo
 	return err
 }
 
+type ReviewEdges501JSONResponse struct{ NotImplementedJSONResponse }
+
+func (response ReviewEdges501JSONResponse) VisitReviewEdgesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(501)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type DeleteNodeRequestObject struct {
 	NodeId NodeId `json:"node_id"`
 }
@@ -2237,6 +2410,20 @@ func (response DeleteNode404JSONResponse) VisitDeleteNodeResponse(w http.Respons
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteNode501JSONResponse struct{ NotImplementedJSONResponse }
+
+func (response DeleteNode501JSONResponse) VisitDeleteNodeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(501)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -2301,6 +2488,20 @@ func (response GetNode404JSONResponse) VisitGetNodeResponse(w http.ResponseWrite
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetNode501JSONResponse struct{ NotImplementedJSONResponse }
+
+func (response GetNode501JSONResponse) VisitGetNodeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(501)
 	_, err := buf.WriteTo(w)
 	return err
 }

@@ -14,9 +14,25 @@ BEGIN;
 -- откатывается на public, и таблицы уезжают не туда.
 CREATE SCHEMA IF NOT EXISTS inv;
 
-SET LOCAL search_path = inv, public, pg_temp;
+-- Расширение ставится ДО смены search_path и явно в public. Под
+-- `search_path = inv` оно уехало бы внутрь inv: операторы стали бы не видны
+-- сессиям без inv в пути, а DROP SCHEMA inv унёс бы расширение с собой.
+--
+-- CREATE EXTENSION требует прав, которых на управляемом Postgres у прикладной
+-- роли обычно нет. Молчаливое падение здесь выглядит как поломка миграции,
+-- поэтому причина проговаривается явно.
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_trgm') THEN
+        BEGIN
+            CREATE EXTENSION pg_trgm WITH SCHEMA public;
+        EXCEPTION WHEN insufficient_privilege THEN
+            RAISE EXCEPTION 'нужно расширение pg_trgm: попросите администратора базы выполнить CREATE EXTENSION pg_trgm WITH SCHEMA public';
+        END;
+    END IF;
+END $$;
 
-CREATE EXTENSION IF NOT EXISTS pg_trgm;
+SET LOCAL search_path = inv, public, pg_temp;
 
 CREATE OR REPLACE FUNCTION set_updated_at()
 RETURNS trigger

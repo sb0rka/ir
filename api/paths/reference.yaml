@@ -56,6 +56,7 @@ paths:
                   - { code: ndr, kind: ndr, title: PT NAD }
                   - { code: infra, kind: infra, title: Инфраструктурные логи }
         '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '501': { $ref: '../shared/responses.yaml#/components/responses/NotImplemented' }
         '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
 
 components:

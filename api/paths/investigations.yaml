@@ -30,6 +30,7 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Investigation' }
         '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '501': { $ref: '../shared/responses.yaml#/components/responses/NotImplemented' }
         '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
         '404':
           description: The parent named in parent_id does not exist in this tenant.
@@ -104,6 +105,7 @@ paths:
                     closed_at: '2026-07-22T16:04:12Z'
                 next_cursor: null
         '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '501': { $ref: '../shared/responses.yaml#/components/responses/NotImplemented' }
         '422': { $ref: '../shared/responses.yaml#/components/responses/ValidationError' }
 
   /investigations/{investigation_id}:
@@ -139,6 +141,7 @@ paths:
                 created_at: '2026-07-24T08:55:00Z'
                 updated_at: '2026-07-24T10:15:20Z'
         '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '501': { $ref: '../shared/responses.yaml#/components/responses/NotImplemented' }
         '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
         '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
     patch:
@@ -165,6 +168,7 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Investigation' }
         '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '501': { $ref: '../shared/responses.yaml#/components/responses/NotImplemented' }
         '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
         '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
         '409': { $ref: '../shared/responses.yaml#/components/responses/Conflict' }
@@ -183,6 +187,7 @@ paths:
         '204':
           description: Deleted
         '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '501': { $ref: '../shared/responses.yaml#/components/responses/NotImplemented' }
         '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
         '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
 
@@ -251,6 +256,7 @@ paths:
                     closed_at: '2026-07-24T10:15:20Z'
                     depth: 1
         '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '501': { $ref: '../shared/responses.yaml#/components/responses/NotImplemented' }
         '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
         '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
 

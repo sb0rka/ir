@@ -15,17 +15,19 @@ type SubjectRoles struct {
 	Roles     []string
 }
 
+// Source — источник в том виде, в каком его отдаёт справочник. Ни строки
+// подключения, ни ссылки на секрет здесь нет: клиенту нужно только назвать
+// источник, ходить в него — работа сервиса.
 type Source struct {
-	Code      string
-	Kind      string
-	Title     string
-	SecretRef *string
-	IsEnabled bool
+	Code  string
+	Kind  string
+	Title string
 }
 
 type EntityType struct {
-	Code  string
-	Title string
+	Code     string
+	Title    string
+	Category string
 }
 
 type RelationType struct {

@@ -52,11 +52,8 @@ func (l *Loop) Run(ctx context.Context) error {
 	}
 }
 
-// tick заберёт одну задачу через FOR UPDATE SKIP LOCKED, когда появится
-// таблица jobs. Пока реестр пуст — цикл держит процесс живым и логирует старт.
+// TODO(ir): забирать задачу из jobs через FOR UPDATE SKIP LOCKED и звать
+// handlers[kind]. Пока обработчиков нет, цикл только держит процесс живым.
 func (l *Loop) tick(_ context.Context) error {
-	if len(l.handlers) == 0 {
-		return nil
-	}
 	return nil
 }

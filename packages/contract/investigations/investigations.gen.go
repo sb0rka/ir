@@ -391,6 +391,9 @@ type Forbidden = ErrorResponse
 // NotFound Body of every non-2xx response. Clients branch on `code`, not on the HTTP status: the status says what happened at the protocol level, the code says what happened in the domain.
 type NotFound = ErrorResponse
 
+// NotImplemented Body of every non-2xx response. Clients branch on `code`, not on the HTTP status: the status says what happened at the protocol level, the code says what happened in the domain.
+type NotImplemented = ErrorResponse
+
 // Unauthorized Body of every non-2xx response. Clients branch on `code`, not on the HTTP status: the status says what happened at the protocol level, the code says what happened in the domain.
 type Unauthorized = ErrorResponse
 
@@ -807,6 +810,8 @@ type ForbiddenJSONResponse ErrorResponse
 
 type NotFoundJSONResponse ErrorResponse
 
+type NotImplementedJSONResponse ErrorResponse
+
 type UnauthorizedJSONResponse ErrorResponse
 
 type ValidationErrorJSONResponse ErrorResponse
@@ -857,6 +862,20 @@ func (response ListInvestigations422JSONResponse) VisitListInvestigationsRespons
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListInvestigations501JSONResponse struct{ NotImplementedJSONResponse }
+
+func (response ListInvestigations501JSONResponse) VisitListInvestigationsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(501)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -939,6 +958,20 @@ func (response CreateInvestigation422JSONResponse) VisitCreateInvestigationRespo
 	return err
 }
 
+type CreateInvestigation501JSONResponse struct{ NotImplementedJSONResponse }
+
+func (response CreateInvestigation501JSONResponse) VisitCreateInvestigationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(501)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type DeleteInvestigationRequestObject struct {
 	InvestigationId InvestigationId `json:"investigation_id"`
 }
@@ -993,6 +1026,20 @@ func (response DeleteInvestigation404JSONResponse) VisitDeleteInvestigationRespo
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteInvestigation501JSONResponse struct{ NotImplementedJSONResponse }
+
+func (response DeleteInvestigation501JSONResponse) VisitDeleteInvestigationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(501)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -1057,6 +1104,20 @@ func (response GetInvestigation404JSONResponse) VisitGetInvestigationResponse(w 
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetInvestigation501JSONResponse struct{ NotImplementedJSONResponse }
+
+func (response GetInvestigation501JSONResponse) VisitGetInvestigationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(501)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -1154,6 +1215,20 @@ func (response UpdateInvestigation422JSONResponse) VisitUpdateInvestigationRespo
 	return err
 }
 
+type UpdateInvestigation501JSONResponse struct{ NotImplementedJSONResponse }
+
+func (response UpdateInvestigation501JSONResponse) VisitUpdateInvestigationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(501)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type GetInvestigationTreeRequestObject struct {
 	InvestigationId InvestigationId `json:"investigation_id"`
 }
@@ -1214,6 +1289,20 @@ func (response GetInvestigationTree404JSONResponse) VisitGetInvestigationTreeRes
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetInvestigationTree501JSONResponse struct{ NotImplementedJSONResponse }
+
+func (response GetInvestigationTree501JSONResponse) VisitGetInvestigationTreeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(501)
 	_, err := buf.WriteTo(w)
 	return err
 }

@@ -45,6 +45,17 @@ components:
         application/json:
           schema: { $ref: './errors.yaml#/components/schemas/ErrorResponse' }
 
+    NotImplemented:
+      description: >-
+        The operation exists in the contract but has no implementation yet
+        (code=not_implemented). Declared on every operation because the service
+        is being built contract-first: a client can hide the control instead of
+        showing an error, and knows this is not a failure. Goes away per
+        operation as each one is written.
+      content:
+        application/json:
+          schema: { $ref: './errors.yaml#/components/schemas/ErrorResponse' }
+
     SourceUnavailable:
       description: >-
         An upstream security tool did not answer. The investigation itself is

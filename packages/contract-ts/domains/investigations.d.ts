@@ -262,6 +262,15 @@ export interface components {
                 "application/json": components["schemas"]["ErrorResponse"];
             };
         };
+        /** @description The operation exists in the contract but has no implementation yet (code=not_implemented). Declared on every operation because the service is being built contract-first: a client can hide the control instead of showing an error, and knows this is not a failure. Goes away per operation as each one is written. */
+        NotImplemented: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
         /** @description Caller is authenticated but holds no role in the tenant, or the role does not grant this action (code=forbidden). */
         Forbidden: {
             headers: {
@@ -385,6 +394,7 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             422: components["responses"]["ValidationError"];
+            501: components["responses"]["NotImplemented"];
         };
     };
     createInvestigation: {
@@ -421,6 +431,7 @@ export interface operations {
                 };
             };
             422: components["responses"]["ValidationError"];
+            501: components["responses"]["NotImplemented"];
         };
     };
     getInvestigation: {
@@ -469,6 +480,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            501: components["responses"]["NotImplemented"];
         };
     };
     deleteInvestigation: {
@@ -493,6 +505,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            501: components["responses"]["NotImplemented"];
         };
     };
     updateInvestigation: {
@@ -525,6 +538,7 @@ export interface operations {
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
             422: components["responses"]["ValidationError"];
+            501: components["responses"]["NotImplemented"];
         };
     };
     getInvestigationTree: {
@@ -621,6 +635,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            501: components["responses"]["NotImplemented"];
         };
     };
 }

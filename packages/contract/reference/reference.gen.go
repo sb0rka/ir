@@ -211,6 +211,9 @@ type SourceKind string
 // Forbidden Body of every non-2xx response. Clients branch on `code`, not on the HTTP status: the status says what happened at the protocol level, the code says what happened in the domain.
 type Forbidden = ErrorResponse
 
+// NotImplemented Body of every non-2xx response. Clients branch on `code`, not on the HTTP status: the status says what happened at the protocol level, the code says what happened in the domain.
+type NotImplemented = ErrorResponse
+
 // Unauthorized Body of every non-2xx response. Clients branch on `code`, not on the HTTP status: the status says what happened at the protocol level, the code says what happened in the domain.
 type Unauthorized = ErrorResponse
 
@@ -371,6 +374,8 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 
 type ForbiddenJSONResponse ErrorResponse
 
+type NotImplementedJSONResponse ErrorResponse
+
 type UnauthorizedJSONResponse ErrorResponse
 
 type GetReferenceRequestObject struct {
@@ -418,6 +423,20 @@ func (response GetReference403JSONResponse) VisitGetReferenceResponse(w http.Res
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetReference501JSONResponse struct{ NotImplementedJSONResponse }
+
+func (response GetReference501JSONResponse) VisitGetReferenceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(501)
 	_, err := buf.WriteTo(w)
 	return err
 }

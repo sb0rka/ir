@@ -72,6 +72,7 @@ paths:
                     last_seen: '2026-07-24T03:15:02Z'
                 next_cursor: null
         '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '501': { $ref: '../shared/responses.yaml#/components/responses/NotImplemented' }
         '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
         '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
         '422': { $ref: '../shared/responses.yaml#/components/responses/ValidationError' }
@@ -100,6 +101,7 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Entity' }
         '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '501': { $ref: '../shared/responses.yaml#/components/responses/NotImplemented' }
         '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
         '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
         '422': { $ref: '../shared/responses.yaml#/components/responses/ValidationError' }
@@ -128,6 +130,7 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Entity' }
         '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '501': { $ref: '../shared/responses.yaml#/components/responses/NotImplemented' }
         '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
         '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
         '422': { $ref: '../shared/responses.yaml#/components/responses/ValidationError' }
@@ -144,6 +147,7 @@ paths:
         '204':
           description: Deleted
         '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '501': { $ref: '../shared/responses.yaml#/components/responses/NotImplemented' }
         '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
         '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
         '409': { $ref: '../shared/responses.yaml#/components/responses/Conflict' }
@@ -188,6 +192,7 @@ paths:
                     display_name: powershell.exe
                     relation_code: executed
         '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '501': { $ref: '../shared/responses.yaml#/components/responses/NotImplemented' }
         '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
         '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
 

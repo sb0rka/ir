@@ -5,10 +5,13 @@ package server
 
 import (
 	"context"
+	"errors"
 	"log/slog"
+	"net/http"
 
 	"github.com/sb0rka/ir/apps/investigations/internal/store"
 	"github.com/sb0rka/ir/apps/investigations/internal/transport"
+	"github.com/sb0rka/ir/apps/investigations/internal/transport/httperr"
 )
 
 type Server struct {
@@ -27,6 +30,12 @@ func New(db store.Database, log *slog.Logger) *Server {
 func (s *Server) Resolve(ctx context.Context, subjectID string) (transport.Roles, error) {
 	roles, err := s.db.RoleBindings(ctx, subjectID)
 	if err != nil {
+		// Роли в нескольких тенантах — состояние данных, а не сбой сервера.
+		// Без этой ветки клиент получал бы 500 и не понимал, что чинить.
+		if errors.Is(err, store.ErrAmbiguousTenant) {
+			return transport.Roles{}, httperr.New(http.StatusConflict, httperr.CodeConflict,
+				"subject has roles in several projects; tenant is ambiguous")
+		}
 		return transport.Roles{}, err
 	}
 	return transport.Roles{ProjectID: roles.ProjectID, Roles: roles.Roles}, nil

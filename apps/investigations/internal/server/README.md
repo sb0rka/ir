@@ -8,7 +8,6 @@
 
 ```bash
 task gen              # спека, контракт, заготовки, TypeScript
-
 ```
 
 `task gen` дописывает заготовки через [`josharian/impl`](https://github.com/josharian/impl),
@@ -19,9 +18,9 @@ task gen              # спека, контракт, заготовки, TypeSc
 Заготовка выглядит так:
 
 ```go
-// ListSourceKinds Классы источников
-// (GET /source-kinds)
-func (s *Server) ListSourceKinds(ctx context.Context, request reference.ListSourceKindsRequestObject) (reference.ListSourceKindsResponseObject, error) {
+// GetReference Every dictionary the UI needs
+// (GET /reference)
+func (s *Server) GetReference(ctx context.Context, request reference.GetReferenceRequestObject) (reference.GetReferenceResponseObject, error) {
 	return nil, httperr.ErrNotImplemented
 }
 ```
@@ -29,13 +28,41 @@ func (s *Server) ListSourceKinds(ctx context.Context, request reference.ListSour
 Ручка отвечает `501` с кодом `not_implemented` — фронт отличит «ещё не
 сделано» от поломки. Дальше эта строка заменяется реализацией.
 
-Удалили ручку из спеки — обработчик надо снести руками: `impl` только
-дописывает, чтобы не затирать написанное. Компилятор назовёт лишние методы.
+Удалили ручку из спеки — метод надо снести руками: `impl` только дописывает,
+чтобы не затирать написанное, а компилятор про лишний метод не скажет.
+Удалили домен целиком — файл уберёт `task gen` (шаг `gen-prune`).
+
+## Тенант проверяется в каждой ручке
+
+Половина путей адресуется глобально по id: `/entities/{id}`, `/events/{id}`,
+`/nodes/{id}`, `/edges/{id}`. В таком запросе расследования нет, а значит
+**база не подстрахует** — в отличие от вложенных путей, где `investigation_id`
+приходит параметром и работают составные внешние ключи.
+
+Отсюда правило без исключений: **любая выборка по id фильтруется по
+`project_id` из контекста**, а не проверяется после чтения.
+
+```go
+identity, ok := authctx.From(ctx)
+if !ok {
+    return nil, httperr.ErrUnauthorized
+}
+edge, err := s.db.Edge(ctx, identity.ProjectID, request.EdgeId)
+```
+
+Забытое условие в одном методе даёт чтение чужого расследования по угаданному
+uuid, и поймать это нечем: ответ будет валидным по схеме, а тестов на чужой
+тенант в каркасе пока нет. Поэтому `project_id` — первый параметр каждого
+метода стора, работающего по id: пропустить его не даст сигнатура.
+
+Отсутствие записи и запись в чужом тенанте отвечают одинаково — `404`. `403`
+здесь означал бы «такая запись есть, но не ваша», то есть подтверждал бы
+существование чужих данных.
 
 ## Образец реализации
 
-`reference.go` и `admin.go` — три готовые ручки справочников: достать из стора,
-разложить в тип контракта, вернуть. Остальные писать по этому же шаблону.
+`reference.go` — справочники: достать из стора, разложить в тип контракта,
+вернуть. Остальные писать по этому же шаблону.
 
 Слои строгие: `server` не ходит в базу напрямую, только через интерфейс
 `store.Database`.

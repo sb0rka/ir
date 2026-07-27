@@ -234,6 +234,9 @@ type Forbidden = ErrorResponse
 // NotFound Body of every non-2xx response. Clients branch on `code`, not on the HTTP status: the status says what happened at the protocol level, the code says what happened in the domain.
 type NotFound = ErrorResponse
 
+// NotImplemented Body of every non-2xx response. Clients branch on `code`, not on the HTTP status: the status says what happened at the protocol level, the code says what happened in the domain.
+type NotImplemented = ErrorResponse
+
 // SourceUnavailable Body of every non-2xx response. Clients branch on `code`, not on the HTTP status: the status says what happened at the protocol level, the code says what happened in the domain.
 type SourceUnavailable = ErrorResponse
 
@@ -643,6 +646,8 @@ type ForbiddenJSONResponse ErrorResponse
 
 type NotFoundJSONResponse ErrorResponse
 
+type NotImplementedJSONResponse ErrorResponse
+
 type SourceUnavailableJSONResponse ErrorResponse
 
 type UnauthorizedJSONResponse ErrorResponse
@@ -721,6 +726,20 @@ func (response DeleteEvent409JSONResponse) VisitDeleteEventResponse(w http.Respo
 	return err
 }
 
+type DeleteEvent501JSONResponse struct{ NotImplementedJSONResponse }
+
+func (response DeleteEvent501JSONResponse) VisitDeleteEventResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(501)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type GetEventRequestObject struct {
 	EventId EventId `json:"event_id"`
 }
@@ -781,6 +800,20 @@ func (response GetEvent404JSONResponse) VisitGetEventResponse(w http.ResponseWri
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetEvent501JSONResponse struct{ NotImplementedJSONResponse }
+
+func (response GetEvent501JSONResponse) VisitGetEventResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(501)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -860,6 +893,20 @@ func (response ListEvents422JSONResponse) VisitListEventsResponse(w http.Respons
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListEvents501JSONResponse struct{ NotImplementedJSONResponse }
+
+func (response ListEvents501JSONResponse) VisitListEventsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(501)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -953,6 +1000,20 @@ func (response AttachEvents422JSONResponse) VisitAttachEventsResponse(w http.Res
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AttachEvents501JSONResponse struct{ NotImplementedJSONResponse }
+
+func (response AttachEvents501JSONResponse) VisitAttachEventsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(501)
 	_, err := buf.WriteTo(w)
 	return err
 }

@@ -34,6 +34,7 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/EventAttachResult' }
         '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '501': { $ref: '../shared/responses.yaml#/components/responses/NotImplemented' }
         '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
         '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
         '409': { $ref: '../shared/responses.yaml#/components/responses/Conflict' }
@@ -141,6 +142,7 @@ paths:
                       - { entity_id: 22222222-0000-4000-8000-000000000004, relation_code: dst }
                 next_cursor: null
         '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '501': { $ref: '../shared/responses.yaml#/components/responses/NotImplemented' }
         '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
         '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
         '422': { $ref: '../shared/responses.yaml#/components/responses/ValidationError' }
@@ -188,6 +190,7 @@ paths:
                   - { entity_id: 22222222-0000-4000-8000-000000000003, relation_code: object }
                   - { entity_id: 22222222-0000-4000-8000-000000000001, relation_code: src }
         '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '501': { $ref: '../shared/responses.yaml#/components/responses/NotImplemented' }
         '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
         '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
     delete:
@@ -207,6 +210,7 @@ paths:
         '204':
           description: Dropped
         '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '501': { $ref: '../shared/responses.yaml#/components/responses/NotImplemented' }
         '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
         '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
         '409': { $ref: '../shared/responses.yaml#/components/responses/Conflict' }

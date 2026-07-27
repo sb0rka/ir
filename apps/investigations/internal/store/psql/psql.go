@@ -2,18 +2,14 @@ package psql
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/sb0rka/ir/apps/investigations/internal/domain/model"
+	"github.com/sb0rka/ir/apps/investigations/internal/store"
 )
-
-// ErrAmbiguousTenant — у субъекта роли в нескольких проектах, а запрос не
-// указывает, в каком он действует.
-var ErrAmbiguousTenant = errors.New("subject has role bindings in multiple projects")
 
 type DB struct {
 	pool *pgxpool.Pool
@@ -75,13 +71,17 @@ func (d *DB) RoleBindings(ctx context.Context, subjectID string) (model.SubjectR
 	}
 	// Выбирать тенант молча нельзя: запрос не говорит, какой из них имелся
 	// в виду. Появится мультитенантный клиент — тенант станет явным входом.
-	return model.SubjectRoles{}, ErrAmbiguousTenant
+	return model.SubjectRoles{}, store.ErrAmbiguousTenant
 }
 
+// ListSources отдаёт только включённые источники: справочник питает диалог
+// затяжки, а предлагать источник, к которому не пойдём, незачем. secret_ref
+// не выбирается вовсе — что не прочитано, то не утечёт в ответ по недосмотру.
 func (d *DB) ListSources(ctx context.Context) ([]model.Source, error) {
 	rows, err := d.pool.Query(ctx, `
-		SELECT code, kind, title, secret_ref, is_enabled
+		SELECT code, kind, title
 		  FROM sources
+		 WHERE is_enabled
 		 ORDER BY code
 	`)
 	if err != nil {
@@ -92,7 +92,7 @@ func (d *DB) ListSources(ctx context.Context) ([]model.Source, error) {
 	var out []model.Source
 	for rows.Next() {
 		var item model.Source
-		if err := rows.Scan(&item.Code, &item.Kind, &item.Title, &item.SecretRef, &item.IsEnabled); err != nil {
+		if err := rows.Scan(&item.Code, &item.Kind, &item.Title); err != nil {
 			return nil, fmt.Errorf("scan source: %w", err)
 		}
 		out = append(out, item)
@@ -102,7 +102,7 @@ func (d *DB) ListSources(ctx context.Context) ([]model.Source, error) {
 
 func (d *DB) ListEntityTypes(ctx context.Context) ([]model.EntityType, error) {
 	rows, err := d.pool.Query(ctx, `
-		SELECT code, title
+		SELECT code, title, category
 		  FROM entity_types
 		 ORDER BY code
 	`)
@@ -114,7 +114,7 @@ func (d *DB) ListEntityTypes(ctx context.Context) ([]model.EntityType, error) {
 	var out []model.EntityType
 	for rows.Next() {
 		var item model.EntityType
-		if err := rows.Scan(&item.Code, &item.Title); err != nil {
+		if err := rows.Scan(&item.Code, &item.Title, &item.Category); err != nil {
 			return nil, fmt.Errorf("scan entity type: %w", err)
 		}
 		out = append(out, item)

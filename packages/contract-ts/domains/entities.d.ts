@@ -215,6 +215,15 @@ export interface components {
                 "application/json": components["schemas"]["ErrorResponse"];
             };
         };
+        /** @description The operation exists in the contract but has no implementation yet (code=not_implemented). Declared on every operation because the service is being built contract-first: a client can hide the control instead of showing an error, and knows this is not a failure. Goes away per operation as each one is written. */
+        NotImplemented: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
         /** @description The record changed since the version the client sent, the write would duplicate an existing one, or the investigation is already closed. `details.conflicts` lists the ids that clashed (code=conflict). */
         Conflict: {
             headers: {
@@ -334,6 +343,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             422: components["responses"]["ValidationError"];
+            501: components["responses"]["NotImplemented"];
         };
     };
     createEntity: {
@@ -365,6 +375,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             422: components["responses"]["ValidationError"];
+            501: components["responses"]["NotImplemented"];
         };
     };
     getEntityCard: {
@@ -433,6 +444,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            501: components["responses"]["NotImplemented"];
         };
     };
     deleteEntity: {
@@ -458,6 +470,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            501: components["responses"]["NotImplemented"];
         };
     };
     updateEntity: {
@@ -489,6 +502,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             422: components["responses"]["ValidationError"];
+            501: components["responses"]["NotImplemented"];
         };
     };
 }

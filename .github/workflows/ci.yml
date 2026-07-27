@@ -41,6 +41,9 @@ jobs:
       - name: go vet
         run: task vet
 
+      - name: Тесты
+        run: task test
+
       # Ставим зависимости: без них клиент не проверить, а он тоже часть контракта.
       - name: Контракт для TypeScript компилируется
         working-directory: packages/contract-ts

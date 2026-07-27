@@ -534,6 +534,15 @@ export interface components {
                 "application/json": components["schemas"]["ErrorResponse"];
             };
         };
+        /** @description The operation exists in the contract but has no implementation yet (code=not_implemented). Declared on every operation because the service is being built contract-first: a client can hide the control instead of showing an error, and knows this is not a failure. Goes away per operation as each one is written. */
+        NotImplemented: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
         /** @description The record changed since the version the client sent, the write would duplicate an existing one, or the investigation is already closed. `details.conflicts` lists the ids that clashed (code=conflict). */
         Conflict: {
             headers: {
@@ -701,6 +710,25 @@ export interface operations {
                      *           "updated_at": "2026-07-24T09:41:55Z"
                      *         },
                      *         {
+                     *           "id": "55555555-0000-4000-8000-000000000005",
+                     *           "investigation_id": "1a2b3c4d-0000-4000-8000-000000000001",
+                     *           "source_node_id": "44444444-0000-4000-8000-000000000002",
+                     *           "target_node_id": "44444444-0000-4000-8000-000000000004",
+                     *           "relation_code": "connected_to",
+                     *           "status": "confirmed",
+                     *           "why": "Сессия открыта в контексте этой учётки — видно по идентификатору входа в сетевом событии.",
+                     *           "origin": "analyst",
+                     *           "origin_ref": "7c9e6b21-0000-4000-8000-0000000000aa",
+                     *           "evidence_count": 2,
+                     *           "evidence_event_ids": [
+                     *             "33333333-0000-4000-8000-000000000001",
+                     *             "33333333-0000-4000-8000-000000000003"
+                     *           ],
+                     *           "version": 1,
+                     *           "created_at": "2026-07-24T10:22:14Z",
+                     *           "updated_at": "2026-07-24T10:22:14Z"
+                     *         },
+                     *         {
                      *           "id": "55555555-0000-4000-8000-000000000004",
                      *           "investigation_id": "1a2b3c4d-0000-4000-8000-000000000001",
                      *           "source_node_id": "44444444-0000-4000-8000-000000000005",
@@ -729,6 +757,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             422: components["responses"]["ValidationError"];
+            501: components["responses"]["NotImplemented"];
         };
     };
     listNodes: {
@@ -765,6 +794,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             422: components["responses"]["ValidationError"];
+            501: components["responses"]["NotImplemented"];
         };
     };
     createNode: {
@@ -796,6 +826,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             422: components["responses"]["ValidationError"];
+            501: components["responses"]["NotImplemented"];
         };
     };
     getNode: {
@@ -822,6 +853,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            501: components["responses"]["NotImplemented"];
         };
     };
     deleteNode: {
@@ -846,6 +878,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            501: components["responses"]["NotImplemented"];
         };
     };
     listEdges: {
@@ -888,6 +921,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             422: components["responses"]["ValidationError"];
+            501: components["responses"]["NotImplemented"];
         };
     };
     createEdge: {
@@ -920,6 +954,7 @@ export interface operations {
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
             422: components["responses"]["ValidationError"];
+            501: components["responses"]["NotImplemented"];
         };
     };
     getEdge: {
@@ -946,6 +981,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            501: components["responses"]["NotImplemented"];
         };
     };
     deleteEdge: {
@@ -970,6 +1006,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            501: components["responses"]["NotImplemented"];
         };
     };
     updateEdge: {
@@ -1002,6 +1039,7 @@ export interface operations {
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
             422: components["responses"]["ValidationError"];
+            501: components["responses"]["NotImplemented"];
         };
     };
     listEdgeEvidence: {
@@ -1028,6 +1066,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            501: components["responses"]["NotImplemented"];
         };
     };
     addEdgeEvidence: {
@@ -1059,6 +1098,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             422: components["responses"]["ValidationError"];
+            501: components["responses"]["NotImplemented"];
         };
     };
     deleteEdgeEvidence: {
@@ -1086,6 +1126,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             422: components["responses"]["ValidationError"];
+            501: components["responses"]["NotImplemented"];
         };
     };
     reviewEdges: {
@@ -1118,6 +1159,7 @@ export interface operations {
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
             422: components["responses"]["ValidationError"];
+            501: components["responses"]["NotImplemented"];
         };
     };
 }

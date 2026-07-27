@@ -52,10 +52,24 @@ func run() error {
 		Roles:  api,
 	})
 
+	// Роль по умолчанию делает валидный токен достаточным для работы, минуя
+	// role_bindings. На стенде это удобно, в проде — дыра, поэтому о ней
+	// слышно при каждом старте.
+	if cfg.Server.DefaultRole != "" {
+		log.Warn("default_role_enabled",
+			"role", cfg.Server.DefaultRole,
+			"note", "любой валидный токен получает эту роль; для прода INV_DEFAULT_ROLE должен быть пуст")
+	}
+
 	srv := &http.Server{
 		Addr:              net.JoinHostPort(cfg.Server.Addr, cfg.Server.Port),
 		Handler:           handler,
 		ReadHeaderTimeout: 10 * time.Second,
+		// Заголовки без тела прикрыты ReadHeaderTimeout, но медленное тело
+		// и простаивающее keep-alive держали бы соединение бесконечно.
+		ReadTimeout:  30 * time.Second,
+		WriteTimeout: 60 * time.Second,
+		IdleTimeout:  120 * time.Second,
 	}
 
 	errc := make(chan error, 1)

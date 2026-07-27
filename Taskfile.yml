@@ -23,10 +23,34 @@ tasks:
     desc: Перегенерировать всё из api/ — одна команда на всю генерацию
     cmds:
       - task: spec
+      - task: gen-prune
       - task: gen-go
       - task: gen-stubs
       - task: gen-ts
       - gofmt -w packages/contract {{.SERVER_DIR}}
+
+  gen-prune:
+    desc: Убрать сгенерированное для доменов, которых больше нет в api/paths
+    cmds:
+      # Генераторы только создают и перезаписывают. Без этого шага удаление
+      # домена оставляет живой Go-пакет и .d.ts, которые компилируются,
+      # импортируются и ничего не обслуживают.
+      - cmd: |
+          for dir in packages/contract/*/; do
+            name=$(basename "$dir")
+            [ "$name" = "spec" ] && continue
+            [ -f "api/paths/$name.yaml" ] || { echo "убираю мёртвый домен: $name"; rm -rf "$dir"; }
+          done
+          for file in packages/contract-ts/domains/*.d.ts; do
+            [ -e "$file" ] || continue
+            name=$(basename "$file" .d.ts)
+            [ -f "api/paths/$name.yaml" ] || { echo "убираю мёртвый домен: $name.d.ts"; rm -f "$file"; }
+          done
+          for file in {{.SERVER_DIR}}/*.go; do
+            name=$(basename "$file" .go)
+            [ "$name" = "server" ] && continue
+            [ -f "api/paths/$name.yaml" ] || { echo "убираю мёртвые заготовки: $name.go"; rm -f "$file"; }
+          done
 
   spec:
     desc: Собрать спеку и проверить
@@ -40,6 +64,10 @@ tasks:
     sources: ['api/paths/*.yaml']
     method: none
     cmds:
+      # Каталог пересоздаётся, а не дополняется: иначе удалённый домен оставит
+      # здесь свой файл, и gen-go с gen-ts будут вечно генерировать мёртвый
+      # пакет — check-generated этого не заметит, потому что diff пустой.
+      - cmd: rm -rf api/build && mkdir -p api/build
       - for: sources
         cmd: "{{.REDOCLY}} bundle '{{.ITEM}}' -o api/build/{{osBase .ITEM}}"
 
@@ -156,6 +184,12 @@ tasks:
       - cd apps/investigations && go vet ./...
       - cd packages/contract && go vet ./...
 
+  test:
+    desc: go test помодульно
+    cmds:
+      - cd apps/investigations && go test ./...
+      - cd packages/contract && go test ./...
+
   tidy:
     desc: go mod tidy в каждом модуле
     cmds:
@@ -168,6 +202,7 @@ tasks:
       - task: check-generated
       - task: build
       - task: vet
+      - task: test
 
   dev:
     desc: Поднять локальный стенд (Postgres + api + worker)
