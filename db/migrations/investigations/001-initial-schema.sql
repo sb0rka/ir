@@ -10,6 +10,10 @@
 
 BEGIN;
 
+-- Схема создаётся здесь, а не снаружи: без неё search_path молча
+-- откатывается на public, и таблицы уезжают не туда.
+CREATE SCHEMA IF NOT EXISTS inv;
+
 SET LOCAL search_path = inv, public, pg_temp;
 
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
@@ -491,73 +495,6 @@ CREATE TABLE IF NOT EXISTS reports (
 
 CREATE INDEX IF NOT EXISTS ix_reports_investigation
     ON reports (investigation_id, created_at DESC);
-
--- ИНТЕГРАЦИЯ С SOM (ссылки без внешних ключей — другая база)
-
-CREATE TABLE IF NOT EXISTS investigation_workflows (
-    workflow_id UUID NOT NULL,
-    investigation_id UUID NOT NULL,
-
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
-
-    CONSTRAINT pk_investigation_workflows PRIMARY KEY (workflow_id, investigation_id),
-    CONSTRAINT fk_inv_workflows_investigation_id_investigations FOREIGN KEY (investigation_id)
-        REFERENCES investigations (id) ON DELETE CASCADE
-);
-
-CREATE TABLE IF NOT EXISTS graph_node_issues (
-    issue_id UUID NOT NULL,
-    graph_node_id UUID NOT NULL,
-
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
-
-    CONSTRAINT pk_graph_node_issues PRIMARY KEY (issue_id, graph_node_id),
-    CONSTRAINT fk_gni_graph_node_id_graph_nodes FOREIGN KEY (graph_node_id)
-        REFERENCES graph_nodes (id) ON DELETE CASCADE
-);
-
--- АГЕНТСКИЙ КОНТУР
--- Бюджетов у SOM нет — счётчики и лимиты живут здесь.
-
-CREATE TABLE IF NOT EXISTS agent_grants (
-    jti VARCHAR(64) NOT NULL,
-    project_id VARCHAR(12) NOT NULL,
-    investigation_id UUID NOT NULL,
-    som_workflow_id UUID,
-
-    scopes VARCHAR[] DEFAULT '{}'::varchar[] NOT NULL,
-    max_tool_calls INTEGER DEFAULT 60 NOT NULL,
-    tool_calls_used INTEGER DEFAULT 0 NOT NULL,
-    max_enrich_calls INTEGER DEFAULT 5 NOT NULL,
-    enrich_calls_used INTEGER DEFAULT 0 NOT NULL,
-
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
-    expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
-    revoked_at TIMESTAMP WITH TIME ZONE,
-
-    CONSTRAINT pk_agent_grants PRIMARY KEY (jti),
-    CONSTRAINT fk_agent_grants_investigation_id_investigations FOREIGN KEY (investigation_id)
-        REFERENCES investigations (id) ON DELETE CASCADE
-);
-
--- Журнал вызовов агента: он же реестр идемпотентности ретраев
-CREATE TABLE IF NOT EXISTS agent_tool_calls (
-    grant_jti VARCHAR(64) NOT NULL,
-    seq INTEGER NOT NULL,
-
-    tool_name VARCHAR(64) NOT NULL,
-    request_hash VARCHAR(80),
-    result_ref VARCHAR,
-    status VARCHAR(8) DEFAULT 'ok' NOT NULL CHECK (status IN ('ok', 'error')),
-    error VARCHAR,
-
-    started_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
-    finished_at TIMESTAMP WITH TIME ZONE,
-
-    CONSTRAINT pk_agent_tool_calls PRIMARY KEY (grant_jti, seq),
-    CONSTRAINT fk_atc_grant_jti_agent_grants FOREIGN KEY (grant_jti)
-        REFERENCES agent_grants (jti) ON DELETE CASCADE
-);
 
 -- ДОСТУП, АУДИТ, ОЧЕРЕДЬ
 

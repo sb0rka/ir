@@ -115,6 +115,13 @@ func authMiddleware(cfg config.ServerConfig, log *slog.Logger, roles RoleResolve
 					break
 				}
 			}
+			// Deny-by-default: валидная подпись — ещё не право работать
+			// в продукте. Без единой роли доступа нет, иначе отзыв биндингов
+			// не отзывал бы доступ.
+			if len(identity.Roles) == 0 {
+				httperr.Write(w, log, httperr.ErrForbidden)
+				return
+			}
 
 			next.ServeHTTP(w, r.WithContext(authctx.With(r.Context(), identity)))
 		})
@@ -139,6 +146,20 @@ func verify(raw string, cfg config.AuthConfig) (authctx.Identity, error) {
 			http.StatusUnauthorized, httperr.CodeUnauthorized, "token verification is not configured")
 	}
 
+	// Проверки iss/aud навешиваются только если заданы: пустое значение
+	// в jwt.WithIssuer/WithAudience требует пустого поля в токене, то есть
+	// отклоняет вообще всё.
+	opts := []jwt.ParserOption{
+		jwt.WithValidMethods([]string{jwt.SigningMethodEdDSA.Alg()}),
+		jwt.WithExpirationRequired(),
+	}
+	if cfg.AccessTokenIssuer != "" {
+		opts = append(opts, jwt.WithIssuer(cfg.AccessTokenIssuer))
+	}
+	if cfg.AccessTokenAudience != "" {
+		opts = append(opts, jwt.WithAudience(cfg.AccessTokenAudience))
+	}
+
 	claims := &accessTokenClaims{}
 	_, err := jwt.ParseWithClaims(raw, claims, func(token *jwt.Token) (any, error) {
 		if cfg.AccessTokenKid != "" {
@@ -154,11 +175,7 @@ func verify(raw string, cfg config.AuthConfig) (authctx.Identity, error) {
 			}
 		}
 		return ed25519.PublicKey(cfg.AccessTokenPublicKey), nil
-	},
-		jwt.WithValidMethods([]string{jwt.SigningMethodEdDSA.Alg()}),
-		jwt.WithIssuer(cfg.AccessTokenIssuer),
-		jwt.WithAudience(cfg.AccessTokenAudience),
-	)
+	}, opts...)
 	if err != nil {
 		return authctx.Identity{}, httperr.ErrUnauthorized
 	}

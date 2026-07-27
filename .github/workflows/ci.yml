@@ -41,12 +41,12 @@ jobs:
       - name: go vet
         run: task vet
 
-      - name: TypeScript-типы компилируются
+      # Ставим зависимости: без них клиент не проверить, а он тоже часть контракта.
+      - name: Контракт для TypeScript компилируется
         working-directory: packages/contract-ts
-        run: >-
-          npx --yes -p typescript@5 tsc --noEmit --strict --skipLibCheck
-          --target ES2022 --module ESNext --moduleResolution bundler
-          --allowImportingTsExtensions paths.gen.ts domains/*.d.ts
+        run: |
+          npm install --no-audit --no-fund
+          npm run typecheck
 
   migrations:
     runs-on: ubuntu-latest

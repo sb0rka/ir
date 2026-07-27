@@ -9,5 +9,9 @@
     "skipLibCheck": true,
     "types": []
   },
-  "include": ["*.ts", "*.d.ts"]
+  "include": [
+    "client.ts",
+    "api.d.ts",
+    "domains/*.d.ts"
+  ]
 }

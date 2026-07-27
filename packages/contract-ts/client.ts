@@ -1,6 +1,6 @@
 import createClient from "openapi-fetch";
 
-import type { paths } from "./paths.gen.ts";
+import type { paths } from "./api.d.ts";
 
 /**
  * Типизированный клиент Investigations API.

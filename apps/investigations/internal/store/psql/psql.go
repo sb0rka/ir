@@ -2,6 +2,7 @@ package psql
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -9,6 +10,10 @@ import (
 
 	"github.com/sb0rka/ir/apps/investigations/internal/domain/model"
 )
+
+// ErrAmbiguousTenant — у субъекта роли в нескольких проектах, а запрос не
+// указывает, в каком он действует.
+var ErrAmbiguousTenant = errors.New("subject has role bindings in multiple projects")
 
 type DB struct {
 	pool *pgxpool.Pool
@@ -45,16 +50,32 @@ func (d *DB) RoleBindings(ctx context.Context, subjectID string) (model.SubjectR
 	}
 	defer rows.Close()
 
-	var out model.SubjectRoles
+	// Роли собираются по проектам, а не сваливаются в один список: субъект
+	// штатно имеет биндинги в нескольких тенантах, и склейка дала бы права
+	// одного проекта в контексте другого.
+	byProject := make(map[string][]string)
 	for rows.Next() {
 		var projectID, role string
 		if err := rows.Scan(&projectID, &role); err != nil {
 			return model.SubjectRoles{}, fmt.Errorf("scan role binding: %w", err)
 		}
-		out.ProjectID = projectID
-		out.Roles = append(out.Roles, role)
+		byProject[projectID] = append(byProject[projectID], role)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return model.SubjectRoles{}, fmt.Errorf("iterate role bindings: %w", err)
+	}
+
+	switch len(byProject) {
+	case 0:
+		return model.SubjectRoles{}, nil
+	case 1:
+		for projectID, roles := range byProject {
+			return model.SubjectRoles{ProjectID: projectID, Roles: roles}, nil
+		}
+	}
+	// Выбирать тенант молча нельзя: запрос не говорит, какой из них имелся
+	// в виду. Появится мультитенантный клиент — тенант станет явным входом.
+	return model.SubjectRoles{}, ErrAmbiguousTenant
 }
 
 func (d *DB) ListSources(ctx context.Context) ([]model.Source, error) {
