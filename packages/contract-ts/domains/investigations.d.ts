@@ -89,7 +89,7 @@ export interface components {
              * @description Identifier of the investigation.
              */
             id: string;
-            /** @description Sb0rka project that owns the case — the tenant. Taken from the verified token, never from the request body, and inherited unchanged by every child. */
+            /** @description Sb0rka project that owns the case — the tenant. Resolved from the caller's token and never accepted from a request body, so no client can write into a tenant it does not belong to. Every child inherits it unchanged. */
             project_id: string;
             /**
              * Format: uuid
@@ -151,11 +151,9 @@ export interface components {
             description?: string;
             /**
              * Format: uuid
-             * @description The investigation this one refines. Omit it to open a root case. A child inherits the parent's tenant.
+             * @description The investigation this one refines. Omit it to open a root case.
              */
             parent_id?: string;
-            /** @description Sb0rka project that owns the case. Required for a root, refused for a child — a hypothesis cannot belong to a different tenant than its parent. */
-            project_id?: string;
             /** @description Initial assessment. Can be revised later. */
             severity?: components["schemas"]["Severity"];
         };

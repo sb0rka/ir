@@ -206,7 +206,7 @@ type Investigation struct {
 	// ParentId The investigation this one refines. Null means it is a root case; anything else means it is a hypothesis inside a larger case.
 	ParentId *openapi_types.UUID `json:"parent_id,omitempty"`
 
-	// ProjectId Sb0rka project that owns the case — the tenant. Taken from the verified token, never from the request body, and inherited unchanged by every child.
+	// ProjectId Sb0rka project that owns the case — the tenant. Resolved from the caller's token and never accepted from a request body, so no client can write into a tenant it does not belong to. Every child inherits it unchanged.
 	ProjectId string `json:"project_id"`
 
 	// Severity How bad this looks. Set during triage and revised as evidence arrives; null until someone judges it.
@@ -236,11 +236,8 @@ type InvestigationCreate struct {
 	// Description Context — what is known so far and what needs checking.
 	Description *string `json:"description,omitempty"`
 
-	// ParentId The investigation this one refines. Omit it to open a root case. A child inherits the parent's tenant.
+	// ParentId The investigation this one refines. Omit it to open a root case.
 	ParentId *openapi_types.UUID `json:"parent_id,omitempty"`
-
-	// ProjectId Sb0rka project that owns the case. Required for a root, refused for a child — a hypothesis cannot belong to a different tenant than its parent.
-	ProjectId *string `json:"project_id,omitempty"`
 
 	// Severity Initial assessment. Can be revised later.
 	Severity *Severity `json:"severity,omitempty"`
@@ -334,7 +331,7 @@ type InvestigationTree struct {
 		// ParentId The investigation this one refines. Null means it is a root case; anything else means it is a hypothesis inside a larger case.
 		ParentId *openapi_types.UUID `json:"parent_id,omitempty"`
 
-		// ProjectId Sb0rka project that owns the case — the tenant. Taken from the verified token, never from the request body, and inherited unchanged by every child.
+		// ProjectId Sb0rka project that owns the case — the tenant. Resolved from the caller's token and never accepted from a request body, so no client can write into a tenant it does not belong to. Every child inherits it unchanged.
 		ProjectId string `json:"project_id"`
 
 		// Severity How bad this looks. Set during triage and revised as evidence arrives; null until someone judges it.

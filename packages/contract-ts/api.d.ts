@@ -100,6 +100,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/investigations/{investigation_id}/nodes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
+                investigation_id: components["parameters"]["InvestigationId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Put a node on the graph
+         * @description Entity nodes appear on their own when events are pulled in, but events stay on the timeline until someone decides one matters. This is that decision — the analyst promotes an event from the timeline onto the graph so edges can be drawn from it, which is how an attack chain gets reconstructed by hand.
+         *     Idempotent: promoting something already on the graph returns the existing node rather than failing, so the button is safe to press twice.
+         */
+        post: operations["createNode"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/investigations/{investigation_id}/edges": {
         parameters: {
             query?: never;
@@ -212,6 +236,27 @@ export interface paths {
          * @description This investigation and everything under it, flattened in pre-order with a depth on each item. The client rebuilds the tree in one pass — no recursive fetching.
          */
         get: operations["getInvestigationTree"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/reference": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Every dictionary the UI needs
+         * @description Vocabularies the rest of the API refers to by code — entity types, edge relations and configured sources. The client fetches this once at startup and caches it: without it a `type_code` is an opaque string with no icon, a `relation_code` has no human label, and the ingest dialog has no source to offer.
+         *     Returned as one payload rather than three endpoints because all of it is needed together, before anything else can render. Dictionaries are deployment-wide, not per-tenant, so the response is the same for every caller.
+         */
+        get: operations["getReference"];
         put?: never;
         post?: never;
         delete?: never;
@@ -505,6 +550,21 @@ export interface components {
              */
             occurred_at?: string | null;
         };
+        /** @description What to promote onto the graph. Give exactly one of the two ids, and it must match node_type — the pair is what says which one is meant. */
+        NodeCreate: {
+            /** @description Which of the two ids below is being given. */
+            node_type: components["schemas"]["NodeType"];
+            /**
+             * Format: uuid
+             * @description The entity, when node_type is entity. Rarely needed — entities are put on the graph automatically as their events arrive.
+             */
+            entity_id?: string;
+            /**
+             * Format: uuid
+             * @description The event, when node_type is event. Must already belong to this investigation.
+             */
+            event_id?: string;
+        };
         /** @description A claim that two nodes are related. Unlike an event, an edge can be wrong — hence a status, a stated reason, and the events it rests on. */
         Edge: {
             /**
@@ -637,7 +697,7 @@ export interface components {
              * @description Identifier of the investigation.
              */
             id: string;
-            /** @description Sb0rka project that owns the case — the tenant. Taken from the verified token, never from the request body, and inherited unchanged by every child. */
+            /** @description Sb0rka project that owns the case — the tenant. Resolved from the caller's token and never accepted from a request body, so no client can write into a tenant it does not belong to. Every child inherits it unchanged. */
             project_id: string;
             /**
              * Format: uuid
@@ -699,11 +759,9 @@ export interface components {
             description?: string;
             /**
              * Format: uuid
-             * @description The investigation this one refines. Omit it to open a root case. A child inherits the parent's tenant.
+             * @description The investigation this one refines. Omit it to open a root case.
              */
             parent_id?: string;
-            /** @description Sb0rka project that owns the case. Required for a root, refused for a child — a hypothesis cannot belong to a different tenant than its parent. */
-            project_id?: string;
             /** @description Initial assessment. Can be revised later. */
             severity?: components["schemas"]["Severity"];
         };
@@ -761,6 +819,56 @@ export interface components {
          * @enum {string}
          */
         Severity: "low" | "medium" | "high" | "critical";
+        /** @description The full set of dictionaries, in one request. */
+        Reference: {
+            /** @description Kinds of entity that can appear as a node. */
+            entity_types: components["schemas"]["EntityType"][];
+            /** @description Relations an edge can assert between two nodes. */
+            relation_types: components["schemas"]["RelationType"][];
+            /** @description Security tools events can be pulled from. Disabled ones are omitted. */
+            sources: components["schemas"]["Source"][];
+        };
+        /** @description A kind of thing an incident revolves around. The core set is fixed in code; anything peripheral is a dictionary row, which is why the client must read this rather than hardcode the list. */
+        EntityType: {
+            /** @description What `type_code` on an entity or a graph node holds — host, user, account, email, process, ip, domain, url, file_hash. */
+            code: string;
+            /** @description Human-readable name for the UI. */
+            title: string;
+            /** @description Broad family the type belongs to. Lets the graph colour related kinds alike without knowing every code. */
+            category: components["schemas"]["EntityCategory"];
+        };
+        /**
+         * @description Family of entity types, coarse enough to stay stable as new types are added.
+         * @enum {string}
+         */
+        EntityCategory: "identity" | "network" | "execution" | "persistence" | "asset" | "other";
+        /** @description A relation an edge may assert. The endpoint kinds are what make this more than a label: they say which pairs of nodes the relation is legal between, so the client can offer only the relations that fit the two nodes an analyst selected — and the server rejects the rest anyway. */
+        RelationType: {
+            /** @description What `relation_code` on an edge holds — parent_process, logged_in, connected_to, executed, resolved_to, same_host, subevent_of, followed_by. */
+            code: string;
+            /** @description Human-readable name, drawn on or beside the edge. */
+            title: string;
+            /** @description Kind of node the relation may start from. */
+            source_kind: components["schemas"]["NodeType"];
+            /** @description Kind of node it may point to. */
+            target_kind: components["schemas"]["NodeType"];
+            /** @description Whether the order of the endpoints carries meaning. Undirected relations are drawn without an arrowhead and read the same either way. */
+            directed: boolean;
+        };
+        /** @description A security tool events can be pulled from. Connection settings and credentials are deliberately absent — the client only needs to name a source, never to reach it. */
+        Source: {
+            /** @description What `source_code` holds on an event and in an ingest request. */
+            code: string;
+            /** @description Class of tool. Determines which query fields make sense and how the UI groups sources. */
+            kind: components["schemas"]["SourceKind"];
+            /** @description Human-readable name of the installation, e.g. "MaxPatrol SIEM". */
+            title: string;
+        };
+        /**
+         * @description Class of security tool the source belongs to.
+         * @enum {string}
+         */
+        SourceKind: "siem" | "edr" | "ndr" | "infra" | "sandbox" | "other";
     };
     responses: {
         /** @description Token is missing, malformed, expired or signed by an unknown key (code=unauthorized). */
@@ -999,6 +1107,37 @@ export interface operations {
             422: components["responses"]["ValidationError"];
         };
     };
+    createNode: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
+                investigation_id: components["parameters"]["InvestigationId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NodeCreate"];
+            };
+        };
+        responses: {
+            /** @description The node, whether it was just created or already there */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GraphNode"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["ValidationError"];
+        };
+    };
     createEdge: {
         parameters: {
             query?: never;
@@ -1216,6 +1355,28 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    getReference: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description All dictionaries */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Reference"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
         };
     };
 }

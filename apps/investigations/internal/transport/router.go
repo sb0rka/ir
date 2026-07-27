@@ -11,6 +11,7 @@ import (
 	"github.com/sb0rka/ir/packages/contract/events"
 	"github.com/sb0rka/ir/packages/contract/graph"
 	"github.com/sb0rka/ir/packages/contract/investigations"
+	"github.com/sb0rka/ir/packages/contract/reference"
 )
 
 const baseURL = "/api/v1"
@@ -33,6 +34,7 @@ type API interface {
 	events.StrictServerInterface
 	graph.StrictServerInterface
 	investigations.StrictServerInterface
+	reference.StrictServerInterface
 }
 
 type Dependencies struct {
@@ -108,6 +110,15 @@ func registerDomains(mux *http.ServeMux, deps Dependencies) {
 			ResponseErrorHandlerFunc: onResponseError,
 		}),
 		investigations.StdHTTPServerOptions{
+			BaseURL: baseURL, BaseRouter: mux, ErrorHandlerFunc: onRequestError,
+		})
+
+	reference.HandlerWithOptions(
+		reference.NewStrictHandlerWithOptions(deps.Server, nil, reference.StrictHTTPServerOptions{
+			RequestErrorHandlerFunc:  onRequestError,
+			ResponseErrorHandlerFunc: onResponseError,
+		}),
+		reference.StdHTTPServerOptions{
 			BaseURL: baseURL, BaseRouter: mux, ErrorHandlerFunc: onRequestError,
 		})
 

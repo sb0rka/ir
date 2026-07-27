@@ -40,6 +40,10 @@ tags:
     description: >-
       Nodes, the edges claiming how they relate, and the review that turns a
       machine's suggestion into an established fact.
+  - name: reference
+    description: >-
+      Dictionaries the rest of the API refers to by code — entity types, edge
+      relations, configured sources. Read once at startup.
 
 components:
   securitySchemes:

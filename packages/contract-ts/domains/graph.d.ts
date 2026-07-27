@@ -27,6 +27,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/investigations/{investigation_id}/nodes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
+                investigation_id: components["parameters"]["InvestigationId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Put a node on the graph
+         * @description Entity nodes appear on their own when events are pulled in, but events stay on the timeline until someone decides one matters. This is that decision — the analyst promotes an event from the timeline onto the graph so edges can be drawn from it, which is how an attack chain gets reconstructed by hand.
+         *     Idempotent: promoting something already on the graph returns the existing node rather than failing, so the button is safe to press twice.
+         */
+        post: operations["createNode"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/investigations/{investigation_id}/edges": {
         parameters: {
             query?: never;
@@ -128,6 +152,21 @@ export interface components {
              * @description When the event happened. Event nodes only.
              */
             occurred_at?: string | null;
+        };
+        /** @description What to promote onto the graph. Give exactly one of the two ids, and it must match node_type — the pair is what says which one is meant. */
+        NodeCreate: {
+            /** @description Which of the two ids below is being given. */
+            node_type: components["schemas"]["NodeType"];
+            /**
+             * Format: uuid
+             * @description The entity, when node_type is entity. Rarely needed — entities are put on the graph automatically as their events arrive.
+             */
+            entity_id?: string;
+            /**
+             * Format: uuid
+             * @description The event, when node_type is event. Must already belong to this investigation.
+             */
+            event_id?: string;
         };
         /** @description A claim that two nodes are related. Unlike an event, an edge can be wrong — hence a status, a stated reason, and the events it rests on. */
         Edge: {
@@ -355,6 +394,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Graph"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["ValidationError"];
+        };
+    };
+    createNode: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
+                investigation_id: components["parameters"]["InvestigationId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NodeCreate"];
+            };
+        };
+        responses: {
+            /** @description The node, whether it was just created or already there */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GraphNode"];
                 };
             };
             401: components["responses"]["Unauthorized"];

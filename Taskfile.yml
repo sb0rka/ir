@@ -59,6 +59,15 @@ tasks:
     sources: ['api/paths/*.yaml']
     method: none
     cmds:
+      # Новый домен: impl дописывает в конец файла, но перед этим разбирает
+      # весь пакет, а пустой файл без package-строки разбор роняет. Поэтому
+      # заготовку заводим сами — иначе добавление домена требовало бы ручного
+      # шага, которого в `task gen` быть не должно.
+      - for: sources
+        cmd: >-
+          cd {{.SERVER_DIR}} &&
+          { test -s '{{trimSuffix ".yaml" (osBase .ITEM)}}.go' ||
+          printf 'package server\n' > '{{trimSuffix ".yaml" (osBase .ITEM)}}.go' ; }
       # impl дописывает только отсутствующие методы, готовый код не трогает.
       - for: sources
         cmd: >-

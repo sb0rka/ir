@@ -30,3 +30,9 @@ func (s *Server) ReviewEdges(
 ) (graph.ReviewEdgesResponseObject, error) {
 	return nil, httperr.ErrNotImplemented
 }
+
+// CreateNode Put a node on the graph
+// (POST /investigations/{investigation_id}/nodes)
+func (s *Server) CreateNode(ctx context.Context, request graph.CreateNodeRequestObject) (graph.CreateNodeResponseObject, error) {
+	return nil, httperr.ErrNotImplemented
+}

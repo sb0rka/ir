@@ -258,6 +258,18 @@ type GraphNode struct {
 	TypeCode *string `json:"type_code,omitempty"`
 }
 
+// NodeCreate What to promote onto the graph. Give exactly one of the two ids, and it must match node_type — the pair is what says which one is meant.
+type NodeCreate struct {
+	// EntityId The entity, when node_type is entity. Rarely needed — entities are put on the graph automatically as their events arrive.
+	EntityId *openapi_types.UUID `json:"entity_id,omitempty"`
+
+	// EventId The event, when node_type is event. Must already belong to this investigation.
+	EventId *openapi_types.UUID `json:"event_id,omitempty"`
+
+	// NodeType Which of the two ids below is being given.
+	NodeType NodeType `json:"node_type"`
+}
+
 // NodeType What a graph node stands for. An entity node is a host, account, process, address or hash; an event node is a source record promoted onto the graph.
 type NodeType string
 
@@ -330,6 +342,9 @@ type GetGraphParams struct {
 // CreateEdgeJSONRequestBody defines body for CreateEdge for application/json ContentType.
 type CreateEdgeJSONRequestBody = EdgeCreate
 
+// CreateNodeJSONRequestBody defines body for CreateNode for application/json ContentType.
+type CreateNodeJSONRequestBody = NodeCreate
+
 // ReviewEdgesJSONRequestBody defines body for ReviewEdges for application/json ContentType.
 type ReviewEdgesJSONRequestBody = ReviewRequest
 
@@ -341,6 +356,9 @@ type ServerInterface interface {
 	// GetGraph Graph of the investigation
 	// (GET /investigations/{investigation_id}/graph)
 	GetGraph(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, params GetGraphParams)
+	// CreateNode Put a node on the graph
+	// (POST /investigations/{investigation_id}/nodes)
+	CreateNode(w http.ResponseWriter, r *http.Request, investigationId InvestigationId)
 	// ReviewEdges Review proposed edges in bulk
 	// (POST /investigations/{investigation_id}/review)
 	ReviewEdges(w http.ResponseWriter, r *http.Request, investigationId InvestigationId)
@@ -440,6 +458,32 @@ func (siw *ServerInterfaceWrapper) GetGraph(w http.ResponseWriter, r *http.Reque
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetGraph(w, r, investigationId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateNode operation middleware
+func (siw *ServerInterfaceWrapper) CreateNode(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "investigation_id" -------------
+	var investigationId InvestigationId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "investigation_id", r.PathValue("investigation_id"), &investigationId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "investigation_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateNode(w, r, investigationId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -596,6 +640,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	}
 
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/investigations/{investigation_id}/graph", wrapper.GetGraph)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/investigations/{investigation_id}/nodes", wrapper.CreateNode)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/investigations/{investigation_id}/edges", wrapper.CreateEdge)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/investigations/{investigation_id}/review", wrapper.ReviewEdges)
 
@@ -784,6 +829,85 @@ func (response GetGraph422JSONResponse) VisitGetGraphResponse(w http.ResponseWri
 	return err
 }
 
+type CreateNodeRequestObject struct {
+	InvestigationId InvestigationId `json:"investigation_id"`
+	Body            *CreateNodeJSONRequestBody
+}
+
+type CreateNodeResponseObject interface {
+	VisitCreateNodeResponse(w http.ResponseWriter) error
+}
+
+type CreateNode201JSONResponse GraphNode
+
+func (response CreateNode201JSONResponse) VisitCreateNodeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateNode401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response CreateNode401JSONResponse) VisitCreateNodeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateNode403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response CreateNode403JSONResponse) VisitCreateNodeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateNode404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response CreateNode404JSONResponse) VisitCreateNodeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateNode422JSONResponse struct{ ValidationErrorJSONResponse }
+
+func (response CreateNode422JSONResponse) VisitCreateNodeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type ReviewEdgesRequestObject struct {
 	InvestigationId InvestigationId `json:"investigation_id"`
 	Body            *ReviewEdgesJSONRequestBody
@@ -885,6 +1009,9 @@ type StrictServerInterface interface {
 	// GetGraph Graph of the investigation
 	// (GET /investigations/{investigation_id}/graph)
 	GetGraph(ctx context.Context, request GetGraphRequestObject) (GetGraphResponseObject, error)
+	// CreateNode Put a node on the graph
+	// (POST /investigations/{investigation_id}/nodes)
+	CreateNode(ctx context.Context, request CreateNodeRequestObject) (CreateNodeResponseObject, error)
 	// ReviewEdges Review proposed edges in bulk
 	// (POST /investigations/{investigation_id}/review)
 	ReviewEdges(ctx context.Context, request ReviewEdgesRequestObject) (ReviewEdgesResponseObject, error)
@@ -982,6 +1109,39 @@ func (sh *strictHandler) GetGraph(w http.ResponseWriter, r *http.Request, invest
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetGraphResponseObject); ok {
 		if err := validResponse.VisitGetGraphResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateNode operation middleware
+func (sh *strictHandler) CreateNode(w http.ResponseWriter, r *http.Request, investigationId InvestigationId) {
+	var request CreateNodeRequestObject
+
+	request.InvestigationId = investigationId
+
+	var body CreateNodeJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateNode(ctx, request.(CreateNodeRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateNode")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateNodeResponseObject); ok {
+		if err := validResponse.VisitCreateNodeResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

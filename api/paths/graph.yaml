@@ -54,6 +54,38 @@ paths:
         '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
         '422': { $ref: '../shared/responses.yaml#/components/responses/ValidationError' }
 
+  /investigations/{investigation_id}/nodes:
+    parameters:
+      - { $ref: '../shared/parameters.yaml#/components/parameters/InvestigationId' }
+    post:
+      tags: [graph]
+      summary: Put a node on the graph
+      description: >-
+        Entity nodes appear on their own when events are pulled in, but events
+        stay on the timeline until someone decides one matters. This is that
+        decision — the analyst promotes an event from the timeline onto the
+        graph so edges can be drawn from it, which is how an attack chain gets
+        reconstructed by hand.
+
+        Idempotent: promoting something already on the graph returns the
+        existing node rather than failing, so the button is safe to press twice.
+      operationId: createNode
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/NodeCreate' }
+      responses:
+        '201':
+          description: The node, whether it was just created or already there
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GraphNode' }
+        '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
+        '422': { $ref: '../shared/responses.yaml#/components/responses/ValidationError' }
+
   /investigations/{investigation_id}/edges:
     parameters:
       - { $ref: '../shared/parameters.yaml#/components/parameters/InvestigationId' }
@@ -191,6 +223,29 @@ components:
           format: date-time
           nullable: true
           description: When the event happened. Event nodes only.
+
+    NodeCreate:
+      type: object
+      description: >-
+        What to promote onto the graph. Give exactly one of the two ids, and it
+        must match node_type — the pair is what says which one is meant.
+      required: [node_type]
+      properties:
+        node_type:
+          allOf: [{ $ref: '../shared/enums.yaml#/components/schemas/NodeType' }]
+          description: Which of the two ids below is being given.
+        entity_id:
+          type: string
+          format: uuid
+          description: >-
+            The entity, when node_type is entity. Rarely needed — entities are
+            put on the graph automatically as their events arrive.
+        event_id:
+          type: string
+          format: uuid
+          description: >-
+            The event, when node_type is event. Must already belong to this
+            investigation.
 
     Edge:
       type: object

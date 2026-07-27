@@ -1,0 +1,139 @@
+openapi: 3.0.3
+info:
+  title: IR — reference data
+  version: 0.1.0
+servers:
+  - url: /api/v1
+security:
+  - bearerAuth: []
+
+paths:
+  /reference:
+    get:
+      tags: [reference]
+      summary: Every dictionary the UI needs
+      description: >-
+        Vocabularies the rest of the API refers to by code — entity types, edge
+        relations and configured sources. The client fetches this once at
+        startup and caches it: without it a `type_code` is an opaque string with
+        no icon, a `relation_code` has no human label, and the ingest dialog has
+        no source to offer.
+
+        Returned as one payload rather than three endpoints because all of it is
+        needed together, before anything else can render. Dictionaries are
+        deployment-wide, not per-tenant, so the response is the same for every
+        caller.
+      operationId: getReference
+      responses:
+        '200':
+          description: All dictionaries
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Reference' }
+        '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
+
+components:
+  schemas:
+    Reference:
+      type: object
+      description: The full set of dictionaries, in one request.
+      required: [entity_types, relation_types, sources]
+      properties:
+        entity_types:
+          type: array
+          description: Kinds of entity that can appear as a node.
+          items: { $ref: '#/components/schemas/EntityType' }
+        relation_types:
+          type: array
+          description: Relations an edge can assert between two nodes.
+          items: { $ref: '#/components/schemas/RelationType' }
+        sources:
+          type: array
+          description: Security tools events can be pulled from. Disabled ones are omitted.
+          items: { $ref: '#/components/schemas/Source' }
+
+    EntityType:
+      type: object
+      description: >-
+        A kind of thing an incident revolves around. The core set is fixed in
+        code; anything peripheral is a dictionary row, which is why the client
+        must read this rather than hardcode the list.
+      required: [code, title, category]
+      properties:
+        code:
+          type: string
+          description: >-
+            What `type_code` on an entity or a graph node holds — host, user,
+            account, email, process, ip, domain, url, file_hash.
+        title:
+          type: string
+          description: Human-readable name for the UI.
+        category:
+          allOf: [{ $ref: '#/components/schemas/EntityCategory' }]
+          description: >-
+            Broad family the type belongs to. Lets the graph colour related
+            kinds alike without knowing every code.
+
+    EntityCategory:
+      type: string
+      description: >-
+        Family of entity types, coarse enough to stay stable as new types are
+        added.
+      enum: [identity, network, execution, persistence, asset, other]
+
+    RelationType:
+      type: object
+      description: >-
+        A relation an edge may assert. The endpoint kinds are what make this
+        more than a label: they say which pairs of nodes the relation is legal
+        between, so the client can offer only the relations that fit the two
+        nodes an analyst selected — and the server rejects the rest anyway.
+      required: [code, title, source_kind, target_kind, directed]
+      properties:
+        code:
+          type: string
+          description: >-
+            What `relation_code` on an edge holds — parent_process, logged_in,
+            connected_to, executed, resolved_to, same_host, subevent_of,
+            followed_by.
+        title:
+          type: string
+          description: Human-readable name, drawn on or beside the edge.
+        source_kind:
+          allOf: [{ $ref: '../shared/enums.yaml#/components/schemas/NodeType' }]
+          description: Kind of node the relation may start from.
+        target_kind:
+          allOf: [{ $ref: '../shared/enums.yaml#/components/schemas/NodeType' }]
+          description: Kind of node it may point to.
+        directed:
+          type: boolean
+          description: >-
+            Whether the order of the endpoints carries meaning. Undirected
+            relations are drawn without an arrowhead and read the same either
+            way.
+
+    Source:
+      type: object
+      description: >-
+        A security tool events can be pulled from. Connection settings and
+        credentials are deliberately absent — the client only needs to name a
+        source, never to reach it.
+      required: [code, kind, title]
+      properties:
+        code:
+          type: string
+          description: What `source_code` holds on an event and in an ingest request.
+        kind:
+          allOf: [{ $ref: '#/components/schemas/SourceKind' }]
+          description: >-
+            Class of tool. Determines which query fields make sense and how the
+            UI groups sources.
+        title:
+          type: string
+          description: Human-readable name of the installation, e.g. "MaxPatrol SIEM".
+
+    SourceKind:
+      type: string
+      description: Class of security tool the source belongs to.
+      enum: [siem, edr, ndr, infra, sandbox, other]
