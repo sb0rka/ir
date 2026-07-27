@@ -24,14 +24,14 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Investigation' }
-        '401': { $ref: '../shared/responses.yaml#/Unauthorized' }
-        '403': { $ref: '../shared/responses.yaml#/Forbidden' }
+        '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
         '404':
           description: parent_id не существует
           content:
             application/json:
-              schema: { $ref: '../shared/errors.yaml#/ErrorResponse' }
-        '422': { $ref: '../shared/responses.yaml#/ValidationError' }
+              schema: { $ref: '../shared/errors.yaml#/components/schemas/ErrorResponse' }
+        '422': { $ref: '../shared/responses.yaml#/components/responses/ValidationError' }
     get:
       tags: [investigations]
       summary: Список расследований
@@ -40,22 +40,22 @@ paths:
       parameters:
         - { name: parent_id, in: query, schema: { type: string, format: uuid } }
         - { name: status, in: query, schema: { $ref: '#/components/schemas/InvestigationStatus' } }
-        - { name: severity, in: query, schema: { $ref: '../shared/enums.yaml#/Severity' } }
+        - { name: severity, in: query, schema: { $ref: '../shared/enums.yaml#/components/schemas/Severity' } }
         - { name: q, in: query, description: Подстрока в title, schema: { type: string } }
-        - { $ref: '../shared/parameters.yaml#/Limit' }
-        - { $ref: '../shared/parameters.yaml#/Cursor' }
+        - { $ref: '../shared/parameters.yaml#/components/parameters/Limit' }
+        - { $ref: '../shared/parameters.yaml#/components/parameters/Cursor' }
       responses:
         '200':
           description: Страница
           content:
             application/json:
               schema: { $ref: '#/components/schemas/InvestigationPage' }
-        '401': { $ref: '../shared/responses.yaml#/Unauthorized' }
-        '422': { $ref: '../shared/responses.yaml#/ValidationError' }
+        '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '422': { $ref: '../shared/responses.yaml#/components/responses/ValidationError' }
 
   /investigations/{investigation_id}:
     parameters:
-      - { $ref: '../shared/parameters.yaml#/InvestigationId' }
+      - { $ref: '../shared/parameters.yaml#/components/parameters/InvestigationId' }
     get:
       tags: [investigations]
       summary: Карточка расследования
@@ -66,9 +66,9 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Investigation' }
-        '401': { $ref: '../shared/responses.yaml#/Unauthorized' }
-        '403': { $ref: '../shared/responses.yaml#/Forbidden' }
-        '404': { $ref: '../shared/responses.yaml#/NotFound' }
+        '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
     patch:
       tags: [investigations]
       summary: Изменить расследование
@@ -91,15 +91,15 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Investigation' }
-        '401': { $ref: '../shared/responses.yaml#/Unauthorized' }
-        '403': { $ref: '../shared/responses.yaml#/Forbidden' }
-        '404': { $ref: '../shared/responses.yaml#/NotFound' }
-        '409': { $ref: '../shared/responses.yaml#/Conflict' }
-        '422': { $ref: '../shared/responses.yaml#/ValidationError' }
+        '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
+        '409': { $ref: '../shared/responses.yaml#/components/responses/Conflict' }
+        '422': { $ref: '../shared/responses.yaml#/components/responses/ValidationError' }
 
   /investigations/{investigation_id}/tree:
     parameters:
-      - { $ref: '../shared/parameters.yaml#/InvestigationId' }
+      - { $ref: '../shared/parameters.yaml#/components/parameters/InvestigationId' }
     get:
       tags: [investigations]
       summary: Поддерево расследования
@@ -111,9 +111,9 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/InvestigationTree' }
-        '401': { $ref: '../shared/responses.yaml#/Unauthorized' }
-        '403': { $ref: '../shared/responses.yaml#/Forbidden' }
-        '404': { $ref: '../shared/responses.yaml#/NotFound' }
+        '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
 
 components:
   schemas:
@@ -131,7 +131,7 @@ components:
         # на словарь не даёт валидатору знать, что именно бывает null.
         severity:
           type: string
-          allOf: [{ $ref: '../shared/enums.yaml#/Severity' }]
+          allOf: [{ $ref: '../shared/enums.yaml#/components/schemas/Severity' }]
           nullable: true
         verdict:
           type: string
@@ -144,7 +144,7 @@ components:
           maximum: 1
           nullable: true
         origin:
-          allOf: [{ $ref: '../shared/enums.yaml#/Origin' }]
+          allOf: [{ $ref: '../shared/enums.yaml#/components/schemas/Origin' }]
           description: >-
             Кто создал: аналитик через API, правило или агент. Ставится сервером
             по способу создания, клиентом не задаётся.
@@ -177,7 +177,7 @@ components:
         project_id:
           type: string
           description: Тенант sb0rka. Обязателен для корня, запрещён для потомка.
-        severity: { $ref: '../shared/enums.yaml#/Severity' }
+        severity: { $ref: '../shared/enums.yaml#/components/schemas/Severity' }
     InvestigationPage:
       type: object
       required: [items]
@@ -203,7 +203,7 @@ components:
           minimum: 0
           maximum: 1
           description: Уверенность в гипотезе. Осмысленна для под-расследования
-        severity: { $ref: '../shared/enums.yaml#/Severity' }
+        severity: { $ref: '../shared/enums.yaml#/components/schemas/Severity' }
     InvestigationStatus:
       type: string
       enum: [open, closed]

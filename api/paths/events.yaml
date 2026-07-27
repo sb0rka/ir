@@ -10,7 +10,7 @@ security:
 paths:
   /investigations/{investigation_id}/events:
     parameters:
-      - { $ref: '../shared/parameters.yaml#/InvestigationId' }
+      - { $ref: '../shared/parameters.yaml#/components/parameters/InvestigationId' }
     post:
       tags: [events]
       summary: Затянуть события в расследование
@@ -31,12 +31,12 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/EventAttachResult' }
-        '401': { $ref: '../shared/responses.yaml#/Unauthorized' }
-        '403': { $ref: '../shared/responses.yaml#/Forbidden' }
-        '404': { $ref: '../shared/responses.yaml#/NotFound' }
-        '409': { $ref: '../shared/responses.yaml#/Conflict' }
-        '422': { $ref: '../shared/responses.yaml#/ValidationError' }
-        '502': { $ref: '../shared/responses.yaml#/SourceUnavailable' }
+        '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
+        '409': { $ref: '../shared/responses.yaml#/components/responses/Conflict' }
+        '422': { $ref: '../shared/responses.yaml#/components/responses/ValidationError' }
+        '502': { $ref: '../shared/responses.yaml#/components/responses/SourceUnavailable' }
     get:
       tags: [events]
       summary: События расследования (таймлайн)
@@ -49,22 +49,22 @@ paths:
         - { name: from, in: query, schema: { type: string, format: date-time } }
         - { name: to, in: query, schema: { type: string, format: date-time } }
         - { name: q, in: query, description: Подстрока в normalized_data, schema: { type: string } }
-        - { $ref: '../shared/parameters.yaml#/Limit' }
-        - { $ref: '../shared/parameters.yaml#/Cursor' }
+        - { $ref: '../shared/parameters.yaml#/components/parameters/Limit' }
+        - { $ref: '../shared/parameters.yaml#/components/parameters/Cursor' }
       responses:
         '200':
           description: Страница событий
           content:
             application/json:
               schema: { $ref: '#/components/schemas/EventPage' }
-        '401': { $ref: '../shared/responses.yaml#/Unauthorized' }
-        '403': { $ref: '../shared/responses.yaml#/Forbidden' }
-        '404': { $ref: '../shared/responses.yaml#/NotFound' }
-        '422': { $ref: '../shared/responses.yaml#/ValidationError' }
+        '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
+        '422': { $ref: '../shared/responses.yaml#/components/responses/ValidationError' }
 
   /events/{event_id}:
     parameters:
-      - { $ref: '../shared/parameters.yaml#/EventId' }
+      - { $ref: '../shared/parameters.yaml#/components/parameters/EventId' }
     get:
       tags: [events]
       summary: Событие целиком
@@ -76,9 +76,9 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Event' }
-        '401': { $ref: '../shared/responses.yaml#/Unauthorized' }
-        '403': { $ref: '../shared/responses.yaml#/Forbidden' }
-        '404': { $ref: '../shared/responses.yaml#/NotFound' }
+        '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
 
 components:
   schemas:
@@ -146,11 +146,37 @@ components:
         duplicates: { type: integer, description: Отброшено по dedup_key }
         entities_extracted: { type: integer }
         edges_created: { type: integer, description: Рёбра от правил связывания }
+    EventSummary:
+      type: object
+      description: |
+        Событие без сырья: список тянет сотни записей, а raw_data у каждой —
+        килобайты. Полное событие отдаёт GET /events/{event_id}.
+      required: [id, investigation_id, source_code, source_event_id, event_type, occurred_at, ingested_at]
+      properties:
+        id: { type: string, format: uuid }
+        investigation_id: { type: string, format: uuid }
+        source_code: { type: string }
+        source_event_id: { type: string }
+        source_ref: { type: string, nullable: true }
+        event_type: { type: string }
+        occurred_at: { type: string, format: date-time }
+        ingested_at: { type: string, format: date-time }
+        normalized_data:
+          type: object
+          additionalProperties: true
+        entities:
+          type: array
+          items:
+            type: object
+            required: [entity_id, relation_code]
+            properties:
+              entity_id: { type: string, format: uuid }
+              relation_code: { type: string }
     EventPage:
       type: object
       required: [items]
       properties:
         items:
           type: array
-          items: { $ref: '#/components/schemas/Event' }
+          items: { $ref: '#/components/schemas/EventSummary' }
         next_cursor: { type: string, nullable: true }

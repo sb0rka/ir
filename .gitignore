@@ -20,3 +20,6 @@ __pycache__/
 api/bundle.yaml
 *.tmp.yaml
 api/docs.html
+api/build/
+api/docs.html
+go.work.sum

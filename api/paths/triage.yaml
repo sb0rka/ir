@@ -19,24 +19,24 @@ paths:
       operationId: listAlerts
       parameters:
         - { name: source_code, in: query, schema: { type: string } }
-        - { name: severity, in: query, schema: { $ref: '../shared/enums.yaml#/Severity' } }
+        - { name: severity, in: query, schema: { $ref: '../shared/enums.yaml#/components/schemas/Severity' } }
         - { name: from, in: query, schema: { type: string, format: date-time } }
         - { name: to, in: query, schema: { type: string, format: date-time } }
         - name: only_new
           in: query
           description: Скрыть сработки, по которым уже заведено расследование
           schema: { type: boolean, default: false }
-        - { $ref: '../shared/parameters.yaml#/Limit' }
-        - { $ref: '../shared/parameters.yaml#/Cursor' }
+        - { $ref: '../shared/parameters.yaml#/components/parameters/Limit' }
+        - { $ref: '../shared/parameters.yaml#/components/parameters/Cursor' }
       responses:
         '200':
           description: Лента
           content:
             application/json:
               schema: { $ref: '#/components/schemas/AlertPage' }
-        '401': { $ref: '../shared/responses.yaml#/Unauthorized' }
-        '422': { $ref: '../shared/responses.yaml#/ValidationError' }
-        '502': { $ref: '../shared/responses.yaml#/SourceUnavailable' }
+        '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '422': { $ref: '../shared/responses.yaml#/components/responses/ValidationError' }
+        '502': { $ref: '../shared/responses.yaml#/components/responses/SourceUnavailable' }
 
   /search:
     get:
@@ -61,17 +61,17 @@ paths:
           explode: false
         - { name: from, in: query, schema: { type: string, format: date-time } }
         - { name: to, in: query, schema: { type: string, format: date-time } }
-        - { $ref: '../shared/parameters.yaml#/Limit' }
-        - { $ref: '../shared/parameters.yaml#/Cursor' }
+        - { $ref: '../shared/parameters.yaml#/components/parameters/Limit' }
+        - { $ref: '../shared/parameters.yaml#/components/parameters/Cursor' }
       responses:
         '200':
           description: Результаты
           content:
             application/json:
               schema: { $ref: '#/components/schemas/SearchResult' }
-        '401': { $ref: '../shared/responses.yaml#/Unauthorized' }
-        '422': { $ref: '../shared/responses.yaml#/ValidationError' }
-        '502': { $ref: '../shared/responses.yaml#/SourceUnavailable' }
+        '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '422': { $ref: '../shared/responses.yaml#/components/responses/ValidationError' }
+        '502': { $ref: '../shared/responses.yaml#/components/responses/SourceUnavailable' }
 
 components:
   schemas:
@@ -86,7 +86,7 @@ components:
         source_event_id: { type: string }
         source_ref: { type: string, nullable: true, description: Ссылка на сработку в консоли источника }
         title: { type: string }
-        severity: { $ref: '../shared/enums.yaml#/Severity' }
+        severity: { $ref: '../shared/enums.yaml#/components/schemas/Severity' }
         occurred_at: { type: string, format: date-time }
         entities:
           type: array

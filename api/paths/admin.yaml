@@ -26,7 +26,7 @@ paths:
                   items:
                     type: array
                     items: { $ref: '#/components/schemas/Source' }
-        '401': { $ref: '../shared/responses.yaml#/Unauthorized' }
+        '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
 
   /extensions:
     get:
@@ -46,7 +46,7 @@ paths:
                   items:
                     type: array
                     items: { $ref: '#/components/schemas/Extension' }
-        '401': { $ref: '../shared/responses.yaml#/Unauthorized' }
+        '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
 
   /linking-rules:
     get:
@@ -65,95 +65,8 @@ paths:
                   items:
                     type: array
                     items: { $ref: '#/components/schemas/LinkingRule' }
-        '401': { $ref: '../shared/responses.yaml#/Unauthorized' }
-        '403': { $ref: '../shared/responses.yaml#/Forbidden' }
-
-  /linking-rules/{rule_code}:
-    parameters:
-      - { $ref: '../shared/parameters.yaml#/RuleCode' }
-    patch:
-      tags: [admin]
-      summary: Изменить правило связывания
-      description: |
-        Правила — конфигурация, не код: набор признаков связывания задаёт заказчик.
-        Изменение не переписывает уже созданные рёбра.
-      operationId: updateLinkingRule
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: '#/components/schemas/LinkingRulePatch' }
-      responses:
-        '200':
-          description: Правило
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/LinkingRule' }
-        '401': { $ref: '../shared/responses.yaml#/Unauthorized' }
-        '403': { $ref: '../shared/responses.yaml#/Forbidden' }
-        '404': { $ref: '../shared/responses.yaml#/NotFound' }
-        '422': { $ref: '../shared/responses.yaml#/ValidationError' }
-
-  /roles:
-    get:
-      tags: [admin]
-      summary: Роли субъектов тенанта
-      operationId: listRoleBindings
-      responses:
-        '200':
-          description: Роли
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [items]
-                properties:
-                  items:
-                    type: array
-                    items: { $ref: '#/components/schemas/RoleBinding' }
-        '401': { $ref: '../shared/responses.yaml#/Unauthorized' }
-        '403': { $ref: '../shared/responses.yaml#/Forbidden' }
-    post:
-      tags: [admin]
-      summary: Назначить роль
-      description: |
-        Роли SOC (l1, l2, lead, admin) не совпадают с ролями проекта платформы —
-        это отдельный вокабуляр, привязанный к субъекту в тенанте.
-      operationId: createRoleBinding
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: '#/components/schemas/RoleBindingCreate' }
-      responses:
-        '201':
-          description: Назначено
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/RoleBinding' }
-        '401': { $ref: '../shared/responses.yaml#/Unauthorized' }
-        '403': { $ref: '../shared/responses.yaml#/Forbidden' }
-        '409': { $ref: '../shared/responses.yaml#/Conflict' }
-        '422': { $ref: '../shared/responses.yaml#/ValidationError' }
-
-  /roles/{subject_id}/{role}:
-    parameters:
-      - { $ref: '../shared/parameters.yaml#/SubjectId' }
-      - name: role
-        in: path
-        required: true
-        schema:
-          type: string
-          enum: [l1, l2, lead, admin]
-    delete:
-      tags: [admin]
-      summary: Снять роль
-      operationId: deleteRoleBinding
-      responses:
-        '204': { description: Снято }
-        '401': { $ref: '../shared/responses.yaml#/Unauthorized' }
-        '403': { $ref: '../shared/responses.yaml#/Forbidden' }
-        '404': { $ref: '../shared/responses.yaml#/NotFound' }
+        '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
 
   /audit:
     get:
@@ -170,21 +83,21 @@ paths:
         - { name: external_call, in: query, description: Только вызовы наружу, schema: { type: boolean } }
         - { name: from, in: query, schema: { type: string, format: date-time } }
         - { name: to, in: query, schema: { type: string, format: date-time } }
-        - { $ref: '../shared/parameters.yaml#/Limit' }
-        - { $ref: '../shared/parameters.yaml#/Cursor' }
+        - { $ref: '../shared/parameters.yaml#/components/parameters/Limit' }
+        - { $ref: '../shared/parameters.yaml#/components/parameters/Cursor' }
       responses:
         '200':
           description: Страница журнала
           content:
             application/json:
               schema: { $ref: '#/components/schemas/AuditPage' }
-        '401': { $ref: '../shared/responses.yaml#/Unauthorized' }
-        '403': { $ref: '../shared/responses.yaml#/Forbidden' }
-        '422': { $ref: '../shared/responses.yaml#/ValidationError' }
+        '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
+        '422': { $ref: '../shared/responses.yaml#/components/responses/ValidationError' }
 
   /investigations/{investigation_id}/metrics:
     parameters:
-      - { $ref: '../shared/parameters.yaml#/InvestigationId' }
+      - { $ref: '../shared/parameters.yaml#/components/parameters/InvestigationId' }
     get:
       tags: [admin]
       summary: Метрики расследования
@@ -196,9 +109,9 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/InvestigationMetrics' }
-        '401': { $ref: '../shared/responses.yaml#/Unauthorized' }
-        '403': { $ref: '../shared/responses.yaml#/Forbidden' }
-        '404': { $ref: '../shared/responses.yaml#/NotFound' }
+        '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
 
   /health:
     get:
@@ -220,7 +133,7 @@ paths:
                   sources:
                     type: array
                     items: { $ref: '#/components/schemas/SourceHealth' }
-        '401': { $ref: '../shared/responses.yaml#/Unauthorized' }
+        '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
 
 components:
   schemas:
@@ -306,36 +219,8 @@ components:
           additionalProperties: true
           description: match, window_sec, relation_code, confidence
         born_status:
-          $ref: '../shared/enums.yaml#/EdgeStatus'
+          $ref: '../shared/enums.yaml#/components/schemas/EdgeStatus'
         is_enabled: { type: boolean }
-    LinkingRulePatch:
-      type: object
-      properties:
-        title: { type: string }
-        rule:
-          type: object
-          additionalProperties: true
-        born_status: { $ref: '../shared/enums.yaml#/EdgeStatus' }
-        is_enabled: { type: boolean }
-    RoleBinding:
-      type: object
-      description: Роль субъекта платформы в тенанте. Вокабуляр SOC, не платформенный.
-      required: [subject_id, role]
-      properties:
-        subject_id: { type: string, format: uuid }
-        role:
-          type: string
-          enum: [l1, l2, lead, admin]
-        granted_by_subject_id: { type: string, format: uuid, nullable: true }
-        created_at: { type: string, format: date-time }
-    RoleBindingCreate:
-      type: object
-      required: [subject_id, role]
-      properties:
-        subject_id: { type: string, format: uuid }
-        role:
-          type: string
-          enum: [l1, l2, lead, admin]
     Source:
       type: object
       description: Источник улик. Секреты не возвращаются — только ссылка secret_ref.

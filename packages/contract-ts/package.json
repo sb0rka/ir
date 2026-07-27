@@ -3,19 +3,22 @@
   "version": "0.1.0",
   "description": "Типы и клиент Investigations API, сгенерированные из OpenAPI",
   "type": "module",
-  "types": "./investigations.d.ts",
+  "types": "./paths.gen.ts",
   "exports": {
     ".": {
-      "types": "./investigations.d.ts",
+      "types": "./paths.gen.ts",
       "default": "./client.ts"
+    },
+    "./domains/*": {
+      "types": "./domains/*.d.ts"
     }
   },
   "files": [
-    "investigations.d.ts",
+    "domains",
+    "paths.gen.ts",
     "client.ts"
   ],
   "scripts": {
-    "generate": "openapi-typescript ../../api/bundle.yaml -o ./investigations.d.ts",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {

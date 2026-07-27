@@ -10,7 +10,7 @@ security:
 paths:
   /investigations/{investigation_id}/response-packages:
     parameters:
-      - { $ref: '../shared/parameters.yaml#/InvestigationId' }
+      - { $ref: '../shared/parameters.yaml#/components/parameters/InvestigationId' }
     post:
       tags: [output]
       summary: Собрать пакет реагирования
@@ -29,33 +29,13 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ResponsePackage' }
-        '401': { $ref: '../shared/responses.yaml#/Unauthorized' }
-        '403': { $ref: '../shared/responses.yaml#/Forbidden' }
-        '404': { $ref: '../shared/responses.yaml#/NotFound' }
-        '422': { $ref: '../shared/responses.yaml#/ValidationError' }
-    get:
-      tags: [output]
-      summary: Пакеты расследования
-      operationId: listResponsePackages
-      responses:
-        '200':
-          description: Пакеты
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [items]
-                properties:
-                  items:
-                    type: array
-                    items: { $ref: '#/components/schemas/ResponsePackage' }
-        '401': { $ref: '../shared/responses.yaml#/Unauthorized' }
-        '403': { $ref: '../shared/responses.yaml#/Forbidden' }
-        '404': { $ref: '../shared/responses.yaml#/NotFound' }
-
+        '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
+        '422': { $ref: '../shared/responses.yaml#/components/responses/ValidationError' }
   /response-packages/{package_id}:
     parameters:
-      - { $ref: '../shared/parameters.yaml#/PackageId' }
+      - { $ref: '../shared/parameters.yaml#/components/parameters/PackageId' }
     get:
       tags: [output]
       summary: Пакет реагирования
@@ -66,9 +46,9 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ResponsePackage' }
-        '401': { $ref: '../shared/responses.yaml#/Unauthorized' }
-        '403': { $ref: '../shared/responses.yaml#/Forbidden' }
-        '404': { $ref: '../shared/responses.yaml#/NotFound' }
+        '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
     patch:
       tags: [output]
       summary: Зафиксировать пакет
@@ -85,37 +65,15 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ResponsePackage' }
-        '401': { $ref: '../shared/responses.yaml#/Unauthorized' }
-        '403': { $ref: '../shared/responses.yaml#/Forbidden' }
-        '404': { $ref: '../shared/responses.yaml#/NotFound' }
-        '409': { $ref: '../shared/responses.yaml#/Conflict' }
-        '422': { $ref: '../shared/responses.yaml#/ValidationError' }
-
-  /response-packages/{package_id}/export:
-    parameters:
-      - { $ref: '../shared/parameters.yaml#/PackageId' }
-    get:
-      tags: [output]
-      summary: Выгрузить пакет для EDR
-      description: Тело в формате пакета (json/csv/stix) для загрузки в средство защиты.
-      operationId: exportResponsePackage
-      responses:
-        '200':
-          description: Выгрузка
-          content:
-            application/json:
-              schema:
-                type: object
-                additionalProperties: true
-            text/csv:
-              schema: { type: string }
-        '401': { $ref: '../shared/responses.yaml#/Unauthorized' }
-        '403': { $ref: '../shared/responses.yaml#/Forbidden' }
-        '404': { $ref: '../shared/responses.yaml#/NotFound' }
+        '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
+        '409': { $ref: '../shared/responses.yaml#/components/responses/Conflict' }
+        '422': { $ref: '../shared/responses.yaml#/components/responses/ValidationError' }
 
   /investigations/{investigation_id}/reports:
     parameters:
-      - { $ref: '../shared/parameters.yaml#/InvestigationId' }
+      - { $ref: '../shared/parameters.yaml#/components/parameters/InvestigationId' }
     post:
       tags: [output]
       summary: Сгенерировать отчёт по инциденту
@@ -135,30 +93,13 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Report' }
-        '401': { $ref: '../shared/responses.yaml#/Unauthorized' }
-        '403': { $ref: '../shared/responses.yaml#/Forbidden' }
-        '404': { $ref: '../shared/responses.yaml#/NotFound' }
-        '422': { $ref: '../shared/responses.yaml#/ValidationError' }
-    get:
-      tags: [output]
-      summary: Отчёты расследования
-      operationId: listReports
-      parameters:
-        - { $ref: '../shared/parameters.yaml#/Limit' }
-        - { $ref: '../shared/parameters.yaml#/Cursor' }
-      responses:
-        '200':
-          description: Отчёты
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/ReportPage' }
-        '401': { $ref: '../shared/responses.yaml#/Unauthorized' }
-        '403': { $ref: '../shared/responses.yaml#/Forbidden' }
-        '404': { $ref: '../shared/responses.yaml#/NotFound' }
-
+        '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
+        '422': { $ref: '../shared/responses.yaml#/components/responses/ValidationError' }
   /reports/{report_id}:
     parameters:
-      - { $ref: '../shared/parameters.yaml#/ReportId' }
+      - { $ref: '../shared/parameters.yaml#/components/parameters/ReportId' }
     get:
       tags: [output]
       summary: Статус отчёта
@@ -169,13 +110,13 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Report' }
-        '401': { $ref: '../shared/responses.yaml#/Unauthorized' }
-        '403': { $ref: '../shared/responses.yaml#/Forbidden' }
-        '404': { $ref: '../shared/responses.yaml#/NotFound' }
+        '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
 
   /reports/{report_id}/content:
     parameters:
-      - { $ref: '../shared/parameters.yaml#/ReportId' }
+      - { $ref: '../shared/parameters.yaml#/components/parameters/ReportId' }
     get:
       tags: [output]
       summary: Скачать отчёт
@@ -188,14 +129,14 @@ paths:
               schema: { type: string }
             application/pdf:
               schema: { type: string, format: binary }
-        '401': { $ref: '../shared/responses.yaml#/Unauthorized' }
-        '403': { $ref: '../shared/responses.yaml#/Forbidden' }
-        '404': { $ref: '../shared/responses.yaml#/NotFound' }
+        '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
         '409':
           description: Отчёт ещё не готов или сборка упала (code=conflict)
           content:
             application/json:
-              schema: { $ref: '../shared/errors.yaml#/ErrorResponse' }
+              schema: { $ref: '../shared/errors.yaml#/components/schemas/ErrorResponse' }
 
 components:
   schemas:
@@ -235,14 +176,6 @@ components:
           type: boolean
           default: true
           description: «Проверено и исключено» — отклонённые ветки с причинами
-    ReportPage:
-      type: object
-      required: [items]
-      properties:
-        items:
-          type: array
-          items: { $ref: '#/components/schemas/Report' }
-        next_cursor: { type: string, nullable: true }
     ResponsePackage:
       type: object
       description: |

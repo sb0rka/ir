@@ -1,30 +1,32 @@
 # Единый конверт ошибки для всех ручек.
 
-ErrorResponse:
-  type: object
-  required: [error]
-  properties:
-    error:
+components:
+  schemas:
+    ErrorResponse:
       type: object
-      required: [code, message]
+      required: [error]
       properties:
-        code:
-          type: string
-          description: |
-            not_implemented — ручка объявлена в контракте, но ещё не реализована.
-            Клиент может отличить её от настоящей поломки сервера и скрыть
-            элемент интерфейса, а не показывать ошибку.
-          enum:
-            - unauthorized
-            - forbidden
-            - not_found
-            - conflict
-            - validation
-            - source_unavailable
-            - som_unavailable
-            - not_implemented
-            - internal
-        message: { type: string }
-        details:
+        error:
           type: object
-          additionalProperties: true
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              description: |
+                not_implemented — ручка объявлена в контракте, но ещё не реализована.
+                Клиент может отличить её от настоящей поломки сервера и скрыть
+                элемент интерфейса, а не показывать ошибку.
+              enum:
+                - unauthorized
+                - forbidden
+                - not_found
+                - conflict
+                - validation
+                - source_unavailable
+                - som_unavailable
+                - not_implemented
+                - internal
+            message: { type: string }
+            details:
+              type: object
+              additionalProperties: true

@@ -10,7 +10,7 @@ security:
 paths:
   /investigations/{investigation_id}/graph:
     parameters:
-      - { $ref: '../shared/parameters.yaml#/InvestigationId' }
+      - { $ref: '../shared/parameters.yaml#/components/parameters/InvestigationId' }
     get:
       tags: [graph]
       summary: Граф расследования
@@ -28,7 +28,7 @@ paths:
           description: Фильтр статусов рёбер, по умолчанию proposed,confirmed
           schema:
             type: array
-            items: { $ref: '../shared/enums.yaml#/EdgeStatus' }
+            items: { $ref: '../shared/enums.yaml#/components/schemas/EdgeStatus' }
           style: form
           explode: false
       responses:
@@ -37,14 +37,14 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Graph' }
-        '401': { $ref: '../shared/responses.yaml#/Unauthorized' }
-        '403': { $ref: '../shared/responses.yaml#/Forbidden' }
-        '404': { $ref: '../shared/responses.yaml#/NotFound' }
-        '422': { $ref: '../shared/responses.yaml#/ValidationError' }
+        '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
+        '422': { $ref: '../shared/responses.yaml#/components/responses/ValidationError' }
 
   /investigations/{investigation_id}/edges:
     parameters:
-      - { $ref: '../shared/parameters.yaml#/InvestigationId' }
+      - { $ref: '../shared/parameters.yaml#/components/parameters/InvestigationId' }
     post:
       tags: [graph]
       summary: Создать ребро (аналитик)
@@ -65,40 +65,15 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Edge' }
-        '401': { $ref: '../shared/responses.yaml#/Unauthorized' }
-        '403': { $ref: '../shared/responses.yaml#/Forbidden' }
-        '404': { $ref: '../shared/responses.yaml#/NotFound' }
-        '409': { $ref: '../shared/responses.yaml#/Conflict' }
-        '422': { $ref: '../shared/responses.yaml#/ValidationError' }
-
-  /edges/{edge_id}:
-    parameters:
-      - { $ref: '../shared/parameters.yaml#/EdgeId' }
-    patch:
-      tags: [graph]
-      summary: Подтвердить или отклонить ребро
-      description: reject требует reject_reason. Версия обязательна (409 при расхождении).
-      operationId: updateEdge
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: '#/components/schemas/EdgePatch' }
-      responses:
-        '200':
-          description: Ребро
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Edge' }
-        '401': { $ref: '../shared/responses.yaml#/Unauthorized' }
-        '403': { $ref: '../shared/responses.yaml#/Forbidden' }
-        '404': { $ref: '../shared/responses.yaml#/NotFound' }
-        '409': { $ref: '../shared/responses.yaml#/Conflict' }
-        '422': { $ref: '../shared/responses.yaml#/ValidationError' }
+        '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
+        '409': { $ref: '../shared/responses.yaml#/components/responses/Conflict' }
+        '422': { $ref: '../shared/responses.yaml#/components/responses/ValidationError' }
 
   /investigations/{investigation_id}/review:
     parameters:
-      - { $ref: '../shared/parameters.yaml#/InvestigationId' }
+      - { $ref: '../shared/parameters.yaml#/components/parameters/InvestigationId' }
     post:
       tags: [graph]
       summary: Батч-ревизия proposed-рёбер
@@ -118,11 +93,11 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ReviewResult' }
-        '401': { $ref: '../shared/responses.yaml#/Unauthorized' }
-        '403': { $ref: '../shared/responses.yaml#/Forbidden' }
-        '404': { $ref: '../shared/responses.yaml#/NotFound' }
-        '409': { $ref: '../shared/responses.yaml#/Conflict' }
-        '422': { $ref: '../shared/responses.yaml#/ValidationError' }
+        '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
+        '409': { $ref: '../shared/responses.yaml#/components/responses/Conflict' }
+        '422': { $ref: '../shared/responses.yaml#/components/responses/ValidationError' }
 
 components:
   schemas:
@@ -135,11 +110,11 @@ components:
         source_node_id: { type: string, format: uuid }
         target_node_id: { type: string, format: uuid }
         relation_code: { type: string }
-        status: { $ref: '../shared/enums.yaml#/EdgeStatus' }
+        status: { $ref: '../shared/enums.yaml#/components/schemas/EdgeStatus' }
         reject_reason: { type: string, nullable: true }
         confidence: { type: number, minimum: 0, maximum: 1, nullable: true }
         why: { type: string, nullable: true, description: Обоснование. Обязательно при origin=agent }
-        origin: { $ref: '../shared/enums.yaml#/Origin' }
+        origin: { $ref: '../shared/enums.yaml#/components/schemas/Origin' }
         origin_ref: { type: string, nullable: true, description: subject_id | код правила | id запуска }
         evidence_count: { type: integer }
         evidence_event_ids:
@@ -191,10 +166,10 @@ components:
       properties:
         id: { type: string, format: uuid }
         investigation_id: { type: string, format: uuid }
-        node_type: { $ref: '../shared/enums.yaml#/NodeType' }
+        node_type: { $ref: '../shared/enums.yaml#/components/schemas/NodeType' }
         entity_id: { type: string, format: uuid, nullable: true }
         event_id: { type: string, format: uuid, nullable: true }
-        origin: { $ref: '../shared/enums.yaml#/Origin' }
+        origin: { $ref: '../shared/enums.yaml#/components/schemas/Origin' }
         label: { type: string, description: display_name сущности или сводка события }
         type_code:
           type: string

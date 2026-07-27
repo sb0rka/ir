@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: packages/contract/go.mod
+          cache-dependency-path: packages/contract/go.sum
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - uses: arduino/setup-task@v2
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Собрать и проверить спеку
+        run: task spec
+
+      # Главная защита от «забыл перегенерировать»: код генерируется заново
+      # и сверяется с тем, что в PR. Любое расхождение — падение сборки.
+      - name: Сгенерированный код соответствует спеке
+        run: task check-generated
+
+      - name: go vet
+        run: task vet
+
+      - name: TypeScript-типы компилируются
+        working-directory: packages/contract-ts
+        run: >-
+          npx --yes -p typescript@5 tsc --noEmit --strict --skipLibCheck
+          --target ES2022 --module ESNext --moduleResolution bundler
+          --allowImportingTsExtensions paths.gen.ts domains/*.d.ts
+

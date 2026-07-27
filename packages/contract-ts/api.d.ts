@@ -61,71 +61,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/linking-rules/{rule_code}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                rule_code: components["parameters"]["RuleCode"];
-            };
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        /**
-         * Изменить правило связывания
-         * @description Правила — конфигурация, не код: набор признаков связывания задаёт заказчик.
-         *     Изменение не переписывает уже созданные рёбра.
-         */
-        patch: operations["updateLinkingRule"];
-        trace?: never;
-    };
-    "/roles": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Роли субъектов тенанта */
-        get: operations["listRoleBindings"];
-        put?: never;
-        /**
-         * Назначить роль
-         * @description Роли SOC (l1, l2, lead, admin) не совпадают с ролями проекта платформы —
-         *     это отдельный вокабуляр, привязанный к субъекту в тенанте.
-         */
-        post: operations["createRoleBinding"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/roles/{subject_id}/{role}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                subject_id: components["parameters"]["SubjectId"];
-                role: "l1" | "l2" | "lead" | "admin";
-            };
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        /** Снять роль */
-        delete: operations["deleteRoleBinding"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/audit": {
         parameters: {
             query?: never;
@@ -201,26 +136,6 @@ export interface paths {
         /** Артефакты расследования */
         get: operations["listArtifacts"];
         put?: never;
-        /** Добавить артефакт */
-        post: operations["createArtifact"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/artifacts/{artifact_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                artifact_id: components["parameters"]["ArtifactId"];
-            };
-            cookie?: never;
-        };
-        /** Артефакт с вердиктами обогащений */
-        get: operations["getArtifact"];
-        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -270,25 +185,6 @@ export interface paths {
          *     по узлам инфраструктуры. Большая выборка уходит в фон (job_id).
          */
         post: operations["importIocs"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/investigations/{investigation_id}/entities": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                investigation_id: components["parameters"]["InvestigationId"];
-            };
-            cookie?: never;
-        };
-        /** Сущности расследования */
-        get: operations["listEntities"];
-        put?: never;
-        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -419,28 +315,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/edges/{edge_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                edge_id: components["parameters"]["EdgeId"];
-            };
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        /**
-         * Подтвердить или отклонить ребро
-         * @description reject требует reject_reason. Версия обязательна (409 при расхождении).
-         */
-        patch: operations["updateEdge"];
-        trace?: never;
-    };
     "/investigations/{investigation_id}/review": {
         parameters: {
             query?: never;
@@ -545,8 +419,7 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** Пакеты расследования */
-        get: operations["listResponsePackages"];
+        get?: never;
         put?: never;
         /**
          * Собрать пакет реагирования
@@ -583,28 +456,6 @@ export interface paths {
         patch: operations["finalizeResponsePackage"];
         trace?: never;
     };
-    "/response-packages/{package_id}/export": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                package_id: components["parameters"]["PackageId"];
-            };
-            cookie?: never;
-        };
-        /**
-         * Выгрузить пакет для EDR
-         * @description Тело в формате пакета (json/csv/stix) для загрузки в средство защиты.
-         */
-        get: operations["exportResponsePackage"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/investigations/{investigation_id}/reports": {
         parameters: {
             query?: never;
@@ -614,8 +465,7 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** Отчёты расследования */
-        get: operations["listReports"];
+        get?: never;
         put?: never;
         /**
          * Сгенерировать отчёт по инциденту
@@ -696,50 +546,6 @@ export interface paths {
         get: operations["listRelationTypes"];
         put?: never;
         post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/graph-nodes/{node_id}/issues": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                node_id: components["parameters"]["NodeId"];
-            };
-            cookie?: never;
-        };
-        /** Задачи узла */
-        get: operations["listNodeIssues"];
-        put?: never;
-        /**
-         * Создать исследовательскую задачу по узлу
-         * @description Создаёт issue в SOM («что происходило на узле», «проверить контекст по
-         *     таймлайну») и связывает с узлом графа. Агенты работают в sub-issues SOM.
-         */
-        post: operations["createNodeIssue"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/investigations/{investigation_id}/workflows": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                investigation_id: components["parameters"]["InvestigationId"];
-            };
-            cookie?: never;
-        };
-        /** Workflows расследования */
-        get: operations["listWorkflows"];
-        put?: never;
-        /** Привязать агентский workflow SOM */
-        post: operations["linkWorkflow"];
         delete?: never;
         options?: never;
         head?: never;
@@ -865,31 +671,6 @@ export interface components {
             born_status: components["schemas"]["EdgeStatus"];
             is_enabled: boolean;
         };
-        LinkingRulePatch: {
-            title?: string;
-            rule?: {
-                [key: string]: unknown;
-            };
-            born_status?: components["schemas"]["EdgeStatus"];
-            is_enabled?: boolean;
-        };
-        /** @description Роль субъекта платформы в тенанте. Вокабуляр SOC, не платформенный. */
-        RoleBinding: {
-            /** Format: uuid */
-            subject_id: string;
-            /** @enum {string} */
-            role: "l1" | "l2" | "lead" | "admin";
-            /** Format: uuid */
-            granted_by_subject_id?: string | null;
-            /** Format: date-time */
-            created_at?: string;
-        };
-        RoleBindingCreate: {
-            /** Format: uuid */
-            subject_id: string;
-            /** @enum {string} */
-            role: "l1" | "l2" | "lead" | "admin";
-        };
         /** @description Источник улик. Секреты не возвращаются — только ссылка secret_ref. */
         Source: {
             code: string;
@@ -957,15 +738,6 @@ export interface components {
             };
             /** Format: date-time */
             created_at: string;
-        };
-        ArtifactCreate: {
-            type_code: string;
-            value: string;
-            /** Format: uuid */
-            entity_id?: string;
-            metadata?: {
-                [key: string]: unknown;
-            };
         };
         ArtifactPage: {
             items: components["schemas"]["Artifact"][];
@@ -1115,8 +887,34 @@ export interface components {
             /** @description Рёбра от правил связывания */
             edges_created: number;
         };
+        /**
+         * @description Событие без сырья: список тянет сотни записей, а raw_data у каждой —
+         *     килобайты. Полное событие отдаёт GET /events/{event_id}.
+         */
+        EventSummary: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            investigation_id: string;
+            source_code: string;
+            source_event_id: string;
+            source_ref?: string | null;
+            event_type: string;
+            /** Format: date-time */
+            occurred_at: string;
+            /** Format: date-time */
+            ingested_at: string;
+            normalized_data?: {
+                [key: string]: unknown;
+            };
+            entities?: {
+                /** Format: uuid */
+                entity_id: string;
+                relation_code: string;
+            }[];
+        };
         EventPage: {
-            items: components["schemas"]["Event"][];
+            items: components["schemas"]["EventSummary"][];
             next_cursor?: string | null;
         };
         Edge: {
@@ -1337,10 +1135,6 @@ export interface components {
              */
             include_rejected: boolean;
         };
-        ReportPage: {
-            items: components["schemas"]["Report"][];
-            next_cursor?: string | null;
-        };
         /**
          * @description Пакет реагирования: только подтверждённые артефакты расследования,
          *     в формате, пригодном для загрузки в EDR заказчика.
@@ -1396,38 +1190,6 @@ export interface components {
             source_kind: components["schemas"]["NodeType"];
             target_kind: components["schemas"]["NodeType"];
             directed: boolean;
-        };
-        InvestigationWorkflow: {
-            /** Format: uuid */
-            workflow_id: string;
-            /** Format: uuid */
-            investigation_id: string;
-            /** Format: date-time */
-            created_at: string;
-        };
-        InvestigationWorkflowList: {
-            items: components["schemas"]["InvestigationWorkflow"][];
-        };
-        NodeIssue: {
-            /** Format: uuid */
-            issue_id: string;
-            /** Format: uuid */
-            graph_node_id: string;
-            /** @description Ссылка на issue в SOM */
-            issue_url?: string | null;
-            /** Format: date-time */
-            created_at: string;
-        };
-        NodeIssueCreate: {
-            title: string;
-            description?: string;
-        };
-        NodeIssueList: {
-            items: components["schemas"]["NodeIssue"][];
-        };
-        WorkflowLinkCreate: {
-            /** Format: uuid */
-            workflow_id: string;
         };
         /**
          * @description Сработка источника. Лента триажа — единственное представление вне
@@ -1505,8 +1267,8 @@ export interface components {
                 "application/json": components["schemas"]["ErrorResponse"];
             };
         };
-        /** @description Не найдено в тенанте субъекта (code=not_found) */
-        NotFound: {
+        /** @description Невалидные данные (code=validation) */
+        ValidationError: {
             headers: {
                 [name: string]: unknown;
             };
@@ -1514,8 +1276,8 @@ export interface components {
                 "application/json": components["schemas"]["ErrorResponse"];
             };
         };
-        /** @description Невалидные данные (code=validation) */
-        ValidationError: {
+        /** @description Не найдено в тенанте субъекта (code=not_found) */
+        NotFound: {
             headers: {
                 [name: string]: unknown;
             };
@@ -1541,19 +1303,8 @@ export interface components {
                 "application/json": components["schemas"]["ErrorResponse"];
             };
         };
-        /** @description SOM недоступен (code=som_unavailable) */
-        SomUnavailable: {
-            headers: {
-                [name: string]: unknown;
-            };
-            content: {
-                "application/json": components["schemas"]["ErrorResponse"];
-            };
-        };
     };
     parameters: {
-        RuleCode: string;
-        SubjectId: string;
         Limit: number;
         /** @description Непрозрачный keyset-курсор из next_cursor предыдущей страницы */
         Cursor: string;
@@ -1561,10 +1312,8 @@ export interface components {
         ArtifactId: string;
         EntityId: string;
         EventId: string;
-        EdgeId: string;
         PackageId: string;
         ReportId: string;
-        NodeId: string;
     };
     requestBodies: never;
     headers: never;
@@ -1640,112 +1389,6 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
-        };
-    };
-    updateLinkingRule: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                rule_code: components["parameters"]["RuleCode"];
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["LinkingRulePatch"];
-            };
-        };
-        responses: {
-            /** @description Правило */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["LinkingRule"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-            422: components["responses"]["ValidationError"];
-        };
-    };
-    listRoleBindings: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Роли */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        items: components["schemas"]["RoleBinding"][];
-                    };
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-        };
-    };
-    createRoleBinding: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["RoleBindingCreate"];
-            };
-        };
-        responses: {
-            /** @description Назначено */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RoleBinding"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            409: components["responses"]["Conflict"];
-            422: components["responses"]["ValidationError"];
-        };
-    };
-    deleteRoleBinding: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                subject_id: components["parameters"]["SubjectId"];
-                role: "l1" | "l2" | "lead" | "admin";
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Снято */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
         };
     };
     listAudit: {
@@ -1861,62 +1504,6 @@ export interface operations {
             422: components["responses"]["ValidationError"];
         };
     };
-    createArtifact: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                investigation_id: components["parameters"]["InvestigationId"];
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ArtifactCreate"];
-            };
-        };
-        responses: {
-            /** @description Артефакт */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Artifact"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
-            422: components["responses"]["ValidationError"];
-        };
-    };
-    getArtifact: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                artifact_id: components["parameters"]["ArtifactId"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Артефакт */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Artifact"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-        };
-    };
     enrichArtifact: {
         parameters: {
             query?: never;
@@ -1985,37 +1572,6 @@ export interface operations {
             409: components["responses"]["Conflict"];
             422: components["responses"]["ValidationError"];
             502: components["responses"]["SourceUnavailable"];
-        };
-    };
-    listEntities: {
-        parameters: {
-            query?: {
-                type_code?: string;
-                limit?: components["parameters"]["Limit"];
-                /** @description Непрозрачный keyset-курсор из next_cursor предыдущей страницы */
-                cursor?: components["parameters"]["Cursor"];
-            };
-            header?: never;
-            path: {
-                investigation_id: components["parameters"]["InvestigationId"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Страница сущностей */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["EntityPage"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-            422: components["responses"]["ValidationError"];
         };
     };
     getEntityCard: {
@@ -2186,37 +1742,6 @@ export interface operations {
         responses: {
             /** @description Ребро */
             201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Edge"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
-            422: components["responses"]["ValidationError"];
-        };
-    };
-    updateEdge: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                edge_id: components["parameters"]["EdgeId"];
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["EdgePatch"];
-            };
-        };
-        responses: {
-            /** @description Ребро */
-            200: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -2410,33 +1935,6 @@ export interface operations {
             404: components["responses"]["NotFound"];
         };
     };
-    listResponsePackages: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                investigation_id: components["parameters"]["InvestigationId"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Пакеты */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        items: components["schemas"]["ResponsePackage"][];
-                    };
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-        };
-    };
     createResponsePackage: {
         parameters: {
             query?: never;
@@ -2521,63 +2019,6 @@ export interface operations {
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
             422: components["responses"]["ValidationError"];
-        };
-    };
-    exportResponsePackage: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                package_id: components["parameters"]["PackageId"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Выгрузка */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                    "text/csv": string;
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-        };
-    };
-    listReports: {
-        parameters: {
-            query?: {
-                limit?: components["parameters"]["Limit"];
-                /** @description Непрозрачный keyset-курсор из next_cursor предыдущей страницы */
-                cursor?: components["parameters"]["Cursor"];
-            };
-            header?: never;
-            path: {
-                investigation_id: components["parameters"]["InvestigationId"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Отчёты */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ReportPage"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
         };
     };
     createReport: {
@@ -2714,116 +2155,6 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
-        };
-    };
-    listNodeIssues: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                node_id: components["parameters"]["NodeId"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Связки */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["NodeIssueList"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-        };
-    };
-    createNodeIssue: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                node_id: components["parameters"]["NodeId"];
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["NodeIssueCreate"];
-            };
-        };
-        responses: {
-            /** @description Связка узел—issue */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["NodeIssue"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-            502: components["responses"]["SomUnavailable"];
-        };
-    };
-    listWorkflows: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                investigation_id: components["parameters"]["InvestigationId"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Привязки */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["InvestigationWorkflowList"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-        };
-    };
-    linkWorkflow: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                investigation_id: components["parameters"]["InvestigationId"];
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["WorkflowLinkCreate"];
-            };
-        };
-        responses: {
-            /** @description Привязано */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["InvestigationWorkflow"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
         };
     };
     listAlerts: {

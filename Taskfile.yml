@@ -2,54 +2,107 @@ version: '3'
 
 # Запуск: task <имя>. Требует go-task (https://taskfile.dev).
 
+vars:
+  MODULE: github.com/sb0rka/ir/packages/contract
+  REDOCLY: npx --yes @redocly/cli@latest
+  CODEGEN: go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@v2.8.0
+  OPENAPI_TS: npx --yes openapi-typescript@7
+
 tasks:
   default:
     cmds:
       - task --list
 
-  spec:
-    desc: Собрать api/bundle.yaml из доменных файлов и проверить
-    dir: api
+  gen:
+    desc: Перегенерировать всё из api/ — одна команда на всю генерацию
     cmds:
-      # join склеивает секции paths и components из фрагментов: стандартный
-      # $ref подставляет один объект, а не сливает карты, поэтому bundle тут
-      # не подходит. Конфликты URL и одноимённых схем join находит сам.
-      - npx --yes @redocly/cli@latest join openapi.yaml paths/*.yaml -o bundle.yaml --without-x-tag-groups
-      - npx --yes @redocly/cli@latest lint bundle.yaml
+      - task: spec
+      - task: gen-go
+      - task: gen-ts
+      - gofmt -w packages/contract
+
+  spec:
+    desc: Собрать спеку и проверить
+    cmds:
+      - task: spec-domains
+      - '{{.REDOCLY}} join api/openapi.yaml api/paths/*.yaml -o api/bundle.yaml --without-x-tag-groups'
+      - '{{.REDOCLY}} lint api/bundle.yaml'
+
+  spec-domains:
+    desc: Развернуть каждый доменный файл в самостоятельный документ
+    sources: ['api/paths/*.yaml']
+    method: none
+    cmds:
+      - for: sources
+        cmd: "{{.REDOCLY}} bundle '{{.ITEM}}' -o api/build/{{osBase .ITEM}}"
+
+  gen-go:
+    desc: Go-контракт — пакет на домен
+    sources: ['api/build/*.yaml']
+    method: none
+    cmds:
+      - for: sources
+        cmd: >-
+          cd packages/contract &&
+          {{.CODEGEN}} -package {{trimSuffix ".yaml" (osBase .ITEM)}}
+          -generate models,std-http-server,strict-server
+          -o {{trimSuffix ".yaml" (osBase .ITEM)}}/{{trimSuffix ".yaml" (osBase .ITEM)}}.gen.go
+          '../../{{.ITEM}}'
+      - cd packages/contract && {{.CODEGEN}} -package spec -generate embedded-spec -o spec/spec.gen.go ../../api/bundle.yaml
+
+
+  gen-ts:
+    desc: TypeScript — по домену плюс общий api.d.ts для клиента
+    sources: ['api/build/*.yaml']
+    method: none
+    cmds:
+      - for: sources
+        cmd: >-
+          {{.OPENAPI_TS}} '{{.ITEM}}'
+          -o packages/contract-ts/domains/{{trimSuffix ".yaml" (osBase .ITEM)}}.d.ts
+      # Клиенту нужен один paths на весь API — берём из собранной спеки.
+      - '{{.OPENAPI_TS}} api/bundle.yaml -o packages/contract-ts/api.d.ts'
 
   spec-docs:
     desc: Собрать документацию в api/docs.html и открыть
-    dir: api
     deps: [spec]
     cmds:
-      - npx --yes @redocly/cli@latest build-docs bundle.yaml -o docs.html
-      - cmd: '{{if eq OS "windows"}}start docs.html{{else}}open docs.html{{end}}'
+      - '{{.REDOCLY}} build-docs api/bundle.yaml -o api/docs.html'
+      - cmd: '{{if eq OS "windows"}}start api/docs.html{{else}}open api/docs.html{{end}}'
         ignore_error: true
 
-  generate-go:
-    desc: Сгенерировать Go-типы и серверные интерфейсы из спеки
-    deps: [spec]
-    dir: packages/contract
+  check-generated:
+    desc: Проверить, что сгенерированное соответствует спеке
     cmds:
-      - go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@v2.8.0 --config=oapi-codegen.yaml ../../api/bundle.yaml
+      - task: gen
+      # Одна проверка на всё: Go-контракт, заготовки, TypeScript. Если
+      # перегенерация что-то изменила — спеку правили, а результат не
+      # закоммитили.
+      - cmd: |
+          git diff --exit-code -- packages || {
+            echo ""
+            echo "Сгенерированный код разошёлся со спекой."
+            echo "Почините: task gen, затем закоммитьте изменения."
+            exit 1
+          }
+      - cmd: |
+          test -z "$(git status --porcelain -- packages)" || {
+            echo ""
+            echo "Появились несохранённые сгенерированные файлы:"
+            git status --short -- packages
+            exit 1
+          }
 
-  generate-ts:
-    desc: Сгенерировать TypeScript-типы для клиента
-    deps: [spec]
-    dir: packages/contract-ts
-    cmds:
-      - npx --yes openapi-typescript@7 ../../api/bundle.yaml -o ./investigations.d.ts
-
-  generate:
-    desc: Перегенерировать всё из спеки (Go + TypeScript)
-    cmds:
-      - task: generate-go
-      - task: generate-ts
 
   fmt:
     desc: gofmt по всем модулям
     cmds:
       - gofmt -w packages
+
+  vet:
+    desc: go vet помодульно (из-за go.work)
+    cmds:
+      - cd packages/contract && go vet ./...
 
   tidy:
     desc: go mod tidy в каждом модуле
@@ -57,8 +110,12 @@ tasks:
       - cd packages/contract && go mod tidy
 
   check:
-    desc: Спека, генерация, сборка контракта — то, что гоняет CI
+    desc: Всё, что гоняет CI
     cmds:
-      - task: generate
+      - task: check-generated
       - cd packages/contract && go build ./...
+      - task: vet
+
+
+
 

@@ -1,41 +1,45 @@
-Unauthorized:
-  description: Нет или невалиден токен (code=unauthorized)
-  content:
-    application/json:
-      schema: { $ref: './errors.yaml#/ErrorResponse' }
+# Типовые ответы об ошибках.
 
-Forbidden:
-  description: Роль не даёт действия или чужой тенант (code=forbidden)
-  content:
-    application/json:
-      schema: { $ref: './errors.yaml#/ErrorResponse' }
+components:
+  responses:
+    Unauthorized:
+      description: Нет или невалиден токен (code=unauthorized)
+      content:
+        application/json:
+          schema: { $ref: './errors.yaml#/components/schemas/ErrorResponse' }
 
-NotFound:
-  description: Не найдено в тенанте субъекта (code=not_found)
-  content:
-    application/json:
-      schema: { $ref: './errors.yaml#/ErrorResponse' }
+    Forbidden:
+      description: Роль не даёт действия или чужой тенант (code=forbidden)
+      content:
+        application/json:
+          schema: { $ref: './errors.yaml#/components/schemas/ErrorResponse' }
 
-Conflict:
-  description: Конфликт версии, дубликат или закрытое расследование (code=conflict)
-  content:
-    application/json:
-      schema: { $ref: './errors.yaml#/ErrorResponse' }
+    NotFound:
+      description: Не найдено в тенанте субъекта (code=not_found)
+      content:
+        application/json:
+          schema: { $ref: './errors.yaml#/components/schemas/ErrorResponse' }
 
-ValidationError:
-  description: Невалидные данные (code=validation)
-  content:
-    application/json:
-      schema: { $ref: './errors.yaml#/ErrorResponse' }
+    Conflict:
+      description: Конфликт версии, дубликат или закрытое расследование (code=conflict)
+      content:
+        application/json:
+          schema: { $ref: './errors.yaml#/components/schemas/ErrorResponse' }
 
-SourceUnavailable:
-  description: Источник улик недоступен (code=source_unavailable)
-  content:
-    application/json:
-      schema: { $ref: './errors.yaml#/ErrorResponse' }
+    ValidationError:
+      description: Невалидные данные (code=validation)
+      content:
+        application/json:
+          schema: { $ref: './errors.yaml#/components/schemas/ErrorResponse' }
 
-SomUnavailable:
-  description: SOM недоступен (code=som_unavailable)
-  content:
-    application/json:
-      schema: { $ref: './errors.yaml#/ErrorResponse' }
+    SourceUnavailable:
+      description: Источник улик недоступен (code=source_unavailable)
+      content:
+        application/json:
+          schema: { $ref: './errors.yaml#/components/schemas/ErrorResponse' }
+
+    SomUnavailable:
+      description: SOM недоступен (code=som_unavailable)
+      content:
+        application/json:
+          schema: { $ref: './errors.yaml#/components/schemas/ErrorResponse' }

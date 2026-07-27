@@ -1,17 +1,20 @@
 # Словари, используемые более чем одним доменом.
 
-Severity:
-  type: string
-  enum: [low, medium, high, critical]
+components:
+  schemas:
+    Severity:
+      type: string
+      enum: [low, medium, high, critical]
 
-Origin:
-  type: string
-  enum: [analyst, rule, agent]
+    Origin:
+      type: string
+      enum: [analyst, rule, agent]
 
-NodeType:
-  type: string
-  enum: [entity, event]
+    NodeType:
+      type: string
+      enum: [entity, event]
 
-EdgeStatus:
-  type: string
-  enum: [proposed, confirmed, rejected]
+    EdgeStatus:
+      type: string
+      enum: [proposed, confirmed, rejected]
+

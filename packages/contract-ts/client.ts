@@ -1,6 +1,6 @@
 import createClient from "openapi-fetch";
 
-import type { paths, components } from "./investigations.d.ts";
+import type { paths } from "./paths.gen.ts";
 
 /**
  * Типизированный клиент Investigations API.
@@ -28,16 +28,10 @@ export function createIrClient(options: {
   return client;
 }
 
-/** Конверт ошибки: тело неуспешного ответа у всех ручек одинаковое. */
-export type ApiError = components["schemas"]["ErrorResponse"]["error"];
+export type { paths };
 
-export type Investigation = components["schemas"]["Investigation"];
-export type Event = components["schemas"]["Event"];
-export type Entity = components["schemas"]["Entity"];
-export type Graph = components["schemas"]["Graph"];
-export type GraphNode = components["schemas"]["GraphNode"];
-export type Edge = components["schemas"]["Edge"];
-export type Artifact = components["schemas"]["Artifact"];
-export type Alert = components["schemas"]["Alert"];
-
-export type { paths, components };
+// Типы доменов импортируются напрямую из ./domains/<домен>: раскладка та же,
+// что в api/paths, поэтому искать не приходится.
+//
+//   import type { components } from "@ir/contract/domains/graph";
+//   type Edge = components["schemas"]["Edge"];

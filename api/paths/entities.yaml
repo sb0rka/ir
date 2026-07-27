@@ -8,31 +8,9 @@ security:
   - bearerAuth: []
 
 paths:
-  /investigations/{investigation_id}/entities:
-    parameters:
-      - { $ref: '../shared/parameters.yaml#/InvestigationId' }
-    get:
-      tags: [entities]
-      summary: Сущности расследования
-      operationId: listEntities
-      parameters:
-        - { name: type_code, in: query, schema: { type: string } }
-        - { $ref: '../shared/parameters.yaml#/Limit' }
-        - { $ref: '../shared/parameters.yaml#/Cursor' }
-      responses:
-        '200':
-          description: Страница сущностей
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/EntityPage' }
-        '401': { $ref: '../shared/responses.yaml#/Unauthorized' }
-        '403': { $ref: '../shared/responses.yaml#/Forbidden' }
-        '404': { $ref: '../shared/responses.yaml#/NotFound' }
-        '422': { $ref: '../shared/responses.yaml#/ValidationError' }
-
   /entities/{entity_id}:
     parameters:
-      - { $ref: '../shared/parameters.yaml#/EntityId' }
+      - { $ref: '../shared/parameters.yaml#/components/parameters/EntityId' }
     get:
       tags: [entities]
       summary: Карточка сущности
@@ -46,9 +24,9 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/EntityCard' }
-        '401': { $ref: '../shared/responses.yaml#/Unauthorized' }
-        '403': { $ref: '../shared/responses.yaml#/Forbidden' }
-        '404': { $ref: '../shared/responses.yaml#/NotFound' }
+        '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
 
 components:
   schemas:
