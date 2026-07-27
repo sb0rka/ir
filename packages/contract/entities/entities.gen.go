@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -113,6 +114,39 @@ type EntityCard struct {
 	} `json:"occurrences"`
 }
 
+// EntityCreate An entity entered by hand, before any event mentions it.
+type EntityCreate struct {
+	// CanonicalKey Normalised identity — fqdn for a host, SID for an account, sha256 for a file. Together with the type this is what makes two records the same thing, so it is worth normalising before sending.
+	CanonicalKey string `json:"canonical_key"`
+
+	// DisplayName Label for the UI. Falls back to the canonical key when absent.
+	DisplayName *string `json:"display_name,omitempty"`
+
+	// Metadata Anything else worth carrying — where the indicator came from, notes.
+	Metadata *map[string]interface{} `json:"metadata,omitempty"`
+
+	// TypeCode Kind of thing, from the entity-type dictionary. Rejected if unknown, so a typo cannot invent a type.
+	TypeCode string `json:"type_code"`
+}
+
+// EntityPage One page of entities.
+type EntityPage struct {
+	// Items The entities on this page.
+	Items []Entity `json:"items"`
+
+	// NextCursor Pass as `cursor` to get the next page. Absent on the last page.
+	NextCursor *string `json:"next_cursor,omitempty"`
+}
+
+// EntityPatch Fields to change. Anything omitted stays as it is. Identity — the type and the canonical key — is not editable.
+type EntityPatch struct {
+	// DisplayName New label for the UI.
+	DisplayName *string `json:"display_name,omitempty"`
+
+	// Metadata Replaces the stored attributes wholesale, not merged into them.
+	Metadata *map[string]interface{} `json:"metadata,omitempty"`
+}
+
 // ErrorResponse Body of every non-2xx response. Clients branch on `code`, not on the HTTP status: the status says what happened at the protocol level, the code says what happened in the domain.
 type ErrorResponse struct {
 	// Error The failure itself. Never carries internal details of a 500.
@@ -131,8 +165,20 @@ type ErrorResponse struct {
 // ErrorResponseErrorCode Machine-readable reason, stable across releases. `validation` covers both a malformed body (400) and a well-formed but invalid one (422). `not_implemented` means the operation exists in the contract but has no implementation yet — a client can hide the control instead of showing an error.
 type ErrorResponseErrorCode string
 
+// Cursor defines model for Cursor.
+type Cursor = string
+
 // EntityId defines model for EntityId.
 type EntityId = openapi_types.UUID
+
+// InvestigationId defines model for InvestigationId.
+type InvestigationId = openapi_types.UUID
+
+// Limit defines model for Limit.
+type Limit = int
+
+// Conflict Body of every non-2xx response. Clients branch on `code`, not on the HTTP status: the status says what happened at the protocol level, the code says what happened in the domain.
+type Conflict = ErrorResponse
 
 // Forbidden Body of every non-2xx response. Clients branch on `code`, not on the HTTP status: the status says what happened at the protocol level, the code says what happened in the domain.
 type Forbidden = ErrorResponse
@@ -143,11 +189,47 @@ type NotFound = ErrorResponse
 // Unauthorized Body of every non-2xx response. Clients branch on `code`, not on the HTTP status: the status says what happened at the protocol level, the code says what happened in the domain.
 type Unauthorized = ErrorResponse
 
+// ValidationError Body of every non-2xx response. Clients branch on `code`, not on the HTTP status: the status says what happened at the protocol level, the code says what happened in the domain.
+type ValidationError = ErrorResponse
+
+// ListEntitiesParams defines parameters for ListEntities.
+type ListEntitiesParams struct {
+	// TypeCode Keep only entities of this kind — host, user, ip, file_hash.
+	TypeCode *string `form:"type_code,omitempty" json:"type_code,omitempty"`
+
+	// Q Substring match on the canonical key and the display name.
+	Q *string `form:"q,omitempty" json:"q,omitempty"`
+
+	// Limit How many items to return. The server may return fewer, never more.
+	Limit *Limit `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// Cursor Opaque keyset cursor taken from `next_cursor` of the previous page. Encodes a position, not a query — do not build one by hand. Omit it to start from the beginning.
+	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
+// UpdateEntityJSONRequestBody defines body for UpdateEntity for application/json ContentType.
+type UpdateEntityJSONRequestBody = EntityPatch
+
+// CreateEntityJSONRequestBody defines body for CreateEntity for application/json ContentType.
+type CreateEntityJSONRequestBody = EntityCreate
+
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
+	// DeleteEntity Delete an entity
+	// (DELETE /entities/{entity_id})
+	DeleteEntity(w http.ResponseWriter, r *http.Request, entityId EntityId)
 	// GetEntityCard Entity card
 	// (GET /entities/{entity_id})
 	GetEntityCard(w http.ResponseWriter, r *http.Request, entityId EntityId)
+	// UpdateEntity Edit an entity
+	// (PATCH /entities/{entity_id})
+	UpdateEntity(w http.ResponseWriter, r *http.Request, entityId EntityId)
+	// ListEntities Entities of the investigation
+	// (GET /investigations/{investigation_id}/entities)
+	ListEntities(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, params ListEntitiesParams)
+	// CreateEntity Add an entity by hand
+	// (POST /investigations/{investigation_id}/entities)
+	CreateEntity(w http.ResponseWriter, r *http.Request, investigationId InvestigationId)
 }
 
 // ServerInterfaceWrapper converts contexts to parameters.
@@ -158,6 +240,32 @@ type ServerInterfaceWrapper struct {
 }
 
 type MiddlewareFunc func(http.Handler) http.Handler
+
+// DeleteEntity operation middleware
+func (siw *ServerInterfaceWrapper) DeleteEntity(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "entity_id" -------------
+	var entityId EntityId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "entity_id", r.PathValue("entity_id"), &entityId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "entity_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteEntity(w, r, entityId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
 
 // GetEntityCard operation middleware
 func (siw *ServerInterfaceWrapper) GetEntityCard(w http.ResponseWriter, r *http.Request) {
@@ -176,6 +284,139 @@ func (siw *ServerInterfaceWrapper) GetEntityCard(w http.ResponseWriter, r *http.
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetEntityCard(w, r, entityId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateEntity operation middleware
+func (siw *ServerInterfaceWrapper) UpdateEntity(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "entity_id" -------------
+	var entityId EntityId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "entity_id", r.PathValue("entity_id"), &entityId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "entity_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateEntity(w, r, entityId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListEntities operation middleware
+func (siw *ServerInterfaceWrapper) ListEntities(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "investigation_id" -------------
+	var investigationId InvestigationId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "investigation_id", r.PathValue("investigation_id"), &investigationId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "investigation_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListEntitiesParams
+
+	// ------------- Optional query parameter "type_code" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "type_code", r.URL.Query(), &params.TypeCode, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "type_code"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "type_code", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "q" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "q", r.URL.Query(), &params.Q, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "q"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "q", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListEntities(w, r, investigationId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateEntity operation middleware
+func (siw *ServerInterfaceWrapper) CreateEntity(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "investigation_id" -------------
+	var investigationId InvestigationId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "investigation_id", r.PathValue("investigation_id"), &investigationId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "investigation_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateEntity(w, r, investigationId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -305,16 +546,96 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 		ErrorHandlerFunc:   options.ErrorHandlerFunc,
 	}
 
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/investigations/{investigation_id}/entities", wrapper.ListEntities)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/investigations/{investigation_id}/entities", wrapper.CreateEntity)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/entities/{entity_id}", wrapper.DeleteEntity)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/entities/{entity_id}", wrapper.GetEntityCard)
+	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/entities/{entity_id}", wrapper.UpdateEntity)
 
 	return m
 }
+
+type ConflictJSONResponse ErrorResponse
 
 type ForbiddenJSONResponse ErrorResponse
 
 type NotFoundJSONResponse ErrorResponse
 
 type UnauthorizedJSONResponse ErrorResponse
+
+type ValidationErrorJSONResponse ErrorResponse
+
+type DeleteEntityRequestObject struct {
+	EntityId EntityId `json:"entity_id"`
+}
+
+type DeleteEntityResponseObject interface {
+	VisitDeleteEntityResponse(w http.ResponseWriter) error
+}
+
+type DeleteEntity204Response struct {
+}
+
+func (response DeleteEntity204Response) VisitDeleteEntityResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteEntity401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response DeleteEntity401JSONResponse) VisitDeleteEntityResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteEntity403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response DeleteEntity403JSONResponse) VisitDeleteEntityResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteEntity404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response DeleteEntity404JSONResponse) VisitDeleteEntityResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteEntity409JSONResponse struct{ ConflictJSONResponse }
+
+func (response DeleteEntity409JSONResponse) VisitDeleteEntityResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
 
 type GetEntityCardRequestObject struct {
 	EntityId EntityId `json:"entity_id"`
@@ -380,11 +701,260 @@ func (response GetEntityCard404JSONResponse) VisitGetEntityCardResponse(w http.R
 	return err
 }
 
+type UpdateEntityRequestObject struct {
+	EntityId EntityId `json:"entity_id"`
+	Body     *UpdateEntityJSONRequestBody
+}
+
+type UpdateEntityResponseObject interface {
+	VisitUpdateEntityResponse(w http.ResponseWriter) error
+}
+
+type UpdateEntity200JSONResponse Entity
+
+func (response UpdateEntity200JSONResponse) VisitUpdateEntityResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateEntity401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response UpdateEntity401JSONResponse) VisitUpdateEntityResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateEntity403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response UpdateEntity403JSONResponse) VisitUpdateEntityResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateEntity404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response UpdateEntity404JSONResponse) VisitUpdateEntityResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateEntity422JSONResponse struct{ ValidationErrorJSONResponse }
+
+func (response UpdateEntity422JSONResponse) VisitUpdateEntityResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListEntitiesRequestObject struct {
+	InvestigationId InvestigationId `json:"investigation_id"`
+	Params          ListEntitiesParams
+}
+
+type ListEntitiesResponseObject interface {
+	VisitListEntitiesResponse(w http.ResponseWriter) error
+}
+
+type ListEntities200JSONResponse EntityPage
+
+func (response ListEntities200JSONResponse) VisitListEntitiesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListEntities401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response ListEntities401JSONResponse) VisitListEntitiesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListEntities403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response ListEntities403JSONResponse) VisitListEntitiesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListEntities404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response ListEntities404JSONResponse) VisitListEntitiesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListEntities422JSONResponse struct{ ValidationErrorJSONResponse }
+
+func (response ListEntities422JSONResponse) VisitListEntitiesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateEntityRequestObject struct {
+	InvestigationId InvestigationId `json:"investigation_id"`
+	Body            *CreateEntityJSONRequestBody
+}
+
+type CreateEntityResponseObject interface {
+	VisitCreateEntityResponse(w http.ResponseWriter) error
+}
+
+type CreateEntity201JSONResponse Entity
+
+func (response CreateEntity201JSONResponse) VisitCreateEntityResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateEntity401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response CreateEntity401JSONResponse) VisitCreateEntityResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateEntity403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response CreateEntity403JSONResponse) VisitCreateEntityResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateEntity404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response CreateEntity404JSONResponse) VisitCreateEntityResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateEntity422JSONResponse struct{ ValidationErrorJSONResponse }
+
+func (response CreateEntity422JSONResponse) VisitCreateEntityResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
+	// DeleteEntity Delete an entity
+	// (DELETE /entities/{entity_id})
+	DeleteEntity(ctx context.Context, request DeleteEntityRequestObject) (DeleteEntityResponseObject, error)
 	// GetEntityCard Entity card
 	// (GET /entities/{entity_id})
 	GetEntityCard(ctx context.Context, request GetEntityCardRequestObject) (GetEntityCardResponseObject, error)
+	// UpdateEntity Edit an entity
+	// (PATCH /entities/{entity_id})
+	UpdateEntity(ctx context.Context, request UpdateEntityRequestObject) (UpdateEntityResponseObject, error)
+	// ListEntities Entities of the investigation
+	// (GET /investigations/{investigation_id}/entities)
+	ListEntities(ctx context.Context, request ListEntitiesRequestObject) (ListEntitiesResponseObject, error)
+	// CreateEntity Add an entity by hand
+	// (POST /investigations/{investigation_id}/entities)
+	CreateEntity(ctx context.Context, request CreateEntityRequestObject) (CreateEntityResponseObject, error)
 }
 
 type StrictHandlerFunc func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error)
@@ -426,6 +996,32 @@ type strictHandler struct {
 	options     StrictHTTPServerOptions
 }
 
+// DeleteEntity operation middleware
+func (sh *strictHandler) DeleteEntity(w http.ResponseWriter, r *http.Request, entityId EntityId) {
+	var request DeleteEntityRequestObject
+
+	request.EntityId = entityId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteEntity(ctx, request.(DeleteEntityRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteEntity")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteEntityResponseObject); ok {
+		if err := validResponse.VisitDeleteEntityResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // GetEntityCard operation middleware
 func (sh *strictHandler) GetEntityCard(w http.ResponseWriter, r *http.Request, entityId EntityId) {
 	var request GetEntityCardRequestObject
@@ -445,6 +1041,99 @@ func (sh *strictHandler) GetEntityCard(w http.ResponseWriter, r *http.Request, e
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetEntityCardResponseObject); ok {
 		if err := validResponse.VisitGetEntityCardResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpdateEntity operation middleware
+func (sh *strictHandler) UpdateEntity(w http.ResponseWriter, r *http.Request, entityId EntityId) {
+	var request UpdateEntityRequestObject
+
+	request.EntityId = entityId
+
+	var body UpdateEntityJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdateEntity(ctx, request.(UpdateEntityRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdateEntity")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UpdateEntityResponseObject); ok {
+		if err := validResponse.VisitUpdateEntityResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListEntities operation middleware
+func (sh *strictHandler) ListEntities(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, params ListEntitiesParams) {
+	var request ListEntitiesRequestObject
+
+	request.InvestigationId = investigationId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListEntities(ctx, request.(ListEntitiesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListEntities")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListEntitiesResponseObject); ok {
+		if err := validResponse.VisitListEntitiesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateEntity operation middleware
+func (sh *strictHandler) CreateEntity(w http.ResponseWriter, r *http.Request, investigationId InvestigationId) {
+	var request CreateEntityRequestObject
+
+	request.InvestigationId = investigationId
+
+	var body CreateEntityJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateEntity(ctx, request.(CreateEntityRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateEntity")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateEntityResponseObject); ok {
+		if err := validResponse.VisitCreateEntityResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

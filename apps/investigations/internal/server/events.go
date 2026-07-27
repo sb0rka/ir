@@ -30,3 +30,9 @@ func (s *Server) AttachEvents(
 ) (events.AttachEventsResponseObject, error) {
 	return nil, httperr.ErrNotImplemented
 }
+
+// DeleteEvent Drop an event from the investigation
+// (DELETE /events/{event_id})
+func (s *Server) DeleteEvent(ctx context.Context, request events.DeleteEventRequestObject) (events.DeleteEventResponseObject, error) {
+	return nil, httperr.ErrNotImplemented
+}

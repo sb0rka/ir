@@ -45,7 +45,11 @@ export interface paths {
         get: operations["getInvestigation"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Delete an investigation
+         * @description Removes the investigation and everything it owns — its events, entities, graph and edges — along with the whole subtree beneath it. Irreversible, and meant for cases opened by mistake; a case that was actually worked on should be closed with a verdict instead, so the reasoning survives.
+         */
+        delete: operations["deleteInvestigation"];
         options?: never;
         head?: never;
         /**
@@ -89,7 +93,7 @@ export interface components {
              * @description Identifier of the investigation.
              */
             id: string;
-            /** @description Sb0rka project that owns the case — the tenant. Resolved from the caller's token and never accepted from a request body, so no client can write into a tenant it does not belong to. Every child inherits it unchanged. */
+            /** @description Project that owns the case — the tenant. Every child inherits it unchanged, so a whole tree belongs to one tenant. */
             project_id: string;
             /**
              * Format: uuid
@@ -154,6 +158,11 @@ export interface components {
              * @description The investigation this one refines. Omit it to open a root case.
              */
             parent_id?: string;
+            /**
+             * @description Project that owns the case — the tenant. Required for a root, ignored for a child, which inherits its parent's.
+             *     Temporary: the tenant belongs in the token, not in a request body. It is accepted for now so the frontend can work before auth is wired up, and goes away once it is.
+             */
+            project_id?: string;
             /** @description Initial assessment. Can be revised later. */
             severity?: components["schemas"]["Severity"];
         };
@@ -386,6 +395,30 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["Investigation"];
                 };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteInvestigation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
+                investigation_id: components["parameters"]["InvestigationId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];

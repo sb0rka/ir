@@ -37,7 +37,11 @@ export interface paths {
             };
             cookie?: never;
         };
-        get?: never;
+        /**
+         * Nodes of the investigation
+         * @description The nodes alone, paginated — for lists and pickers, where the full graph payload with all its edges would be wasteful.
+         */
+        get: operations["listNodes"];
         put?: never;
         /**
          * Put a node on the graph
@@ -46,6 +50,33 @@ export interface paths {
          */
         post: operations["createNode"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/nodes/{node_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identifier of a graph node. Edges reference this, not the entity or event behind it. */
+                node_id: components["parameters"]["NodeId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * One node
+         * @description The node on its own, for a detail panel or a hover card.
+         */
+        get: operations["getNode"];
+        put?: never;
+        post?: never;
+        /**
+         * Take a node off the graph
+         * @description Removes the node and every edge touching it. The entity or event behind it stays — this only says "not worth showing on the graph", which is how a mistakenly promoted event gets undone.
+         */
+        delete: operations["deleteNode"];
         options?: never;
         head?: never;
         patch?: never;
@@ -61,7 +92,11 @@ export interface paths {
             };
             cookie?: never;
         };
-        get?: never;
+        /**
+         * Edges of the investigation
+         * @description The edges alone, paginated. This is what backs the review queue — filter to proposed, sort through them, then confirm or reject in bulk.
+         */
+        get: operations["listEdges"];
         put?: never;
         /**
          * Draw an edge by hand
@@ -69,6 +104,90 @@ export interface paths {
          */
         post: operations["createEdge"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/edges/{edge_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identifier of an edge — one claim that two nodes are related. */
+                edge_id: components["parameters"]["EdgeId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * One edge
+         * @description The edge with its evidence ids, for a detail panel.
+         */
+        get: operations["getEdge"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete an edge
+         * @description For an edge drawn by mistake. A claim that was considered and found wrong should be rejected with a reason instead — that survives into the report as "checked and excluded", while deleting leaves no trace that anyone looked.
+         */
+        delete: operations["deleteEdge"];
+        options?: never;
+        head?: never;
+        /**
+         * Edit one edge
+         * @description Reviewing a single edge, plus corrections to what it claims. Rejecting requires a reason. The endpoints and the relation are fixed — an edge between different nodes is a different claim, so delete this one and draw the right one.
+         *     Use the batch review endpoint when handling a queue; this is for the one edge open in front of you.
+         */
+        patch: operations["updateEdge"];
+        trace?: never;
+    };
+    "/edges/{edge_id}/evidence": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identifier of an edge — one claim that two nodes are related. */
+                edge_id: components["parameters"]["EdgeId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * What the edge rests on
+         * @description The cited events in full. This is the provenance chain the product is built to defend: from a claim on the graph to the events behind it, and from each event to the record in the source tool.
+         */
+        get: operations["listEdgeEvidence"];
+        put?: never;
+        /**
+         * Cite more events
+         * @description Adds grounds to an edge that already exists — the case for a claim usually accumulates rather than arriving complete. Events must belong to the same investigation; citing another case's evidence is refused by the database, not merely by the service. Already-cited events are ignored rather than duplicated.
+         */
+        post: operations["addEdgeEvidence"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/edges/{edge_id}/evidence/{event_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identifier of an edge — one claim that two nodes are related. */
+                edge_id: components["parameters"]["EdgeId"];
+                /** @description Identifier of an event already pulled into an investigation. */
+                event_id: components["parameters"]["EventId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Stop citing an event
+         * @description Removes one ground from an edge. Refused if it is the last one on a confirmed edge: an established claim resting on nothing is exactly what the product exists to prevent. Reject the edge instead.
+         */
+        delete: operations["deleteEdgeEvidence"];
         options?: never;
         head?: never;
         patch?: never;
@@ -246,6 +365,73 @@ export interface components {
             /** @description Events backing the claim. Each must belong to this investigation — citing another case's event is refused. */
             evidence_event_ids?: string[];
         };
+        /** @description Fields to change on one edge. Anything omitted stays as it is; `version` is always required so two reviewers cannot overwrite each other. */
+        EdgePatch: {
+            /** @description Version the client last read. A mismatch is a 409. */
+            version: number;
+            /** @description Accept or rule out the claim. Rejecting requires a reason alongside. */
+            status?: components["schemas"]["EdgeStatus"];
+            /** @description Why it does not hold. Required when rejecting. */
+            reject_reason?: string;
+            /** @description Revised degree of certainty. */
+            confidence?: number;
+            /** @description Revised justification. */
+            why?: string;
+            /** @description Replaces the stored extras wholesale, not merged into them. */
+            metadata?: {
+                [key: string]: unknown;
+            };
+        };
+        /** @description One page of nodes. */
+        NodePage: {
+            /** @description The nodes on this page. */
+            items: components["schemas"]["GraphNode"][];
+            /** @description Pass as `cursor` to get the next page. Absent on the last page. */
+            next_cursor?: string | null;
+        };
+        /** @description One page of edges. */
+        EdgePage: {
+            /** @description The edges on this page. */
+            items: components["schemas"]["Edge"][];
+            /** @description Pass as `cursor` to get the next page. Absent on the last page. */
+            next_cursor?: string | null;
+        };
+        /** @description The events an edge cites, in full rather than as bare ids. */
+        EdgeEvidence: {
+            /**
+             * Format: uuid
+             * @description The edge these events support.
+             */
+            edge_id: string;
+            /** @description The cited events, oldest first. Each carries the link back to its source console. */
+            items: components["schemas"]["EvidenceEvent"][];
+        };
+        /** @description A cited event, trimmed to what a provenance panel shows. The full record is one request away. */
+        EvidenceEvent: {
+            /**
+             * Format: uuid
+             * @description The event.
+             */
+            event_id: string;
+            /** @description Which tool it came from. */
+            source_code: string;
+            /** @description Its identifier in that tool. */
+            source_event_id: string;
+            /** @description Link that opens the record in the source console. */
+            source_ref?: string | null;
+            /** @description What happened, in the product's vocabulary. */
+            event_type: string;
+            /**
+             * Format: date-time
+             * @description When it happened, per the source.
+             */
+            occurred_at: string;
+        };
+        /** @description Events to cite in support of an existing edge. */
+        EdgeEvidenceAdd: {
+            /** @description Events to add. All must belong to the same investigation as the edge. Ones already cited are ignored. */
+            event_ids: string[];
+        };
         /** @description Edges to accept and edges to rule out, applied as one transaction. At least one of the two lists must be non-empty. */
         ReviewRequest: {
             /** @description Edges the analyst accepts as established. */
@@ -361,6 +547,16 @@ export interface components {
     parameters: {
         /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
         InvestigationId: string;
+        /** @description How many items to return. The server may return fewer, never more. */
+        Limit: number;
+        /** @description Opaque keyset cursor taken from `next_cursor` of the previous page. Encodes a position, not a query — do not build one by hand. Omit it to start from the beginning. */
+        Cursor: string;
+        /** @description Identifier of a graph node. Edges reference this, not the entity or event behind it. */
+        NodeId: string;
+        /** @description Identifier of an edge — one claim that two nodes are related. */
+        EdgeId: string;
+        /** @description Identifier of an event already pulled into an investigation. */
+        EventId: string;
     };
     requestBodies: never;
     headers: never;
@@ -402,6 +598,42 @@ export interface operations {
             422: components["responses"]["ValidationError"];
         };
     };
+    listNodes: {
+        parameters: {
+            query?: {
+                /** @description Keep only entity nodes or only event nodes. */
+                node_type?: components["schemas"]["NodeType"];
+                /** @description Substring match on the node label. */
+                q?: string;
+                /** @description How many items to return. The server may return fewer, never more. */
+                limit?: components["parameters"]["Limit"];
+                /** @description Opaque keyset cursor taken from `next_cursor` of the previous page. Encodes a position, not a query — do not build one by hand. Omit it to start from the beginning. */
+                cursor?: components["parameters"]["Cursor"];
+            };
+            header?: never;
+            path: {
+                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
+                investigation_id: components["parameters"]["InvestigationId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description One page of nodes */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NodePage"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["ValidationError"];
+        };
+    };
     createNode: {
         parameters: {
             query?: never;
@@ -425,6 +657,98 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["GraphNode"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["ValidationError"];
+        };
+    };
+    getNode: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identifier of a graph node. Edges reference this, not the entity or event behind it. */
+                node_id: components["parameters"]["NodeId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The node */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GraphNode"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteNode: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identifier of a graph node. Edges reference this, not the entity or event behind it. */
+                node_id: components["parameters"]["NodeId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Removed */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listEdges: {
+        parameters: {
+            query?: {
+                /** @description Which edge states to include. Defaults to proposed and confirmed. */
+                statuses?: components["schemas"]["EdgeStatus"][];
+                /** @description Keep only edges from one producer. Filtering to agent is how a reviewer looks at just the machine's suggestions. */
+                origin?: components["schemas"]["Origin"];
+                /** @description Keep only edges asserting this relation. */
+                relation_code?: string;
+                /** @description Keep only edges touching this node, in either direction. */
+                node_id?: string;
+                /** @description Drop edges the producer was less sure about than this. */
+                min_confidence?: number;
+                /** @description How many items to return. The server may return fewer, never more. */
+                limit?: components["parameters"]["Limit"];
+                /** @description Opaque keyset cursor taken from `next_cursor` of the previous page. Encodes a position, not a query — do not build one by hand. Omit it to start from the beginning. */
+                cursor?: components["parameters"]["Cursor"];
+            };
+            header?: never;
+            path: {
+                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
+                investigation_id: components["parameters"]["InvestigationId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description One page of edges */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EdgePage"];
                 };
             };
             401: components["responses"]["Unauthorized"];
@@ -462,6 +786,172 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationError"];
+        };
+    };
+    getEdge: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identifier of an edge — one claim that two nodes are related. */
+                edge_id: components["parameters"]["EdgeId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The edge */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Edge"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteEdge: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identifier of an edge — one claim that two nodes are related. */
+                edge_id: components["parameters"]["EdgeId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateEdge: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identifier of an edge — one claim that two nodes are related. */
+                edge_id: components["parameters"]["EdgeId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EdgePatch"];
+            };
+        };
+        responses: {
+            /** @description The updated edge */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Edge"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationError"];
+        };
+    };
+    listEdgeEvidence: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identifier of an edge — one claim that two nodes are related. */
+                edge_id: components["parameters"]["EdgeId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The cited events */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EdgeEvidence"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    addEdgeEvidence: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identifier of an edge — one claim that two nodes are related. */
+                edge_id: components["parameters"]["EdgeId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EdgeEvidenceAdd"];
+            };
+        };
+        responses: {
+            /** @description The evidence after the addition */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EdgeEvidence"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["ValidationError"];
+        };
+    };
+    deleteEdgeEvidence: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identifier of an edge — one claim that two nodes are related. */
+                edge_id: components["parameters"]["EdgeId"];
+                /** @description Identifier of an event already pulled into an investigation. */
+                event_id: components["parameters"]["EventId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Removed */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
             422: components["responses"]["ValidationError"];
         };
     };

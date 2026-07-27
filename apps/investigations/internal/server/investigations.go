@@ -46,3 +46,9 @@ func (s *Server) GetInvestigationTree(
 ) (investigations.GetInvestigationTreeResponseObject, error) {
 	return nil, httperr.ErrNotImplemented
 }
+
+// DeleteInvestigation Delete an investigation
+// (DELETE /investigations/{investigation_id})
+func (s *Server) DeleteInvestigation(ctx context.Context, request investigations.DeleteInvestigationRequestObject) (investigations.DeleteInvestigationResponseObject, error) {
+	return nil, httperr.ErrNotImplemented
+}

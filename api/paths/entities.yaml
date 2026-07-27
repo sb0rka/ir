@@ -8,9 +8,110 @@ security:
   - bearerAuth: []
 
 paths:
+  /investigations/{investigation_id}/entities:
+    parameters:
+      - { $ref: '../shared/parameters.yaml#/components/parameters/InvestigationId' }
+    get:
+      tags: [entities]
+      summary: Entities of the investigation
+      description: >-
+        Everything the case has extracted so far, newest first. Backs the
+        entity panel next to the graph and the picker used when drawing an edge
+        by hand.
+      operationId: listEntities
+      parameters:
+        - name: type_code
+          in: query
+          description: Keep only entities of this kind — host, user, ip, file_hash.
+          schema: { type: string }
+        - name: q
+          in: query
+          description: Substring match on the canonical key and the display name.
+          schema: { type: string }
+        - { $ref: '../shared/parameters.yaml#/components/parameters/Limit' }
+        - { $ref: '../shared/parameters.yaml#/components/parameters/Cursor' }
+      responses:
+        '200':
+          description: One page of entities
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EntityPage' }
+        '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
+        '422': { $ref: '../shared/responses.yaml#/components/responses/ValidationError' }
+    post:
+      tags: [entities]
+      summary: Add an entity by hand
+      description: >-
+        Entities normally arrive with events, but an analyst often starts from
+        an indicator someone handed them — a hash from a bulletin, an address
+        from a colleague — before any event mentions it. This creates that
+        entity so it can be placed on the graph and reasoned about immediately.
+
+        Idempotent on type and key: adding one that already exists returns the
+        existing entity rather than a duplicate, so the same indicator entered
+        twice stays one node.
+      operationId: createEntity
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EntityCreate' }
+      responses:
+        '201':
+          description: The entity, whether it was just created or already there
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Entity' }
+        '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
+        '422': { $ref: '../shared/responses.yaml#/components/responses/ValidationError' }
+
   /entities/{entity_id}:
     parameters:
       - { $ref: '../shared/parameters.yaml#/components/parameters/EntityId' }
+    patch:
+      tags: [entities]
+      summary: Edit an entity
+      description: >-
+        Changes only what a human can meaningfully improve — the label shown on
+        the graph and the extra attributes. The type and the canonical key are
+        fixed: they are the entity's identity, and rewriting them would silently
+        turn one thing into another under every edge already attached to it.
+      operationId: updateEntity
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EntityPatch' }
+      responses:
+        '200':
+          description: The updated entity
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Entity' }
+        '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
+        '422': { $ref: '../shared/responses.yaml#/components/responses/ValidationError' }
+    delete:
+      tags: [entities]
+      summary: Delete an entity
+      description: >-
+        Removes the entity together with its graph node and the edges attached
+        to it. Refused while any event still mentions it — an entity extracted
+        from evidence is a consequence of that evidence, so drop the event
+        instead.
+      operationId: deleteEntity
+      responses:
+        '204':
+          description: Deleted
+        '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
+        '409': { $ref: '../shared/responses.yaml#/components/responses/Conflict' }
     get:
       tags: [entities]
       summary: Entity card
@@ -82,6 +183,58 @@ components:
           description: >-
             Latest event that mentions it. Together with first_seen this bounds
             the window the entity was active in.
+
+    EntityCreate:
+      type: object
+      description: An entity entered by hand, before any event mentions it.
+      required: [type_code, canonical_key]
+      properties:
+        type_code:
+          type: string
+          description: >-
+            Kind of thing, from the entity-type dictionary. Rejected if unknown,
+            so a typo cannot invent a type.
+        canonical_key:
+          type: string
+          description: >-
+            Normalised identity — fqdn for a host, SID for an account, sha256
+            for a file. Together with the type this is what makes two records
+            the same thing, so it is worth normalising before sending.
+        display_name:
+          type: string
+          description: Label for the UI. Falls back to the canonical key when absent.
+        metadata:
+          type: object
+          description: Anything else worth carrying — where the indicator came from, notes.
+          additionalProperties: true
+
+    EntityPatch:
+      type: object
+      description: >-
+        Fields to change. Anything omitted stays as it is. Identity — the type
+        and the canonical key — is not editable.
+      properties:
+        display_name:
+          type: string
+          description: New label for the UI.
+        metadata:
+          type: object
+          description: Replaces the stored attributes wholesale, not merged into them.
+          additionalProperties: true
+
+    EntityPage:
+      type: object
+      description: One page of entities.
+      required: [items]
+      properties:
+        items:
+          type: array
+          description: The entities on this page.
+          items: { $ref: '#/components/schemas/Entity' }
+        next_cursor:
+          type: string
+          nullable: true
+          description: Pass as `cursor` to get the next page. Absent on the last page.
 
     EntityCard:
       type: object

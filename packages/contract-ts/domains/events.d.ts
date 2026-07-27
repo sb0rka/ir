@@ -48,7 +48,12 @@ export interface paths {
         get: operations["getEvent"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Drop an event from the investigation
+         * @description Undoes a pull that brought in the wrong thing. The event leaves the timeline, its graph node goes with it, and so do the edges that hung off that node — which is why an event cited as evidence by a confirmed edge cannot be dropped: removing it would leave an established claim resting on nothing.
+         *     Only the copy inside this investigation is affected. The record in the source tool is untouched, and re-pulling it brings it back.
+         */
+        delete: operations["deleteEvent"];
         options?: never;
         head?: never;
         patch?: never;
@@ -397,6 +402,31 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    deleteEvent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identifier of an event already pulled into an investigation. */
+                event_id: components["parameters"]["EventId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Dropped */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
         };
     };
 }

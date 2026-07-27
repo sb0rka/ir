@@ -189,6 +189,51 @@ type EdgeCreate struct {
 	Why *string `json:"why,omitempty"`
 }
 
+// EdgeEvidence The events an edge cites, in full rather than as bare ids.
+type EdgeEvidence struct {
+	// EdgeId The edge these events support.
+	EdgeId openapi_types.UUID `json:"edge_id"`
+
+	// Items The cited events, oldest first. Each carries the link back to its source console.
+	Items []EvidenceEvent `json:"items"`
+}
+
+// EdgeEvidenceAdd Events to cite in support of an existing edge.
+type EdgeEvidenceAdd struct {
+	// EventIds Events to add. All must belong to the same investigation as the edge. Ones already cited are ignored.
+	EventIds []openapi_types.UUID `json:"event_ids"`
+}
+
+// EdgePage One page of edges.
+type EdgePage struct {
+	// Items The edges on this page.
+	Items []Edge `json:"items"`
+
+	// NextCursor Pass as `cursor` to get the next page. Absent on the last page.
+	NextCursor *string `json:"next_cursor,omitempty"`
+}
+
+// EdgePatch Fields to change on one edge. Anything omitted stays as it is; `version` is always required so two reviewers cannot overwrite each other.
+type EdgePatch struct {
+	// Confidence Revised degree of certainty.
+	Confidence *float32 `json:"confidence,omitempty"`
+
+	// Metadata Replaces the stored extras wholesale, not merged into them.
+	Metadata *map[string]interface{} `json:"metadata,omitempty"`
+
+	// RejectReason Why it does not hold. Required when rejecting.
+	RejectReason *string `json:"reject_reason,omitempty"`
+
+	// Status Accept or rule out the claim. Rejecting requires a reason alongside.
+	Status *EdgeStatus `json:"status,omitempty"`
+
+	// Version Version the client last read. A mismatch is a 409.
+	Version int `json:"version"`
+
+	// Why Revised justification.
+	Why *string `json:"why,omitempty"`
+}
+
 // EdgeStatus Where an edge stands in review. Proposed until a human accepts it. Rejected edges are kept rather than deleted, so that "checked and excluded" survives into the report.
 type EdgeStatus string
 
@@ -209,6 +254,27 @@ type ErrorResponse struct {
 
 // ErrorResponseErrorCode Machine-readable reason, stable across releases. `validation` covers both a malformed body (400) and a well-formed but invalid one (422). `not_implemented` means the operation exists in the contract but has no implementation yet — a client can hide the control instead of showing an error.
 type ErrorResponseErrorCode string
+
+// EvidenceEvent A cited event, trimmed to what a provenance panel shows. The full record is one request away.
+type EvidenceEvent struct {
+	// EventId The event.
+	EventId openapi_types.UUID `json:"event_id"`
+
+	// EventType What happened, in the product's vocabulary.
+	EventType string `json:"event_type"`
+
+	// OccurredAt When it happened, per the source.
+	OccurredAt time.Time `json:"occurred_at"`
+
+	// SourceCode Which tool it came from.
+	SourceCode string `json:"source_code"`
+
+	// SourceEventId Its identifier in that tool.
+	SourceEventId string `json:"source_event_id"`
+
+	// SourceRef Link that opens the record in the source console.
+	SourceRef *string `json:"source_ref,omitempty"`
+}
 
 // Graph Nodes and edges as one payload, ready to render.
 type Graph struct {
@@ -270,6 +336,15 @@ type NodeCreate struct {
 	NodeType NodeType `json:"node_type"`
 }
 
+// NodePage One page of nodes.
+type NodePage struct {
+	// Items The nodes on this page.
+	Items []GraphNode `json:"items"`
+
+	// NextCursor Pass as `cursor` to get the next page. Absent on the last page.
+	NextCursor *string `json:"next_cursor,omitempty"`
+}
+
 // NodeType What a graph node stands for. An entity node is a host, account, process, address or hash; an event node is a source record promoted onto the graph.
 type NodeType string
 
@@ -309,8 +384,23 @@ type ReviewResult struct {
 	Rejected []openapi_types.UUID `json:"rejected"`
 }
 
+// Cursor defines model for Cursor.
+type Cursor = string
+
+// EdgeId defines model for EdgeId.
+type EdgeId = openapi_types.UUID
+
+// EventId defines model for EventId.
+type EventId = openapi_types.UUID
+
 // InvestigationId defines model for InvestigationId.
 type InvestigationId = openapi_types.UUID
+
+// Limit defines model for Limit.
+type Limit = int
+
+// NodeId defines model for NodeId.
+type NodeId = openapi_types.UUID
 
 // Conflict Body of every non-2xx response. Clients branch on `code`, not on the HTTP status: the status says what happened at the protocol level, the code says what happened in the domain.
 type Conflict = ErrorResponse
@@ -327,6 +417,30 @@ type Unauthorized = ErrorResponse
 // ValidationError Body of every non-2xx response. Clients branch on `code`, not on the HTTP status: the status says what happened at the protocol level, the code says what happened in the domain.
 type ValidationError = ErrorResponse
 
+// ListEdgesParams defines parameters for ListEdges.
+type ListEdgesParams struct {
+	// Statuses Which edge states to include. Defaults to proposed and confirmed.
+	Statuses *[]EdgeStatus `form:"statuses,omitempty" json:"statuses,omitempty"`
+
+	// Origin Keep only edges from one producer. Filtering to agent is how a reviewer looks at just the machine's suggestions.
+	Origin *Origin `form:"origin,omitempty" json:"origin,omitempty"`
+
+	// RelationCode Keep only edges asserting this relation.
+	RelationCode *string `form:"relation_code,omitempty" json:"relation_code,omitempty"`
+
+	// NodeId Keep only edges touching this node, in either direction.
+	NodeId *openapi_types.UUID `form:"node_id,omitempty" json:"node_id,omitempty"`
+
+	// MinConfidence Drop edges the producer was less sure about than this.
+	MinConfidence *float32 `form:"min_confidence,omitempty" json:"min_confidence,omitempty"`
+
+	// Limit How many items to return. The server may return fewer, never more.
+	Limit *Limit `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// Cursor Opaque keyset cursor taken from `next_cursor` of the previous page. Encodes a position, not a query — do not build one by hand. Omit it to start from the beginning.
+	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
 // GetGraphParams defines parameters for GetGraph.
 type GetGraphParams struct {
 	// IncludeSubtree Also return the graphs of child investigations. Nodes stay per-case, so the same host appears once per investigation — group them client-side by type_code and canonical_key.
@@ -339,6 +453,27 @@ type GetGraphParams struct {
 	Statuses *[]EdgeStatus `form:"statuses,omitempty" json:"statuses,omitempty"`
 }
 
+// ListNodesParams defines parameters for ListNodes.
+type ListNodesParams struct {
+	// NodeType Keep only entity nodes or only event nodes.
+	NodeType *NodeType `form:"node_type,omitempty" json:"node_type,omitempty"`
+
+	// Q Substring match on the node label.
+	Q *string `form:"q,omitempty" json:"q,omitempty"`
+
+	// Limit How many items to return. The server may return fewer, never more.
+	Limit *Limit `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// Cursor Opaque keyset cursor taken from `next_cursor` of the previous page. Encodes a position, not a query — do not build one by hand. Omit it to start from the beginning.
+	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
+// UpdateEdgeJSONRequestBody defines body for UpdateEdge for application/json ContentType.
+type UpdateEdgeJSONRequestBody = EdgePatch
+
+// AddEdgeEvidenceJSONRequestBody defines body for AddEdgeEvidence for application/json ContentType.
+type AddEdgeEvidenceJSONRequestBody = EdgeEvidenceAdd
+
 // CreateEdgeJSONRequestBody defines body for CreateEdge for application/json ContentType.
 type CreateEdgeJSONRequestBody = EdgeCreate
 
@@ -350,18 +485,48 @@ type ReviewEdgesJSONRequestBody = ReviewRequest
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
+	// DeleteEdge Delete an edge
+	// (DELETE /edges/{edge_id})
+	DeleteEdge(w http.ResponseWriter, r *http.Request, edgeId EdgeId)
+	// GetEdge One edge
+	// (GET /edges/{edge_id})
+	GetEdge(w http.ResponseWriter, r *http.Request, edgeId EdgeId)
+	// UpdateEdge Edit one edge
+	// (PATCH /edges/{edge_id})
+	UpdateEdge(w http.ResponseWriter, r *http.Request, edgeId EdgeId)
+	// ListEdgeEvidence What the edge rests on
+	// (GET /edges/{edge_id}/evidence)
+	ListEdgeEvidence(w http.ResponseWriter, r *http.Request, edgeId EdgeId)
+	// AddEdgeEvidence Cite more events
+	// (POST /edges/{edge_id}/evidence)
+	AddEdgeEvidence(w http.ResponseWriter, r *http.Request, edgeId EdgeId)
+	// DeleteEdgeEvidence Stop citing an event
+	// (DELETE /edges/{edge_id}/evidence/{event_id})
+	DeleteEdgeEvidence(w http.ResponseWriter, r *http.Request, edgeId EdgeId, eventId EventId)
+	// ListEdges Edges of the investigation
+	// (GET /investigations/{investigation_id}/edges)
+	ListEdges(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, params ListEdgesParams)
 	// CreateEdge Draw an edge by hand
 	// (POST /investigations/{investigation_id}/edges)
 	CreateEdge(w http.ResponseWriter, r *http.Request, investigationId InvestigationId)
 	// GetGraph Graph of the investigation
 	// (GET /investigations/{investigation_id}/graph)
 	GetGraph(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, params GetGraphParams)
+	// ListNodes Nodes of the investigation
+	// (GET /investigations/{investigation_id}/nodes)
+	ListNodes(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, params ListNodesParams)
 	// CreateNode Put a node on the graph
 	// (POST /investigations/{investigation_id}/nodes)
 	CreateNode(w http.ResponseWriter, r *http.Request, investigationId InvestigationId)
 	// ReviewEdges Review proposed edges in bulk
 	// (POST /investigations/{investigation_id}/review)
 	ReviewEdges(w http.ResponseWriter, r *http.Request, investigationId InvestigationId)
+	// DeleteNode Take a node off the graph
+	// (DELETE /nodes/{node_id})
+	DeleteNode(w http.ResponseWriter, r *http.Request, nodeId NodeId)
+	// GetNode One node
+	// (GET /nodes/{node_id})
+	GetNode(w http.ResponseWriter, r *http.Request, nodeId NodeId)
 }
 
 // ServerInterfaceWrapper converts contexts to parameters.
@@ -372,6 +537,291 @@ type ServerInterfaceWrapper struct {
 }
 
 type MiddlewareFunc func(http.Handler) http.Handler
+
+// DeleteEdge operation middleware
+func (siw *ServerInterfaceWrapper) DeleteEdge(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "edge_id" -------------
+	var edgeId EdgeId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "edge_id", r.PathValue("edge_id"), &edgeId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "edge_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteEdge(w, r, edgeId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetEdge operation middleware
+func (siw *ServerInterfaceWrapper) GetEdge(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "edge_id" -------------
+	var edgeId EdgeId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "edge_id", r.PathValue("edge_id"), &edgeId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "edge_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetEdge(w, r, edgeId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateEdge operation middleware
+func (siw *ServerInterfaceWrapper) UpdateEdge(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "edge_id" -------------
+	var edgeId EdgeId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "edge_id", r.PathValue("edge_id"), &edgeId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "edge_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateEdge(w, r, edgeId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListEdgeEvidence operation middleware
+func (siw *ServerInterfaceWrapper) ListEdgeEvidence(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "edge_id" -------------
+	var edgeId EdgeId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "edge_id", r.PathValue("edge_id"), &edgeId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "edge_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListEdgeEvidence(w, r, edgeId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// AddEdgeEvidence operation middleware
+func (siw *ServerInterfaceWrapper) AddEdgeEvidence(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "edge_id" -------------
+	var edgeId EdgeId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "edge_id", r.PathValue("edge_id"), &edgeId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "edge_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.AddEdgeEvidence(w, r, edgeId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteEdgeEvidence operation middleware
+func (siw *ServerInterfaceWrapper) DeleteEdgeEvidence(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "edge_id" -------------
+	var edgeId EdgeId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "edge_id", r.PathValue("edge_id"), &edgeId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "edge_id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "event_id" -------------
+	var eventId EventId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "event_id", r.PathValue("event_id"), &eventId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "event_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteEdgeEvidence(w, r, edgeId, eventId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListEdges operation middleware
+func (siw *ServerInterfaceWrapper) ListEdges(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "investigation_id" -------------
+	var investigationId InvestigationId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "investigation_id", r.PathValue("investigation_id"), &investigationId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "investigation_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListEdgesParams
+
+	// ------------- Optional query parameter "statuses" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", false, false, "statuses", r.URL.Query(), &params.Statuses, runtime.BindQueryParameterOptions{Type: "array", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "statuses"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "statuses", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "origin" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "origin", r.URL.Query(), &params.Origin, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "origin"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "origin", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "relation_code" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "relation_code", r.URL.Query(), &params.RelationCode, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "relation_code"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "relation_code", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "node_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "node_id", r.URL.Query(), &params.NodeId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "node_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "node_id", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "min_confidence" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "min_confidence", r.URL.Query(), &params.MinConfidence, runtime.BindQueryParameterOptions{Type: "number", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "min_confidence"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "min_confidence", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListEdges(w, r, investigationId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
 
 // CreateEdge operation middleware
 func (siw *ServerInterfaceWrapper) CreateEdge(w http.ResponseWriter, r *http.Request) {
@@ -467,6 +917,87 @@ func (siw *ServerInterfaceWrapper) GetGraph(w http.ResponseWriter, r *http.Reque
 	handler.ServeHTTP(w, r)
 }
 
+// ListNodes operation middleware
+func (siw *ServerInterfaceWrapper) ListNodes(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "investigation_id" -------------
+	var investigationId InvestigationId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "investigation_id", r.PathValue("investigation_id"), &investigationId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "investigation_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListNodesParams
+
+	// ------------- Optional query parameter "node_type" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "node_type", r.URL.Query(), &params.NodeType, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "node_type"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "node_type", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "q" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "q", r.URL.Query(), &params.Q, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "q"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "q", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListNodes(w, r, investigationId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // CreateNode operation middleware
 func (siw *ServerInterfaceWrapper) CreateNode(w http.ResponseWriter, r *http.Request) {
 
@@ -510,6 +1041,58 @@ func (siw *ServerInterfaceWrapper) ReviewEdges(w http.ResponseWriter, r *http.Re
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ReviewEdges(w, r, investigationId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteNode operation middleware
+func (siw *ServerInterfaceWrapper) DeleteNode(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "node_id" -------------
+	var nodeId NodeId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "node_id", r.PathValue("node_id"), &nodeId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "node_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteNode(w, r, nodeId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetNode operation middleware
+func (siw *ServerInterfaceWrapper) GetNode(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "node_id" -------------
+	var nodeId NodeId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "node_id", r.PathValue("node_id"), &nodeId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "node_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetNode(w, r, nodeId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -640,8 +1223,18 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	}
 
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/investigations/{investigation_id}/graph", wrapper.GetGraph)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/investigations/{investigation_id}/nodes", wrapper.ListNodes)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/investigations/{investigation_id}/nodes", wrapper.CreateNode)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/nodes/{node_id}", wrapper.DeleteNode)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/nodes/{node_id}", wrapper.GetNode)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/investigations/{investigation_id}/edges", wrapper.ListEdges)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/investigations/{investigation_id}/edges", wrapper.CreateEdge)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/edges/{edge_id}", wrapper.DeleteEdge)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/edges/{edge_id}", wrapper.GetEdge)
+	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/edges/{edge_id}", wrapper.UpdateEdge)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/edges/{edge_id}/evidence", wrapper.ListEdgeEvidence)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/edges/{edge_id}/evidence", wrapper.AddEdgeEvidence)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/edges/{edge_id}/evidence/{event_id}", wrapper.DeleteEdgeEvidence)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/investigations/{investigation_id}/review", wrapper.ReviewEdges)
 
 	return m
@@ -656,6 +1249,516 @@ type NotFoundJSONResponse ErrorResponse
 type UnauthorizedJSONResponse ErrorResponse
 
 type ValidationErrorJSONResponse ErrorResponse
+
+type DeleteEdgeRequestObject struct {
+	EdgeId EdgeId `json:"edge_id"`
+}
+
+type DeleteEdgeResponseObject interface {
+	VisitDeleteEdgeResponse(w http.ResponseWriter) error
+}
+
+type DeleteEdge204Response struct {
+}
+
+func (response DeleteEdge204Response) VisitDeleteEdgeResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteEdge401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response DeleteEdge401JSONResponse) VisitDeleteEdgeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteEdge403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response DeleteEdge403JSONResponse) VisitDeleteEdgeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteEdge404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response DeleteEdge404JSONResponse) VisitDeleteEdgeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetEdgeRequestObject struct {
+	EdgeId EdgeId `json:"edge_id"`
+}
+
+type GetEdgeResponseObject interface {
+	VisitGetEdgeResponse(w http.ResponseWriter) error
+}
+
+type GetEdge200JSONResponse Edge
+
+func (response GetEdge200JSONResponse) VisitGetEdgeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetEdge401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response GetEdge401JSONResponse) VisitGetEdgeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetEdge403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response GetEdge403JSONResponse) VisitGetEdgeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetEdge404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response GetEdge404JSONResponse) VisitGetEdgeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateEdgeRequestObject struct {
+	EdgeId EdgeId `json:"edge_id"`
+	Body   *UpdateEdgeJSONRequestBody
+}
+
+type UpdateEdgeResponseObject interface {
+	VisitUpdateEdgeResponse(w http.ResponseWriter) error
+}
+
+type UpdateEdge200JSONResponse Edge
+
+func (response UpdateEdge200JSONResponse) VisitUpdateEdgeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateEdge401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response UpdateEdge401JSONResponse) VisitUpdateEdgeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateEdge403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response UpdateEdge403JSONResponse) VisitUpdateEdgeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateEdge404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response UpdateEdge404JSONResponse) VisitUpdateEdgeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateEdge409JSONResponse struct{ ConflictJSONResponse }
+
+func (response UpdateEdge409JSONResponse) VisitUpdateEdgeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateEdge422JSONResponse struct{ ValidationErrorJSONResponse }
+
+func (response UpdateEdge422JSONResponse) VisitUpdateEdgeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListEdgeEvidenceRequestObject struct {
+	EdgeId EdgeId `json:"edge_id"`
+}
+
+type ListEdgeEvidenceResponseObject interface {
+	VisitListEdgeEvidenceResponse(w http.ResponseWriter) error
+}
+
+type ListEdgeEvidence200JSONResponse EdgeEvidence
+
+func (response ListEdgeEvidence200JSONResponse) VisitListEdgeEvidenceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListEdgeEvidence401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response ListEdgeEvidence401JSONResponse) VisitListEdgeEvidenceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListEdgeEvidence403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response ListEdgeEvidence403JSONResponse) VisitListEdgeEvidenceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListEdgeEvidence404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response ListEdgeEvidence404JSONResponse) VisitListEdgeEvidenceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddEdgeEvidenceRequestObject struct {
+	EdgeId EdgeId `json:"edge_id"`
+	Body   *AddEdgeEvidenceJSONRequestBody
+}
+
+type AddEdgeEvidenceResponseObject interface {
+	VisitAddEdgeEvidenceResponse(w http.ResponseWriter) error
+}
+
+type AddEdgeEvidence200JSONResponse EdgeEvidence
+
+func (response AddEdgeEvidence200JSONResponse) VisitAddEdgeEvidenceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddEdgeEvidence401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response AddEdgeEvidence401JSONResponse) VisitAddEdgeEvidenceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddEdgeEvidence403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response AddEdgeEvidence403JSONResponse) VisitAddEdgeEvidenceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddEdgeEvidence404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response AddEdgeEvidence404JSONResponse) VisitAddEdgeEvidenceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddEdgeEvidence422JSONResponse struct{ ValidationErrorJSONResponse }
+
+func (response AddEdgeEvidence422JSONResponse) VisitAddEdgeEvidenceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteEdgeEvidenceRequestObject struct {
+	EdgeId  EdgeId  `json:"edge_id"`
+	EventId EventId `json:"event_id"`
+}
+
+type DeleteEdgeEvidenceResponseObject interface {
+	VisitDeleteEdgeEvidenceResponse(w http.ResponseWriter) error
+}
+
+type DeleteEdgeEvidence204Response struct {
+}
+
+func (response DeleteEdgeEvidence204Response) VisitDeleteEdgeEvidenceResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteEdgeEvidence401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response DeleteEdgeEvidence401JSONResponse) VisitDeleteEdgeEvidenceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteEdgeEvidence403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response DeleteEdgeEvidence403JSONResponse) VisitDeleteEdgeEvidenceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteEdgeEvidence404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response DeleteEdgeEvidence404JSONResponse) VisitDeleteEdgeEvidenceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteEdgeEvidence422JSONResponse struct{ ValidationErrorJSONResponse }
+
+func (response DeleteEdgeEvidence422JSONResponse) VisitDeleteEdgeEvidenceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListEdgesRequestObject struct {
+	InvestigationId InvestigationId `json:"investigation_id"`
+	Params          ListEdgesParams
+}
+
+type ListEdgesResponseObject interface {
+	VisitListEdgesResponse(w http.ResponseWriter) error
+}
+
+type ListEdges200JSONResponse EdgePage
+
+func (response ListEdges200JSONResponse) VisitListEdgesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListEdges401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response ListEdges401JSONResponse) VisitListEdgesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListEdges403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response ListEdges403JSONResponse) VisitListEdgesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListEdges404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response ListEdges404JSONResponse) VisitListEdgesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListEdges422JSONResponse struct{ ValidationErrorJSONResponse }
+
+func (response ListEdges422JSONResponse) VisitListEdgesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
 
 type CreateEdgeRequestObject struct {
 	InvestigationId InvestigationId `json:"investigation_id"`
@@ -818,6 +1921,85 @@ func (response GetGraph404JSONResponse) VisitGetGraphResponse(w http.ResponseWri
 type GetGraph422JSONResponse struct{ ValidationErrorJSONResponse }
 
 func (response GetGraph422JSONResponse) VisitGetGraphResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListNodesRequestObject struct {
+	InvestigationId InvestigationId `json:"investigation_id"`
+	Params          ListNodesParams
+}
+
+type ListNodesResponseObject interface {
+	VisitListNodesResponse(w http.ResponseWriter) error
+}
+
+type ListNodes200JSONResponse NodePage
+
+func (response ListNodes200JSONResponse) VisitListNodesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListNodes401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response ListNodes401JSONResponse) VisitListNodesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListNodes403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response ListNodes403JSONResponse) VisitListNodesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListNodes404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response ListNodes404JSONResponse) VisitListNodesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListNodes422JSONResponse struct{ ValidationErrorJSONResponse }
+
+func (response ListNodes422JSONResponse) VisitListNodesResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -1001,20 +2183,172 @@ func (response ReviewEdges422JSONResponse) VisitReviewEdgesResponse(w http.Respo
 	return err
 }
 
+type DeleteNodeRequestObject struct {
+	NodeId NodeId `json:"node_id"`
+}
+
+type DeleteNodeResponseObject interface {
+	VisitDeleteNodeResponse(w http.ResponseWriter) error
+}
+
+type DeleteNode204Response struct {
+}
+
+func (response DeleteNode204Response) VisitDeleteNodeResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteNode401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response DeleteNode401JSONResponse) VisitDeleteNodeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteNode403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response DeleteNode403JSONResponse) VisitDeleteNodeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteNode404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response DeleteNode404JSONResponse) VisitDeleteNodeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetNodeRequestObject struct {
+	NodeId NodeId `json:"node_id"`
+}
+
+type GetNodeResponseObject interface {
+	VisitGetNodeResponse(w http.ResponseWriter) error
+}
+
+type GetNode200JSONResponse GraphNode
+
+func (response GetNode200JSONResponse) VisitGetNodeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetNode401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response GetNode401JSONResponse) VisitGetNodeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetNode403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response GetNode403JSONResponse) VisitGetNodeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetNode404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response GetNode404JSONResponse) VisitGetNodeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
+	// DeleteEdge Delete an edge
+	// (DELETE /edges/{edge_id})
+	DeleteEdge(ctx context.Context, request DeleteEdgeRequestObject) (DeleteEdgeResponseObject, error)
+	// GetEdge One edge
+	// (GET /edges/{edge_id})
+	GetEdge(ctx context.Context, request GetEdgeRequestObject) (GetEdgeResponseObject, error)
+	// UpdateEdge Edit one edge
+	// (PATCH /edges/{edge_id})
+	UpdateEdge(ctx context.Context, request UpdateEdgeRequestObject) (UpdateEdgeResponseObject, error)
+	// ListEdgeEvidence What the edge rests on
+	// (GET /edges/{edge_id}/evidence)
+	ListEdgeEvidence(ctx context.Context, request ListEdgeEvidenceRequestObject) (ListEdgeEvidenceResponseObject, error)
+	// AddEdgeEvidence Cite more events
+	// (POST /edges/{edge_id}/evidence)
+	AddEdgeEvidence(ctx context.Context, request AddEdgeEvidenceRequestObject) (AddEdgeEvidenceResponseObject, error)
+	// DeleteEdgeEvidence Stop citing an event
+	// (DELETE /edges/{edge_id}/evidence/{event_id})
+	DeleteEdgeEvidence(ctx context.Context, request DeleteEdgeEvidenceRequestObject) (DeleteEdgeEvidenceResponseObject, error)
+	// ListEdges Edges of the investigation
+	// (GET /investigations/{investigation_id}/edges)
+	ListEdges(ctx context.Context, request ListEdgesRequestObject) (ListEdgesResponseObject, error)
 	// CreateEdge Draw an edge by hand
 	// (POST /investigations/{investigation_id}/edges)
 	CreateEdge(ctx context.Context, request CreateEdgeRequestObject) (CreateEdgeResponseObject, error)
 	// GetGraph Graph of the investigation
 	// (GET /investigations/{investigation_id}/graph)
 	GetGraph(ctx context.Context, request GetGraphRequestObject) (GetGraphResponseObject, error)
+	// ListNodes Nodes of the investigation
+	// (GET /investigations/{investigation_id}/nodes)
+	ListNodes(ctx context.Context, request ListNodesRequestObject) (ListNodesResponseObject, error)
 	// CreateNode Put a node on the graph
 	// (POST /investigations/{investigation_id}/nodes)
 	CreateNode(ctx context.Context, request CreateNodeRequestObject) (CreateNodeResponseObject, error)
 	// ReviewEdges Review proposed edges in bulk
 	// (POST /investigations/{investigation_id}/review)
 	ReviewEdges(ctx context.Context, request ReviewEdgesRequestObject) (ReviewEdgesResponseObject, error)
+	// DeleteNode Take a node off the graph
+	// (DELETE /nodes/{node_id})
+	DeleteNode(ctx context.Context, request DeleteNodeRequestObject) (DeleteNodeResponseObject, error)
+	// GetNode One node
+	// (GET /nodes/{node_id})
+	GetNode(ctx context.Context, request GetNodeRequestObject) (GetNodeResponseObject, error)
 }
 
 type StrictHandlerFunc func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error)
@@ -1054,6 +2388,204 @@ type strictHandler struct {
 	ssi         StrictServerInterface
 	middlewares []StrictMiddlewareFunc
 	options     StrictHTTPServerOptions
+}
+
+// DeleteEdge operation middleware
+func (sh *strictHandler) DeleteEdge(w http.ResponseWriter, r *http.Request, edgeId EdgeId) {
+	var request DeleteEdgeRequestObject
+
+	request.EdgeId = edgeId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteEdge(ctx, request.(DeleteEdgeRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteEdge")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteEdgeResponseObject); ok {
+		if err := validResponse.VisitDeleteEdgeResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetEdge operation middleware
+func (sh *strictHandler) GetEdge(w http.ResponseWriter, r *http.Request, edgeId EdgeId) {
+	var request GetEdgeRequestObject
+
+	request.EdgeId = edgeId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetEdge(ctx, request.(GetEdgeRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetEdge")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetEdgeResponseObject); ok {
+		if err := validResponse.VisitGetEdgeResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpdateEdge operation middleware
+func (sh *strictHandler) UpdateEdge(w http.ResponseWriter, r *http.Request, edgeId EdgeId) {
+	var request UpdateEdgeRequestObject
+
+	request.EdgeId = edgeId
+
+	var body UpdateEdgeJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdateEdge(ctx, request.(UpdateEdgeRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdateEdge")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UpdateEdgeResponseObject); ok {
+		if err := validResponse.VisitUpdateEdgeResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListEdgeEvidence operation middleware
+func (sh *strictHandler) ListEdgeEvidence(w http.ResponseWriter, r *http.Request, edgeId EdgeId) {
+	var request ListEdgeEvidenceRequestObject
+
+	request.EdgeId = edgeId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListEdgeEvidence(ctx, request.(ListEdgeEvidenceRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListEdgeEvidence")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListEdgeEvidenceResponseObject); ok {
+		if err := validResponse.VisitListEdgeEvidenceResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// AddEdgeEvidence operation middleware
+func (sh *strictHandler) AddEdgeEvidence(w http.ResponseWriter, r *http.Request, edgeId EdgeId) {
+	var request AddEdgeEvidenceRequestObject
+
+	request.EdgeId = edgeId
+
+	var body AddEdgeEvidenceJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.AddEdgeEvidence(ctx, request.(AddEdgeEvidenceRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "AddEdgeEvidence")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(AddEdgeEvidenceResponseObject); ok {
+		if err := validResponse.VisitAddEdgeEvidenceResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteEdgeEvidence operation middleware
+func (sh *strictHandler) DeleteEdgeEvidence(w http.ResponseWriter, r *http.Request, edgeId EdgeId, eventId EventId) {
+	var request DeleteEdgeEvidenceRequestObject
+
+	request.EdgeId = edgeId
+	request.EventId = eventId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteEdgeEvidence(ctx, request.(DeleteEdgeEvidenceRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteEdgeEvidence")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteEdgeEvidenceResponseObject); ok {
+		if err := validResponse.VisitDeleteEdgeEvidenceResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListEdges operation middleware
+func (sh *strictHandler) ListEdges(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, params ListEdgesParams) {
+	var request ListEdgesRequestObject
+
+	request.InvestigationId = investigationId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListEdges(ctx, request.(ListEdgesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListEdges")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListEdgesResponseObject); ok {
+		if err := validResponse.VisitListEdgesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
 }
 
 // CreateEdge operation middleware
@@ -1109,6 +2641,33 @@ func (sh *strictHandler) GetGraph(w http.ResponseWriter, r *http.Request, invest
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetGraphResponseObject); ok {
 		if err := validResponse.VisitGetGraphResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListNodes operation middleware
+func (sh *strictHandler) ListNodes(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, params ListNodesParams) {
+	var request ListNodesRequestObject
+
+	request.InvestigationId = investigationId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListNodes(ctx, request.(ListNodesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListNodes")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListNodesResponseObject); ok {
+		if err := validResponse.VisitListNodesResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -1175,6 +2734,58 @@ func (sh *strictHandler) ReviewEdges(w http.ResponseWriter, r *http.Request, inv
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(ReviewEdgesResponseObject); ok {
 		if err := validResponse.VisitReviewEdgesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteNode operation middleware
+func (sh *strictHandler) DeleteNode(w http.ResponseWriter, r *http.Request, nodeId NodeId) {
+	var request DeleteNodeRequestObject
+
+	request.NodeId = nodeId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteNode(ctx, request.(DeleteNodeRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteNode")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteNodeResponseObject); ok {
+		if err := validResponse.VisitDeleteNodeResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetNode operation middleware
+func (sh *strictHandler) GetNode(w http.ResponseWriter, r *http.Request, nodeId NodeId) {
+	var request GetNodeRequestObject
+
+	request.NodeId = nodeId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetNode(ctx, request.(GetNodeRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetNode")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetNodeResponseObject); ok {
+		if err := validResponse.VisitGetNodeResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

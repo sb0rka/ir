@@ -122,6 +122,22 @@ paths:
         '409': { $ref: '../shared/responses.yaml#/components/responses/Conflict' }
         '422': { $ref: '../shared/responses.yaml#/components/responses/ValidationError' }
 
+    delete:
+      tags: [investigations]
+      summary: Delete an investigation
+      description: >-
+        Removes the investigation and everything it owns — its events, entities,
+        graph and edges — along with the whole subtree beneath it. Irreversible,
+        and meant for cases opened by mistake; a case that was actually worked on
+        should be closed with a verdict instead, so the reasoning survives.
+      operationId: deleteInvestigation
+      responses:
+        '204':
+          description: Deleted
+        '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
+
   /investigations/{investigation_id}/tree:
     parameters:
       - { $ref: '../shared/parameters.yaml#/components/parameters/InvestigationId' }
@@ -160,10 +176,8 @@ components:
         project_id:
           type: string
           description: >-
-            Sb0rka project that owns the case — the tenant. Resolved from the
-            caller's token and never accepted from a request body, so no client
-            can write into a tenant it does not belong to. Every child inherits
-            it unchanged.
+            Project that owns the case — the tenant. Every child inherits it
+            unchanged, so a whole tree belongs to one tenant.
         parent_id:
           type: string
           format: uuid
@@ -282,6 +296,15 @@ components:
           format: uuid
           description: >-
             The investigation this one refines. Omit it to open a root case.
+        project_id:
+          type: string
+          description: >-
+            Project that owns the case — the tenant. Required for a root,
+            ignored for a child, which inherits its parent's.
+
+            Temporary: the tenant belongs in the token, not in a request body.
+            It is accepted for now so the frontend can work before auth is wired
+            up, and goes away once it is.
         severity:
           allOf: [{ $ref: '../shared/enums.yaml#/components/schemas/Severity' }]
           description: Initial assessment. Can be revised later.

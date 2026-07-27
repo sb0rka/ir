@@ -25,6 +25,20 @@ components:
       description: Identifier of an entity — a host, account, process, address or hash.
       schema: { type: string, format: uuid }
 
+    NodeId:
+      name: node_id
+      in: path
+      required: true
+      description: Identifier of a graph node. Edges reference this, not the entity or event behind it.
+      schema: { type: string, format: uuid }
+
+    EdgeId:
+      name: edge_id
+      in: path
+      required: true
+      description: Identifier of an edge — one claim that two nodes are related.
+      schema: { type: string, format: uuid }
+
     Limit:
       name: limit
       in: query

@@ -206,7 +206,7 @@ type Investigation struct {
 	// ParentId The investigation this one refines. Null means it is a root case; anything else means it is a hypothesis inside a larger case.
 	ParentId *openapi_types.UUID `json:"parent_id,omitempty"`
 
-	// ProjectId Sb0rka project that owns the case — the tenant. Resolved from the caller's token and never accepted from a request body, so no client can write into a tenant it does not belong to. Every child inherits it unchanged.
+	// ProjectId Project that owns the case — the tenant. Every child inherits it unchanged, so a whole tree belongs to one tenant.
 	ProjectId string `json:"project_id"`
 
 	// Severity How bad this looks. Set during triage and revised as evidence arrives; null until someone judges it.
@@ -238,6 +238,10 @@ type InvestigationCreate struct {
 
 	// ParentId The investigation this one refines. Omit it to open a root case.
 	ParentId *openapi_types.UUID `json:"parent_id,omitempty"`
+
+	// ProjectId Project that owns the case — the tenant. Required for a root, ignored for a child, which inherits its parent's.
+	// Temporary: the tenant belongs in the token, not in a request body. It is accepted for now so the frontend can work before auth is wired up, and goes away once it is.
+	ProjectId *string `json:"project_id,omitempty"`
 
 	// Severity Initial assessment. Can be revised later.
 	Severity *Severity `json:"severity,omitempty"`
@@ -331,7 +335,7 @@ type InvestigationTree struct {
 		// ParentId The investigation this one refines. Null means it is a root case; anything else means it is a hypothesis inside a larger case.
 		ParentId *openapi_types.UUID `json:"parent_id,omitempty"`
 
-		// ProjectId Sb0rka project that owns the case — the tenant. Resolved from the caller's token and never accepted from a request body, so no client can write into a tenant it does not belong to. Every child inherits it unchanged.
+		// ProjectId Project that owns the case — the tenant. Every child inherits it unchanged, so a whole tree belongs to one tenant.
 		ProjectId string `json:"project_id"`
 
 		// Severity How bad this looks. Set during triage and revised as evidence arrives; null until someone judges it.
@@ -428,6 +432,9 @@ type ServerInterface interface {
 	// CreateInvestigation Open an investigation or a hypothesis under one
 	// (POST /investigations)
 	CreateInvestigation(w http.ResponseWriter, r *http.Request)
+	// DeleteInvestigation Delete an investigation
+	// (DELETE /investigations/{investigation_id})
+	DeleteInvestigation(w http.ResponseWriter, r *http.Request, investigationId InvestigationId)
 	// GetInvestigation One investigation
 	// (GET /investigations/{investigation_id})
 	GetInvestigation(w http.ResponseWriter, r *http.Request, investigationId InvestigationId)
@@ -551,6 +558,32 @@ func (siw *ServerInterfaceWrapper) CreateInvestigation(w http.ResponseWriter, r 
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.CreateInvestigation(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteInvestigation operation middleware
+func (siw *ServerInterfaceWrapper) DeleteInvestigation(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "investigation_id" -------------
+	var investigationId InvestigationId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "investigation_id", r.PathValue("investigation_id"), &investigationId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "investigation_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteInvestigation(w, r, investigationId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -760,6 +793,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/investigations", wrapper.ListInvestigations)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/investigations", wrapper.CreateInvestigation)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/investigations/{investigation_id}", wrapper.DeleteInvestigation)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/investigations/{investigation_id}", wrapper.GetInvestigation)
 	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/investigations/{investigation_id}", wrapper.UpdateInvestigation)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/investigations/{investigation_id}/tree", wrapper.GetInvestigationTree)
@@ -901,6 +935,64 @@ func (response CreateInvestigation422JSONResponse) VisitCreateInvestigationRespo
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteInvestigationRequestObject struct {
+	InvestigationId InvestigationId `json:"investigation_id"`
+}
+
+type DeleteInvestigationResponseObject interface {
+	VisitDeleteInvestigationResponse(w http.ResponseWriter) error
+}
+
+type DeleteInvestigation204Response struct {
+}
+
+func (response DeleteInvestigation204Response) VisitDeleteInvestigationResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteInvestigation401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response DeleteInvestigation401JSONResponse) VisitDeleteInvestigationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteInvestigation403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response DeleteInvestigation403JSONResponse) VisitDeleteInvestigationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteInvestigation404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response DeleteInvestigation404JSONResponse) VisitDeleteInvestigationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -1134,6 +1226,9 @@ type StrictServerInterface interface {
 	// CreateInvestigation Open an investigation or a hypothesis under one
 	// (POST /investigations)
 	CreateInvestigation(ctx context.Context, request CreateInvestigationRequestObject) (CreateInvestigationResponseObject, error)
+	// DeleteInvestigation Delete an investigation
+	// (DELETE /investigations/{investigation_id})
+	DeleteInvestigation(ctx context.Context, request DeleteInvestigationRequestObject) (DeleteInvestigationResponseObject, error)
 	// GetInvestigation One investigation
 	// (GET /investigations/{investigation_id})
 	GetInvestigation(ctx context.Context, request GetInvestigationRequestObject) (GetInvestigationResponseObject, error)
@@ -1234,6 +1329,32 @@ func (sh *strictHandler) CreateInvestigation(w http.ResponseWriter, r *http.Requ
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(CreateInvestigationResponseObject); ok {
 		if err := validResponse.VisitCreateInvestigationResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteInvestigation operation middleware
+func (sh *strictHandler) DeleteInvestigation(w http.ResponseWriter, r *http.Request, investigationId InvestigationId) {
+	var request DeleteInvestigationRequestObject
+
+	request.InvestigationId = investigationId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteInvestigation(ctx, request.(DeleteInvestigationRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteInvestigation")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteInvestigationResponseObject); ok {
+		if err := validResponse.VisitDeleteInvestigationResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

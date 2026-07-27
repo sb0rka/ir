@@ -4,6 +4,34 @@
  */
 
 export interface paths {
+    "/investigations/{investigation_id}/entities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
+                investigation_id: components["parameters"]["InvestigationId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Entities of the investigation
+         * @description Everything the case has extracted so far, newest first. Backs the entity panel next to the graph and the picker used when drawing an edge by hand.
+         */
+        get: operations["listEntities"];
+        put?: never;
+        /**
+         * Add an entity by hand
+         * @description Entities normally arrive with events, but an analyst often starts from an indicator someone handed them — a hash from a bulletin, an address from a colleague — before any event mentions it. This creates that entity so it can be placed on the graph and reasoned about immediately.
+         *     Idempotent on type and key: adding one that already exists returns the existing entity rather than a duplicate, so the same indicator entered twice stays one node.
+         */
+        post: operations["createEntity"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/entities/{entity_id}": {
         parameters: {
             query?: never;
@@ -21,10 +49,18 @@ export interface paths {
         get: operations["getEntityCard"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Delete an entity
+         * @description Removes the entity together with its graph node and the edges attached to it. Refused while any event still mentions it — an entity extracted from evidence is a consequence of that evidence, so drop the event instead.
+         */
+        delete: operations["deleteEntity"];
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Edit an entity
+         * @description Changes only what a human can meaningfully improve — the label shown on the graph and the extra attributes. The type and the canonical key are fixed: they are the entity's identity, and rewriting them would silently turn one thing into another under every edge already attached to it.
+         */
+        patch: operations["updateEntity"];
         trace?: never;
     };
 }
@@ -63,6 +99,35 @@ export interface components {
              * @description Latest event that mentions it. Together with first_seen this bounds the window the entity was active in.
              */
             last_seen?: string | null;
+        };
+        /** @description An entity entered by hand, before any event mentions it. */
+        EntityCreate: {
+            /** @description Kind of thing, from the entity-type dictionary. Rejected if unknown, so a typo cannot invent a type. */
+            type_code: string;
+            /** @description Normalised identity — fqdn for a host, SID for an account, sha256 for a file. Together with the type this is what makes two records the same thing, so it is worth normalising before sending. */
+            canonical_key: string;
+            /** @description Label for the UI. Falls back to the canonical key when absent. */
+            display_name?: string;
+            /** @description Anything else worth carrying — where the indicator came from, notes. */
+            metadata?: {
+                [key: string]: unknown;
+            };
+        };
+        /** @description Fields to change. Anything omitted stays as it is. Identity — the type and the canonical key — is not editable. */
+        EntityPatch: {
+            /** @description New label for the UI. */
+            display_name?: string;
+            /** @description Replaces the stored attributes wholesale, not merged into them. */
+            metadata?: {
+                [key: string]: unknown;
+            };
+        };
+        /** @description One page of entities. */
+        EntityPage: {
+            /** @description The entities on this page. */
+            items: components["schemas"]["Entity"][];
+            /** @description Pass as `cursor` to get the next page. Absent on the last page. */
+            next_cursor?: string | null;
         };
         /** @description Entity plus the context an analyst needs to judge it: how much of this case it touches, where else it has surfaced, and who it talks to. */
         EntityCard: {
@@ -141,8 +206,32 @@ export interface components {
                 "application/json": components["schemas"]["ErrorResponse"];
             };
         };
+        /** @description Request parsed but violates a rule of the domain — an impossible status transition, a confirmation without evidence, a malformed cursor (code=validation). */
+        ValidationError: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
+        /** @description The record changed since the version the client sent, the write would duplicate an existing one, or the investigation is already closed. `details.conflicts` lists the ids that clashed (code=conflict). */
+        Conflict: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
     };
     parameters: {
+        /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
+        InvestigationId: string;
+        /** @description How many items to return. The server may return fewer, never more. */
+        Limit: number;
+        /** @description Opaque keyset cursor taken from `next_cursor` of the previous page. Encodes a position, not a query — do not build one by hand. Omit it to start from the beginning. */
+        Cursor: string;
         /** @description Identifier of an entity — a host, account, process, address or hash. */
         EntityId: string;
     };
@@ -152,6 +241,73 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    listEntities: {
+        parameters: {
+            query?: {
+                /** @description Keep only entities of this kind — host, user, ip, file_hash. */
+                type_code?: string;
+                /** @description Substring match on the canonical key and the display name. */
+                q?: string;
+                /** @description How many items to return. The server may return fewer, never more. */
+                limit?: components["parameters"]["Limit"];
+                /** @description Opaque keyset cursor taken from `next_cursor` of the previous page. Encodes a position, not a query — do not build one by hand. Omit it to start from the beginning. */
+                cursor?: components["parameters"]["Cursor"];
+            };
+            header?: never;
+            path: {
+                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
+                investigation_id: components["parameters"]["InvestigationId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description One page of entities */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EntityPage"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["ValidationError"];
+        };
+    };
+    createEntity: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
+                investigation_id: components["parameters"]["InvestigationId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EntityCreate"];
+            };
+        };
+        responses: {
+            /** @description The entity, whether it was just created or already there */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Entity"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["ValidationError"];
+        };
+    };
     getEntityCard: {
         parameters: {
             query?: never;
@@ -176,6 +332,62 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    deleteEntity: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identifier of an entity — a host, account, process, address or hash. */
+                entity_id: components["parameters"]["EntityId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    updateEntity: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identifier of an entity — a host, account, process, address or hash. */
+                entity_id: components["parameters"]["EntityId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EntityPatch"];
+            };
+        };
+        responses: {
+            /** @description The updated entity */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Entity"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["ValidationError"];
         };
     };
 }

@@ -110,6 +110,26 @@ paths:
         '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
         '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
         '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
+    delete:
+      tags: [events]
+      summary: Drop an event from the investigation
+      description: >-
+        Undoes a pull that brought in the wrong thing. The event leaves the
+        timeline, its graph node goes with it, and so do the edges that hung off
+        that node — which is why an event cited as evidence by a confirmed edge
+        cannot be dropped: removing it would leave an established claim resting
+        on nothing.
+
+        Only the copy inside this investigation is affected. The record in the
+        source tool is untouched, and re-pulling it brings it back.
+      operationId: deleteEvent
+      responses:
+        '204':
+          description: Dropped
+        '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
+        '409': { $ref: '../shared/responses.yaml#/components/responses/Conflict' }
 
 components:
   schemas:
