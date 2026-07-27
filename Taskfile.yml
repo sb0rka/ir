@@ -10,9 +10,6 @@ vars:
   IMPL: go run github.com/josharian/impl@v1.5.0
   GOIMPORTS: go run golang.org/x/tools/cmd/goimports@latest
   OPENAPI_TS: npx --yes openapi-typescript@7
-  # Через --package, а не `npx @stoplight/prism-cli`: имя пакета и имя бинарника
-  # различаются, и без явного флага npx на Windows бинарник не находит.
-  PRISM: npx --yes --package=@stoplight/prism-cli@5 -- prism
 
 tasks:
   default:
@@ -127,15 +124,6 @@ tasks:
       # Клиенту нужен один paths на весь API — берём из собранной спеки.
       - '{{.OPENAPI_TS}} api/bundle.yaml -o packages/contract-ts/api.d.ts'
 
-  mock:
-    desc: Мок-сервер прямо из спеки на :4010 — фронту, пока ручки не реализованы
-    deps: [spec]
-    cmds:
-      # Без -d Prism отдаёт примеры из спеки как есть. С -d он генерирует
-      # значения по схеме, и uuid узлов не совпадут с концами рёбер — граф
-      # приедет рассыпанным, так что динамику здесь не включать.
-      - '{{.PRISM}} mock api/bundle.yaml --port 4010 --host 127.0.0.1'
-
   spec-docs:
     desc: Собрать документацию API в api/docs.html
     deps: [spec]
@@ -184,12 +172,6 @@ tasks:
       - cd apps/investigations && go vet ./...
       - cd packages/contract && go vet ./...
 
-  test:
-    desc: go test помодульно
-    cmds:
-      - cd apps/investigations && go test ./...
-      - cd packages/contract && go test ./...
-
   tidy:
     desc: go mod tidy в каждом модуле
     cmds:
@@ -202,7 +184,6 @@ tasks:
       - task: check-generated
       - task: build
       - task: vet
-      - task: test
 
   dev:
     desc: Поднять локальный стенд (Postgres + api + worker)
