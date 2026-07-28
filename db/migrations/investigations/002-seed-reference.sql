@@ -50,16 +50,4 @@ INSERT INTO sources (code, kind, title) VALUES
     ('infra', 'infra', 'Инфраструктурные логи (демо-датасет)')
 ON CONFLICT (code) DO NOTHING;
 
--- Правило рождается confirmed: источник сам утверждает, что события
--- породили сработку. Эвристики ниже дают только proposed.
-INSERT INTO linking_rules (code, title, kind, rule, born_status) VALUES
-    ('chain-subevents', 'События сработки', 'chain-join',
-     '{"relation_code": "subevent_of", "confidence": 1.0}'::jsonb, 'confirmed'),
-    ('identity-same-host', 'Общий узел', 'identity-join',
-     '{"match": ["host"], "relation_code": "same_host", "confidence": 0.9}'::jsonb, 'proposed'),
-    ('temporal-logon-exec', 'Запуск после входа', 'temporal-join',
-     '{"match": ["account", "host"], "window_sec": 300, "relation_code": "executed", "confidence": 0.6}'::jsonb, 'proposed')
-ON CONFLICT (code) DO NOTHING;
-
-
 COMMIT;

@@ -69,51 +69,6 @@ BEFORE UPDATE ON sources
 FOR EACH ROW
 EXECUTE FUNCTION set_updated_at();
 
--- Карты нормализации: перевод полей источника в общий конверт — конфигурация,
--- а не код. Активная версия переключается флагом, без выкладки.
-CREATE TABLE IF NOT EXISTS mapping_profiles (
-    id UUID DEFAULT gen_random_uuid() NOT NULL,
-    source_code VARCHAR(32) NOT NULL,
-
-    version INTEGER DEFAULT 1 NOT NULL,
-    profile JSONB NOT NULL,
-    is_active BOOLEAN DEFAULT false NOT NULL,
-
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
-
-    CONSTRAINT pk_mapping_profiles PRIMARY KEY (id),
-    CONSTRAINT uq_mapping_profiles_source_version UNIQUE (source_code, version),
-    CONSTRAINT fk_mapping_profiles_source_code_sources FOREIGN KEY (source_code)
-        REFERENCES sources (code) ON DELETE CASCADE
-);
-
--- Правила связывания — детерминированный путь построения рёбер.
--- Граф строится без агента: система полноценна без LLM.
-CREATE TABLE IF NOT EXISTS linking_rules (
-    code VARCHAR(64) NOT NULL,
-
-    title VARCHAR NOT NULL,
-    kind VARCHAR(16) NOT NULL
-        CHECK (kind IN ('chain-join', 'identity-join', 'temporal-join', 'pair-join')),
-    rule JSONB NOT NULL,
-    born_status VARCHAR(16) DEFAULT 'proposed' NOT NULL
-        CHECK (born_status IN ('proposed', 'confirmed')),
-    is_enabled BOOLEAN DEFAULT true NOT NULL,
-
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
-
-    CONSTRAINT pk_linking_rules PRIMARY KEY (code)
-);
-
-DROP TRIGGER IF EXISTS trg_linking_rules_set_updated_at ON linking_rules;
-CREATE TRIGGER trg_linking_rules_set_updated_at
-BEFORE UPDATE ON linking_rules
-FOR EACH ROW
-EXECUTE FUNCTION set_updated_at();
-
-
-
 -- Ядро типов фиксировано кодом; периферия (ja3, registry_key) добавляется
 -- строкой справочника, без миграции.
 CREATE TABLE IF NOT EXISTS entity_types (
@@ -447,14 +402,7 @@ CREATE TABLE IF NOT EXISTS edge_evidence (
 
 CREATE INDEX IF NOT EXISTS ix_edge_evidence_event ON edge_evidence (event_id);
 
-
-
-
-
-
-
-
--- ДОСТУП И АУДИТ
+-- ДОСТУП
 
 CREATE TABLE IF NOT EXISTS role_bindings (
     project_id VARCHAR(12) NOT NULL,
@@ -468,26 +416,5 @@ CREATE TABLE IF NOT EXISTS role_bindings (
 );
 
 CREATE INDEX IF NOT EXISTS ix_role_bindings_subject ON role_bindings (subject_id);
-
--- Аудит — источник метрики сокращения шагов. Append-only:
--- гранты на UPDATE/DELETE не выдаются.
-CREATE TABLE IF NOT EXISTS audit_log (
-    id BIGINT GENERATED ALWAYS AS IDENTITY NOT NULL,
-    project_id VARCHAR(12) NOT NULL,
-    investigation_id UUID,
-
-    actor_type VARCHAR(8) NOT NULL CHECK (actor_type IN ('user', 'agent', 'system')),
-    actor_id VARCHAR(64) NOT NULL,
-    action VARCHAR(64) NOT NULL,
-    payload JSONB DEFAULT '{}'::jsonb NOT NULL,
-    external_call BOOLEAN DEFAULT false NOT NULL,
-
-    ts TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
-
-    CONSTRAINT pk_audit_log PRIMARY KEY (id)
-);
-
-CREATE INDEX IF NOT EXISTS ix_audit_investigation ON audit_log (investigation_id, ts DESC);
-CREATE INDEX IF NOT EXISTS ix_audit_project_ts ON audit_log (project_id, ts DESC);
 
 COMMIT;
