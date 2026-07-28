@@ -53,8 +53,6 @@ CREATE TABLE IF NOT EXISTS sources (
     kind VARCHAR(16) NOT NULL
         CHECK (kind IN ('siem', 'edr', 'ndr', 'infra', 'sandbox', 'other')),
     title VARCHAR NOT NULL,
-    connection JSONB DEFAULT '{}'::jsonb NOT NULL,
-    secret_ref VARCHAR,
     is_enabled BOOLEAN DEFAULT true NOT NULL,
 
     created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
@@ -78,9 +76,6 @@ CREATE TABLE IF NOT EXISTS entity_types (
     category VARCHAR(32) NOT NULL
         CHECK (category IN ('identity', 'network', 'execution', 'persistence', 'asset', 'other')),
     is_core BOOLEAN DEFAULT false NOT NULL,
-    is_join_key BOOLEAN DEFAULT false NOT NULL,
-    key_template VARCHAR,
-    card_hint JSONB,
 
     created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
 
@@ -127,7 +122,6 @@ CREATE TABLE IF NOT EXISTS investigations (
         CHECK (origin IN ('analyst', 'rule', 'agent')),
     origin_ref VARCHAR,
     author_subject_id UUID NOT NULL,
-    assignee_subject_id UUID,
     version INTEGER DEFAULT 1 NOT NULL,
 
     created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
