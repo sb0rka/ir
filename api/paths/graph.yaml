@@ -40,7 +40,7 @@ paths:
             pass rejected explicitly to see what was ruled out.
           schema:
             type: array
-            items: { $ref: '../shared/enums.yaml#/components/schemas/EdgeStatus' }
+            items: { $ref: '../shared/enums.yaml#/components/schemas/GraphEdgeStatus' }
           style: form
           explode: false
       responses:
@@ -117,8 +117,9 @@ paths:
         '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
         '422': { $ref: '../shared/responses.yaml#/components/responses/ValidationError' }
 
-  /nodes/{node_id}:
+  /investigations/{investigation_id}/nodes/{node_id}:
     parameters:
+      - { $ref: '../shared/parameters.yaml#/components/parameters/InvestigationId' }
       - { $ref: '../shared/parameters.yaml#/components/parameters/NodeId' }
     get:
       tags: [graph]
@@ -160,14 +161,14 @@ paths:
       description: >-
         The edges alone, paginated. This is what backs the review queue —
         filter to proposed, sort through them, then confirm or reject in bulk.
-      operationId: listEdges
+      operationId: listGraphEdges
       parameters:
         - name: statuses
           in: query
           description: Which edge states to include. Defaults to proposed and confirmed.
           schema:
             type: array
-            items: { $ref: '../shared/enums.yaml#/components/schemas/EdgeStatus' }
+            items: { $ref: '../shared/enums.yaml#/components/schemas/GraphEdgeStatus' }
           style: form
           explode: false
         - name: origin
@@ -195,7 +196,7 @@ paths:
           description: One page of edges
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/EdgePage' }
+              schema: { $ref: '#/components/schemas/GraphEdgePage' }
         '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
         '501': { $ref: '../shared/responses.yaml#/components/responses/NotImplemented' }
         '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
@@ -211,18 +212,18 @@ paths:
         node kinds, so an event-to-event relation cannot be hung between two
         entities. Re-creating the same triple returns 409 rather than a
         duplicate.
-      operationId: createEdge
+      operationId: createGraphEdge
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/EdgeCreate' }
+            schema: { $ref: '#/components/schemas/GraphEdgeCreate' }
       responses:
         '201':
           description: The new edge
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Edge' }
+              schema: { $ref: '#/components/schemas/GraphEdge' }
         '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
         '501': { $ref: '../shared/responses.yaml#/components/responses/NotImplemented' }
         '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
@@ -230,20 +231,21 @@ paths:
         '409': { $ref: '../shared/responses.yaml#/components/responses/Conflict' }
         '422': { $ref: '../shared/responses.yaml#/components/responses/ValidationError' }
 
-  /edges/{edge_id}:
+  /investigations/{investigation_id}/edges/{edge_id}:
     parameters:
-      - { $ref: '../shared/parameters.yaml#/components/parameters/EdgeId' }
+      - { $ref: '../shared/parameters.yaml#/components/parameters/InvestigationId' }
+      - { $ref: '../shared/parameters.yaml#/components/parameters/GraphEdgeId' }
     get:
       tags: [graph]
       summary: One edge
       description: The edge with its evidence ids, for a detail panel.
-      operationId: getEdge
+      operationId: getGraphEdge
       responses:
         '200':
           description: The edge
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Edge' }
+              schema: { $ref: '#/components/schemas/GraphEdge' }
         '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
         '501': { $ref: '../shared/responses.yaml#/components/responses/NotImplemented' }
         '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
@@ -259,18 +261,18 @@ paths:
 
         Use the batch review endpoint when handling a queue; this is for the one
         edge open in front of you.
-      operationId: updateEdge
+      operationId: updateGraphEdge
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/EdgePatch' }
+            schema: { $ref: '#/components/schemas/GraphEdgePatch' }
       responses:
         '200':
           description: The updated edge
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Edge' }
+              schema: { $ref: '#/components/schemas/GraphEdge' }
         '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
         '501': { $ref: '../shared/responses.yaml#/components/responses/NotImplemented' }
         '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
@@ -285,7 +287,7 @@ paths:
         wrong should be rejected with a reason instead — that survives into the
         report as "checked and excluded", while deleting leaves no trace that
         anyone looked.
-      operationId: deleteEdge
+      operationId: deleteGraphEdge
       responses:
         '204':
           description: Deleted
@@ -294,9 +296,10 @@ paths:
         '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
         '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
 
-  /edges/{edge_id}/evidence:
+  /investigations/{investigation_id}/edges/{edge_id}/evidence:
     parameters:
-      - { $ref: '../shared/parameters.yaml#/components/parameters/EdgeId' }
+      - { $ref: '../shared/parameters.yaml#/components/parameters/InvestigationId' }
+      - { $ref: '../shared/parameters.yaml#/components/parameters/GraphEdgeId' }
     get:
       tags: [graph]
       summary: What the edge rests on
@@ -304,13 +307,13 @@ paths:
         The cited events in full. This is the provenance chain the product is
         built to defend: from a claim on the graph to the events behind it, and
         from each event to the record in the source tool.
-      operationId: listEdgeEvidence
+      operationId: listGraphEdgeEvidence
       responses:
         '200':
           description: The cited events
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/EdgeEvidence' }
+              schema: { $ref: '#/components/schemas/GraphEdgeEvidence' }
         '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
         '501': { $ref: '../shared/responses.yaml#/components/responses/NotImplemented' }
         '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
@@ -324,27 +327,28 @@ paths:
         the same investigation; citing another case's evidence is refused by the
         database, not merely by the service. Already-cited events are ignored
         rather than duplicated.
-      operationId: addEdgeEvidence
+      operationId: addGraphEdgeEvidence
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/EdgeEvidenceAdd' }
+            schema: { $ref: '#/components/schemas/GraphEdgeEvidenceAdd' }
       responses:
         '200':
           description: The evidence after the addition
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/EdgeEvidence' }
+              schema: { $ref: '#/components/schemas/GraphEdgeEvidence' }
         '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
         '501': { $ref: '../shared/responses.yaml#/components/responses/NotImplemented' }
         '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
         '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
         '422': { $ref: '../shared/responses.yaml#/components/responses/ValidationError' }
 
-  /edges/{edge_id}/evidence/{event_id}:
+  /investigations/{investigation_id}/edges/{edge_id}/evidence/{event_id}:
     parameters:
-      - { $ref: '../shared/parameters.yaml#/components/parameters/EdgeId' }
+      - { $ref: '../shared/parameters.yaml#/components/parameters/InvestigationId' }
+      - { $ref: '../shared/parameters.yaml#/components/parameters/GraphEdgeId' }
       - { $ref: '../shared/parameters.yaml#/components/parameters/EventId' }
     delete:
       tags: [graph]
@@ -353,7 +357,7 @@ paths:
         Removes one ground from an edge. Refused if it is the last one on a
         confirmed edge: an established claim resting on nothing is exactly what
         the product exists to prevent. Reject the edge instead.
-      operationId: deleteEdgeEvidence
+      operationId: deleteGraphEdgeEvidence
       responses:
         '204':
           description: Removed
@@ -374,7 +378,7 @@ paths:
         All or nothing: if any item carries a stale version the whole batch is
         refused with 409 and `details.conflicts` naming the ids, and nothing is
         written — so an optimistic UI can roll back precisely.
-      operationId: reviewEdges
+      operationId: reviewGraphEdges
       requestBody:
         required: true
         content:
@@ -414,7 +418,7 @@ components:
         edges:
           type: array
           description: Edges surviving the status and confidence filters.
-          items: { $ref: '#/components/schemas/Edge' }
+          items: { $ref: '#/components/schemas/GraphEdge' }
 
     GraphNode:
       type: object
@@ -494,7 +498,7 @@ components:
             The event, when node_type is event. Must already belong to this
             investigation.
 
-    Edge:
+    GraphEdge:
       type: object
       description: >-
         A claim that two nodes are related. Unlike an event, an edge can be
@@ -525,7 +529,7 @@ components:
             What the relation is — parent_process, logged_in, connected_to,
             executed, resolved_to, same_host, subevent_of, followed_by.
         status:
-          allOf: [{ $ref: '../shared/enums.yaml#/components/schemas/EdgeStatus' }]
+          allOf: [{ $ref: '../shared/enums.yaml#/components/schemas/GraphEdgeStatus' }]
           description: Where the claim stands in review.
         reject_reason:
           type: string
@@ -586,7 +590,7 @@ components:
           format: date-time
           description: When it last changed — in practice, when it was reviewed.
 
-    EdgeCreate:
+    GraphEdgeCreate:
       type: object
       description: A relation the analyst asserts between two existing nodes.
       required: [source_node_id, target_node_id, relation_code]
@@ -619,7 +623,7 @@ components:
             citing another case's event is refused.
           items: { type: string, format: uuid }
 
-    EdgePatch:
+    GraphEdgePatch:
       type: object
       description: >-
         Fields to change on one edge. Anything omitted stays as it is; `version`
@@ -631,7 +635,7 @@ components:
           minimum: 1
           description: Version the client last read. A mismatch is a 409.
         status:
-          allOf: [{ $ref: '../shared/enums.yaml#/components/schemas/EdgeStatus' }]
+          allOf: [{ $ref: '../shared/enums.yaml#/components/schemas/GraphEdgeStatus' }]
           description: >-
             Accept or rule out the claim. Rejecting requires a reason alongside.
         reject_reason:
@@ -664,7 +668,7 @@ components:
           nullable: true
           description: Pass as `cursor` to get the next page. Absent on the last page.
 
-    EdgePage:
+    GraphEdgePage:
       type: object
       description: One page of edges.
       required: [items]
@@ -672,13 +676,13 @@ components:
         items:
           type: array
           description: The edges on this page.
-          items: { $ref: '#/components/schemas/Edge' }
+          items: { $ref: '#/components/schemas/GraphEdge' }
         next_cursor:
           type: string
           nullable: true
           description: Pass as `cursor` to get the next page. Absent on the last page.
 
-    EdgeEvidence:
+    GraphEdgeEvidence:
       type: object
       description: The events an edge cites, in full rather than as bare ids.
       required: [edge_id, items]
@@ -723,7 +727,7 @@ components:
           format: date-time
           description: When it happened, per the source.
 
-    EdgeEvidenceAdd:
+    GraphEdgeEvidenceAdd:
       type: object
       description: Events to cite in support of an existing edge.
       required: [event_ids]

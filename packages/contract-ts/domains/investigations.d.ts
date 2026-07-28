@@ -253,6 +253,15 @@ export interface components {
                 "application/json": components["schemas"]["ErrorResponse"];
             };
         };
+        /** @description Caller is authenticated but holds no role in the tenant, or the role does not grant this action (code=forbidden). */
+        Forbidden: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
         /** @description Request parsed but violates a rule of the domain — an impossible status transition, a confirmation without evidence, a malformed cursor (code=validation). */
         ValidationError: {
             headers: {
@@ -264,15 +273,6 @@ export interface components {
         };
         /** @description The operation exists in the contract but has no implementation yet (code=not_implemented). Declared on every operation because the service is being built contract-first: a client can hide the control instead of showing an error, and knows this is not a failure. Goes away per operation as each one is written. */
         NotImplemented: {
-            headers: {
-                [name: string]: unknown;
-            };
-            content: {
-                "application/json": components["schemas"]["ErrorResponse"];
-            };
-        };
-        /** @description Caller is authenticated but holds no role in the tenant, or the role does not grant this action (code=forbidden). */
-        Forbidden: {
             headers: {
                 [name: string]: unknown;
             };
@@ -345,6 +345,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             422: components["responses"]["ValidationError"];
             501: components["responses"]["NotImplemented"];
         };

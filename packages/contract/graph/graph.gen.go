@@ -18,27 +18,6 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
-// Defines values for EdgeStatus.
-const (
-	Confirmed EdgeStatus = "confirmed"
-	Proposed  EdgeStatus = "proposed"
-	Rejected  EdgeStatus = "rejected"
-)
-
-// Valid indicates whether the value is a known member of the EdgeStatus enum.
-func (e EdgeStatus) Valid() bool {
-	switch e {
-	case Confirmed:
-		return true
-	case Proposed:
-		return true
-	case Rejected:
-		return true
-	default:
-		return false
-	}
-}
-
 // Defines values for ErrorResponseErrorCode.
 const (
 	ErrorResponseErrorCodeConflict          ErrorResponseErrorCode = "conflict"
@@ -69,6 +48,27 @@ func (e ErrorResponseErrorCode) Valid() bool {
 	case ErrorResponseErrorCodeUnauthorized:
 		return true
 	case ErrorResponseErrorCodeValidation:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for GraphEdgeStatus.
+const (
+	Confirmed GraphEdgeStatus = "confirmed"
+	Proposed  GraphEdgeStatus = "proposed"
+	Rejected  GraphEdgeStatus = "rejected"
+)
+
+// Valid indicates whether the value is a known member of the GraphEdgeStatus enum.
+func (e GraphEdgeStatus) Valid() bool {
+	switch e {
+	case Confirmed:
+		return true
+	case Proposed:
+		return true
+	case Rejected:
 		return true
 	default:
 		return false
@@ -114,129 +114,6 @@ func (e Origin) Valid() bool {
 	}
 }
 
-// Edge A claim that two nodes are related. Unlike an event, an edge can be wrong — hence a status, a stated reason, and the events it rests on.
-type Edge struct {
-	// Confidence How sure the producer was. Rules carry a fixed value per rule; an agent estimates its own.
-	Confidence *float32 `json:"confidence,omitempty"`
-
-	// CreatedAt When the edge was created.
-	CreatedAt *time.Time `json:"created_at,omitempty"`
-
-	// EvidenceCount How many events the edge cites. Zero is allowed for an analyst, never for an agent.
-	EvidenceCount int `json:"evidence_count"`
-
-	// EvidenceEventIds The cited events. All belong to the same investigation — the database enforces it, so a claim cannot lean on another case's data.
-	EvidenceEventIds *[]openapi_types.UUID `json:"evidence_event_ids,omitempty"`
-
-	// Id Identifier of the edge.
-	Id openapi_types.UUID `json:"id"`
-
-	// InvestigationId Investigation the edge belongs to.
-	InvestigationId openapi_types.UUID `json:"investigation_id"`
-
-	// Metadata Producer-specific extras, e.g. which rule field matched.
-	Metadata *map[string]interface{} `json:"metadata,omitempty"`
-
-	// Origin Who produced the claim. Never changes, unlike status.
-	Origin Origin `json:"origin"`
-
-	// OriginRef Which one exactly — the analyst's subject id, the rule's code, or the agent run's identifier. Together with origin this is how a claim is traced back to its author.
-	OriginRef *string `json:"origin_ref,omitempty"`
-
-	// RejectReason Why it was ruled out. Required when rejecting, and it is what makes a rejected branch useful in the report.
-	RejectReason *string `json:"reject_reason,omitempty"`
-
-	// RelationCode What the relation is — parent_process, logged_in, connected_to, executed, resolved_to, same_host, subevent_of, followed_by.
-	RelationCode string `json:"relation_code"`
-
-	// SourceNodeId Node the relation starts from.
-	SourceNodeId openapi_types.UUID `json:"source_node_id"`
-
-	// Status Where the claim stands in review.
-	Status EdgeStatus `json:"status"`
-
-	// TargetNodeId Node it points to. For an undirected relation the order carries no meaning.
-	TargetNodeId openapi_types.UUID `json:"target_node_id"`
-
-	// UpdatedAt When it last changed — in practice, when it was reviewed.
-	UpdatedAt *time.Time `json:"updated_at,omitempty"`
-
-	// Version Bumped on every change. Send the value you last read when reviewing; a mismatch means someone else got there first.
-	Version int `json:"version"`
-
-	// Why Plain-language justification. Mandatory for an agent: an unexplained machine suggestion is not reviewable.
-	Why *string `json:"why,omitempty"`
-}
-
-// EdgeCreate A relation the analyst asserts between two existing nodes.
-type EdgeCreate struct {
-	// Confidence Optional degree of certainty. A manual edge is normally certain.
-	Confidence *float32 `json:"confidence,omitempty"`
-
-	// EvidenceEventIds Events backing the claim. Each must belong to this investigation — citing another case's event is refused.
-	EvidenceEventIds *[]openapi_types.UUID `json:"evidence_event_ids,omitempty"`
-
-	// RelationCode Relation from the dictionary. Its declared endpoint kinds must match the two nodes, otherwise the request is rejected.
-	RelationCode string `json:"relation_code"`
-
-	// SourceNodeId Node the relation starts from.
-	SourceNodeId openapi_types.UUID `json:"source_node_id"`
-
-	// TargetNodeId Node it points to.
-	TargetNodeId openapi_types.UUID `json:"target_node_id"`
-
-	// Why Justification, for the record. Optional here, required of agents.
-	Why *string `json:"why,omitempty"`
-}
-
-// EdgeEvidence The events an edge cites, in full rather than as bare ids.
-type EdgeEvidence struct {
-	// EdgeId The edge these events support.
-	EdgeId openapi_types.UUID `json:"edge_id"`
-
-	// Items The cited events, oldest first. Each carries the link back to its source console.
-	Items []EvidenceEvent `json:"items"`
-}
-
-// EdgeEvidenceAdd Events to cite in support of an existing edge.
-type EdgeEvidenceAdd struct {
-	// EventIds Events to add. All must belong to the same investigation as the edge. Ones already cited are ignored.
-	EventIds []openapi_types.UUID `json:"event_ids"`
-}
-
-// EdgePage One page of edges.
-type EdgePage struct {
-	// Items The edges on this page.
-	Items []Edge `json:"items"`
-
-	// NextCursor Pass as `cursor` to get the next page. Absent on the last page.
-	NextCursor *string `json:"next_cursor,omitempty"`
-}
-
-// EdgePatch Fields to change on one edge. Anything omitted stays as it is; `version` is always required so two reviewers cannot overwrite each other.
-type EdgePatch struct {
-	// Confidence Revised degree of certainty.
-	Confidence *float32 `json:"confidence,omitempty"`
-
-	// Metadata Replaces the stored extras wholesale, not merged into them.
-	Metadata *map[string]interface{} `json:"metadata,omitempty"`
-
-	// RejectReason Why it does not hold. Required when rejecting.
-	RejectReason *string `json:"reject_reason,omitempty"`
-
-	// Status Accept or rule out the claim. Rejecting requires a reason alongside.
-	Status *EdgeStatus `json:"status,omitempty"`
-
-	// Version Version the client last read. A mismatch is a 409.
-	Version int `json:"version"`
-
-	// Why Revised justification.
-	Why *string `json:"why,omitempty"`
-}
-
-// EdgeStatus Where an edge stands in review. Proposed until a human accepts it. Rejected edges are kept rather than deleted, so that "checked and excluded" survives into the report.
-type EdgeStatus string
-
 // ErrorResponse Body of every non-2xx response. Clients branch on `code`, not on the HTTP status: the status says what happened at the protocol level, the code says what happened in the domain.
 type ErrorResponse struct {
 	// Error The failure itself. Never carries internal details of a 500.
@@ -279,7 +156,7 @@ type EvidenceEvent struct {
 // Graph Nodes and edges as one payload, ready to render.
 type Graph struct {
 	// Edges Edges surviving the status and confidence filters.
-	Edges []Edge `json:"edges"`
+	Edges []GraphEdge `json:"edges"`
 
 	// IncludeSubtree Whether child investigations were merged into this response.
 	IncludeSubtree *bool `json:"include_subtree,omitempty"`
@@ -290,6 +167,129 @@ type Graph struct {
 	// Nodes Every node referenced by the edges below, plus isolated ones.
 	Nodes []GraphNode `json:"nodes"`
 }
+
+// GraphEdge A claim that two nodes are related. Unlike an event, an edge can be wrong — hence a status, a stated reason, and the events it rests on.
+type GraphEdge struct {
+	// Confidence How sure the producer was. Rules carry a fixed value per rule; an agent estimates its own.
+	Confidence *float32 `json:"confidence,omitempty"`
+
+	// CreatedAt When the edge was created.
+	CreatedAt *time.Time `json:"created_at,omitempty"`
+
+	// EvidenceCount How many events the edge cites. Zero is allowed for an analyst, never for an agent.
+	EvidenceCount int `json:"evidence_count"`
+
+	// EvidenceEventIds The cited events. All belong to the same investigation — the database enforces it, so a claim cannot lean on another case's data.
+	EvidenceEventIds *[]openapi_types.UUID `json:"evidence_event_ids,omitempty"`
+
+	// Id Identifier of the edge.
+	Id openapi_types.UUID `json:"id"`
+
+	// InvestigationId Investigation the edge belongs to.
+	InvestigationId openapi_types.UUID `json:"investigation_id"`
+
+	// Metadata Producer-specific extras, e.g. which rule field matched.
+	Metadata *map[string]interface{} `json:"metadata,omitempty"`
+
+	// Origin Who produced the claim. Never changes, unlike status.
+	Origin Origin `json:"origin"`
+
+	// OriginRef Which one exactly — the analyst's subject id, the rule's code, or the agent run's identifier. Together with origin this is how a claim is traced back to its author.
+	OriginRef *string `json:"origin_ref,omitempty"`
+
+	// RejectReason Why it was ruled out. Required when rejecting, and it is what makes a rejected branch useful in the report.
+	RejectReason *string `json:"reject_reason,omitempty"`
+
+	// RelationCode What the relation is — parent_process, logged_in, connected_to, executed, resolved_to, same_host, subevent_of, followed_by.
+	RelationCode string `json:"relation_code"`
+
+	// SourceNodeId Node the relation starts from.
+	SourceNodeId openapi_types.UUID `json:"source_node_id"`
+
+	// Status Where the claim stands in review.
+	Status GraphEdgeStatus `json:"status"`
+
+	// TargetNodeId Node it points to. For an undirected relation the order carries no meaning.
+	TargetNodeId openapi_types.UUID `json:"target_node_id"`
+
+	// UpdatedAt When it last changed — in practice, when it was reviewed.
+	UpdatedAt *time.Time `json:"updated_at,omitempty"`
+
+	// Version Bumped on every change. Send the value you last read when reviewing; a mismatch means someone else got there first.
+	Version int `json:"version"`
+
+	// Why Plain-language justification. Mandatory for an agent: an unexplained machine suggestion is not reviewable.
+	Why *string `json:"why,omitempty"`
+}
+
+// GraphEdgeCreate A relation the analyst asserts between two existing nodes.
+type GraphEdgeCreate struct {
+	// Confidence Optional degree of certainty. A manual edge is normally certain.
+	Confidence *float32 `json:"confidence,omitempty"`
+
+	// EvidenceEventIds Events backing the claim. Each must belong to this investigation — citing another case's event is refused.
+	EvidenceEventIds *[]openapi_types.UUID `json:"evidence_event_ids,omitempty"`
+
+	// RelationCode Relation from the dictionary. Its declared endpoint kinds must match the two nodes, otherwise the request is rejected.
+	RelationCode string `json:"relation_code"`
+
+	// SourceNodeId Node the relation starts from.
+	SourceNodeId openapi_types.UUID `json:"source_node_id"`
+
+	// TargetNodeId Node it points to.
+	TargetNodeId openapi_types.UUID `json:"target_node_id"`
+
+	// Why Justification, for the record. Optional here, required of agents.
+	Why *string `json:"why,omitempty"`
+}
+
+// GraphEdgeEvidence The events an edge cites, in full rather than as bare ids.
+type GraphEdgeEvidence struct {
+	// EdgeId The edge these events support.
+	EdgeId openapi_types.UUID `json:"edge_id"`
+
+	// Items The cited events, oldest first. Each carries the link back to its source console.
+	Items []EvidenceEvent `json:"items"`
+}
+
+// GraphEdgeEvidenceAdd Events to cite in support of an existing edge.
+type GraphEdgeEvidenceAdd struct {
+	// EventIds Events to add. All must belong to the same investigation as the edge. Ones already cited are ignored.
+	EventIds []openapi_types.UUID `json:"event_ids"`
+}
+
+// GraphEdgePage One page of edges.
+type GraphEdgePage struct {
+	// Items The edges on this page.
+	Items []GraphEdge `json:"items"`
+
+	// NextCursor Pass as `cursor` to get the next page. Absent on the last page.
+	NextCursor *string `json:"next_cursor,omitempty"`
+}
+
+// GraphEdgePatch Fields to change on one edge. Anything omitted stays as it is; `version` is always required so two reviewers cannot overwrite each other.
+type GraphEdgePatch struct {
+	// Confidence Revised degree of certainty.
+	Confidence *float32 `json:"confidence,omitempty"`
+
+	// Metadata Replaces the stored extras wholesale, not merged into them.
+	Metadata *map[string]interface{} `json:"metadata,omitempty"`
+
+	// RejectReason Why it does not hold. Required when rejecting.
+	RejectReason *string `json:"reject_reason,omitempty"`
+
+	// Status Accept or rule out the claim. Rejecting requires a reason alongside.
+	Status *GraphEdgeStatus `json:"status,omitempty"`
+
+	// Version Version the client last read. A mismatch is a 409.
+	Version int `json:"version"`
+
+	// Why Revised justification.
+	Why *string `json:"why,omitempty"`
+}
+
+// GraphEdgeStatus Where an edge stands in review. Proposed until a human accepts it. Rejected edges are kept rather than deleted, so that "checked and excluded" survives into the report.
+type GraphEdgeStatus string
 
 // GraphNode A point on the graph. Stands for exactly one entity or one event — never both, never neither.
 type GraphNode struct {
@@ -387,11 +387,11 @@ type ReviewResult struct {
 // Cursor defines model for Cursor.
 type Cursor = string
 
-// EdgeId defines model for EdgeId.
-type EdgeId = openapi_types.UUID
-
 // EventId defines model for EventId.
 type EventId = openapi_types.UUID
+
+// GraphEdgeId defines model for GraphEdgeId.
+type GraphEdgeId = openapi_types.UUID
 
 // InvestigationId defines model for InvestigationId.
 type InvestigationId = openapi_types.UUID
@@ -420,10 +420,10 @@ type Unauthorized = ErrorResponse
 // ValidationError Body of every non-2xx response. Clients branch on `code`, not on the HTTP status: the status says what happened at the protocol level, the code says what happened in the domain.
 type ValidationError = ErrorResponse
 
-// ListEdgesParams defines parameters for ListEdges.
-type ListEdgesParams struct {
+// ListGraphEdgesParams defines parameters for ListGraphEdges.
+type ListGraphEdgesParams struct {
 	// Statuses Which edge states to include. Defaults to proposed and confirmed.
-	Statuses *[]EdgeStatus `form:"statuses,omitempty" json:"statuses,omitempty"`
+	Statuses *[]GraphEdgeStatus `form:"statuses,omitempty" json:"statuses,omitempty"`
 
 	// Origin Keep only edges from one producer. Filtering to agent is how a reviewer looks at just the machine's suggestions.
 	Origin *Origin `form:"origin,omitempty" json:"origin,omitempty"`
@@ -453,7 +453,7 @@ type GetGraphParams struct {
 	MinConfidence *float32 `form:"min_confidence,omitempty" json:"min_confidence,omitempty"`
 
 	// Statuses Which edge states to include. Defaults to proposed and confirmed; pass rejected explicitly to see what was ruled out.
-	Statuses *[]EdgeStatus `form:"statuses,omitempty" json:"statuses,omitempty"`
+	Statuses *[]GraphEdgeStatus `form:"statuses,omitempty" json:"statuses,omitempty"`
 }
 
 // ListNodesParams defines parameters for ListNodes.
@@ -471,47 +471,47 @@ type ListNodesParams struct {
 	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
 }
 
-// UpdateEdgeJSONRequestBody defines body for UpdateEdge for application/json ContentType.
-type UpdateEdgeJSONRequestBody = EdgePatch
+// CreateGraphEdgeJSONRequestBody defines body for CreateGraphEdge for application/json ContentType.
+type CreateGraphEdgeJSONRequestBody = GraphEdgeCreate
 
-// AddEdgeEvidenceJSONRequestBody defines body for AddEdgeEvidence for application/json ContentType.
-type AddEdgeEvidenceJSONRequestBody = EdgeEvidenceAdd
+// UpdateGraphEdgeJSONRequestBody defines body for UpdateGraphEdge for application/json ContentType.
+type UpdateGraphEdgeJSONRequestBody = GraphEdgePatch
 
-// CreateEdgeJSONRequestBody defines body for CreateEdge for application/json ContentType.
-type CreateEdgeJSONRequestBody = EdgeCreate
+// AddGraphEdgeEvidenceJSONRequestBody defines body for AddGraphEdgeEvidence for application/json ContentType.
+type AddGraphEdgeEvidenceJSONRequestBody = GraphEdgeEvidenceAdd
 
 // CreateNodeJSONRequestBody defines body for CreateNode for application/json ContentType.
 type CreateNodeJSONRequestBody = NodeCreate
 
-// ReviewEdgesJSONRequestBody defines body for ReviewEdges for application/json ContentType.
-type ReviewEdgesJSONRequestBody = ReviewRequest
+// ReviewGraphEdgesJSONRequestBody defines body for ReviewGraphEdges for application/json ContentType.
+type ReviewGraphEdgesJSONRequestBody = ReviewRequest
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
-	// DeleteEdge Delete an edge
-	// (DELETE /edges/{edge_id})
-	DeleteEdge(w http.ResponseWriter, r *http.Request, edgeId EdgeId)
-	// GetEdge One edge
-	// (GET /edges/{edge_id})
-	GetEdge(w http.ResponseWriter, r *http.Request, edgeId EdgeId)
-	// UpdateEdge Edit one edge
-	// (PATCH /edges/{edge_id})
-	UpdateEdge(w http.ResponseWriter, r *http.Request, edgeId EdgeId)
-	// ListEdgeEvidence What the edge rests on
-	// (GET /edges/{edge_id}/evidence)
-	ListEdgeEvidence(w http.ResponseWriter, r *http.Request, edgeId EdgeId)
-	// AddEdgeEvidence Cite more events
-	// (POST /edges/{edge_id}/evidence)
-	AddEdgeEvidence(w http.ResponseWriter, r *http.Request, edgeId EdgeId)
-	// DeleteEdgeEvidence Stop citing an event
-	// (DELETE /edges/{edge_id}/evidence/{event_id})
-	DeleteEdgeEvidence(w http.ResponseWriter, r *http.Request, edgeId EdgeId, eventId EventId)
-	// ListEdges Edges of the investigation
+	// ListGraphEdges Edges of the investigation
 	// (GET /investigations/{investigation_id}/edges)
-	ListEdges(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, params ListEdgesParams)
-	// CreateEdge Draw an edge by hand
+	ListGraphEdges(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, params ListGraphEdgesParams)
+	// CreateGraphEdge Draw an edge by hand
 	// (POST /investigations/{investigation_id}/edges)
-	CreateEdge(w http.ResponseWriter, r *http.Request, investigationId InvestigationId)
+	CreateGraphEdge(w http.ResponseWriter, r *http.Request, investigationId InvestigationId)
+	// DeleteGraphEdge Delete an edge
+	// (DELETE /investigations/{investigation_id}/edges/{edge_id})
+	DeleteGraphEdge(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, edgeId GraphEdgeId)
+	// GetGraphEdge One edge
+	// (GET /investigations/{investigation_id}/edges/{edge_id})
+	GetGraphEdge(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, edgeId GraphEdgeId)
+	// UpdateGraphEdge Edit one edge
+	// (PATCH /investigations/{investigation_id}/edges/{edge_id})
+	UpdateGraphEdge(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, edgeId GraphEdgeId)
+	// ListGraphEdgeEvidence What the edge rests on
+	// (GET /investigations/{investigation_id}/edges/{edge_id}/evidence)
+	ListGraphEdgeEvidence(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, edgeId GraphEdgeId)
+	// AddGraphEdgeEvidence Cite more events
+	// (POST /investigations/{investigation_id}/edges/{edge_id}/evidence)
+	AddGraphEdgeEvidence(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, edgeId GraphEdgeId)
+	// DeleteGraphEdgeEvidence Stop citing an event
+	// (DELETE /investigations/{investigation_id}/edges/{edge_id}/evidence/{event_id})
+	DeleteGraphEdgeEvidence(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, edgeId GraphEdgeId, eventId EventId)
 	// GetGraph Graph of the investigation
 	// (GET /investigations/{investigation_id}/graph)
 	GetGraph(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, params GetGraphParams)
@@ -521,15 +521,15 @@ type ServerInterface interface {
 	// CreateNode Put a node on the graph
 	// (POST /investigations/{investigation_id}/nodes)
 	CreateNode(w http.ResponseWriter, r *http.Request, investigationId InvestigationId)
-	// ReviewEdges Review proposed edges in bulk
-	// (POST /investigations/{investigation_id}/review)
-	ReviewEdges(w http.ResponseWriter, r *http.Request, investigationId InvestigationId)
 	// DeleteNode Take a node off the graph
-	// (DELETE /nodes/{node_id})
-	DeleteNode(w http.ResponseWriter, r *http.Request, nodeId NodeId)
+	// (DELETE /investigations/{investigation_id}/nodes/{node_id})
+	DeleteNode(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, nodeId NodeId)
 	// GetNode One node
-	// (GET /nodes/{node_id})
-	GetNode(w http.ResponseWriter, r *http.Request, nodeId NodeId)
+	// (GET /investigations/{investigation_id}/nodes/{node_id})
+	GetNode(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, nodeId NodeId)
+	// ReviewGraphEdges Review proposed edges in bulk
+	// (POST /investigations/{investigation_id}/review)
+	ReviewGraphEdges(w http.ResponseWriter, r *http.Request, investigationId InvestigationId)
 }
 
 // ServerInterfaceWrapper converts contexts to parameters.
@@ -541,173 +541,8 @@ type ServerInterfaceWrapper struct {
 
 type MiddlewareFunc func(http.Handler) http.Handler
 
-// DeleteEdge operation middleware
-func (siw *ServerInterfaceWrapper) DeleteEdge(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "edge_id" -------------
-	var edgeId EdgeId
-
-	err = runtime.BindStyledParameterWithOptions("simple", "edge_id", r.PathValue("edge_id"), &edgeId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "edge_id", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.DeleteEdge(w, r, edgeId)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// GetEdge operation middleware
-func (siw *ServerInterfaceWrapper) GetEdge(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "edge_id" -------------
-	var edgeId EdgeId
-
-	err = runtime.BindStyledParameterWithOptions("simple", "edge_id", r.PathValue("edge_id"), &edgeId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "edge_id", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetEdge(w, r, edgeId)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// UpdateEdge operation middleware
-func (siw *ServerInterfaceWrapper) UpdateEdge(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "edge_id" -------------
-	var edgeId EdgeId
-
-	err = runtime.BindStyledParameterWithOptions("simple", "edge_id", r.PathValue("edge_id"), &edgeId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "edge_id", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.UpdateEdge(w, r, edgeId)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// ListEdgeEvidence operation middleware
-func (siw *ServerInterfaceWrapper) ListEdgeEvidence(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "edge_id" -------------
-	var edgeId EdgeId
-
-	err = runtime.BindStyledParameterWithOptions("simple", "edge_id", r.PathValue("edge_id"), &edgeId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "edge_id", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListEdgeEvidence(w, r, edgeId)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// AddEdgeEvidence operation middleware
-func (siw *ServerInterfaceWrapper) AddEdgeEvidence(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "edge_id" -------------
-	var edgeId EdgeId
-
-	err = runtime.BindStyledParameterWithOptions("simple", "edge_id", r.PathValue("edge_id"), &edgeId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "edge_id", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.AddEdgeEvidence(w, r, edgeId)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// DeleteEdgeEvidence operation middleware
-func (siw *ServerInterfaceWrapper) DeleteEdgeEvidence(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "edge_id" -------------
-	var edgeId EdgeId
-
-	err = runtime.BindStyledParameterWithOptions("simple", "edge_id", r.PathValue("edge_id"), &edgeId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "edge_id", Err: err})
-		return
-	}
-
-	// ------------- Path parameter "event_id" -------------
-	var eventId EventId
-
-	err = runtime.BindStyledParameterWithOptions("simple", "event_id", r.PathValue("event_id"), &eventId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "event_id", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.DeleteEdgeEvidence(w, r, edgeId, eventId)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// ListEdges operation middleware
-func (siw *ServerInterfaceWrapper) ListEdges(w http.ResponseWriter, r *http.Request) {
+// ListGraphEdges operation middleware
+func (siw *ServerInterfaceWrapper) ListGraphEdges(w http.ResponseWriter, r *http.Request) {
 
 	var err error
 	_ = err
@@ -722,7 +557,7 @@ func (siw *ServerInterfaceWrapper) ListEdges(w http.ResponseWriter, r *http.Requ
 	}
 
 	// Parameter object where we will unmarshal all parameters from the context
-	var params ListEdgesParams
+	var params ListGraphEdgesParams
 
 	// ------------- Optional query parameter "statuses" -------------
 
@@ -816,7 +651,7 @@ func (siw *ServerInterfaceWrapper) ListEdges(w http.ResponseWriter, r *http.Requ
 	}
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListEdges(w, r, investigationId, params)
+		siw.Handler.ListGraphEdges(w, r, investigationId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -826,8 +661,8 @@ func (siw *ServerInterfaceWrapper) ListEdges(w http.ResponseWriter, r *http.Requ
 	handler.ServeHTTP(w, r)
 }
 
-// CreateEdge operation middleware
-func (siw *ServerInterfaceWrapper) CreateEdge(w http.ResponseWriter, r *http.Request) {
+// CreateGraphEdge operation middleware
+func (siw *ServerInterfaceWrapper) CreateGraphEdge(w http.ResponseWriter, r *http.Request) {
 
 	var err error
 	_ = err
@@ -842,7 +677,226 @@ func (siw *ServerInterfaceWrapper) CreateEdge(w http.ResponseWriter, r *http.Req
 	}
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.CreateEdge(w, r, investigationId)
+		siw.Handler.CreateGraphEdge(w, r, investigationId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteGraphEdge operation middleware
+func (siw *ServerInterfaceWrapper) DeleteGraphEdge(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "investigation_id" -------------
+	var investigationId InvestigationId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "investigation_id", r.PathValue("investigation_id"), &investigationId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "investigation_id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "edge_id" -------------
+	var edgeId GraphEdgeId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "edge_id", r.PathValue("edge_id"), &edgeId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "edge_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteGraphEdge(w, r, investigationId, edgeId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetGraphEdge operation middleware
+func (siw *ServerInterfaceWrapper) GetGraphEdge(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "investigation_id" -------------
+	var investigationId InvestigationId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "investigation_id", r.PathValue("investigation_id"), &investigationId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "investigation_id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "edge_id" -------------
+	var edgeId GraphEdgeId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "edge_id", r.PathValue("edge_id"), &edgeId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "edge_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetGraphEdge(w, r, investigationId, edgeId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateGraphEdge operation middleware
+func (siw *ServerInterfaceWrapper) UpdateGraphEdge(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "investigation_id" -------------
+	var investigationId InvestigationId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "investigation_id", r.PathValue("investigation_id"), &investigationId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "investigation_id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "edge_id" -------------
+	var edgeId GraphEdgeId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "edge_id", r.PathValue("edge_id"), &edgeId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "edge_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateGraphEdge(w, r, investigationId, edgeId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListGraphEdgeEvidence operation middleware
+func (siw *ServerInterfaceWrapper) ListGraphEdgeEvidence(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "investigation_id" -------------
+	var investigationId InvestigationId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "investigation_id", r.PathValue("investigation_id"), &investigationId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "investigation_id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "edge_id" -------------
+	var edgeId GraphEdgeId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "edge_id", r.PathValue("edge_id"), &edgeId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "edge_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListGraphEdgeEvidence(w, r, investigationId, edgeId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// AddGraphEdgeEvidence operation middleware
+func (siw *ServerInterfaceWrapper) AddGraphEdgeEvidence(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "investigation_id" -------------
+	var investigationId InvestigationId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "investigation_id", r.PathValue("investigation_id"), &investigationId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "investigation_id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "edge_id" -------------
+	var edgeId GraphEdgeId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "edge_id", r.PathValue("edge_id"), &edgeId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "edge_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.AddGraphEdgeEvidence(w, r, investigationId, edgeId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteGraphEdgeEvidence operation middleware
+func (siw *ServerInterfaceWrapper) DeleteGraphEdgeEvidence(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "investigation_id" -------------
+	var investigationId InvestigationId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "investigation_id", r.PathValue("investigation_id"), &investigationId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "investigation_id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "edge_id" -------------
+	var edgeId GraphEdgeId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "edge_id", r.PathValue("edge_id"), &edgeId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "edge_id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "event_id" -------------
+	var eventId EventId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "event_id", r.PathValue("event_id"), &eventId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "event_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteGraphEdgeEvidence(w, r, investigationId, edgeId, eventId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1027,8 +1081,8 @@ func (siw *ServerInterfaceWrapper) CreateNode(w http.ResponseWriter, r *http.Req
 	handler.ServeHTTP(w, r)
 }
 
-// ReviewEdges operation middleware
-func (siw *ServerInterfaceWrapper) ReviewEdges(w http.ResponseWriter, r *http.Request) {
+// DeleteNode operation middleware
+func (siw *ServerInterfaceWrapper) DeleteNode(w http.ResponseWriter, r *http.Request) {
 
 	var err error
 	_ = err
@@ -1042,23 +1096,6 @@ func (siw *ServerInterfaceWrapper) ReviewEdges(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ReviewEdges(w, r, investigationId)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// DeleteNode operation middleware
-func (siw *ServerInterfaceWrapper) DeleteNode(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
 	// ------------- Path parameter "node_id" -------------
 	var nodeId NodeId
 
@@ -1069,7 +1106,7 @@ func (siw *ServerInterfaceWrapper) DeleteNode(w http.ResponseWriter, r *http.Req
 	}
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.DeleteNode(w, r, nodeId)
+		siw.Handler.DeleteNode(w, r, investigationId, nodeId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1085,6 +1122,15 @@ func (siw *ServerInterfaceWrapper) GetNode(w http.ResponseWriter, r *http.Reques
 	var err error
 	_ = err
 
+	// ------------- Path parameter "investigation_id" -------------
+	var investigationId InvestigationId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "investigation_id", r.PathValue("investigation_id"), &investigationId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "investigation_id", Err: err})
+		return
+	}
+
 	// ------------- Path parameter "node_id" -------------
 	var nodeId NodeId
 
@@ -1095,7 +1141,33 @@ func (siw *ServerInterfaceWrapper) GetNode(w http.ResponseWriter, r *http.Reques
 	}
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetNode(w, r, nodeId)
+		siw.Handler.GetNode(w, r, investigationId, nodeId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ReviewGraphEdges operation middleware
+func (siw *ServerInterfaceWrapper) ReviewGraphEdges(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "investigation_id" -------------
+	var investigationId InvestigationId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "investigation_id", r.PathValue("investigation_id"), &investigationId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "investigation_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ReviewGraphEdges(w, r, investigationId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1228,17 +1300,17 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/investigations/{investigation_id}/graph", wrapper.GetGraph)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/investigations/{investigation_id}/nodes", wrapper.ListNodes)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/investigations/{investigation_id}/nodes", wrapper.CreateNode)
-	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/nodes/{node_id}", wrapper.DeleteNode)
-	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/nodes/{node_id}", wrapper.GetNode)
-	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/investigations/{investigation_id}/edges", wrapper.ListEdges)
-	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/investigations/{investigation_id}/edges", wrapper.CreateEdge)
-	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/edges/{edge_id}", wrapper.DeleteEdge)
-	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/edges/{edge_id}", wrapper.GetEdge)
-	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/edges/{edge_id}", wrapper.UpdateEdge)
-	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/edges/{edge_id}/evidence", wrapper.ListEdgeEvidence)
-	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/edges/{edge_id}/evidence", wrapper.AddEdgeEvidence)
-	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/edges/{edge_id}/evidence/{event_id}", wrapper.DeleteEdgeEvidence)
-	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/investigations/{investigation_id}/review", wrapper.ReviewEdges)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/investigations/{investigation_id}/nodes/{node_id}", wrapper.DeleteNode)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/investigations/{investigation_id}/nodes/{node_id}", wrapper.GetNode)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/investigations/{investigation_id}/edges", wrapper.ListGraphEdges)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/investigations/{investigation_id}/edges", wrapper.CreateGraphEdge)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/investigations/{investigation_id}/edges/{edge_id}", wrapper.DeleteGraphEdge)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/investigations/{investigation_id}/edges/{edge_id}", wrapper.GetGraphEdge)
+	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/investigations/{investigation_id}/edges/{edge_id}", wrapper.UpdateGraphEdge)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/investigations/{investigation_id}/edges/{edge_id}/evidence", wrapper.ListGraphEdgeEvidence)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/investigations/{investigation_id}/edges/{edge_id}/evidence", wrapper.AddGraphEdgeEvidence)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/investigations/{investigation_id}/edges/{edge_id}/evidence/{event_id}", wrapper.DeleteGraphEdgeEvidence)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/investigations/{investigation_id}/review", wrapper.ReviewGraphEdges)
 
 	return m
 }
@@ -1255,533 +1327,18 @@ type UnauthorizedJSONResponse ErrorResponse
 
 type ValidationErrorJSONResponse ErrorResponse
 
-type DeleteEdgeRequestObject struct {
-	EdgeId EdgeId `json:"edge_id"`
-}
-
-type DeleteEdgeResponseObject interface {
-	VisitDeleteEdgeResponse(w http.ResponseWriter) error
-}
-
-type DeleteEdge204Response struct {
-}
-
-func (response DeleteEdge204Response) VisitDeleteEdgeResponse(w http.ResponseWriter) error {
-	w.WriteHeader(204)
-	return nil
-}
-
-type DeleteEdge401JSONResponse struct{ UnauthorizedJSONResponse }
-
-func (response DeleteEdge401JSONResponse) VisitDeleteEdgeResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(401)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type DeleteEdge403JSONResponse struct{ ForbiddenJSONResponse }
-
-func (response DeleteEdge403JSONResponse) VisitDeleteEdgeResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(403)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type DeleteEdge404JSONResponse struct{ NotFoundJSONResponse }
-
-func (response DeleteEdge404JSONResponse) VisitDeleteEdgeResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(404)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type DeleteEdge501JSONResponse struct{ NotImplementedJSONResponse }
-
-func (response DeleteEdge501JSONResponse) VisitDeleteEdgeResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(501)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type GetEdgeRequestObject struct {
-	EdgeId EdgeId `json:"edge_id"`
-}
-
-type GetEdgeResponseObject interface {
-	VisitGetEdgeResponse(w http.ResponseWriter) error
-}
-
-type GetEdge200JSONResponse Edge
-
-func (response GetEdge200JSONResponse) VisitGetEdgeResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(200)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type GetEdge401JSONResponse struct{ UnauthorizedJSONResponse }
-
-func (response GetEdge401JSONResponse) VisitGetEdgeResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(401)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type GetEdge403JSONResponse struct{ ForbiddenJSONResponse }
-
-func (response GetEdge403JSONResponse) VisitGetEdgeResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(403)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type GetEdge404JSONResponse struct{ NotFoundJSONResponse }
-
-func (response GetEdge404JSONResponse) VisitGetEdgeResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(404)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type GetEdge501JSONResponse struct{ NotImplementedJSONResponse }
-
-func (response GetEdge501JSONResponse) VisitGetEdgeResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(501)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type UpdateEdgeRequestObject struct {
-	EdgeId EdgeId `json:"edge_id"`
-	Body   *UpdateEdgeJSONRequestBody
-}
-
-type UpdateEdgeResponseObject interface {
-	VisitUpdateEdgeResponse(w http.ResponseWriter) error
-}
-
-type UpdateEdge200JSONResponse Edge
-
-func (response UpdateEdge200JSONResponse) VisitUpdateEdgeResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(200)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type UpdateEdge401JSONResponse struct{ UnauthorizedJSONResponse }
-
-func (response UpdateEdge401JSONResponse) VisitUpdateEdgeResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(401)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type UpdateEdge403JSONResponse struct{ ForbiddenJSONResponse }
-
-func (response UpdateEdge403JSONResponse) VisitUpdateEdgeResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(403)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type UpdateEdge404JSONResponse struct{ NotFoundJSONResponse }
-
-func (response UpdateEdge404JSONResponse) VisitUpdateEdgeResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(404)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type UpdateEdge409JSONResponse struct{ ConflictJSONResponse }
-
-func (response UpdateEdge409JSONResponse) VisitUpdateEdgeResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(409)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type UpdateEdge422JSONResponse struct{ ValidationErrorJSONResponse }
-
-func (response UpdateEdge422JSONResponse) VisitUpdateEdgeResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(422)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type UpdateEdge501JSONResponse struct{ NotImplementedJSONResponse }
-
-func (response UpdateEdge501JSONResponse) VisitUpdateEdgeResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(501)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type ListEdgeEvidenceRequestObject struct {
-	EdgeId EdgeId `json:"edge_id"`
-}
-
-type ListEdgeEvidenceResponseObject interface {
-	VisitListEdgeEvidenceResponse(w http.ResponseWriter) error
-}
-
-type ListEdgeEvidence200JSONResponse EdgeEvidence
-
-func (response ListEdgeEvidence200JSONResponse) VisitListEdgeEvidenceResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(200)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type ListEdgeEvidence401JSONResponse struct{ UnauthorizedJSONResponse }
-
-func (response ListEdgeEvidence401JSONResponse) VisitListEdgeEvidenceResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(401)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type ListEdgeEvidence403JSONResponse struct{ ForbiddenJSONResponse }
-
-func (response ListEdgeEvidence403JSONResponse) VisitListEdgeEvidenceResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(403)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type ListEdgeEvidence404JSONResponse struct{ NotFoundJSONResponse }
-
-func (response ListEdgeEvidence404JSONResponse) VisitListEdgeEvidenceResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(404)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type ListEdgeEvidence501JSONResponse struct{ NotImplementedJSONResponse }
-
-func (response ListEdgeEvidence501JSONResponse) VisitListEdgeEvidenceResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(501)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type AddEdgeEvidenceRequestObject struct {
-	EdgeId EdgeId `json:"edge_id"`
-	Body   *AddEdgeEvidenceJSONRequestBody
-}
-
-type AddEdgeEvidenceResponseObject interface {
-	VisitAddEdgeEvidenceResponse(w http.ResponseWriter) error
-}
-
-type AddEdgeEvidence200JSONResponse EdgeEvidence
-
-func (response AddEdgeEvidence200JSONResponse) VisitAddEdgeEvidenceResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(200)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type AddEdgeEvidence401JSONResponse struct{ UnauthorizedJSONResponse }
-
-func (response AddEdgeEvidence401JSONResponse) VisitAddEdgeEvidenceResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(401)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type AddEdgeEvidence403JSONResponse struct{ ForbiddenJSONResponse }
-
-func (response AddEdgeEvidence403JSONResponse) VisitAddEdgeEvidenceResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(403)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type AddEdgeEvidence404JSONResponse struct{ NotFoundJSONResponse }
-
-func (response AddEdgeEvidence404JSONResponse) VisitAddEdgeEvidenceResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(404)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type AddEdgeEvidence422JSONResponse struct{ ValidationErrorJSONResponse }
-
-func (response AddEdgeEvidence422JSONResponse) VisitAddEdgeEvidenceResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(422)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type AddEdgeEvidence501JSONResponse struct{ NotImplementedJSONResponse }
-
-func (response AddEdgeEvidence501JSONResponse) VisitAddEdgeEvidenceResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(501)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type DeleteEdgeEvidenceRequestObject struct {
-	EdgeId  EdgeId  `json:"edge_id"`
-	EventId EventId `json:"event_id"`
-}
-
-type DeleteEdgeEvidenceResponseObject interface {
-	VisitDeleteEdgeEvidenceResponse(w http.ResponseWriter) error
-}
-
-type DeleteEdgeEvidence204Response struct {
-}
-
-func (response DeleteEdgeEvidence204Response) VisitDeleteEdgeEvidenceResponse(w http.ResponseWriter) error {
-	w.WriteHeader(204)
-	return nil
-}
-
-type DeleteEdgeEvidence401JSONResponse struct{ UnauthorizedJSONResponse }
-
-func (response DeleteEdgeEvidence401JSONResponse) VisitDeleteEdgeEvidenceResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(401)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type DeleteEdgeEvidence403JSONResponse struct{ ForbiddenJSONResponse }
-
-func (response DeleteEdgeEvidence403JSONResponse) VisitDeleteEdgeEvidenceResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(403)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type DeleteEdgeEvidence404JSONResponse struct{ NotFoundJSONResponse }
-
-func (response DeleteEdgeEvidence404JSONResponse) VisitDeleteEdgeEvidenceResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(404)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type DeleteEdgeEvidence422JSONResponse struct{ ValidationErrorJSONResponse }
-
-func (response DeleteEdgeEvidence422JSONResponse) VisitDeleteEdgeEvidenceResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(422)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type DeleteEdgeEvidence501JSONResponse struct{ NotImplementedJSONResponse }
-
-func (response DeleteEdgeEvidence501JSONResponse) VisitDeleteEdgeEvidenceResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(501)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type ListEdgesRequestObject struct {
+type ListGraphEdgesRequestObject struct {
 	InvestigationId InvestigationId `json:"investigation_id"`
-	Params          ListEdgesParams
+	Params          ListGraphEdgesParams
 }
 
-type ListEdgesResponseObject interface {
-	VisitListEdgesResponse(w http.ResponseWriter) error
+type ListGraphEdgesResponseObject interface {
+	VisitListGraphEdgesResponse(w http.ResponseWriter) error
 }
 
-type ListEdges200JSONResponse EdgePage
+type ListGraphEdges200JSONResponse GraphEdgePage
 
-func (response ListEdges200JSONResponse) VisitListEdgesResponse(w http.ResponseWriter) error {
+func (response ListGraphEdges200JSONResponse) VisitListGraphEdgesResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -1793,9 +1350,9 @@ func (response ListEdges200JSONResponse) VisitListEdgesResponse(w http.ResponseW
 	return err
 }
 
-type ListEdges401JSONResponse struct{ UnauthorizedJSONResponse }
+type ListGraphEdges401JSONResponse struct{ UnauthorizedJSONResponse }
 
-func (response ListEdges401JSONResponse) VisitListEdgesResponse(w http.ResponseWriter) error {
+func (response ListGraphEdges401JSONResponse) VisitListGraphEdgesResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -1807,9 +1364,9 @@ func (response ListEdges401JSONResponse) VisitListEdgesResponse(w http.ResponseW
 	return err
 }
 
-type ListEdges403JSONResponse struct{ ForbiddenJSONResponse }
+type ListGraphEdges403JSONResponse struct{ ForbiddenJSONResponse }
 
-func (response ListEdges403JSONResponse) VisitListEdgesResponse(w http.ResponseWriter) error {
+func (response ListGraphEdges403JSONResponse) VisitListGraphEdgesResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -1821,9 +1378,9 @@ func (response ListEdges403JSONResponse) VisitListEdgesResponse(w http.ResponseW
 	return err
 }
 
-type ListEdges404JSONResponse struct{ NotFoundJSONResponse }
+type ListGraphEdges404JSONResponse struct{ NotFoundJSONResponse }
 
-func (response ListEdges404JSONResponse) VisitListEdgesResponse(w http.ResponseWriter) error {
+func (response ListGraphEdges404JSONResponse) VisitListGraphEdgesResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -1835,9 +1392,9 @@ func (response ListEdges404JSONResponse) VisitListEdgesResponse(w http.ResponseW
 	return err
 }
 
-type ListEdges422JSONResponse struct{ ValidationErrorJSONResponse }
+type ListGraphEdges422JSONResponse struct{ ValidationErrorJSONResponse }
 
-func (response ListEdges422JSONResponse) VisitListEdgesResponse(w http.ResponseWriter) error {
+func (response ListGraphEdges422JSONResponse) VisitListGraphEdgesResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -1849,9 +1406,9 @@ func (response ListEdges422JSONResponse) VisitListEdgesResponse(w http.ResponseW
 	return err
 }
 
-type ListEdges501JSONResponse struct{ NotImplementedJSONResponse }
+type ListGraphEdges501JSONResponse struct{ NotImplementedJSONResponse }
 
-func (response ListEdges501JSONResponse) VisitListEdgesResponse(w http.ResponseWriter) error {
+func (response ListGraphEdges501JSONResponse) VisitListGraphEdgesResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -1863,18 +1420,18 @@ func (response ListEdges501JSONResponse) VisitListEdgesResponse(w http.ResponseW
 	return err
 }
 
-type CreateEdgeRequestObject struct {
+type CreateGraphEdgeRequestObject struct {
 	InvestigationId InvestigationId `json:"investigation_id"`
-	Body            *CreateEdgeJSONRequestBody
+	Body            *CreateGraphEdgeJSONRequestBody
 }
 
-type CreateEdgeResponseObject interface {
-	VisitCreateEdgeResponse(w http.ResponseWriter) error
+type CreateGraphEdgeResponseObject interface {
+	VisitCreateGraphEdgeResponse(w http.ResponseWriter) error
 }
 
-type CreateEdge201JSONResponse Edge
+type CreateGraphEdge201JSONResponse GraphEdge
 
-func (response CreateEdge201JSONResponse) VisitCreateEdgeResponse(w http.ResponseWriter) error {
+func (response CreateGraphEdge201JSONResponse) VisitCreateGraphEdgeResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -1886,9 +1443,9 @@ func (response CreateEdge201JSONResponse) VisitCreateEdgeResponse(w http.Respons
 	return err
 }
 
-type CreateEdge401JSONResponse struct{ UnauthorizedJSONResponse }
+type CreateGraphEdge401JSONResponse struct{ UnauthorizedJSONResponse }
 
-func (response CreateEdge401JSONResponse) VisitCreateEdgeResponse(w http.ResponseWriter) error {
+func (response CreateGraphEdge401JSONResponse) VisitCreateGraphEdgeResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -1900,9 +1457,9 @@ func (response CreateEdge401JSONResponse) VisitCreateEdgeResponse(w http.Respons
 	return err
 }
 
-type CreateEdge403JSONResponse struct{ ForbiddenJSONResponse }
+type CreateGraphEdge403JSONResponse struct{ ForbiddenJSONResponse }
 
-func (response CreateEdge403JSONResponse) VisitCreateEdgeResponse(w http.ResponseWriter) error {
+func (response CreateGraphEdge403JSONResponse) VisitCreateGraphEdgeResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -1914,9 +1471,9 @@ func (response CreateEdge403JSONResponse) VisitCreateEdgeResponse(w http.Respons
 	return err
 }
 
-type CreateEdge404JSONResponse struct{ NotFoundJSONResponse }
+type CreateGraphEdge404JSONResponse struct{ NotFoundJSONResponse }
 
-func (response CreateEdge404JSONResponse) VisitCreateEdgeResponse(w http.ResponseWriter) error {
+func (response CreateGraphEdge404JSONResponse) VisitCreateGraphEdgeResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -1928,9 +1485,9 @@ func (response CreateEdge404JSONResponse) VisitCreateEdgeResponse(w http.Respons
 	return err
 }
 
-type CreateEdge409JSONResponse struct{ ConflictJSONResponse }
+type CreateGraphEdge409JSONResponse struct{ ConflictJSONResponse }
 
-func (response CreateEdge409JSONResponse) VisitCreateEdgeResponse(w http.ResponseWriter) error {
+func (response CreateGraphEdge409JSONResponse) VisitCreateGraphEdgeResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -1942,9 +1499,9 @@ func (response CreateEdge409JSONResponse) VisitCreateEdgeResponse(w http.Respons
 	return err
 }
 
-type CreateEdge422JSONResponse struct{ ValidationErrorJSONResponse }
+type CreateGraphEdge422JSONResponse struct{ ValidationErrorJSONResponse }
 
-func (response CreateEdge422JSONResponse) VisitCreateEdgeResponse(w http.ResponseWriter) error {
+func (response CreateGraphEdge422JSONResponse) VisitCreateGraphEdgeResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -1956,9 +1513,530 @@ func (response CreateEdge422JSONResponse) VisitCreateEdgeResponse(w http.Respons
 	return err
 }
 
-type CreateEdge501JSONResponse struct{ NotImplementedJSONResponse }
+type CreateGraphEdge501JSONResponse struct{ NotImplementedJSONResponse }
 
-func (response CreateEdge501JSONResponse) VisitCreateEdgeResponse(w http.ResponseWriter) error {
+func (response CreateGraphEdge501JSONResponse) VisitCreateGraphEdgeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(501)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteGraphEdgeRequestObject struct {
+	InvestigationId InvestigationId `json:"investigation_id"`
+	EdgeId          GraphEdgeId     `json:"edge_id"`
+}
+
+type DeleteGraphEdgeResponseObject interface {
+	VisitDeleteGraphEdgeResponse(w http.ResponseWriter) error
+}
+
+type DeleteGraphEdge204Response struct {
+}
+
+func (response DeleteGraphEdge204Response) VisitDeleteGraphEdgeResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteGraphEdge401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response DeleteGraphEdge401JSONResponse) VisitDeleteGraphEdgeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteGraphEdge403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response DeleteGraphEdge403JSONResponse) VisitDeleteGraphEdgeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteGraphEdge404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response DeleteGraphEdge404JSONResponse) VisitDeleteGraphEdgeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteGraphEdge501JSONResponse struct{ NotImplementedJSONResponse }
+
+func (response DeleteGraphEdge501JSONResponse) VisitDeleteGraphEdgeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(501)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetGraphEdgeRequestObject struct {
+	InvestigationId InvestigationId `json:"investigation_id"`
+	EdgeId          GraphEdgeId     `json:"edge_id"`
+}
+
+type GetGraphEdgeResponseObject interface {
+	VisitGetGraphEdgeResponse(w http.ResponseWriter) error
+}
+
+type GetGraphEdge200JSONResponse GraphEdge
+
+func (response GetGraphEdge200JSONResponse) VisitGetGraphEdgeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetGraphEdge401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response GetGraphEdge401JSONResponse) VisitGetGraphEdgeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetGraphEdge403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response GetGraphEdge403JSONResponse) VisitGetGraphEdgeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetGraphEdge404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response GetGraphEdge404JSONResponse) VisitGetGraphEdgeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetGraphEdge501JSONResponse struct{ NotImplementedJSONResponse }
+
+func (response GetGraphEdge501JSONResponse) VisitGetGraphEdgeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(501)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateGraphEdgeRequestObject struct {
+	InvestigationId InvestigationId `json:"investigation_id"`
+	EdgeId          GraphEdgeId     `json:"edge_id"`
+	Body            *UpdateGraphEdgeJSONRequestBody
+}
+
+type UpdateGraphEdgeResponseObject interface {
+	VisitUpdateGraphEdgeResponse(w http.ResponseWriter) error
+}
+
+type UpdateGraphEdge200JSONResponse GraphEdge
+
+func (response UpdateGraphEdge200JSONResponse) VisitUpdateGraphEdgeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateGraphEdge401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response UpdateGraphEdge401JSONResponse) VisitUpdateGraphEdgeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateGraphEdge403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response UpdateGraphEdge403JSONResponse) VisitUpdateGraphEdgeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateGraphEdge404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response UpdateGraphEdge404JSONResponse) VisitUpdateGraphEdgeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateGraphEdge409JSONResponse struct{ ConflictJSONResponse }
+
+func (response UpdateGraphEdge409JSONResponse) VisitUpdateGraphEdgeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateGraphEdge422JSONResponse struct{ ValidationErrorJSONResponse }
+
+func (response UpdateGraphEdge422JSONResponse) VisitUpdateGraphEdgeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateGraphEdge501JSONResponse struct{ NotImplementedJSONResponse }
+
+func (response UpdateGraphEdge501JSONResponse) VisitUpdateGraphEdgeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(501)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListGraphEdgeEvidenceRequestObject struct {
+	InvestigationId InvestigationId `json:"investigation_id"`
+	EdgeId          GraphEdgeId     `json:"edge_id"`
+}
+
+type ListGraphEdgeEvidenceResponseObject interface {
+	VisitListGraphEdgeEvidenceResponse(w http.ResponseWriter) error
+}
+
+type ListGraphEdgeEvidence200JSONResponse GraphEdgeEvidence
+
+func (response ListGraphEdgeEvidence200JSONResponse) VisitListGraphEdgeEvidenceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListGraphEdgeEvidence401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response ListGraphEdgeEvidence401JSONResponse) VisitListGraphEdgeEvidenceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListGraphEdgeEvidence403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response ListGraphEdgeEvidence403JSONResponse) VisitListGraphEdgeEvidenceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListGraphEdgeEvidence404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response ListGraphEdgeEvidence404JSONResponse) VisitListGraphEdgeEvidenceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListGraphEdgeEvidence501JSONResponse struct{ NotImplementedJSONResponse }
+
+func (response ListGraphEdgeEvidence501JSONResponse) VisitListGraphEdgeEvidenceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(501)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddGraphEdgeEvidenceRequestObject struct {
+	InvestigationId InvestigationId `json:"investigation_id"`
+	EdgeId          GraphEdgeId     `json:"edge_id"`
+	Body            *AddGraphEdgeEvidenceJSONRequestBody
+}
+
+type AddGraphEdgeEvidenceResponseObject interface {
+	VisitAddGraphEdgeEvidenceResponse(w http.ResponseWriter) error
+}
+
+type AddGraphEdgeEvidence200JSONResponse GraphEdgeEvidence
+
+func (response AddGraphEdgeEvidence200JSONResponse) VisitAddGraphEdgeEvidenceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddGraphEdgeEvidence401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response AddGraphEdgeEvidence401JSONResponse) VisitAddGraphEdgeEvidenceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddGraphEdgeEvidence403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response AddGraphEdgeEvidence403JSONResponse) VisitAddGraphEdgeEvidenceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddGraphEdgeEvidence404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response AddGraphEdgeEvidence404JSONResponse) VisitAddGraphEdgeEvidenceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddGraphEdgeEvidence422JSONResponse struct{ ValidationErrorJSONResponse }
+
+func (response AddGraphEdgeEvidence422JSONResponse) VisitAddGraphEdgeEvidenceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddGraphEdgeEvidence501JSONResponse struct{ NotImplementedJSONResponse }
+
+func (response AddGraphEdgeEvidence501JSONResponse) VisitAddGraphEdgeEvidenceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(501)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteGraphEdgeEvidenceRequestObject struct {
+	InvestigationId InvestigationId `json:"investigation_id"`
+	EdgeId          GraphEdgeId     `json:"edge_id"`
+	EventId         EventId         `json:"event_id"`
+}
+
+type DeleteGraphEdgeEvidenceResponseObject interface {
+	VisitDeleteGraphEdgeEvidenceResponse(w http.ResponseWriter) error
+}
+
+type DeleteGraphEdgeEvidence204Response struct {
+}
+
+func (response DeleteGraphEdgeEvidence204Response) VisitDeleteGraphEdgeEvidenceResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteGraphEdgeEvidence401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response DeleteGraphEdgeEvidence401JSONResponse) VisitDeleteGraphEdgeEvidenceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteGraphEdgeEvidence403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response DeleteGraphEdgeEvidence403JSONResponse) VisitDeleteGraphEdgeEvidenceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteGraphEdgeEvidence404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response DeleteGraphEdgeEvidence404JSONResponse) VisitDeleteGraphEdgeEvidenceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteGraphEdgeEvidence422JSONResponse struct{ ValidationErrorJSONResponse }
+
+func (response DeleteGraphEdgeEvidence422JSONResponse) VisitDeleteGraphEdgeEvidenceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteGraphEdgeEvidence501JSONResponse struct{ NotImplementedJSONResponse }
+
+func (response DeleteGraphEdgeEvidence501JSONResponse) VisitDeleteGraphEdgeEvidenceResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -2249,115 +2327,9 @@ func (response CreateNode501JSONResponse) VisitCreateNodeResponse(w http.Respons
 	return err
 }
 
-type ReviewEdgesRequestObject struct {
-	InvestigationId InvestigationId `json:"investigation_id"`
-	Body            *ReviewEdgesJSONRequestBody
-}
-
-type ReviewEdgesResponseObject interface {
-	VisitReviewEdgesResponse(w http.ResponseWriter) error
-}
-
-type ReviewEdges200JSONResponse ReviewResult
-
-func (response ReviewEdges200JSONResponse) VisitReviewEdgesResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(200)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type ReviewEdges401JSONResponse struct{ UnauthorizedJSONResponse }
-
-func (response ReviewEdges401JSONResponse) VisitReviewEdgesResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(401)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type ReviewEdges403JSONResponse struct{ ForbiddenJSONResponse }
-
-func (response ReviewEdges403JSONResponse) VisitReviewEdgesResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(403)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type ReviewEdges404JSONResponse struct{ NotFoundJSONResponse }
-
-func (response ReviewEdges404JSONResponse) VisitReviewEdgesResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(404)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type ReviewEdges409JSONResponse struct{ ConflictJSONResponse }
-
-func (response ReviewEdges409JSONResponse) VisitReviewEdgesResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(409)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type ReviewEdges422JSONResponse struct{ ValidationErrorJSONResponse }
-
-func (response ReviewEdges422JSONResponse) VisitReviewEdgesResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(422)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type ReviewEdges501JSONResponse struct{ NotImplementedJSONResponse }
-
-func (response ReviewEdges501JSONResponse) VisitReviewEdgesResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(501)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
 type DeleteNodeRequestObject struct {
-	NodeId NodeId `json:"node_id"`
+	InvestigationId InvestigationId `json:"investigation_id"`
+	NodeId          NodeId          `json:"node_id"`
 }
 
 type DeleteNodeResponseObject interface {
@@ -2429,7 +2401,8 @@ func (response DeleteNode501JSONResponse) VisitDeleteNodeResponse(w http.Respons
 }
 
 type GetNodeRequestObject struct {
-	NodeId NodeId `json:"node_id"`
+	InvestigationId InvestigationId `json:"investigation_id"`
+	NodeId          NodeId          `json:"node_id"`
 }
 
 type GetNodeResponseObject interface {
@@ -2506,32 +2479,139 @@ func (response GetNode501JSONResponse) VisitGetNodeResponse(w http.ResponseWrite
 	return err
 }
 
+type ReviewGraphEdgesRequestObject struct {
+	InvestigationId InvestigationId `json:"investigation_id"`
+	Body            *ReviewGraphEdgesJSONRequestBody
+}
+
+type ReviewGraphEdgesResponseObject interface {
+	VisitReviewGraphEdgesResponse(w http.ResponseWriter) error
+}
+
+type ReviewGraphEdges200JSONResponse ReviewResult
+
+func (response ReviewGraphEdges200JSONResponse) VisitReviewGraphEdgesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReviewGraphEdges401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response ReviewGraphEdges401JSONResponse) VisitReviewGraphEdgesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReviewGraphEdges403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response ReviewGraphEdges403JSONResponse) VisitReviewGraphEdgesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReviewGraphEdges404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response ReviewGraphEdges404JSONResponse) VisitReviewGraphEdgesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReviewGraphEdges409JSONResponse struct{ ConflictJSONResponse }
+
+func (response ReviewGraphEdges409JSONResponse) VisitReviewGraphEdgesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReviewGraphEdges422JSONResponse struct{ ValidationErrorJSONResponse }
+
+func (response ReviewGraphEdges422JSONResponse) VisitReviewGraphEdgesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReviewGraphEdges501JSONResponse struct{ NotImplementedJSONResponse }
+
+func (response ReviewGraphEdges501JSONResponse) VisitReviewGraphEdgesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(501)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
-	// DeleteEdge Delete an edge
-	// (DELETE /edges/{edge_id})
-	DeleteEdge(ctx context.Context, request DeleteEdgeRequestObject) (DeleteEdgeResponseObject, error)
-	// GetEdge One edge
-	// (GET /edges/{edge_id})
-	GetEdge(ctx context.Context, request GetEdgeRequestObject) (GetEdgeResponseObject, error)
-	// UpdateEdge Edit one edge
-	// (PATCH /edges/{edge_id})
-	UpdateEdge(ctx context.Context, request UpdateEdgeRequestObject) (UpdateEdgeResponseObject, error)
-	// ListEdgeEvidence What the edge rests on
-	// (GET /edges/{edge_id}/evidence)
-	ListEdgeEvidence(ctx context.Context, request ListEdgeEvidenceRequestObject) (ListEdgeEvidenceResponseObject, error)
-	// AddEdgeEvidence Cite more events
-	// (POST /edges/{edge_id}/evidence)
-	AddEdgeEvidence(ctx context.Context, request AddEdgeEvidenceRequestObject) (AddEdgeEvidenceResponseObject, error)
-	// DeleteEdgeEvidence Stop citing an event
-	// (DELETE /edges/{edge_id}/evidence/{event_id})
-	DeleteEdgeEvidence(ctx context.Context, request DeleteEdgeEvidenceRequestObject) (DeleteEdgeEvidenceResponseObject, error)
-	// ListEdges Edges of the investigation
+	// ListGraphEdges Edges of the investigation
 	// (GET /investigations/{investigation_id}/edges)
-	ListEdges(ctx context.Context, request ListEdgesRequestObject) (ListEdgesResponseObject, error)
-	// CreateEdge Draw an edge by hand
+	ListGraphEdges(ctx context.Context, request ListGraphEdgesRequestObject) (ListGraphEdgesResponseObject, error)
+	// CreateGraphEdge Draw an edge by hand
 	// (POST /investigations/{investigation_id}/edges)
-	CreateEdge(ctx context.Context, request CreateEdgeRequestObject) (CreateEdgeResponseObject, error)
+	CreateGraphEdge(ctx context.Context, request CreateGraphEdgeRequestObject) (CreateGraphEdgeResponseObject, error)
+	// DeleteGraphEdge Delete an edge
+	// (DELETE /investigations/{investigation_id}/edges/{edge_id})
+	DeleteGraphEdge(ctx context.Context, request DeleteGraphEdgeRequestObject) (DeleteGraphEdgeResponseObject, error)
+	// GetGraphEdge One edge
+	// (GET /investigations/{investigation_id}/edges/{edge_id})
+	GetGraphEdge(ctx context.Context, request GetGraphEdgeRequestObject) (GetGraphEdgeResponseObject, error)
+	// UpdateGraphEdge Edit one edge
+	// (PATCH /investigations/{investigation_id}/edges/{edge_id})
+	UpdateGraphEdge(ctx context.Context, request UpdateGraphEdgeRequestObject) (UpdateGraphEdgeResponseObject, error)
+	// ListGraphEdgeEvidence What the edge rests on
+	// (GET /investigations/{investigation_id}/edges/{edge_id}/evidence)
+	ListGraphEdgeEvidence(ctx context.Context, request ListGraphEdgeEvidenceRequestObject) (ListGraphEdgeEvidenceResponseObject, error)
+	// AddGraphEdgeEvidence Cite more events
+	// (POST /investigations/{investigation_id}/edges/{edge_id}/evidence)
+	AddGraphEdgeEvidence(ctx context.Context, request AddGraphEdgeEvidenceRequestObject) (AddGraphEdgeEvidenceResponseObject, error)
+	// DeleteGraphEdgeEvidence Stop citing an event
+	// (DELETE /investigations/{investigation_id}/edges/{edge_id}/evidence/{event_id})
+	DeleteGraphEdgeEvidence(ctx context.Context, request DeleteGraphEdgeEvidenceRequestObject) (DeleteGraphEdgeEvidenceResponseObject, error)
 	// GetGraph Graph of the investigation
 	// (GET /investigations/{investigation_id}/graph)
 	GetGraph(ctx context.Context, request GetGraphRequestObject) (GetGraphResponseObject, error)
@@ -2541,15 +2621,15 @@ type StrictServerInterface interface {
 	// CreateNode Put a node on the graph
 	// (POST /investigations/{investigation_id}/nodes)
 	CreateNode(ctx context.Context, request CreateNodeRequestObject) (CreateNodeResponseObject, error)
-	// ReviewEdges Review proposed edges in bulk
-	// (POST /investigations/{investigation_id}/review)
-	ReviewEdges(ctx context.Context, request ReviewEdgesRequestObject) (ReviewEdgesResponseObject, error)
 	// DeleteNode Take a node off the graph
-	// (DELETE /nodes/{node_id})
+	// (DELETE /investigations/{investigation_id}/nodes/{node_id})
 	DeleteNode(ctx context.Context, request DeleteNodeRequestObject) (DeleteNodeResponseObject, error)
 	// GetNode One node
-	// (GET /nodes/{node_id})
+	// (GET /investigations/{investigation_id}/nodes/{node_id})
 	GetNode(ctx context.Context, request GetNodeRequestObject) (GetNodeResponseObject, error)
+	// ReviewGraphEdges Review proposed edges in bulk
+	// (POST /investigations/{investigation_id}/review)
+	ReviewGraphEdges(ctx context.Context, request ReviewGraphEdgesRequestObject) (ReviewGraphEdgesResponseObject, error)
 }
 
 type StrictHandlerFunc func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error)
@@ -2591,197 +2671,26 @@ type strictHandler struct {
 	options     StrictHTTPServerOptions
 }
 
-// DeleteEdge operation middleware
-func (sh *strictHandler) DeleteEdge(w http.ResponseWriter, r *http.Request, edgeId EdgeId) {
-	var request DeleteEdgeRequestObject
-
-	request.EdgeId = edgeId
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.DeleteEdge(ctx, request.(DeleteEdgeRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "DeleteEdge")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(DeleteEdgeResponseObject); ok {
-		if err := validResponse.VisitDeleteEdgeResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// GetEdge operation middleware
-func (sh *strictHandler) GetEdge(w http.ResponseWriter, r *http.Request, edgeId EdgeId) {
-	var request GetEdgeRequestObject
-
-	request.EdgeId = edgeId
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.GetEdge(ctx, request.(GetEdgeRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "GetEdge")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(GetEdgeResponseObject); ok {
-		if err := validResponse.VisitGetEdgeResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// UpdateEdge operation middleware
-func (sh *strictHandler) UpdateEdge(w http.ResponseWriter, r *http.Request, edgeId EdgeId) {
-	var request UpdateEdgeRequestObject
-
-	request.EdgeId = edgeId
-
-	var body UpdateEdgeJSONRequestBody
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
-		return
-	}
-	request.Body = &body
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.UpdateEdge(ctx, request.(UpdateEdgeRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "UpdateEdge")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(UpdateEdgeResponseObject); ok {
-		if err := validResponse.VisitUpdateEdgeResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// ListEdgeEvidence operation middleware
-func (sh *strictHandler) ListEdgeEvidence(w http.ResponseWriter, r *http.Request, edgeId EdgeId) {
-	var request ListEdgeEvidenceRequestObject
-
-	request.EdgeId = edgeId
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.ListEdgeEvidence(ctx, request.(ListEdgeEvidenceRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "ListEdgeEvidence")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(ListEdgeEvidenceResponseObject); ok {
-		if err := validResponse.VisitListEdgeEvidenceResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// AddEdgeEvidence operation middleware
-func (sh *strictHandler) AddEdgeEvidence(w http.ResponseWriter, r *http.Request, edgeId EdgeId) {
-	var request AddEdgeEvidenceRequestObject
-
-	request.EdgeId = edgeId
-
-	var body AddEdgeEvidenceJSONRequestBody
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
-		return
-	}
-	request.Body = &body
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.AddEdgeEvidence(ctx, request.(AddEdgeEvidenceRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "AddEdgeEvidence")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(AddEdgeEvidenceResponseObject); ok {
-		if err := validResponse.VisitAddEdgeEvidenceResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// DeleteEdgeEvidence operation middleware
-func (sh *strictHandler) DeleteEdgeEvidence(w http.ResponseWriter, r *http.Request, edgeId EdgeId, eventId EventId) {
-	var request DeleteEdgeEvidenceRequestObject
-
-	request.EdgeId = edgeId
-	request.EventId = eventId
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.DeleteEdgeEvidence(ctx, request.(DeleteEdgeEvidenceRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "DeleteEdgeEvidence")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(DeleteEdgeEvidenceResponseObject); ok {
-		if err := validResponse.VisitDeleteEdgeEvidenceResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// ListEdges operation middleware
-func (sh *strictHandler) ListEdges(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, params ListEdgesParams) {
-	var request ListEdgesRequestObject
+// ListGraphEdges operation middleware
+func (sh *strictHandler) ListGraphEdges(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, params ListGraphEdgesParams) {
+	var request ListGraphEdgesRequestObject
 
 	request.InvestigationId = investigationId
 	request.Params = params
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.ListEdges(ctx, request.(ListEdgesRequestObject))
+		return sh.ssi.ListGraphEdges(ctx, request.(ListGraphEdgesRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "ListEdges")
+		handler = middleware(handler, "ListGraphEdges")
 	}
 
 	response, err := handler(r.Context(), w, r, request)
 
 	if err != nil {
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(ListEdgesResponseObject); ok {
-		if err := validResponse.VisitListEdgesResponse(w); err != nil {
+	} else if validResponse, ok := response.(ListGraphEdgesResponseObject); ok {
+		if err := validResponse.VisitListGraphEdgesResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -2789,13 +2698,13 @@ func (sh *strictHandler) ListEdges(w http.ResponseWriter, r *http.Request, inves
 	}
 }
 
-// CreateEdge operation middleware
-func (sh *strictHandler) CreateEdge(w http.ResponseWriter, r *http.Request, investigationId InvestigationId) {
-	var request CreateEdgeRequestObject
+// CreateGraphEdge operation middleware
+func (sh *strictHandler) CreateGraphEdge(w http.ResponseWriter, r *http.Request, investigationId InvestigationId) {
+	var request CreateGraphEdgeRequestObject
 
 	request.InvestigationId = investigationId
 
-	var body CreateEdgeJSONRequestBody
+	var body CreateGraphEdgeJSONRequestBody
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
 		return
@@ -2803,18 +2712,195 @@ func (sh *strictHandler) CreateEdge(w http.ResponseWriter, r *http.Request, inve
 	request.Body = &body
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.CreateEdge(ctx, request.(CreateEdgeRequestObject))
+		return sh.ssi.CreateGraphEdge(ctx, request.(CreateGraphEdgeRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "CreateEdge")
+		handler = middleware(handler, "CreateGraphEdge")
 	}
 
 	response, err := handler(r.Context(), w, r, request)
 
 	if err != nil {
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(CreateEdgeResponseObject); ok {
-		if err := validResponse.VisitCreateEdgeResponse(w); err != nil {
+	} else if validResponse, ok := response.(CreateGraphEdgeResponseObject); ok {
+		if err := validResponse.VisitCreateGraphEdgeResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteGraphEdge operation middleware
+func (sh *strictHandler) DeleteGraphEdge(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, edgeId GraphEdgeId) {
+	var request DeleteGraphEdgeRequestObject
+
+	request.InvestigationId = investigationId
+	request.EdgeId = edgeId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteGraphEdge(ctx, request.(DeleteGraphEdgeRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteGraphEdge")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteGraphEdgeResponseObject); ok {
+		if err := validResponse.VisitDeleteGraphEdgeResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetGraphEdge operation middleware
+func (sh *strictHandler) GetGraphEdge(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, edgeId GraphEdgeId) {
+	var request GetGraphEdgeRequestObject
+
+	request.InvestigationId = investigationId
+	request.EdgeId = edgeId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetGraphEdge(ctx, request.(GetGraphEdgeRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetGraphEdge")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetGraphEdgeResponseObject); ok {
+		if err := validResponse.VisitGetGraphEdgeResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpdateGraphEdge operation middleware
+func (sh *strictHandler) UpdateGraphEdge(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, edgeId GraphEdgeId) {
+	var request UpdateGraphEdgeRequestObject
+
+	request.InvestigationId = investigationId
+	request.EdgeId = edgeId
+
+	var body UpdateGraphEdgeJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdateGraphEdge(ctx, request.(UpdateGraphEdgeRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdateGraphEdge")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UpdateGraphEdgeResponseObject); ok {
+		if err := validResponse.VisitUpdateGraphEdgeResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListGraphEdgeEvidence operation middleware
+func (sh *strictHandler) ListGraphEdgeEvidence(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, edgeId GraphEdgeId) {
+	var request ListGraphEdgeEvidenceRequestObject
+
+	request.InvestigationId = investigationId
+	request.EdgeId = edgeId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListGraphEdgeEvidence(ctx, request.(ListGraphEdgeEvidenceRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListGraphEdgeEvidence")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListGraphEdgeEvidenceResponseObject); ok {
+		if err := validResponse.VisitListGraphEdgeEvidenceResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// AddGraphEdgeEvidence operation middleware
+func (sh *strictHandler) AddGraphEdgeEvidence(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, edgeId GraphEdgeId) {
+	var request AddGraphEdgeEvidenceRequestObject
+
+	request.InvestigationId = investigationId
+	request.EdgeId = edgeId
+
+	var body AddGraphEdgeEvidenceJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.AddGraphEdgeEvidence(ctx, request.(AddGraphEdgeEvidenceRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "AddGraphEdgeEvidence")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(AddGraphEdgeEvidenceResponseObject); ok {
+		if err := validResponse.VisitAddGraphEdgeEvidenceResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteGraphEdgeEvidence operation middleware
+func (sh *strictHandler) DeleteGraphEdgeEvidence(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, edgeId GraphEdgeId, eventId EventId) {
+	var request DeleteGraphEdgeEvidenceRequestObject
+
+	request.InvestigationId = investigationId
+	request.EdgeId = edgeId
+	request.EventId = eventId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteGraphEdgeEvidence(ctx, request.(DeleteGraphEdgeEvidenceRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteGraphEdgeEvidence")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteGraphEdgeEvidenceResponseObject); ok {
+		if err := validResponse.VisitDeleteGraphEdgeEvidenceResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -2909,43 +2995,11 @@ func (sh *strictHandler) CreateNode(w http.ResponseWriter, r *http.Request, inve
 	}
 }
 
-// ReviewEdges operation middleware
-func (sh *strictHandler) ReviewEdges(w http.ResponseWriter, r *http.Request, investigationId InvestigationId) {
-	var request ReviewEdgesRequestObject
-
-	request.InvestigationId = investigationId
-
-	var body ReviewEdgesJSONRequestBody
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
-		return
-	}
-	request.Body = &body
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.ReviewEdges(ctx, request.(ReviewEdgesRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "ReviewEdges")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(ReviewEdgesResponseObject); ok {
-		if err := validResponse.VisitReviewEdgesResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
 // DeleteNode operation middleware
-func (sh *strictHandler) DeleteNode(w http.ResponseWriter, r *http.Request, nodeId NodeId) {
+func (sh *strictHandler) DeleteNode(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, nodeId NodeId) {
 	var request DeleteNodeRequestObject
 
+	request.InvestigationId = investigationId
 	request.NodeId = nodeId
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
@@ -2969,9 +3023,10 @@ func (sh *strictHandler) DeleteNode(w http.ResponseWriter, r *http.Request, node
 }
 
 // GetNode operation middleware
-func (sh *strictHandler) GetNode(w http.ResponseWriter, r *http.Request, nodeId NodeId) {
+func (sh *strictHandler) GetNode(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, nodeId NodeId) {
 	var request GetNodeRequestObject
 
+	request.InvestigationId = investigationId
 	request.NodeId = nodeId
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
@@ -2987,6 +3042,39 @@ func (sh *strictHandler) GetNode(w http.ResponseWriter, r *http.Request, nodeId 
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetNodeResponseObject); ok {
 		if err := validResponse.VisitGetNodeResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ReviewGraphEdges operation middleware
+func (sh *strictHandler) ReviewGraphEdges(w http.ResponseWriter, r *http.Request, investigationId InvestigationId) {
+	var request ReviewGraphEdgesRequestObject
+
+	request.InvestigationId = investigationId
+
+	var body ReviewGraphEdgesJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ReviewGraphEdges(ctx, request.(ReviewGraphEdgesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ReviewGraphEdges")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ReviewGraphEdgesResponseObject); ok {
+		if err := validResponse.VisitReviewGraphEdgesResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

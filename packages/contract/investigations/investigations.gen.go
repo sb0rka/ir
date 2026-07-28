@@ -852,6 +852,20 @@ func (response ListInvestigations401JSONResponse) VisitListInvestigationsRespons
 	return err
 }
 
+type ListInvestigations403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response ListInvestigations403JSONResponse) VisitListInvestigationsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type ListInvestigations422JSONResponse struct{ ValidationErrorJSONResponse }
 
 func (response ListInvestigations422JSONResponse) VisitListInvestigationsResponse(w http.ResponseWriter) error {

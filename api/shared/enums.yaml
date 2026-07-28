@@ -31,7 +31,7 @@ components:
         address or hash; an event node is a source record promoted onto the graph.
       enum: [entity, event]
 
-    EdgeStatus:
+    GraphEdgeStatus:
       type: string
       description: >-
         Where an edge stands in review. Proposed until a human accepts it.

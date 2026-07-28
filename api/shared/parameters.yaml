@@ -32,7 +32,7 @@ components:
       description: Identifier of a graph node. Edges reference this, not the entity or event behind it.
       schema: { type: string, format: uuid }
 
-    EdgeId:
+    GraphEdgeId:
       name: edge_id
       in: path
       required: true
