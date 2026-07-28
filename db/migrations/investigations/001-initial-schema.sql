@@ -67,15 +67,15 @@ BEFORE UPDATE ON sources
 FOR EACH ROW
 EXECUTE FUNCTION set_updated_at();
 
--- Ядро типов фиксировано кодом; периферия (ja3, registry_key) добавляется
--- строкой справочника, без миграции.
+-- Ядро (host, user, account, email, process, ip, domain, url, file_hash)
+-- засевается миграцией; периферия вроде ja3 или registry_key добавляется
+-- строкой справочника, без выкладки.
 CREATE TABLE IF NOT EXISTS entity_types (
     code VARCHAR(64) NOT NULL,
 
     title VARCHAR NOT NULL,
     category VARCHAR(32) NOT NULL
         CHECK (category IN ('identity', 'network', 'execution', 'persistence', 'asset', 'other')),
-    is_core BOOLEAN DEFAULT false NOT NULL,
 
     created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
 
@@ -121,7 +121,6 @@ CREATE TABLE IF NOT EXISTS investigations (
     origin VARCHAR(8) DEFAULT 'analyst' NOT NULL
         CHECK (origin IN ('analyst', 'rule', 'agent')),
     origin_ref VARCHAR,
-    author_subject_id UUID NOT NULL,
     version INTEGER DEFAULT 1 NOT NULL,
 
     created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,

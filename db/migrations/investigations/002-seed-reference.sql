@@ -7,16 +7,16 @@ BEGIN;
 
 SET LOCAL search_path = inv, public, pg_temp;
 
-INSERT INTO entity_types (code, title, category, is_core) VALUES
-    ('host',      'Узел',           'asset',     true),
-    ('user',      'Пользователь',   'identity',  true),
-    ('account',   'Учетная запись', 'identity',  true),
-    ('email',     'Email',          'identity',  true),
-    ('process',   'Процесс',        'execution', true),
-    ('ip',        'IP-адрес',       'network',   true),
-    ('domain',    'Домен',          'network',   true),
-    ('url',       'URL',            'network',   true),
-    ('file_hash', 'Файл / хеш',     'execution', true)
+INSERT INTO entity_types (code, title, category) VALUES
+    ('host',      'Узел',           'asset'),
+    ('user',      'Пользователь',   'identity'),
+    ('account',   'Учетная запись', 'identity'),
+    ('email',     'Email',          'identity'),
+    ('process',   'Процесс',        'execution'),
+    ('ip',        'IP-адрес',       'network'),
+    ('domain',    'Домен',          'network'),
+    ('url',       'URL',            'network'),
+    ('file_hash', 'Файл / хеш',     'execution')
 ON CONFLICT (code) DO NOTHING;
 
 -- Роли сущности в событии
