@@ -72,22 +72,6 @@ services:
       timeout: 3s
       retries: 5
 
-  worker:
-    build:
-      context: .
-      dockerfile: apps/investigations/Dockerfile
-      args:
-        BINARY: worker
-    depends_on:
-      postgres:
-        condition: service_healthy
-      migrate:
-        condition: service_completed_successfully
-    restart: unless-stopped
-    environment:
-      DATABASE_URI: "postgres://postgres:${POSTGRES_PASSWORD:-irdev}@postgres:5432/investigations?search_path=inv"
-      LOG_FORMAT: "json"
-      WORKER_KINDS: "ingest,linking,enrich,report"
 
 volumes:
   pgdata:

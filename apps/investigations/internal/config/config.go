@@ -19,10 +19,6 @@ func Load() (Config, error) {
 			Port:                   env("SERVER_PORT", "8090"),
 			BootstrapAdminSubjects: envList("INV_BOOTSTRAP_ADMIN_SUBJECTS"),
 			DefaultRole:            env("INV_DEFAULT_ROLE", ""),
-			Pagination: PaginationConfig{
-				DefaultLimit: envInt("PAGE_DEFAULT_LIMIT", 50),
-				MaxLimit:     envInt("PAGE_MAX_LIMIT", 200),
-			},
 			Auth: AuthConfig{
 				AccessTokenIssuer:   env("ACCESS_TOKEN_ISSUER", ""),
 				AccessTokenAudience: env("ACCESS_TOKEN_AUDIENCE", ""),
@@ -34,13 +30,6 @@ func Load() (Config, error) {
 			URI:             env("DATABASE_URI", ""),
 			MaxOpenConns:    envInt("DATABASE_MAX_OPEN_CONNS", 10),
 			ConnMaxLifetime: time.Duration(envInt("DATABASE_CONN_MAX_LIFETIME_SEC", 30)) * time.Second,
-		},
-		Worker: WorkerConfig{
-			ID:           env("WORKER_ID", ""),
-			Kinds:        envList("WORKER_KINDS"),
-			PollInterval: time.Duration(envInt("WORKER_POLL_INTERVAL_SEC", 2)) * time.Second,
-			LeaseTimeout: time.Duration(envInt("WORKER_LEASE_TIMEOUT_SEC", 300)) * time.Second,
-			MaxAttempts:  envInt("WORKER_MAX_ATTEMPTS", 3),
 		},
 		Log: LogConfig{
 			Level:  env("LOG_LEVEL", "info"),
@@ -58,9 +47,6 @@ func Load() (Config, error) {
 
 	if cfg.Database.URI == "" {
 		return cfg, fmt.Errorf("DATABASE_URI is required")
-	}
-	if cfg.Server.Pagination.DefaultLimit > cfg.Server.Pagination.MaxLimit {
-		return cfg, fmt.Errorf("PAGE_DEFAULT_LIMIT exceeds PAGE_MAX_LIMIT")
 	}
 	return cfg, nil
 }

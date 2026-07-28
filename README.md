@@ -17,7 +17,7 @@ ir/
 │   ├── bundle.yaml           собранный файл (генерируется, коммитится)
 │   └── bundle.py             сборка и валидация
 ├── apps/
-│   └── investigations/       Go-сервис: cmd/api + cmd/worker
+│   └── investigations/       Go-сервис: каркас API
 ├── packages/
 │   ├── contract/             Go-типы и серверные интерфейсы (генерируются)
 │   └── contract-ts/          TypeScript-типы и клиент (генерируются)
@@ -50,7 +50,7 @@ task check        # спека, генерация, сборка, vet — одн
 ## Локальный стенд
 
 ```bash
-task dev          # Postgres + миграции + api + worker
+task dev          # Postgres + миграции + api
 curl localhost:8090/healthz
 task dev-down
 ```

@@ -454,7 +454,7 @@ CREATE INDEX IF NOT EXISTS ix_edge_evidence_event ON edge_evidence (event_id);
 
 
 
--- ДОСТУП, АУДИТ, ОЧЕРЕДЬ
+-- ДОСТУП И АУДИТ
 
 CREATE TABLE IF NOT EXISTS role_bindings (
     project_id VARCHAR(12) NOT NULL,
@@ -489,29 +489,5 @@ CREATE TABLE IF NOT EXISTS audit_log (
 
 CREATE INDEX IF NOT EXISTS ix_audit_investigation ON audit_log (investigation_id, ts DESC);
 CREATE INDEX IF NOT EXISTS ix_audit_project_ts ON audit_log (project_id, ts DESC);
-
-CREATE TABLE IF NOT EXISTS jobs (
-    id UUID DEFAULT gen_random_uuid() NOT NULL,
-    project_id VARCHAR(12) NOT NULL,
-
-    kind VARCHAR(32) NOT NULL,
-    payload JSONB DEFAULT '{}'::jsonb NOT NULL,
-    status VARCHAR(12) DEFAULT 'pending' NOT NULL
-        CHECK (status IN ('pending', 'running', 'done', 'failed', 'cancelled')),
-    attempts INTEGER DEFAULT 0 NOT NULL,
-    max_attempts INTEGER DEFAULT 3 NOT NULL,
-    last_error VARCHAR,
-    run_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
-    locked_by VARCHAR(64),
-    locked_at TIMESTAMP WITH TIME ZONE,
-
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
-    finished_at TIMESTAMP WITH TIME ZONE,
-
-    CONSTRAINT pk_jobs PRIMARY KEY (id)
-);
-
--- Воркер забирает задачу по виду: FOR UPDATE SKIP LOCKED по этому индексу
-CREATE INDEX IF NOT EXISTS ix_jobs_claim ON jobs (kind, run_at) WHERE status = 'pending';
 
 COMMIT;

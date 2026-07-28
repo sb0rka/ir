@@ -159,7 +159,6 @@ tasks:
     desc: Собрать сервисы в bin/
     cmds:
       - go build -o bin/investigations-api ./apps/investigations/cmd/api
-      - go build -o bin/investigations-worker ./apps/investigations/cmd/worker
 
   fmt:
     desc: gofmt по всем модулям
@@ -186,7 +185,7 @@ tasks:
       - task: vet
 
   dev:
-    desc: Поднять локальный стенд (Postgres + api + worker)
+    desc: Поднять локальный стенд (Postgres + api)
     cmds:
       - docker compose -f docker-compose.dev.yml up -d --build
 
@@ -198,7 +197,7 @@ tasks:
   dev-logs:
     desc: Логи стенда
     cmds:
-      - docker compose -f docker-compose.dev.yml logs -f api worker
+      - docker compose -f docker-compose.dev.yml logs -f api
 
   migrate:
     desc: Применить миграции к локальной базе

@@ -52,20 +52,8 @@ var (
 	ErrNotFound       = New(http.StatusNotFound, CodeNotFound, "not found")
 )
 
-func NotFound(what string) *Error {
-	return New(http.StatusNotFound, CodeNotFound, what+" not found")
-}
-
-func Validation(message string) *Error {
-	return New(http.StatusUnprocessableEntity, CodeValidation, message)
-}
-
 func BadRequest(message string) *Error {
 	return New(http.StatusBadRequest, CodeValidation, message)
-}
-
-func Conflict(message string) *Error {
-	return New(http.StatusConflict, CodeConflict, message)
 }
 
 type body struct {

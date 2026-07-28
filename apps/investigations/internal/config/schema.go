@@ -8,7 +8,6 @@ import (
 type Config struct {
 	Server   ServerConfig
 	Database DatabaseConfig
-	Worker   WorkerConfig
 	Log      LogConfig
 }
 
@@ -20,8 +19,6 @@ type ServerConfig struct {
 	CORSAllowedAll bool
 
 	Auth       AuthConfig
-	Pagination PaginationConfig
-
 	// BootstrapAdminSubjects — субъекты с ролью admin в обход role_bindings.
 	// Без них deny-by-default отказывает всем, включая того, кто должен раздать роли.
 	BootstrapAdminSubjects []string
@@ -40,23 +37,10 @@ type AuthConfig struct {
 	AccessTokenTyp       string
 }
 
-type PaginationConfig struct {
-	DefaultLimit int
-	MaxLimit     int
-}
-
 type DatabaseConfig struct {
 	URI             string
 	MaxOpenConns    int
 	ConnMaxLifetime time.Duration
-}
-
-type WorkerConfig struct {
-	ID           string
-	Kinds        []string
-	PollInterval time.Duration
-	LeaseTimeout time.Duration
-	MaxAttempts  int
 }
 
 type LogConfig struct {
