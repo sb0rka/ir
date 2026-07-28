@@ -71,6 +71,31 @@ paths:
         '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
         '422': { $ref: '../shared/responses.yaml#/components/responses/ValidationError' }
 
+  /investigations/{investigation_id}/entities/{entity_id}:
+    parameters:
+      - { $ref: '../shared/parameters.yaml#/components/parameters/InvestigationId' }
+      - { $ref: '../shared/parameters.yaml#/components/parameters/EntityId' }
+    delete:
+      tags: [entities]
+      summary: Drop an entity from the investigation
+      description: >-
+        Says "this does not belong to my case", not "this never existed". The
+        entity survives with its history intact and stays in every other case it
+        is part of; only the membership goes, taking this case's graph node and
+        the edges hanging off it.
+
+        Refused while an event of this case still mentions the entity — the
+        entity is a consequence of that evidence, so drop the event instead.
+      operationId: detachEntity
+      responses:
+        '204':
+          description: Dropped from the investigation
+        '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '501': { $ref: '../shared/responses.yaml#/components/responses/NotImplemented' }
+        '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
+        '409': { $ref: '../shared/responses.yaml#/components/responses/Conflict' }
+
   /entities/{entity_id}:
     parameters:
       - { $ref: '../shared/parameters.yaml#/components/parameters/EntityId' }
@@ -101,12 +126,14 @@ paths:
         '422': { $ref: '../shared/responses.yaml#/components/responses/ValidationError' }
     delete:
       tags: [entities]
-      summary: Delete an entity
+      summary: Delete an entity from the tenant
       description: >-
-        Removes the entity together with its graph node and the edges attached
-        to it. Refused while any event still mentions it — an entity extracted
-        from evidence is a consequence of that evidence, so drop the event
-        instead.
+        Erases the entity everywhere, along with its history. Almost never what
+        is wanted — to remove it from one case use the per-investigation
+        endpoint, which leaves the other cases alone.
+
+        Refused while the entity is part of any investigation or mentioned by
+        any event, so this only ever applies to something typed in by mistake.
       operationId: deleteEntity
       responses:
         '204':
@@ -120,10 +147,11 @@ paths:
       tags: [entities]
       summary: Entity card
       description: >-
-        Everything known about one host, account, process, address or hash: how
-        often it shows up in this investigation, which other investigations of
-        the tenant it appears in, and what it is connected to. The cross-case
-        part is what answers "have we seen this before".
+        Everything known about one host, account, process, address or hash
+        across the whole tenant: how much evidence mentions it, which
+        investigations it turns up in, and what it is connected to. The
+        cross-case part is what answers "have we seen this before", and it works
+        precisely because the entity is one row rather than a copy per case.
       operationId: getEntityCard
       responses:
         '200':
@@ -141,19 +169,26 @@ components:
     Entity:
       type: object
       description: >-
-        A named thing an incident revolves around, extracted from source events
-        during ingestion. Entities are scoped to one investigation; the same
-        real-world host appears as a separate row in each case it touches.
-      required: [id, investigation_id, type_code, canonical_key]
+        A named thing an incident revolves around — a host, account, process,
+        address or hash — extracted from source events during ingestion.
+
+        An entity belongs to the tenant, not to one investigation: one host is
+        one row no matter how many cases touch it. That is what makes
+        first_seen, last_seen and the cross-case history on the card mean
+        anything. Across tenants nothing is merged — dc-01 of two different
+        customers stays two hosts.
+      required: [id, type_code, canonical_key]
       properties:
         id:
           type: string
           format: uuid
-          description: Server-assigned identifier of this entity.
-        investigation_id:
-          type: string
-          format: uuid
-          description: Investigation this entity belongs to.
+          description: Identifier of the entity within the tenant.
+        added_via:
+          allOf: [{ $ref: '#/components/schemas/EntityOrigin' }]
+          description: >-
+            How it got into the investigation being listed. A property of the
+            membership, not of the entity — extracted from an event in one case,
+            typed in as an indicator in another.
         type_code:
           type: string
           description: >-
@@ -180,14 +215,21 @@ components:
           type: string
           format: date-time
           nullable: true
-          description: Earliest event in this investigation that mentions the entity.
+          description: >-
+            Earliest event mentioning the entity anywhere in the tenant, not
+            just in the case at hand.
         last_seen:
           type: string
           format: date-time
           nullable: true
           description: >-
-            Latest event that mentions it. Together with first_seen this bounds
-            the window the entity was active in.
+            Latest event mentioning it. Together with first_seen this bounds the
+            window the entity was active in, across every investigation.
+
+    EntityOrigin:
+      type: string
+      description: How an entity came to be part of an investigation.
+      enum: [event, ioc, agent, analyst]
 
     EntityCreate:
       type: object
@@ -254,14 +296,15 @@ components:
         events_count:
           type: integer
           description: >-
-            Events in this investigation the entity takes part in. A rough
-            measure of how central it is to the case.
+            Events across the tenant the entity takes part in. Per-case counts
+            are in `occurrences`.
         occurrences:
           type: array
           description: >-
-            Other investigations of the same tenant where an entity with the
-            same type and key shows up. This is the spread assessment: a hash
-            seen in five cases means five hosts to check.
+            Investigations the entity is part of, with its weight in each. This
+            is the spread assessment: a hash in five cases means five hosts to
+            check. Since the entity is one row rather than a copy per case, this
+            is a plain lookup, not a match on type and key.
           items:
             type: object
             required: [investigation_id, title, events_count]
@@ -269,7 +312,7 @@ components:
               investigation_id:
                 type: string
                 format: uuid
-                description: The other investigation.
+                description: The investigation.
               title:
                 type: string
                 description: Its title, so the analyst can judge relevance without opening it.

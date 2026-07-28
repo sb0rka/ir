@@ -18,6 +18,30 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
+// Defines values for EntityOrigin.
+const (
+	Agent   EntityOrigin = "agent"
+	Analyst EntityOrigin = "analyst"
+	Event   EntityOrigin = "event"
+	Ioc     EntityOrigin = "ioc"
+)
+
+// Valid indicates whether the value is a known member of the EntityOrigin enum.
+func (e EntityOrigin) Valid() bool {
+	switch e {
+	case Agent:
+		return true
+	case Analyst:
+		return true
+	case Event:
+		return true
+	case Ioc:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ErrorResponseErrorCode.
 const (
 	ErrorResponseErrorCodeConflict          ErrorResponseErrorCode = "conflict"
@@ -54,24 +78,25 @@ func (e ErrorResponseErrorCode) Valid() bool {
 	}
 }
 
-// Entity A named thing an incident revolves around, extracted from source events during ingestion. Entities are scoped to one investigation; the same real-world host appears as a separate row in each case it touches.
+// Entity A named thing an incident revolves around — a host, account, process, address or hash — extracted from source events during ingestion.
+// An entity belongs to the tenant, not to one investigation: one host is one row no matter how many cases touch it. That is what makes first_seen, last_seen and the cross-case history on the card mean anything. Across tenants nothing is merged — dc-01 of two different customers stays two hosts.
 type Entity struct {
+	// AddedVia How it got into the investigation being listed. A property of the membership, not of the entity — extracted from an event in one case, typed in as an indicator in another.
+	AddedVia *EntityOrigin `json:"added_via,omitempty"`
+
 	// CanonicalKey Normalised identity used for matching: fqdn for a host, SID for an account, GUID for a process, sha256 for a file. Two records with the same type and key are the same thing, so linking rules join on it.
 	CanonicalKey string `json:"canonical_key"`
 
 	// DisplayName Label for the UI. Falls back to canonical_key when absent.
 	DisplayName *string `json:"display_name,omitempty"`
 
-	// FirstSeen Earliest event in this investigation that mentions the entity.
+	// FirstSeen Earliest event mentioning the entity anywhere in the tenant, not just in the case at hand.
 	FirstSeen *time.Time `json:"first_seen,omitempty"`
 
-	// Id Server-assigned identifier of this entity.
+	// Id Identifier of the entity within the tenant.
 	Id openapi_types.UUID `json:"id"`
 
-	// InvestigationId Investigation this entity belongs to.
-	InvestigationId openapi_types.UUID `json:"investigation_id"`
-
-	// LastSeen Latest event that mentions it. Together with first_seen this bounds the window the entity was active in.
+	// LastSeen Latest event mentioning it. Together with first_seen this bounds the window the entity was active in, across every investigation.
 	LastSeen *time.Time `json:"last_seen,omitempty"`
 
 	// Metadata Extra attributes carried over from the source — OS version, owner, geolocation. Free-form on purpose: sources differ.
@@ -86,7 +111,7 @@ type EntityCard struct {
 	// Entity The entity this card is about.
 	Entity Entity `json:"entity"`
 
-	// EventsCount Events in this investigation the entity takes part in. A rough measure of how central it is to the case.
+	// EventsCount Events across the tenant the entity takes part in. Per-case counts are in `occurrences`.
 	EventsCount int `json:"events_count"`
 
 	// Neighbors Entities reachable over confirmed edges only. Proposed links are left out — a card should show what is established, not what is suspected.
@@ -101,12 +126,12 @@ type EntityCard struct {
 		RelationCode string `json:"relation_code"`
 	} `json:"neighbors,omitempty"`
 
-	// Occurrences Other investigations of the same tenant where an entity with the same type and key shows up. This is the spread assessment: a hash seen in five cases means five hosts to check.
+	// Occurrences Investigations the entity is part of, with its weight in each. This is the spread assessment: a hash in five cases means five hosts to check. Since the entity is one row rather than a copy per case, this is a plain lookup, not a match on type and key.
 	Occurrences []struct {
 		// EventsCount How many of its events involve the entity.
 		EventsCount int `json:"events_count"`
 
-		// InvestigationId The other investigation.
+		// InvestigationId The investigation.
 		InvestigationId openapi_types.UUID `json:"investigation_id"`
 
 		// Title Its title, so the analyst can judge relevance without opening it.
@@ -128,6 +153,9 @@ type EntityCreate struct {
 	// TypeCode Kind of thing, from the entity-type dictionary. Rejected if unknown, so a typo cannot invent a type.
 	TypeCode string `json:"type_code"`
 }
+
+// EntityOrigin How an entity came to be part of an investigation.
+type EntityOrigin string
 
 // EntityPage One page of entities.
 type EntityPage struct {
@@ -218,7 +246,7 @@ type CreateEntityJSONRequestBody = EntityCreate
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
-	// DeleteEntity Delete an entity
+	// DeleteEntity Delete an entity from the tenant
 	// (DELETE /entities/{entity_id})
 	DeleteEntity(w http.ResponseWriter, r *http.Request, entityId EntityId)
 	// GetEntityCard Entity card
@@ -233,6 +261,9 @@ type ServerInterface interface {
 	// CreateEntity Add an entity by hand
 	// (POST /investigations/{investigation_id}/entities)
 	CreateEntity(w http.ResponseWriter, r *http.Request, investigationId InvestigationId)
+	// DetachEntity Drop an entity from the investigation
+	// (DELETE /investigations/{investigation_id}/entities/{entity_id})
+	DetachEntity(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, entityId EntityId)
 }
 
 // ServerInterfaceWrapper converts contexts to parameters.
@@ -429,6 +460,41 @@ func (siw *ServerInterfaceWrapper) CreateEntity(w http.ResponseWriter, r *http.R
 	handler.ServeHTTP(w, r)
 }
 
+// DetachEntity operation middleware
+func (siw *ServerInterfaceWrapper) DetachEntity(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "investigation_id" -------------
+	var investigationId InvestigationId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "investigation_id", r.PathValue("investigation_id"), &investigationId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "investigation_id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "entity_id" -------------
+	var entityId EntityId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "entity_id", r.PathValue("entity_id"), &entityId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "entity_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DetachEntity(w, r, investigationId, entityId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 type UnescapedCookieParamError struct {
 	ParamName string
 	Err       error
@@ -551,6 +617,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/investigations/{investigation_id}/entities", wrapper.ListEntities)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/investigations/{investigation_id}/entities", wrapper.CreateEntity)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/investigations/{investigation_id}/entities/{entity_id}", wrapper.DetachEntity)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/entities/{entity_id}", wrapper.DeleteEntity)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/entities/{entity_id}", wrapper.GetEntityCard)
 	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/entities/{entity_id}", wrapper.UpdateEntity)
@@ -1013,9 +1080,96 @@ func (response CreateEntity501JSONResponse) VisitCreateEntityResponse(w http.Res
 	return err
 }
 
+type DetachEntityRequestObject struct {
+	InvestigationId InvestigationId `json:"investigation_id"`
+	EntityId        EntityId        `json:"entity_id"`
+}
+
+type DetachEntityResponseObject interface {
+	VisitDetachEntityResponse(w http.ResponseWriter) error
+}
+
+type DetachEntity204Response struct {
+}
+
+func (response DetachEntity204Response) VisitDetachEntityResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DetachEntity401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response DetachEntity401JSONResponse) VisitDetachEntityResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DetachEntity403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response DetachEntity403JSONResponse) VisitDetachEntityResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DetachEntity404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response DetachEntity404JSONResponse) VisitDetachEntityResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DetachEntity409JSONResponse struct{ ConflictJSONResponse }
+
+func (response DetachEntity409JSONResponse) VisitDetachEntityResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DetachEntity501JSONResponse struct{ NotImplementedJSONResponse }
+
+func (response DetachEntity501JSONResponse) VisitDetachEntityResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(501)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
-	// DeleteEntity Delete an entity
+	// DeleteEntity Delete an entity from the tenant
 	// (DELETE /entities/{entity_id})
 	DeleteEntity(ctx context.Context, request DeleteEntityRequestObject) (DeleteEntityResponseObject, error)
 	// GetEntityCard Entity card
@@ -1030,6 +1184,9 @@ type StrictServerInterface interface {
 	// CreateEntity Add an entity by hand
 	// (POST /investigations/{investigation_id}/entities)
 	CreateEntity(ctx context.Context, request CreateEntityRequestObject) (CreateEntityResponseObject, error)
+	// DetachEntity Drop an entity from the investigation
+	// (DELETE /investigations/{investigation_id}/entities/{entity_id})
+	DetachEntity(ctx context.Context, request DetachEntityRequestObject) (DetachEntityResponseObject, error)
 }
 
 type StrictHandlerFunc func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error)
@@ -1209,6 +1366,33 @@ func (sh *strictHandler) CreateEntity(w http.ResponseWriter, r *http.Request, in
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(CreateEntityResponseObject); ok {
 		if err := validResponse.VisitCreateEntityResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DetachEntity operation middleware
+func (sh *strictHandler) DetachEntity(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, entityId EntityId) {
+	var request DetachEntityRequestObject
+
+	request.InvestigationId = investigationId
+	request.EntityId = entityId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DetachEntity(ctx, request.(DetachEntityRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DetachEntity")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DetachEntityResponseObject); ok {
+		if err := validResponse.VisitDetachEntityResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

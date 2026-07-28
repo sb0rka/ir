@@ -22,7 +22,8 @@ export interface paths {
         put?: never;
         /**
          * Pull events into the investigation
-         * @description The way data enters the product. Takes either explicit references to source records or a query to run against a source. Each event is normalised, its entities are extracted, graph nodes are created and linking rules run — so the graph grows without an agent being involved. Idempotent: re-pulling the same record is a no-op. Up to 500 events per call; a larger selection has to be split.
+         * @description The way data enters the product. Takes either explicit references to source records or a query to run against a source. Each event is normalised, its entities are extracted, graph nodes are created and linking rules run — so the graph grows without an agent being involved.
+         *     A record already ingested for this tenant is linked, not copied: the event keeps one identity across every case that touches it, which is what lets the entity card say where else something has been seen. Idempotent — re-pulling into the same case changes nothing. Up to 500 events per call; a larger selection has to be split.
          */
         post: operations["attachEvents"];
         delete?: never;
@@ -49,11 +50,37 @@ export interface paths {
         put?: never;
         post?: never;
         /**
-         * Drop an event from the investigation
-         * @description Undoes a pull that brought in the wrong thing. The event leaves the timeline, its graph node goes with it, and so do the edges that hung off that node — which is why an event cited as evidence by a confirmed edge cannot be dropped: removing it would leave an established claim resting on nothing.
-         *     Only the copy inside this investigation is affected. The record in the source tool is untouched, and re-pulling it brings it back.
+         * Delete an event from the tenant
+         * @description Erases the event everywhere. Almost never what is wanted — to remove it from one case use the per-investigation endpoint, which leaves the other cases alone.
+         *     Refused while the event is attached to any investigation, so this only ever applies to something ingested by mistake and not yet used.
          */
         delete: operations["deleteEvent"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/investigations/{investigation_id}/events/{event_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
+                investigation_id: components["parameters"]["InvestigationId"];
+                /** @description Identifier of an event already pulled into an investigation. */
+                event_id: components["parameters"]["EventId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Drop an event from the investigation
+         * @description Undoes a pull that brought in the wrong thing. The event leaves this timeline, its node on this graph goes with it, and so do the edges that hung off that node.
+         *     The event itself survives, along with its place in every other case — which is the point of events being shared rather than copied. Refused while a confirmed edge of this case cites it: removing it would leave an established claim resting on nothing.
+         */
+        delete: operations["detachEvent"];
         options?: never;
         head?: never;
         patch?: never;
@@ -63,18 +90,18 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        /** @description A fact from a security tool, pulled into an investigation. Events are never edited and carry no status: a fact cannot be confirmed or rejected, only cited. */
+        /**
+         * @description A fact from a security tool. Events are never edited and carry no status: a fact cannot be confirmed or rejected, only cited.
+         *     An event belongs to the tenant, not to one investigation — the same source record routinely turns up in several cases, and copying it into each would destroy the answer to "where else has this been seen". Membership is a separate link, so pulling an event into a third case adds a relation rather than a duplicate.
+         */
         Event: {
             /**
              * Format: uuid
-             * @description Identifier of this event inside the investigation.
+             * @description Identifier of the event within the tenant.
              */
             id: string;
-            /**
-             * Format: uuid
-             * @description Investigation the event was pulled into. The same source record pulled into two cases yields two rows, so each case owns its evidence outright.
-             */
-            investigation_id: string;
+            /** @description Investigations this event has been pulled into. More than one is normal and is itself a signal: the same record appearing in several cases suggests they are related. */
+            investigation_ids?: string[];
             /** @description Which tool it came from — siem, edr, ndr, infra. */
             source_code: string;
             /** @description Identifier of the record in that tool. Stable address for going back to the original. */
@@ -116,14 +143,18 @@ export interface components {
         EventSummary: {
             /**
              * Format: uuid
-             * @description Identifier of this event.
+             * @description Identifier of the event within the tenant.
              */
             id: string;
             /**
-             * Format: uuid
-             * @description Investigation it belongs to.
+             * Format: date-time
+             * @description When the event was pulled into the investigation being listed. A property of the membership, not of the event — the same event has a different value in another case.
              */
-            investigation_id: string;
+            attached_at?: string;
+            /** @description Who pulled it into this investigation. */
+            attached_by?: components["schemas"]["Actor"];
+            /** @description Why it was pulled in. Part of the case narrative, and likewise per-investigation. */
+            reason?: string | null;
             /** @description Which tool it came from. */
             source_code: string;
             /** @description Identifier of the record in that tool. */
@@ -195,9 +226,11 @@ export interface components {
         };
         /** @description What the pull changed in the investigation. */
         EventAttachResult: {
-            /** @description Events newly added to the case. */
+            /** @description Events newly added to the case, whether ingested now or already known. */
             attached: number;
-            /** @description Events already present and therefore skipped. A non-zero count is normal, not an error — overlapping pulls are expected. */
+            /** @description Of those, how many already existed for the tenant and were linked rather than ingested. Non-zero means this case overlaps another — worth a look. */
+            reused?: number;
+            /** @description Events already in this case and therefore skipped. Normal, not an error: overlapping pulls are expected. */
             duplicates: number;
             /** @description Entities created or updated from the new events. Counts entities, not mentions. */
             entities_extracted: number;
@@ -211,6 +244,11 @@ export interface components {
             /** @description Pass as `cursor` to get the next page. Absent on the last page — that, not an empty page, is how iteration ends. */
             next_cursor?: string | null;
         };
+        /**
+         * @description Who performed an action — a human through the API, an agent run, or the service itself acting on a schedule.
+         * @enum {string}
+         */
+        Actor: "analyst" | "agent" | "system";
         /** @description Body of every non-2xx response. Clients branch on `code`, not on the HTTP status: the status says what happened at the protocol level, the code says what happened in the domain. */
         ErrorResponse: {
             /** @description The failure itself. Never carries internal details of a 500. */
@@ -429,6 +467,34 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description Dropped */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            501: components["responses"]["NotImplemented"];
+        };
+    };
+    detachEvent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
+                investigation_id: components["parameters"]["InvestigationId"];
+                /** @description Identifier of an event already pulled into an investigation. */
+                event_id: components["parameters"]["EventId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Dropped from the investigation */
             204: {
                 headers: {
                     [name: string]: unknown;

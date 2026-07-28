@@ -32,6 +32,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/investigations/{investigation_id}/entities/{entity_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
+                investigation_id: components["parameters"]["InvestigationId"];
+                /** @description Identifier of an entity — a host, account, process, address or hash. */
+                entity_id: components["parameters"]["EntityId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Drop an entity from the investigation
+         * @description Says "this does not belong to my case", not "this never existed". The entity survives with its history intact and stays in every other case it is part of; only the membership goes, taking this case's graph node and the edges hanging off it.
+         *     Refused while an event of this case still mentions the entity — the entity is a consequence of that evidence, so drop the event instead.
+         */
+        delete: operations["detachEntity"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/entities/{entity_id}": {
         parameters: {
             query?: never;
@@ -44,14 +70,15 @@ export interface paths {
         };
         /**
          * Entity card
-         * @description Everything known about one host, account, process, address or hash: how often it shows up in this investigation, which other investigations of the tenant it appears in, and what it is connected to. The cross-case part is what answers "have we seen this before".
+         * @description Everything known about one host, account, process, address or hash across the whole tenant: how much evidence mentions it, which investigations it turns up in, and what it is connected to. The cross-case part is what answers "have we seen this before", and it works precisely because the entity is one row rather than a copy per case.
          */
         get: operations["getEntityCard"];
         put?: never;
         post?: never;
         /**
-         * Delete an entity
-         * @description Removes the entity together with its graph node and the edges attached to it. Refused while any event still mentions it — an entity extracted from evidence is a consequence of that evidence, so drop the event instead.
+         * Delete an entity from the tenant
+         * @description Erases the entity everywhere, along with its history. Almost never what is wanted — to remove it from one case use the per-investigation endpoint, which leaves the other cases alone.
+         *     Refused while the entity is part of any investigation or mentioned by any event, so this only ever applies to something typed in by mistake.
          */
         delete: operations["deleteEntity"];
         options?: never;
@@ -67,18 +94,18 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        /** @description A named thing an incident revolves around, extracted from source events during ingestion. Entities are scoped to one investigation; the same real-world host appears as a separate row in each case it touches. */
+        /**
+         * @description A named thing an incident revolves around — a host, account, process, address or hash — extracted from source events during ingestion.
+         *     An entity belongs to the tenant, not to one investigation: one host is one row no matter how many cases touch it. That is what makes first_seen, last_seen and the cross-case history on the card mean anything. Across tenants nothing is merged — dc-01 of two different customers stays two hosts.
+         */
         Entity: {
             /**
              * Format: uuid
-             * @description Server-assigned identifier of this entity.
+             * @description Identifier of the entity within the tenant.
              */
             id: string;
-            /**
-             * Format: uuid
-             * @description Investigation this entity belongs to.
-             */
-            investigation_id: string;
+            /** @description How it got into the investigation being listed. A property of the membership, not of the entity — extracted from an event in one case, typed in as an indicator in another. */
+            added_via?: components["schemas"]["EntityOrigin"];
             /** @description Kind of thing this is — host, user, account, email, process, ip, domain, url, file_hash. The core set is fixed; peripheral kinds are added as dictionary rows without a migration. */
             type_code: string;
             /** @description Normalised identity used for matching: fqdn for a host, SID for an account, GUID for a process, sha256 for a file. Two records with the same type and key are the same thing, so linking rules join on it. */
@@ -91,15 +118,20 @@ export interface components {
             };
             /**
              * Format: date-time
-             * @description Earliest event in this investigation that mentions the entity.
+             * @description Earliest event mentioning the entity anywhere in the tenant, not just in the case at hand.
              */
             first_seen?: string | null;
             /**
              * Format: date-time
-             * @description Latest event that mentions it. Together with first_seen this bounds the window the entity was active in.
+             * @description Latest event mentioning it. Together with first_seen this bounds the window the entity was active in, across every investigation.
              */
             last_seen?: string | null;
         };
+        /**
+         * @description How an entity came to be part of an investigation.
+         * @enum {string}
+         */
+        EntityOrigin: "event" | "ioc" | "agent" | "analyst";
         /** @description An entity entered by hand, before any event mentions it. */
         EntityCreate: {
             /** @description Kind of thing, from the entity-type dictionary. Rejected if unknown, so a typo cannot invent a type. */
@@ -133,13 +165,13 @@ export interface components {
         EntityCard: {
             /** @description The entity this card is about. */
             entity: components["schemas"]["Entity"];
-            /** @description Events in this investigation the entity takes part in. A rough measure of how central it is to the case. */
+            /** @description Events across the tenant the entity takes part in. Per-case counts are in `occurrences`. */
             events_count: number;
-            /** @description Other investigations of the same tenant where an entity with the same type and key shows up. This is the spread assessment: a hash seen in five cases means five hosts to check. */
+            /** @description Investigations the entity is part of, with its weight in each. This is the spread assessment: a hash in five cases means five hosts to check. Since the entity is one row rather than a copy per case, this is a plain lookup, not a match on type and key. */
             occurrences: {
                 /**
                  * Format: uuid
-                 * @description The other investigation.
+                 * @description The investigation.
                  */
                 investigation_id: string;
                 /** @description Its title, so the analyst can judge relevance without opening it. */
@@ -316,6 +348,34 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             422: components["responses"]["ValidationError"];
+            501: components["responses"]["NotImplemented"];
+        };
+    };
+    detachEntity: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
+                investigation_id: components["parameters"]["InvestigationId"];
+                /** @description Identifier of an entity — a host, account, process, address or hash. */
+                entity_id: components["parameters"]["EntityId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Dropped from the investigation */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
             501: components["responses"]["NotImplemented"];
         };
     };

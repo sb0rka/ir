@@ -19,8 +19,12 @@ paths:
         source records or a query to run against a source. Each event is
         normalised, its entities are extracted, graph nodes are created and
         linking rules run — so the graph grows without an agent being involved.
-        Idempotent: re-pulling the same record is a no-op. Up to 500 events per
-        call; a larger selection has to be split.
+
+        A record already ingested for this tenant is linked, not copied: the
+        event keeps one identity across every case that touches it, which is
+        what lets the entity card say where else something has been seen.
+        Idempotent — re-pulling into the same case changes nothing. Up to 500
+        events per call; a larger selection has to be split.
       operationId: attachEvents
       requestBody:
         required: true
@@ -115,20 +119,44 @@ paths:
         '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
     delete:
       tags: [events]
-      summary: Drop an event from the investigation
+      summary: Delete an event from the tenant
       description: >-
-        Undoes a pull that brought in the wrong thing. The event leaves the
-        timeline, its graph node goes with it, and so do the edges that hung off
-        that node — which is why an event cited as evidence by a confirmed edge
-        cannot be dropped: removing it would leave an established claim resting
-        on nothing.
+        Erases the event everywhere. Almost never what is wanted — to remove it
+        from one case use the per-investigation endpoint, which leaves the other
+        cases alone.
 
-        Only the copy inside this investigation is affected. The record in the
-        source tool is untouched, and re-pulling it brings it back.
+        Refused while the event is attached to any investigation, so this only
+        ever applies to something ingested by mistake and not yet used.
       operationId: deleteEvent
       responses:
         '204':
           description: Dropped
+        '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '501': { $ref: '../shared/responses.yaml#/components/responses/NotImplemented' }
+        '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
+        '409': { $ref: '../shared/responses.yaml#/components/responses/Conflict' }
+
+  /investigations/{investigation_id}/events/{event_id}:
+    parameters:
+      - { $ref: '../shared/parameters.yaml#/components/parameters/InvestigationId' }
+      - { $ref: '../shared/parameters.yaml#/components/parameters/EventId' }
+    delete:
+      tags: [events]
+      summary: Drop an event from the investigation
+      description: >-
+        Undoes a pull that brought in the wrong thing. The event leaves this
+        timeline, its node on this graph goes with it, and so do the edges that
+        hung off that node.
+
+        The event itself survives, along with its place in every other case —
+        which is the point of events being shared rather than copied. Refused
+        while a confirmed edge of this case cites it: removing it would leave an
+        established claim resting on nothing.
+      operationId: detachEvent
+      responses:
+        '204':
+          description: Dropped from the investigation
         '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
         '501': { $ref: '../shared/responses.yaml#/components/responses/NotImplemented' }
         '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
@@ -140,22 +168,27 @@ components:
     Event:
       type: object
       description: >-
-        A fact from a security tool, pulled into an investigation. Events are
-        never edited and carry no status: a fact cannot be confirmed or
-        rejected, only cited.
-      required: [id, investigation_id, source_code, source_event_id, event_type, occurred_at, ingested_at]
+        A fact from a security tool. Events are never edited and carry no
+        status: a fact cannot be confirmed or rejected, only cited.
+
+        An event belongs to the tenant, not to one investigation — the same
+        source record routinely turns up in several cases, and copying it into
+        each would destroy the answer to "where else has this been seen".
+        Membership is a separate link, so pulling an event into a third case
+        adds a relation rather than a duplicate.
+      required: [id, source_code, source_event_id, event_type, occurred_at, ingested_at]
       properties:
         id:
           type: string
           format: uuid
-          description: Identifier of this event inside the investigation.
-        investigation_id:
-          type: string
-          format: uuid
+          description: Identifier of the event within the tenant.
+        investigation_ids:
+          type: array
           description: >-
-            Investigation the event was pulled into. The same source record
-            pulled into two cases yields two rows, so each case owns its
-            evidence outright.
+            Investigations this event has been pulled into. More than one is
+            normal and is itself a signal: the same record appearing in several
+            cases suggests they are related.
+          items: { type: string, format: uuid }
         source_code:
           type: string
           description: Which tool it came from — siem, edr, ndr, infra.
@@ -223,16 +256,28 @@ components:
         Event without the raw payload. A timeline page carries hundreds of
         events and raw payloads run to kilobytes each; the full record is
         available one at a time.
-      required: [id, investigation_id, source_code, source_event_id, event_type, occurred_at, ingested_at]
+      required: [id, source_code, source_event_id, event_type, occurred_at, ingested_at]
       properties:
         id:
           type: string
           format: uuid
-          description: Identifier of this event.
-        investigation_id:
+          description: Identifier of the event within the tenant.
+        attached_at:
           type: string
-          format: uuid
-          description: Investigation it belongs to.
+          format: date-time
+          description: >-
+            When the event was pulled into the investigation being listed.
+            A property of the membership, not of the event — the same event has
+            a different value in another case.
+        attached_by:
+          allOf: [{ $ref: '../shared/enums.yaml#/components/schemas/Actor' }]
+          description: Who pulled it into this investigation.
+        reason:
+          type: string
+          nullable: true
+          description: >-
+            Why it was pulled in. Part of the case narrative, and likewise
+            per-investigation.
         source_code:
           type: string
           description: Which tool it came from.
@@ -341,12 +386,18 @@ components:
       properties:
         attached:
           type: integer
-          description: Events newly added to the case.
+          description: Events newly added to the case, whether ingested now or already known.
+        reused:
+          type: integer
+          description: >-
+            Of those, how many already existed for the tenant and were linked
+            rather than ingested. Non-zero means this case overlaps another —
+            worth a look.
         duplicates:
           type: integer
           description: >-
-            Events already present and therefore skipped. A non-zero count is
-            normal, not an error — overlapping pulls are expected.
+            Events already in this case and therefore skipped. Normal, not an
+            error: overlapping pulls are expected.
         entities_extracted:
           type: integer
           description: >-

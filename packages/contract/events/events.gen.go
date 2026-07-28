@@ -18,6 +18,27 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
+// Defines values for Actor.
+const (
+	Agent   Actor = "agent"
+	Analyst Actor = "analyst"
+	System  Actor = "system"
+)
+
+// Valid indicates whether the value is a known member of the Actor enum.
+func (e Actor) Valid() bool {
+	switch e {
+	case Agent:
+		return true
+	case Analyst:
+		return true
+	case System:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ErrorResponseErrorCode.
 const (
 	ErrorResponseErrorCodeConflict          ErrorResponseErrorCode = "conflict"
@@ -54,6 +75,9 @@ func (e ErrorResponseErrorCode) Valid() bool {
 	}
 }
 
+// Actor Who performed an action — a human through the API, an agent run, or the service itself acting on a schedule.
+type Actor string
+
 // ErrorResponse Body of every non-2xx response. Clients branch on `code`, not on the HTTP status: the status says what happened at the protocol level, the code says what happened in the domain.
 type ErrorResponse struct {
 	// Error The failure itself. Never carries internal details of a 500.
@@ -72,7 +96,8 @@ type ErrorResponse struct {
 // ErrorResponseErrorCode Machine-readable reason, stable across releases. `validation` covers both a malformed body (400) and a well-formed but invalid one (422). `not_implemented` means the operation exists in the contract but has no implementation yet — a client can hide the control instead of showing an error.
 type ErrorResponseErrorCode string
 
-// Event A fact from a security tool, pulled into an investigation. Events are never edited and carry no status: a fact cannot be confirmed or rejected, only cited.
+// Event A fact from a security tool. Events are never edited and carry no status: a fact cannot be confirmed or rejected, only cited.
+// An event belongs to the tenant, not to one investigation — the same source record routinely turns up in several cases, and copying it into each would destroy the answer to "where else has this been seen". Membership is a separate link, so pulling an event into a third case adds a relation rather than a duplicate.
 type Event struct {
 	// Entities Who took part and in what capacity. Extracted during ingestion by the source's mapping profile.
 	Entities *[]struct {
@@ -86,14 +111,14 @@ type Event struct {
 	// EventType What happened, in the product's vocabulary — process_start, network_session, logon, detection.
 	EventType string `json:"event_type"`
 
-	// Id Identifier of this event inside the investigation.
+	// Id Identifier of the event within the tenant.
 	Id openapi_types.UUID `json:"id"`
 
 	// IngestedAt When it was pulled in. Differs from occurred_at whenever an analyst reaches back in time, which is most of the time.
 	IngestedAt time.Time `json:"ingested_at"`
 
-	// InvestigationId Investigation the event was pulled into. The same source record pulled into two cases yields two rows, so each case owns its evidence outright.
-	InvestigationId openapi_types.UUID `json:"investigation_id"`
+	// InvestigationIds Investigations this event has been pulled into. More than one is normal and is itself a signal: the same record appearing in several cases suggests they are related.
+	InvestigationIds *[]openapi_types.UUID `json:"investigation_ids,omitempty"`
 
 	// NormalizedData The event mapped onto the common envelope — subject, action, object, status — so events from different tools can be compared and searched.
 	NormalizedData *map[string]interface{} `json:"normalized_data,omitempty"`
@@ -152,10 +177,10 @@ type EventAttachRequest struct {
 
 // EventAttachResult What the pull changed in the investigation.
 type EventAttachResult struct {
-	// Attached Events newly added to the case.
+	// Attached Events newly added to the case, whether ingested now or already known.
 	Attached int `json:"attached"`
 
-	// Duplicates Events already present and therefore skipped. A non-zero count is normal, not an error — overlapping pulls are expected.
+	// Duplicates Events already in this case and therefore skipped. Normal, not an error: overlapping pulls are expected.
 	Duplicates int `json:"duplicates"`
 
 	// EdgesCreated Edges linking rules produced from the new events. This is the graph growing without an agent: rules alone connect what obviously belongs together.
@@ -163,6 +188,9 @@ type EventAttachResult struct {
 
 	// EntitiesExtracted Entities created or updated from the new events. Counts entities, not mentions.
 	EntitiesExtracted int `json:"entities_extracted"`
+
+	// Reused Of those, how many already existed for the tenant and were linked rather than ingested. Non-zero means this case overlaps another — worth a look.
+	Reused *int `json:"reused,omitempty"`
 }
 
 // EventPage One page of the timeline.
@@ -176,6 +204,12 @@ type EventPage struct {
 
 // EventSummary Event without the raw payload. A timeline page carries hundreds of events and raw payloads run to kilobytes each; the full record is available one at a time.
 type EventSummary struct {
+	// AttachedAt When the event was pulled into the investigation being listed. A property of the membership, not of the event — the same event has a different value in another case.
+	AttachedAt *time.Time `json:"attached_at,omitempty"`
+
+	// AttachedBy Who pulled it into this investigation.
+	AttachedBy *Actor `json:"attached_by,omitempty"`
+
 	// Entities Who took part and in what capacity.
 	Entities *[]struct {
 		// EntityId The participating entity.
@@ -188,20 +222,20 @@ type EventSummary struct {
 	// EventType What happened, in the product's vocabulary.
 	EventType string `json:"event_type"`
 
-	// Id Identifier of this event.
+	// Id Identifier of the event within the tenant.
 	Id openapi_types.UUID `json:"id"`
 
 	// IngestedAt When it was pulled into the investigation.
 	IngestedAt time.Time `json:"ingested_at"`
-
-	// InvestigationId Investigation it belongs to.
-	InvestigationId openapi_types.UUID `json:"investigation_id"`
 
 	// NormalizedData The event mapped onto the common envelope.
 	NormalizedData *map[string]interface{} `json:"normalized_data,omitempty"`
 
 	// OccurredAt When it happened, per the source.
 	OccurredAt time.Time `json:"occurred_at"`
+
+	// Reason Why it was pulled in. Part of the case narrative, and likewise per-investigation.
+	Reason *string `json:"reason,omitempty"`
 
 	// SourceCode Which tool it came from.
 	SourceCode string `json:"source_code"`
@@ -278,7 +312,7 @@ type AttachEventsJSONRequestBody = EventAttachRequest
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
-	// DeleteEvent Drop an event from the investigation
+	// DeleteEvent Delete an event from the tenant
 	// (DELETE /events/{event_id})
 	DeleteEvent(w http.ResponseWriter, r *http.Request, eventId EventId)
 	// GetEvent One event in full
@@ -290,6 +324,9 @@ type ServerInterface interface {
 	// AttachEvents Pull events into the investigation
 	// (POST /investigations/{investigation_id}/events)
 	AttachEvents(w http.ResponseWriter, r *http.Request, investigationId InvestigationId)
+	// DetachEvent Drop an event from the investigation
+	// (DELETE /investigations/{investigation_id}/events/{event_id})
+	DetachEvent(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, eventId EventId)
 }
 
 // ServerInterfaceWrapper converts contexts to parameters.
@@ -512,6 +549,41 @@ func (siw *ServerInterfaceWrapper) AttachEvents(w http.ResponseWriter, r *http.R
 	handler.ServeHTTP(w, r)
 }
 
+// DetachEvent operation middleware
+func (siw *ServerInterfaceWrapper) DetachEvent(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "investigation_id" -------------
+	var investigationId InvestigationId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "investigation_id", r.PathValue("investigation_id"), &investigationId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "investigation_id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "event_id" -------------
+	var eventId EventId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "event_id", r.PathValue("event_id"), &eventId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "event_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DetachEvent(w, r, investigationId, eventId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 type UnescapedCookieParamError struct {
 	ParamName string
 	Err       error
@@ -636,6 +708,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/investigations/{investigation_id}/events", wrapper.AttachEvents)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/events/{event_id}", wrapper.DeleteEvent)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/events/{event_id}", wrapper.GetEvent)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/investigations/{investigation_id}/events/{event_id}", wrapper.DetachEvent)
 
 	return m
 }
@@ -1032,9 +1105,96 @@ func (response AttachEvents502JSONResponse) VisitAttachEventsResponse(w http.Res
 	return err
 }
 
+type DetachEventRequestObject struct {
+	InvestigationId InvestigationId `json:"investigation_id"`
+	EventId         EventId         `json:"event_id"`
+}
+
+type DetachEventResponseObject interface {
+	VisitDetachEventResponse(w http.ResponseWriter) error
+}
+
+type DetachEvent204Response struct {
+}
+
+func (response DetachEvent204Response) VisitDetachEventResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DetachEvent401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response DetachEvent401JSONResponse) VisitDetachEventResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DetachEvent403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response DetachEvent403JSONResponse) VisitDetachEventResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DetachEvent404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response DetachEvent404JSONResponse) VisitDetachEventResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DetachEvent409JSONResponse struct{ ConflictJSONResponse }
+
+func (response DetachEvent409JSONResponse) VisitDetachEventResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DetachEvent501JSONResponse struct{ NotImplementedJSONResponse }
+
+func (response DetachEvent501JSONResponse) VisitDetachEventResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(501)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
-	// DeleteEvent Drop an event from the investigation
+	// DeleteEvent Delete an event from the tenant
 	// (DELETE /events/{event_id})
 	DeleteEvent(ctx context.Context, request DeleteEventRequestObject) (DeleteEventResponseObject, error)
 	// GetEvent One event in full
@@ -1046,6 +1206,9 @@ type StrictServerInterface interface {
 	// AttachEvents Pull events into the investigation
 	// (POST /investigations/{investigation_id}/events)
 	AttachEvents(ctx context.Context, request AttachEventsRequestObject) (AttachEventsResponseObject, error)
+	// DetachEvent Drop an event from the investigation
+	// (DELETE /investigations/{investigation_id}/events/{event_id})
+	DetachEvent(ctx context.Context, request DetachEventRequestObject) (DetachEventResponseObject, error)
 }
 
 type StrictHandlerFunc func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error)
@@ -1192,6 +1355,33 @@ func (sh *strictHandler) AttachEvents(w http.ResponseWriter, r *http.Request, in
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(AttachEventsResponseObject); ok {
 		if err := validResponse.VisitAttachEventsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DetachEvent operation middleware
+func (sh *strictHandler) DetachEvent(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, eventId EventId) {
+	var request DetachEventRequestObject
+
+	request.InvestigationId = investigationId
+	request.EventId = eventId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DetachEvent(ctx, request.(DetachEventRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DetachEvent")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DetachEventResponseObject); ok {
+		if err := validResponse.VisitDetachEventResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

@@ -17,6 +17,13 @@ components:
         unconfirmed and has to be reviewed.
       enum: [analyst, rule, agent]
 
+    Actor:
+      type: string
+      description: >-
+        Who performed an action — a human through the API, an agent run, or the
+        service itself acting on a schedule.
+      enum: [analyst, agent, system]
+
     NodeType:
       type: string
       description: >-

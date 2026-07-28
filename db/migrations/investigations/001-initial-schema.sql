@@ -205,11 +205,18 @@ CREATE INDEX IF NOT EXISTS ix_investigations_status
     ON investigations (project_id, status, created_at DESC);
 
 -- УЛИКИ
+--
+-- События и сущности принадлежат тенанту, а не расследованию: один и тот же
+-- хост или одна и та же сработка штатно фигурируют в нескольких кейсах, и
+-- копировать их на каждый — значит потерять ответ на вопрос «где ещё это
+-- встречалось», ради которого карточка сущности и существует.
+--
+-- Принадлежность расследованию вынесена в investigation_events и
+-- investigation_entities. Там же живёт провенанс: кто затянул и зачем.
 
 CREATE TABLE IF NOT EXISTS events (
     id UUID DEFAULT gen_random_uuid() NOT NULL,
     project_id VARCHAR(12) NOT NULL,
-    investigation_id UUID NOT NULL,
     source_code VARCHAR(32) NOT NULL,
 
     source_event_id VARCHAR NOT NULL,
@@ -220,24 +227,18 @@ CREATE TABLE IF NOT EXISTS events (
     normalized_data JSONB DEFAULT '{}'::jsonb NOT NULL,
     raw_data JSONB,
     dedup_key VARCHAR NOT NULL,
-    fetched_by VARCHAR(16) DEFAULT 'analyst' NOT NULL
-        CHECK (fetched_by IN ('analyst', 'agent', 'system')),
 
     CONSTRAINT pk_events PRIMARY KEY (id),
-    -- Цель составных FK: улика цитируется только внутри своего расследования.
-    CONSTRAINT uq_events_id_investigation UNIQUE (id, investigation_id),
-    CONSTRAINT uq_events_dedup UNIQUE (investigation_id, dedup_key),
-    CONSTRAINT fk_events_investigation_id_investigations FOREIGN KEY (investigation_id)
-        REFERENCES investigations (id) ON DELETE CASCADE,
+    -- Одна запись источника — одна строка на тенант. Затяжка в третий кейс
+    -- ничего не копирует, только добавляет связь.
+    CONSTRAINT uq_events_dedup UNIQUE (project_id, dedup_key),
+    CONSTRAINT uq_events_source UNIQUE (project_id, source_code, source_event_id),
     CONSTRAINT fk_events_source_code_sources FOREIGN KEY (source_code)
         REFERENCES sources (code)
 );
 
 CREATE INDEX IF NOT EXISTS ix_events_timeline
-    ON events (investigation_id, occurred_at, id);
-
-CREATE INDEX IF NOT EXISTS ix_events_source_event
-    ON events (source_code, source_event_id);
+    ON events (project_id, occurred_at, id);
 
 CREATE INDEX IF NOT EXISTS ix_events_normalized
     ON events USING gin (normalized_data jsonb_path_ops);
@@ -249,7 +250,6 @@ CREATE INDEX IF NOT EXISTS ix_events_normalized_trgm
 CREATE TABLE IF NOT EXISTS entities (
     id UUID DEFAULT gen_random_uuid() NOT NULL,
     project_id VARCHAR(12) NOT NULL,
-    investigation_id UUID NOT NULL,
     type_code VARCHAR(64) NOT NULL,
 
     canonical_key VARCHAR NOT NULL,
@@ -262,9 +262,9 @@ CREATE TABLE IF NOT EXISTS entities (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
 
     CONSTRAINT pk_entities PRIMARY KEY (id),
-    CONSTRAINT uq_entities_scope_type_key UNIQUE (investigation_id, type_code, canonical_key),
-    CONSTRAINT fk_entities_investigation_id_investigations FOREIGN KEY (investigation_id)
-        REFERENCES investigations (id) ON DELETE CASCADE,
+    -- Тип и ключ опознают вещь в пределах тенанта. Через границу тенанта не
+    -- склеиваются: dc-01 заказчика A и заказчика B — разные хосты.
+    CONSTRAINT uq_entities_scope_type_key UNIQUE (project_id, type_code, canonical_key),
     CONSTRAINT fk_entities_type_code_entity_types FOREIGN KEY (type_code)
         REFERENCES entity_types (code)
 );
@@ -275,13 +275,10 @@ BEFORE UPDATE ON entities
 FOR EACH ROW
 EXECUTE FUNCTION set_updated_at();
 
--- Кросс-кейсовый поиск сущности: «где ещё встречался этот хеш»
-CREATE INDEX IF NOT EXISTS ix_entities_project_type_key
-    ON entities (project_id, type_code, canonical_key);
-
+-- Участие сущности в событии — факт источника, а не мнение расследования,
+-- поэтому кейса здесь нет.
 CREATE TABLE IF NOT EXISTS event_entity_relations (
     id UUID DEFAULT gen_random_uuid() NOT NULL,
-    investigation_id UUID NOT NULL,
     event_id UUID NOT NULL,
     entity_id UUID NOT NULL,
 
@@ -299,6 +296,48 @@ CREATE TABLE IF NOT EXISTS event_entity_relations (
 
 CREATE INDEX IF NOT EXISTS ix_eer_entity ON event_entity_relations (entity_id);
 CREATE INDEX IF NOT EXISTS ix_eer_event ON event_entity_relations (event_id);
+
+-- СОСТАВ РАССЛЕДОВАНИЯ
+
+CREATE TABLE IF NOT EXISTS investigation_events (
+    investigation_id UUID NOT NULL,
+    event_id UUID NOT NULL,
+    project_id VARCHAR(12) NOT NULL,
+
+    attached_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
+    attached_by VARCHAR(16) DEFAULT 'analyst' NOT NULL
+        CHECK (attached_by IN ('analyst', 'agent', 'system')),
+    -- Зачем затянули: нарратив расследования, а не служебное поле.
+    reason VARCHAR,
+
+    CONSTRAINT pk_investigation_events PRIMARY KEY (investigation_id, event_id),
+    CONSTRAINT fk_inv_events_investigation FOREIGN KEY (investigation_id)
+        REFERENCES investigations (id) ON DELETE CASCADE,
+    CONSTRAINT fk_inv_events_event FOREIGN KEY (event_id)
+        REFERENCES events (id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS ix_inv_events_event ON investigation_events (event_id);
+
+CREATE TABLE IF NOT EXISTS investigation_entities (
+    investigation_id UUID NOT NULL,
+    entity_id UUID NOT NULL,
+    project_id VARCHAR(12) NOT NULL,
+
+    -- Как попала в кейс: извлечена из события, введена аналитиком как
+    -- индикатор или предложена агентом.
+    added_via VARCHAR(16) DEFAULT 'event' NOT NULL
+        CHECK (added_via IN ('event', 'ioc', 'agent', 'analyst')),
+    added_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
+
+    CONSTRAINT pk_investigation_entities PRIMARY KEY (investigation_id, entity_id),
+    CONSTRAINT fk_inv_entities_investigation FOREIGN KEY (investigation_id)
+        REFERENCES investigations (id) ON DELETE CASCADE,
+    CONSTRAINT fk_inv_entities_entity FOREIGN KEY (entity_id)
+        REFERENCES entities (id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS ix_inv_entities_entity ON investigation_entities (entity_id);
 
 -- ГРАФ
 
@@ -323,10 +362,13 @@ CREATE TABLE IF NOT EXISTS graph_nodes (
     ),
     CONSTRAINT fk_graph_nodes_investigation_id_investigations FOREIGN KEY (investigation_id)
         REFERENCES investigations (id) ON DELETE CASCADE,
-    CONSTRAINT fk_graph_nodes_entity_id_entities FOREIGN KEY (entity_id)
-        REFERENCES entities (id) ON DELETE CASCADE,
-    CONSTRAINT fk_graph_nodes_event_id_events FOREIGN KEY (event_id)
-        REFERENCES events (id) ON DELETE CASCADE
+    -- Ссылка не на общую строку, а на её принадлежность этому расследованию:
+    -- на граф кейса не попадёт то, что в кейс не затянуто, а отвязка события
+    -- унесёт узел и висящие на нём рёбра.
+    CONSTRAINT fk_graph_nodes_entity FOREIGN KEY (investigation_id, entity_id)
+        REFERENCES investigation_entities (investigation_id, entity_id) ON DELETE CASCADE,
+    CONSTRAINT fk_graph_nodes_event FOREIGN KEY (investigation_id, event_id)
+        REFERENCES investigation_events (investigation_id, event_id) ON DELETE CASCADE
 );
 
 -- Одна сущность (событие) — один узел в расследовании, иначе рёбра расщепятся
@@ -385,8 +427,10 @@ CREATE INDEX IF NOT EXISTS ix_edges_investigation_status
 CREATE INDEX IF NOT EXISTS ix_edges_source ON edges (source_node_id);
 CREATE INDEX IF NOT EXISTS ix_edges_target ON edges (target_node_id);
 
--- Основания связи. Составной FK держит инвариант: цитируемое событие
--- принадлежит тому же расследованию, что и ребро.
+-- Основания связи. Инвариант тот же — цитируемое событие принадлежит тому же
+-- расследованию, что и ребро, — но держится теперь через состав кейса:
+-- события общие на тенант, «своим» его делает запись в investigation_events.
+-- Отвязали событие от кейса — основания в нём отвалились вместе с ним.
 CREATE TABLE IF NOT EXISTS edge_evidence (
     edge_id UUID NOT NULL,
     event_id UUID NOT NULL,
@@ -397,8 +441,8 @@ CREATE TABLE IF NOT EXISTS edge_evidence (
     CONSTRAINT pk_edge_evidence PRIMARY KEY (edge_id, event_id),
     CONSTRAINT fk_edge_evidence_edge FOREIGN KEY (edge_id, investigation_id)
         REFERENCES edges (id, investigation_id) ON DELETE CASCADE,
-    CONSTRAINT fk_edge_evidence_event FOREIGN KEY (event_id, investigation_id)
-        REFERENCES events (id, investigation_id) ON DELETE CASCADE
+    CONSTRAINT fk_edge_evidence_event FOREIGN KEY (investigation_id, event_id)
+        REFERENCES investigation_events (investigation_id, event_id) ON DELETE CASCADE
 );
 
 CREATE INDEX IF NOT EXISTS ix_edge_evidence_event ON edge_evidence (event_id);

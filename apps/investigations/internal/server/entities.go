@@ -38,3 +38,9 @@ func (s *Server) ListEntities(ctx context.Context, request entities.ListEntities
 func (s *Server) CreateEntity(ctx context.Context, request entities.CreateEntityRequestObject) (entities.CreateEntityResponseObject, error) {
 	return nil, httperr.ErrNotImplemented
 }
+
+// DetachEntity Drop an entity from the investigation
+// (DELETE /investigations/{investigation_id}/entities/{entity_id})
+func (s *Server) DetachEntity(ctx context.Context, request entities.DetachEntityRequestObject) (entities.DetachEntityResponseObject, error) {
+	return nil, httperr.ErrNotImplemented
+}
