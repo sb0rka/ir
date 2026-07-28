@@ -11,11 +11,15 @@ import (
 	"syscall"
 	"time"
 
+	corelog "github.com/sb0rka/sb0rka/packages/core/log"
+
 	"github.com/sb0rka/ir/apps/investigations/internal/config"
 	"github.com/sb0rka/ir/apps/investigations/internal/server"
 	"github.com/sb0rka/ir/apps/investigations/internal/store/psql"
 	"github.com/sb0rka/ir/apps/investigations/internal/transport"
 )
+
+const serviceName = "investigations"
 
 func main() {
 	if err := run(); err != nil {
@@ -29,12 +33,15 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	log := newLogger(cfg.Log)
+	log, err := corelog.New(cfg.Log, serviceName)
+	if err != nil {
+		return err
+	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	db, err := psql.New(ctx, cfg.Database.URI, cfg.Database.MaxOpenConns, cfg.Database.ConnMaxLifetime)
+	db, err := psql.New(ctx, cfg.Database.URI, cfg.Database.MaxConns, cfg.Database.ConnMaxLifetime)
 	if err != nil {
 		return err
 	}
@@ -90,15 +97,4 @@ func run() error {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	return srv.Shutdown(shutdownCtx)
-}
-
-func newLogger(cfg config.LogConfig) *slog.Logger {
-	level := slog.LevelInfo
-	_ = level.UnmarshalText([]byte(cfg.Level))
-
-	opts := &slog.HandlerOptions{Level: level}
-	if cfg.Format == "text" {
-		return slog.New(slog.NewTextHandler(os.Stdout, opts))
-	}
-	return slog.New(slog.NewJSONHandler(os.Stdout, opts))
 }

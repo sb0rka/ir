@@ -75,8 +75,6 @@ func registerDomains(mux *http.ServeMux, deps Dependencies) {
 		httperr.Write(w, deps.Log, err)
 	}
 
-
-
 	entities.HandlerWithOptions(
 		entities.NewStrictHandlerWithOptions(deps.Server, nil, entities.StrictHTTPServerOptions{
 			RequestErrorHandlerFunc:  onRequestError,
@@ -121,9 +119,6 @@ func registerDomains(mux *http.ServeMux, deps Dependencies) {
 		reference.StdHTTPServerOptions{
 			BaseURL: baseURL, BaseRouter: mux, ErrorHandlerFunc: onRequestError,
 		})
-
-
-
 
 }
 

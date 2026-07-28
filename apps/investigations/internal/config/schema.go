@@ -2,23 +2,27 @@ package config
 
 import (
 	"crypto/ed25519"
-	"time"
+
+	coreconfig "github.com/sb0rka/sb0rka/packages/core/config"
 )
 
+// Своего здесь только то, чего нет у остальных сервисов платформы: проверка
+// токена и роли SOC. Логи и база берутся типами из core.
 type Config struct {
 	Server   ServerConfig
-	Database DatabaseConfig
-	Log      LogConfig
+	Database coreconfig.DatabaseConfig
+	Log      coreconfig.LoggerConfig
 }
 
 type ServerConfig struct {
 	Addr string
 	Port string
 
-	CORSWhitelist  map[string]bool
-	CORSAllowedAll bool
+	// Формат core: "*" — обычный ключ карты, а не отдельный флаг.
+	CORSWhitelist map[string]bool
 
-	Auth       AuthConfig
+	Auth AuthConfig
+
 	// BootstrapAdminSubjects — субъекты с ролью admin в обход role_bindings.
 	// Без них deny-by-default отказывает всем, включая того, кто должен раздать роли.
 	BootstrapAdminSubjects []string
@@ -35,15 +39,4 @@ type AuthConfig struct {
 	AccessTokenAudience  string
 	AccessTokenKid       string
 	AccessTokenTyp       string
-}
-
-type DatabaseConfig struct {
-	URI             string
-	MaxOpenConns    int
-	ConnMaxLifetime time.Duration
-}
-
-type LogConfig struct {
-	Level  string
-	Format string
 }

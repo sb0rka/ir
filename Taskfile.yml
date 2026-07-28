@@ -139,19 +139,19 @@ tasks:
       - task: gen
       # Одна проверка на всё: Go-контракт, заготовки, TypeScript. Если
       # перегенерация что-то изменила — спеку правили, а результат не
-      # закоммитили.
+      # закоммитили. Только *.go: рядом с заготовками лежит рукописный README.
       - cmd: |
-          git diff --exit-code -- packages {{.SERVER_DIR}} || {
+          git diff --exit-code -- packages '{{.SERVER_DIR}}/*.go' || {
             echo ""
             echo "Сгенерированный код разошёлся со спекой."
             echo "Почините: task gen, затем закоммитьте изменения."
             exit 1
           }
       - cmd: |
-          test -z "$(git status --porcelain -- packages {{.SERVER_DIR}})" || {
+          test -z "$(git status --porcelain -- packages '{{.SERVER_DIR}}/*.go')" || {
             echo ""
             echo "Появились несохранённые сгенерированные файлы:"
-            git status --short -- packages {{.SERVER_DIR}}
+            git status --short -- packages '{{.SERVER_DIR}}/*.go'
             exit 1
           }
 

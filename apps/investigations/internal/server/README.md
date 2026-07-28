@@ -43,11 +43,11 @@ func (s *Server) GetReference(ctx context.Context, request reference.GetReferenc
 `project_id` из контекста**, а не проверяется после чтения.
 
 ```go
-identity, ok := authctx.From(ctx)
+scope, ok := socctx.ScopeFromContext(ctx)
 if !ok {
     return nil, httperr.ErrUnauthorized
 }
-edge, err := s.db.Edge(ctx, identity.ProjectID, request.EdgeId)
+edge, err := s.db.GraphEdge(ctx, scope.ProjectID, request.EdgeId)
 ```
 
 Забытое условие в одном методе даёт чтение чужого расследования по угаданному
@@ -58,6 +58,11 @@ uuid, и поймать это нечем: ответ будет валидны�
 Отсутствие записи и запись в чужом тенанте отвечают одинаково — `404`. `403`
 здесь означал бы «такая запись есть, но не ваша», то есть подтверждал бы
 существование чужих данных.
+
+Личность из токена — `sub`, `sid`, `kind`, `jti` — лежит в
+`coreauthctx.IdentityFromContext`, общем для всех сервисов платформы. Тенант
+и роли SOC отдельным значением в `socctx`: ролей `l1/l2/lead/admin` у соседей
+пока нет, и в общий тип они попадут, когда понадобятся второму сервису.
 
 ## Слои
 

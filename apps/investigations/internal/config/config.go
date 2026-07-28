@@ -7,37 +7,38 @@ import (
 	"encoding/pem"
 	"fmt"
 	"os"
-	"strconv"
 	"strings"
 	"time"
+
+	coreconfig "github.com/sb0rka/sb0rka/packages/core/config"
 )
 
 func Load() (Config, error) {
 	cfg := Config{
 		Server: ServerConfig{
-			Addr:                   env("SERVER_ADDR", "0.0.0.0"),
-			Port:                   env("SERVER_PORT", "8090"),
+			Addr:                   coreconfig.GetStringEnv("SERVER_ADDR", "0.0.0.0"),
+			Port:                   coreconfig.GetStringEnv("SERVER_PORT", "8090"),
+			CORSWhitelist:          coreconfig.ParseCORSWhitelist(coreconfig.GetStringEnv("SERVER_CORS_WHITELIST", "")),
 			BootstrapAdminSubjects: envList("INV_BOOTSTRAP_ADMIN_SUBJECTS"),
-			DefaultRole:            env("INV_DEFAULT_ROLE", ""),
+			DefaultRole:            coreconfig.GetStringEnv("INV_DEFAULT_ROLE", ""),
 			Auth: AuthConfig{
-				AccessTokenIssuer:   env("ACCESS_TOKEN_ISSUER", ""),
-				AccessTokenAudience: env("ACCESS_TOKEN_AUDIENCE", ""),
-				AccessTokenKid:      env("ACCESS_TOKEN_KID", ""),
-				AccessTokenTyp:      env("ACCESS_TOKEN_TYP", "access+jwt"),
+				AccessTokenIssuer:   coreconfig.GetStringEnv("ACCESS_TOKEN_ISSUER", ""),
+				AccessTokenAudience: coreconfig.GetStringEnv("ACCESS_TOKEN_AUDIENCE", ""),
+				AccessTokenKid:      coreconfig.GetStringEnv("ACCESS_TOKEN_KID", ""),
+				AccessTokenTyp:      coreconfig.GetStringEnv("ACCESS_TOKEN_TYP", "access+jwt"),
 			},
 		},
-		Database: DatabaseConfig{
-			URI:             env("DATABASE_URI", ""),
-			MaxOpenConns:    envInt("DATABASE_MAX_OPEN_CONNS", 10),
-			ConnMaxLifetime: time.Duration(envInt("DATABASE_CONN_MAX_LIFETIME_SEC", 30)) * time.Second,
+		Database: coreconfig.DatabaseConfig{
+			URI:      coreconfig.GetStringEnv("DATABASE_URI", ""),
+			MaxConns: coreconfig.GetIntEnv("DATABASE_MAX_CONNS", coreconfig.DefaultDatabaseMaxConns),
+			ConnMaxLifetime: coreconfig.GetDurationEnv(
+				"DATABASE_CONN_MAX_LIFETIME_SEC", coreconfig.DefaultDatabaseConnMaxLifetime, time.Second),
 		},
-		Log: LogConfig{
-			Level:  env("LOG_LEVEL", "info"),
-			Format: env("LOG_FORMAT", "json"),
+		Log: coreconfig.LoggerConfig{
+			Level:  coreconfig.GetStringEnv("LOG_LEVEL", "info"),
+			Format: coreconfig.GetStringEnv("LOG_FORMAT", "json"),
 		},
 	}
-
-	cfg.Server.CORSWhitelist, cfg.Server.CORSAllowedAll = parseCORS(env("SERVER_CORS_WHITELIST", ""))
 
 	key, err := loadPublicKey()
 	if err != nil {
@@ -52,11 +53,11 @@ func Load() (Config, error) {
 }
 
 // loadPublicKey читает публичный ключ платформы из PEM-файла или base64-переменной.
-// Отсутствие ключа не ошибка старта: сервис поднимется и отдаст /health,
+// Отсутствие ключа не ошибка старта: сервис поднимется и отдаст /healthz,
 // но любой запрос с токеном получит 401 — так виден неполный конфиг стенда.
 func loadPublicKey() (ed25519.PublicKey, error) {
-	raw := []byte(env("ACCESS_TOKEN_PUBLIC_KEY", ""))
-	if path := env("ACCESS_TOKEN_PUBLIC_KEY_FILE_PATH", ""); path != "" {
+	raw := []byte(coreconfig.GetStringEnv("ACCESS_TOKEN_PUBLIC_KEY", ""))
+	if path := coreconfig.GetStringEnv("ACCESS_TOKEN_PUBLIC_KEY_FILE_PATH", ""); path != "" {
 		data, err := os.ReadFile(path)
 		if err != nil {
 			return nil, fmt.Errorf("read public key: %w", err)
@@ -89,36 +90,10 @@ func loadPublicKey() (ed25519.PublicKey, error) {
 	return key, nil
 }
 
-func parseCORS(raw string) (map[string]bool, bool) {
-	list := make(map[string]bool)
-	for _, origin := range strings.Split(raw, ",") {
-		origin = strings.TrimSpace(origin)
-		if origin == "*" {
-			return list, true
-		}
-		if origin != "" {
-			list[origin] = true
-		}
-	}
-	return list, false
-}
-
-func env(key, fallback string) string {
-	if v := strings.TrimSpace(os.Getenv(key)); v != "" {
-		return v
-	}
-	return fallback
-}
-
-func envInt(key string, fallback int) int {
-	if v, err := strconv.Atoi(env(key, "")); err == nil {
-		return v
-	}
-	return fallback
-}
-
+// envList — списковых переменных в core пока нет; когда понадобятся второму
+// сервису, помощник переезжает туда.
 func envList(key string) []string {
-	raw := env(key, "")
+	raw := coreconfig.GetStringEnv(key, "")
 	if raw == "" {
 		return nil
 	}

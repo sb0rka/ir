@@ -8,10 +8,11 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	coreauthctx "github.com/sb0rka/sb0rka/packages/core/transport/authctx"
 
 	"github.com/sb0rka/ir/apps/investigations/internal/config"
-	"github.com/sb0rka/ir/apps/investigations/internal/transport/authctx"
 	"github.com/sb0rka/ir/apps/investigations/internal/transport/httperr"
+	"github.com/sb0rka/ir/apps/investigations/internal/transport/socctx"
 )
 
 // accessTokenClaims повторяет формат токена платформы sb0rka.
@@ -58,18 +59,36 @@ func loggerMiddleware(log *slog.Logger) middlewareChain {
 	}
 }
 
+// corsMiddleware повторяет поведение apps/api платформы, чтобы фронт видел
+// одинаковые заголовки от всех сервисов. Authorization и credentials идут
+// только к явно разрешённому источнику: с «*» браузер их всё равно отвергнет.
 func corsMiddleware(cfg config.ServerConfig) middlewareChain {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			origin := r.Header.Get("Origin")
-			if cfg.CORSAllowedAll {
-				w.Header().Set("Access-Control-Allow-Origin", "*")
-			} else if origin != "" && cfg.CORSWhitelist[origin] {
-				w.Header().Set("Access-Control-Allow-Origin", origin)
-				w.Header().Set("Vary", "Origin")
+			var allowedOrigin string
+			if cfg.CORSWhitelist["*"] {
+				allowedOrigin = "*"
+			} else if origin := r.Header.Get("Origin"); cfg.CORSWhitelist[origin] {
+				allowedOrigin = origin
 			}
-			w.Header().Set("Access-Control-Allow-Methods", "GET,POST,PATCH,DELETE,OPTIONS")
-			w.Header().Set("Access-Control-Allow-Headers", "Authorization,Content-Type")
+
+			// Vary ставится и когда источник не разрешён: ответ всё равно
+			// зависит от Origin, и без этого кэш отдал бы чужому источнику
+			// ответ, собранный для разрешённого.
+			if !cfg.CORSWhitelist["*"] {
+				w.Header().Add("Vary", "Origin")
+			}
+
+			if allowedOrigin != "" {
+				allowHeaders := "Content-Type"
+				if allowedOrigin != "*" {
+					allowHeaders += ", Authorization"
+					w.Header().Set("Access-Control-Allow-Credentials", "true")
+				}
+				w.Header().Set("Access-Control-Allow-Origin", allowedOrigin)
+				w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS")
+				w.Header().Set("Access-Control-Allow-Headers", allowHeaders)
+			}
 
 			if r.Method == http.MethodOptions {
 				w.WriteHeader(http.StatusNoContent)
@@ -97,33 +116,36 @@ func authMiddleware(cfg config.ServerConfig, log *slog.Logger, roles RoleResolve
 				return
 			}
 
+			var scope socctx.Scope
 			if roles != nil {
 				resolved, err := roles.Resolve(r.Context(), identity.SubjectID)
 				if err != nil {
 					httperr.Write(w, log, err)
 					return
 				}
-				identity.ProjectID = resolved.ProjectID
-				identity.Roles = resolved.Roles
+				scope.ProjectID = resolved.ProjectID
+				scope.Roles = resolved.Roles
 			}
-			if len(identity.Roles) == 0 && cfg.DefaultRole != "" {
-				identity.Roles = []string{cfg.DefaultRole}
+			if len(scope.Roles) == 0 && cfg.DefaultRole != "" {
+				scope.Roles = []string{cfg.DefaultRole}
 			}
 			for _, subject := range cfg.BootstrapAdminSubjects {
 				if subject == identity.SubjectID {
-					identity.Roles = append(identity.Roles, "admin")
+					scope.Roles = append(scope.Roles, "admin")
 					break
 				}
 			}
 			// Deny-by-default: валидная подпись — ещё не право работать
 			// в продукте. Без единой роли доступа нет, иначе отзыв биндингов
 			// не отзывал бы доступ.
-			if len(identity.Roles) == 0 {
+			if len(scope.Roles) == 0 {
 				httperr.Write(w, log, httperr.ErrForbidden)
 				return
 			}
 
-			next.ServeHTTP(w, r.WithContext(authctx.With(r.Context(), identity)))
+			ctx := coreauthctx.WithIdentity(r.Context(), identity)
+			ctx = socctx.WithScope(ctx, scope)
+			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
 }
@@ -140,9 +162,9 @@ func bearerToken(header string) (string, error) {
 	return token, nil
 }
 
-func verify(raw string, cfg config.AuthConfig) (authctx.Identity, error) {
+func verify(raw string, cfg config.AuthConfig) (coreauthctx.Identity, error) {
 	if len(cfg.AccessTokenPublicKey) == 0 {
-		return authctx.Identity{}, httperr.New(
+		return coreauthctx.Identity{}, httperr.New(
 			http.StatusUnauthorized, httperr.CodeUnauthorized, "token verification is not configured")
 	}
 
@@ -177,15 +199,16 @@ func verify(raw string, cfg config.AuthConfig) (authctx.Identity, error) {
 		return ed25519.PublicKey(cfg.AccessTokenPublicKey), nil
 	}, opts...)
 	if err != nil {
-		return authctx.Identity{}, httperr.ErrUnauthorized
+		return coreauthctx.Identity{}, httperr.ErrUnauthorized
 	}
 	if claims.Subject == "" || claims.SessionID == "" {
-		return authctx.Identity{}, httperr.ErrUnauthorized
+		return coreauthctx.Identity{}, httperr.ErrUnauthorized
 	}
 
-	return authctx.Identity{
+	return coreauthctx.Identity{
 		SubjectID:   claims.Subject,
 		SubjectKind: claims.SubjectKind,
 		SessionID:   claims.SessionID,
+		JTI:         claims.ID,
 	}, nil
 }

@@ -5,37 +5,29 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
+	corestore "github.com/sb0rka/sb0rka/packages/core/store"
 
 	"github.com/sb0rka/ir/apps/investigations/internal/domain/model"
 	"github.com/sb0rka/ir/apps/investigations/internal/store"
 )
 
+// DB — пул платформы плюс запросы расследований. Сам пул, Ping и Close живут
+// в core: подключение к Postgres одинаково во всех сервисах, отличаются только
+// запросы поверх него.
 type DB struct {
-	pool *pgxpool.Pool
+	*corestore.Pool
 }
 
-func New(ctx context.Context, uri string, maxConns int, connMaxLifetime time.Duration) (*DB, error) {
-	cfg, err := pgxpool.ParseConfig(uri)
-	if err != nil {
-		return nil, fmt.Errorf("parse database uri: %w", err)
-	}
-	cfg.MaxConns = int32(maxConns)
-	cfg.MaxConnLifetime = connMaxLifetime
-
-	pool, err := pgxpool.NewWithConfig(ctx, cfg)
+func New(_ context.Context, uri string, maxConns int, connMaxLifetime time.Duration) (*DB, error) {
+	pool, err := corestore.NewPool(uri, maxConns, connMaxLifetime)
 	if err != nil {
 		return nil, fmt.Errorf("connect: %w", err)
 	}
-	return &DB{pool: pool}, nil
+	return &DB{Pool: pool}, nil
 }
 
-func (d *DB) Ping(ctx context.Context) error { return d.pool.Ping(ctx) }
-
-func (d *DB) Close() { d.pool.Close() }
-
 func (d *DB) RoleBindings(ctx context.Context, subjectID string) (model.SubjectRoles, error) {
-	rows, err := d.pool.Query(ctx, `
+	rows, err := d.Pgx().Query(ctx, `
 		SELECT project_id, role
 		  FROM role_bindings
 		 WHERE subject_id = $1
