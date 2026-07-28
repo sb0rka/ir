@@ -30,10 +30,18 @@ services:
     command:
       - |
         set -e
-        psql -h postgres -U postgres -d investigations -v ON_ERROR_STOP=1 -c 'CREATE SCHEMA IF NOT EXISTS inv;'
         for f in $$(ls /migrations/*.sql | sort); do
-          echo "applying $$f"
+          version=$$(basename "$$f" .sql)
+          applied=$$(psql -h postgres -U postgres -d investigations -tAc \n            "SELECT 1 FROM inv.schema_versions WHERE version = '$$version'" 2>/dev/null || true)
+          if [ "$$applied" = "1" ]; then
+            echo "пропускаю $$version"
+            continue
+          fi
+          echo "применяю $$version"
           psql -h postgres -U postgres -d investigations -v ON_ERROR_STOP=1 -f "$$f"
+          # Журнал появляется только на 001, поэтому запись отметки допускает отказ.
+          psql -h postgres -U postgres -d investigations -tAc \n            "INSERT INTO inv.schema_versions (version) VALUES ('$$version')
+             ON CONFLICT (version) DO NOTHING" >/dev/null 2>&1 || true
         done
 
   api:

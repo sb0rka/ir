@@ -20,6 +20,22 @@ export interface paths {
          */
         get: operations["listEntities"];
         put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/entities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
         /**
          * Add an entity by hand
          * @description Entities normally arrive with events, but an analyst often starts from an indicator someone handed them — a hash from a bulletin, an address from a colleague — before any event mentions it. This creates that entity so it can be placed on the graph and reasoned about immediately.
@@ -27,32 +43,6 @@ export interface paths {
          */
         post: operations["createEntity"];
         delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/investigations/{investigation_id}/entities/{entity_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
-                investigation_id: components["parameters"]["InvestigationId"];
-                /** @description Identifier of an entity — a host, account, process, address or hash. */
-                entity_id: components["parameters"]["EntityId"];
-            };
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        /**
-         * Drop an entity from the investigation
-         * @description Says "this does not belong to my case", not "this never existed". The entity survives with its history intact and stays in every other case it is part of; only the membership goes, taking this case's graph node and the edges hanging off it.
-         *     Refused while an event of this case still mentions the entity — the entity is a consequence of that evidence, so drop the event instead.
-         */
-        delete: operations["detachEntity"];
         options?: never;
         head?: never;
         patch?: never;
@@ -77,7 +67,7 @@ export interface paths {
         post?: never;
         /**
          * Delete an entity from the tenant
-         * @description Erases the entity everywhere, along with its history. Almost never what is wanted — to remove it from one case use the per-investigation endpoint, which leaves the other cases alone.
+         * @description Erases the entity everywhere, along with its history. Almost never what is wanted — to remove it from one case delete the membership instead, which leaves the entity and the other cases alone.
          *     Refused while the entity is part of any investigation or mentioned by any event, so this only ever applies to something typed in by mistake.
          */
         delete: operations["deleteEntity"];
@@ -88,6 +78,32 @@ export interface paths {
          * @description Changes only what a human can meaningfully improve — the label shown on the graph and the extra attributes. The type and the canonical key are fixed: they are the entity's identity, and rewriting them would silently turn one thing into another under every edge already attached to it.
          */
         patch: operations["updateEntity"];
+        trace?: never;
+    };
+    "/entities/{entity_id}/investigations/{investigation_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identifier of an entity — a host, account, process, address or hash. */
+                entity_id: components["parameters"]["EntityId"];
+                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
+                investigation_id: components["parameters"]["InvestigationId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Drop an entity from the investigation
+         * @description Says "this does not belong to my case", not "this never existed". The entity survives with its history intact and stays in every other case it is part of; only the membership goes, taking this case's graph node and the edges hanging off it.
+         *     Refused while an event of this case still mentions the entity — the entity is a consequence of that evidence, so drop the event instead.
+         */
+        delete: operations["detachEntity"];
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
 }
@@ -134,6 +150,11 @@ export interface components {
         EntityOrigin: "event" | "ioc" | "agent" | "analyst";
         /** @description An entity entered by hand, before any event mentions it. */
         EntityCreate: {
+            /**
+             * Format: uuid
+             * @description Investigation to add the entity to. The entity itself belongs to the tenant, so this says where it should show up, not who owns it.
+             */
+            investigation_id: string;
             /** @description Kind of thing, from the entity-type dictionary. Rejected if unknown, so a typo cannot invent a type. */
             type_code: string;
             /** @description Normalised identity — fqdn for a host, SID for an account, sha256 for a file. Together with the type this is what makes two records the same thing, so it is worth normalising before sending. */
@@ -323,10 +344,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
-                investigation_id: components["parameters"]["InvestigationId"];
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody: {
@@ -348,34 +366,6 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             422: components["responses"]["ValidationError"];
-            501: components["responses"]["NotImplemented"];
-        };
-    };
-    detachEntity: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
-                investigation_id: components["parameters"]["InvestigationId"];
-                /** @description Identifier of an entity — a host, account, process, address or hash. */
-                entity_id: components["parameters"]["EntityId"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Dropped from the investigation */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
             501: components["responses"]["NotImplemented"];
         };
     };
@@ -461,6 +451,34 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             422: components["responses"]["ValidationError"];
+            501: components["responses"]["NotImplemented"];
+        };
+    };
+    detachEntity: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identifier of an entity — a host, account, process, address or hash. */
+                entity_id: components["parameters"]["EntityId"];
+                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
+                investigation_id: components["parameters"]["InvestigationId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Dropped from the investigation */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
             501: components["responses"]["NotImplemented"];
         };
     };

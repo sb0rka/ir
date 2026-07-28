@@ -129,12 +129,6 @@ func authMiddleware(cfg config.ServerConfig, log *slog.Logger, roles RoleResolve
 			if len(scope.Roles) == 0 && cfg.DefaultRole != "" {
 				scope.Roles = []string{cfg.DefaultRole}
 			}
-			for _, subject := range cfg.BootstrapAdminSubjects {
-				if subject == identity.SubjectID {
-					scope.Roles = append(scope.Roles, "admin")
-					break
-				}
-			}
 			// Deny-by-default: валидная подпись — ещё не право работать
 			// в продукте. Без единой роли доступа нет, иначе отзыв биндингов
 			// не отзывал бы доступ.

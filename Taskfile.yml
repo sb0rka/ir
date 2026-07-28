@@ -159,6 +159,7 @@ tasks:
     desc: Собрать сервисы в bin/
     cmds:
       - go build -o bin/investigations-api ./apps/investigations/cmd/api
+      - go build -o bin/irctl ./apps/investigations/cmd/irctl
 
   fmt:
     desc: gofmt по всем модулям

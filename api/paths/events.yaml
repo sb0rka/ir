@@ -11,39 +11,6 @@ paths:
   /investigations/{investigation_id}/events:
     parameters:
       - { $ref: '../shared/parameters.yaml#/components/parameters/InvestigationId' }
-    post:
-      tags: [events]
-      summary: Pull events into the investigation
-      description: >-
-        The way data enters the product. Takes either explicit references to
-        source records or a query to run against a source. Each event is
-        normalised, its entities are extracted, graph nodes are created and
-        linking rules run — so the graph grows without an agent being involved.
-
-        A record already ingested for this tenant is linked, not copied: the
-        event keeps one identity across every case that touches it, which is
-        what lets the entity card say where else something has been seen.
-        Idempotent — re-pulling into the same case changes nothing. Up to 500
-        events per call; a larger selection has to be split.
-      operationId: attachEvents
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: '#/components/schemas/EventAttachRequest' }
-      responses:
-        '201':
-          description: What the pull produced
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/EventAttachResult' }
-        '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
-        '501': { $ref: '../shared/responses.yaml#/components/responses/NotImplemented' }
-        '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
-        '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
-        '409': { $ref: '../shared/responses.yaml#/components/responses/Conflict' }
-        '422': { $ref: '../shared/responses.yaml#/components/responses/ValidationError' }
-        '502': { $ref: '../shared/responses.yaml#/components/responses/SourceUnavailable' }
     get:
       tags: [events]
       summary: Timeline of the investigation
@@ -96,6 +63,41 @@ paths:
         '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
         '422': { $ref: '../shared/responses.yaml#/components/responses/ValidationError' }
 
+  /events:
+    post:
+      tags: [events]
+      summary: Pull events into an investigation
+      description: >-
+        The way data enters the product. Takes either explicit references to
+        source records or a query to run against a source. Each event is
+        normalised, its entities are extracted, graph nodes are created and
+        linking rules run — so the graph grows without an agent being involved.
+
+        A record already ingested for this tenant is linked, not copied: the
+        event keeps one identity across every case that touches it, which is
+        what lets the entity card say where else something has been seen.
+        Idempotent — re-pulling into the same case changes nothing. Up to 500
+        events per call; a larger selection has to be split.
+      operationId: attachEvents
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EventAttachRequest' }
+      responses:
+        '201':
+          description: What the pull produced
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EventAttachResult' }
+        '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '501': { $ref: '../shared/responses.yaml#/components/responses/NotImplemented' }
+        '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
+        '409': { $ref: '../shared/responses.yaml#/components/responses/Conflict' }
+        '422': { $ref: '../shared/responses.yaml#/components/responses/ValidationError' }
+        '502': { $ref: '../shared/responses.yaml#/components/responses/SourceUnavailable' }
+
   /events/{event_id}:
     parameters:
       - { $ref: '../shared/parameters.yaml#/components/parameters/EventId' }
@@ -122,8 +124,8 @@ paths:
       summary: Delete an event from the tenant
       description: >-
         Erases the event everywhere. Almost never what is wanted — to remove it
-        from one case use the per-investigation endpoint, which leaves the other
-        cases alone.
+        from one case delete the membership instead, which leaves the event and
+        the other cases alone.
 
         Refused while the event is attached to any investigation, so this only
         ever applies to something ingested by mistake and not yet used.
@@ -137,10 +139,10 @@ paths:
         '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
         '409': { $ref: '../shared/responses.yaml#/components/responses/Conflict' }
 
-  /investigations/{investigation_id}/events/{event_id}:
+  /events/{event_id}/investigations/{investigation_id}:
     parameters:
-      - { $ref: '../shared/parameters.yaml#/components/parameters/InvestigationId' }
       - { $ref: '../shared/parameters.yaml#/components/parameters/EventId' }
+      - { $ref: '../shared/parameters.yaml#/components/parameters/InvestigationId' }
     delete:
       tags: [events]
       summary: Drop an event from the investigation
@@ -321,9 +323,18 @@ components:
     EventAttachRequest:
       type: object
       description: >-
-        What to pull. Give either refs, when the records are already known, or
-        query, to let the source find them — exactly one of the two.
+        What to pull and where to. Give either refs, when the records are
+        already known, or query, to let the source find them — exactly one of
+        the two.
+      required: [investigation_id]
       properties:
+        investigation_id:
+          type: string
+          format: uuid
+          description: >-
+            Investigation to pull the events into. The events themselves belong
+            to the tenant, so this says where they should show up, not who owns
+            them.
         refs:
           type: array
           maxItems: 500

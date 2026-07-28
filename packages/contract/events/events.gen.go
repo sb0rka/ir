@@ -139,8 +139,11 @@ type Event struct {
 	SourceRef *string `json:"source_ref,omitempty"`
 }
 
-// EventAttachRequest What to pull. Give either refs, when the records are already known, or query, to let the source find them — exactly one of the two.
+// EventAttachRequest What to pull and where to. Give either refs, when the records are already known, or query, to let the source find them — exactly one of the two.
 type EventAttachRequest struct {
+	// InvestigationId Investigation to pull the events into. The events themselves belong to the tenant, so this says where they should show up, not who owns them.
+	InvestigationId openapi_types.UUID `json:"investigation_id"`
+
 	// Query A selection to run against one source. This is the pivot: give it an entity key and a window, and whatever the source returns lands in the case.
 	Query *struct {
 		// EntityKey Value to pivot on — a hostname, account, address or hash. Matched against the source's own fields.
@@ -312,21 +315,21 @@ type AttachEventsJSONRequestBody = EventAttachRequest
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
+	// AttachEvents Pull events into an investigation
+	// (POST /events)
+	AttachEvents(w http.ResponseWriter, r *http.Request)
 	// DeleteEvent Delete an event from the tenant
 	// (DELETE /events/{event_id})
 	DeleteEvent(w http.ResponseWriter, r *http.Request, eventId EventId)
 	// GetEvent One event in full
 	// (GET /events/{event_id})
 	GetEvent(w http.ResponseWriter, r *http.Request, eventId EventId)
+	// DetachEvent Drop an event from the investigation
+	// (DELETE /events/{event_id}/investigations/{investigation_id})
+	DetachEvent(w http.ResponseWriter, r *http.Request, eventId EventId, investigationId InvestigationId)
 	// ListEvents Timeline of the investigation
 	// (GET /investigations/{investigation_id}/events)
 	ListEvents(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, params ListEventsParams)
-	// AttachEvents Pull events into the investigation
-	// (POST /investigations/{investigation_id}/events)
-	AttachEvents(w http.ResponseWriter, r *http.Request, investigationId InvestigationId)
-	// DetachEvent Drop an event from the investigation
-	// (DELETE /investigations/{investigation_id}/events/{event_id})
-	DetachEvent(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, eventId EventId)
 }
 
 // ServerInterfaceWrapper converts contexts to parameters.
@@ -337,6 +340,20 @@ type ServerInterfaceWrapper struct {
 }
 
 type MiddlewareFunc func(http.Handler) http.Handler
+
+// AttachEvents operation middleware
+func (siw *ServerInterfaceWrapper) AttachEvents(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.AttachEvents(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
 
 // DeleteEvent operation middleware
 func (siw *ServerInterfaceWrapper) DeleteEvent(w http.ResponseWriter, r *http.Request) {
@@ -381,6 +398,41 @@ func (siw *ServerInterfaceWrapper) GetEvent(w http.ResponseWriter, r *http.Reque
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetEvent(w, r, eventId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DetachEvent operation middleware
+func (siw *ServerInterfaceWrapper) DetachEvent(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "event_id" -------------
+	var eventId EventId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "event_id", r.PathValue("event_id"), &eventId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "event_id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "investigation_id" -------------
+	var investigationId InvestigationId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "investigation_id", r.PathValue("investigation_id"), &investigationId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "investigation_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DetachEvent(w, r, eventId, investigationId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -523,67 +575,6 @@ func (siw *ServerInterfaceWrapper) ListEvents(w http.ResponseWriter, r *http.Req
 	handler.ServeHTTP(w, r)
 }
 
-// AttachEvents operation middleware
-func (siw *ServerInterfaceWrapper) AttachEvents(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "investigation_id" -------------
-	var investigationId InvestigationId
-
-	err = runtime.BindStyledParameterWithOptions("simple", "investigation_id", r.PathValue("investigation_id"), &investigationId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "investigation_id", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.AttachEvents(w, r, investigationId)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// DetachEvent operation middleware
-func (siw *ServerInterfaceWrapper) DetachEvent(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "investigation_id" -------------
-	var investigationId InvestigationId
-
-	err = runtime.BindStyledParameterWithOptions("simple", "investigation_id", r.PathValue("investigation_id"), &investigationId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "investigation_id", Err: err})
-		return
-	}
-
-	// ------------- Path parameter "event_id" -------------
-	var eventId EventId
-
-	err = runtime.BindStyledParameterWithOptions("simple", "event_id", r.PathValue("event_id"), &eventId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "event_id", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.DetachEvent(w, r, investigationId, eventId)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
 type UnescapedCookieParamError struct {
 	ParamName string
 	Err       error
@@ -705,10 +696,10 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	}
 
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/investigations/{investigation_id}/events", wrapper.ListEvents)
-	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/investigations/{investigation_id}/events", wrapper.AttachEvents)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/events", wrapper.AttachEvents)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/events/{event_id}", wrapper.DeleteEvent)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/events/{event_id}", wrapper.GetEvent)
-	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/investigations/{investigation_id}/events/{event_id}", wrapper.DetachEvent)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/events/{event_id}/investigations/{investigation_id}", wrapper.DetachEvent)
 
 	return m
 }
@@ -726,6 +717,126 @@ type SourceUnavailableJSONResponse ErrorResponse
 type UnauthorizedJSONResponse ErrorResponse
 
 type ValidationErrorJSONResponse ErrorResponse
+
+type AttachEventsRequestObject struct {
+	Body *AttachEventsJSONRequestBody
+}
+
+type AttachEventsResponseObject interface {
+	VisitAttachEventsResponse(w http.ResponseWriter) error
+}
+
+type AttachEvents201JSONResponse EventAttachResult
+
+func (response AttachEvents201JSONResponse) VisitAttachEventsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AttachEvents401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response AttachEvents401JSONResponse) VisitAttachEventsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AttachEvents403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response AttachEvents403JSONResponse) VisitAttachEventsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AttachEvents404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response AttachEvents404JSONResponse) VisitAttachEventsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AttachEvents409JSONResponse struct{ ConflictJSONResponse }
+
+func (response AttachEvents409JSONResponse) VisitAttachEventsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AttachEvents422JSONResponse struct{ ValidationErrorJSONResponse }
+
+func (response AttachEvents422JSONResponse) VisitAttachEventsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AttachEvents501JSONResponse struct{ NotImplementedJSONResponse }
+
+func (response AttachEvents501JSONResponse) VisitAttachEventsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(501)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AttachEvents502JSONResponse struct{ SourceUnavailableJSONResponse }
+
+func (response AttachEvents502JSONResponse) VisitAttachEventsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(502)
+	_, err := buf.WriteTo(w)
+	return err
+}
 
 type DeleteEventRequestObject struct {
 	EventId EventId `json:"event_id"`
@@ -891,6 +1002,93 @@ func (response GetEvent501JSONResponse) VisitGetEventResponse(w http.ResponseWri
 	return err
 }
 
+type DetachEventRequestObject struct {
+	EventId         EventId         `json:"event_id"`
+	InvestigationId InvestigationId `json:"investigation_id"`
+}
+
+type DetachEventResponseObject interface {
+	VisitDetachEventResponse(w http.ResponseWriter) error
+}
+
+type DetachEvent204Response struct {
+}
+
+func (response DetachEvent204Response) VisitDetachEventResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DetachEvent401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response DetachEvent401JSONResponse) VisitDetachEventResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DetachEvent403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response DetachEvent403JSONResponse) VisitDetachEventResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DetachEvent404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response DetachEvent404JSONResponse) VisitDetachEventResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DetachEvent409JSONResponse struct{ ConflictJSONResponse }
+
+func (response DetachEvent409JSONResponse) VisitDetachEventResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DetachEvent501JSONResponse struct{ NotImplementedJSONResponse }
+
+func (response DetachEvent501JSONResponse) VisitDetachEventResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(501)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type ListEventsRequestObject struct {
 	InvestigationId InvestigationId `json:"investigation_id"`
 	Params          ListEventsParams
@@ -984,231 +1182,23 @@ func (response ListEvents501JSONResponse) VisitListEventsResponse(w http.Respons
 	return err
 }
 
-type AttachEventsRequestObject struct {
-	InvestigationId InvestigationId `json:"investigation_id"`
-	Body            *AttachEventsJSONRequestBody
-}
-
-type AttachEventsResponseObject interface {
-	VisitAttachEventsResponse(w http.ResponseWriter) error
-}
-
-type AttachEvents201JSONResponse EventAttachResult
-
-func (response AttachEvents201JSONResponse) VisitAttachEventsResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(201)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type AttachEvents401JSONResponse struct{ UnauthorizedJSONResponse }
-
-func (response AttachEvents401JSONResponse) VisitAttachEventsResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(401)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type AttachEvents403JSONResponse struct{ ForbiddenJSONResponse }
-
-func (response AttachEvents403JSONResponse) VisitAttachEventsResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(403)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type AttachEvents404JSONResponse struct{ NotFoundJSONResponse }
-
-func (response AttachEvents404JSONResponse) VisitAttachEventsResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(404)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type AttachEvents409JSONResponse struct{ ConflictJSONResponse }
-
-func (response AttachEvents409JSONResponse) VisitAttachEventsResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(409)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type AttachEvents422JSONResponse struct{ ValidationErrorJSONResponse }
-
-func (response AttachEvents422JSONResponse) VisitAttachEventsResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(422)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type AttachEvents501JSONResponse struct{ NotImplementedJSONResponse }
-
-func (response AttachEvents501JSONResponse) VisitAttachEventsResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(501)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type AttachEvents502JSONResponse struct{ SourceUnavailableJSONResponse }
-
-func (response AttachEvents502JSONResponse) VisitAttachEventsResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(502)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type DetachEventRequestObject struct {
-	InvestigationId InvestigationId `json:"investigation_id"`
-	EventId         EventId         `json:"event_id"`
-}
-
-type DetachEventResponseObject interface {
-	VisitDetachEventResponse(w http.ResponseWriter) error
-}
-
-type DetachEvent204Response struct {
-}
-
-func (response DetachEvent204Response) VisitDetachEventResponse(w http.ResponseWriter) error {
-	w.WriteHeader(204)
-	return nil
-}
-
-type DetachEvent401JSONResponse struct{ UnauthorizedJSONResponse }
-
-func (response DetachEvent401JSONResponse) VisitDetachEventResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(401)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type DetachEvent403JSONResponse struct{ ForbiddenJSONResponse }
-
-func (response DetachEvent403JSONResponse) VisitDetachEventResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(403)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type DetachEvent404JSONResponse struct{ NotFoundJSONResponse }
-
-func (response DetachEvent404JSONResponse) VisitDetachEventResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(404)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type DetachEvent409JSONResponse struct{ ConflictJSONResponse }
-
-func (response DetachEvent409JSONResponse) VisitDetachEventResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(409)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type DetachEvent501JSONResponse struct{ NotImplementedJSONResponse }
-
-func (response DetachEvent501JSONResponse) VisitDetachEventResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(501)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
+	// AttachEvents Pull events into an investigation
+	// (POST /events)
+	AttachEvents(ctx context.Context, request AttachEventsRequestObject) (AttachEventsResponseObject, error)
 	// DeleteEvent Delete an event from the tenant
 	// (DELETE /events/{event_id})
 	DeleteEvent(ctx context.Context, request DeleteEventRequestObject) (DeleteEventResponseObject, error)
 	// GetEvent One event in full
 	// (GET /events/{event_id})
 	GetEvent(ctx context.Context, request GetEventRequestObject) (GetEventResponseObject, error)
+	// DetachEvent Drop an event from the investigation
+	// (DELETE /events/{event_id}/investigations/{investigation_id})
+	DetachEvent(ctx context.Context, request DetachEventRequestObject) (DetachEventResponseObject, error)
 	// ListEvents Timeline of the investigation
 	// (GET /investigations/{investigation_id}/events)
 	ListEvents(ctx context.Context, request ListEventsRequestObject) (ListEventsResponseObject, error)
-	// AttachEvents Pull events into the investigation
-	// (POST /investigations/{investigation_id}/events)
-	AttachEvents(ctx context.Context, request AttachEventsRequestObject) (AttachEventsResponseObject, error)
-	// DetachEvent Drop an event from the investigation
-	// (DELETE /investigations/{investigation_id}/events/{event_id})
-	DetachEvent(ctx context.Context, request DetachEventRequestObject) (DetachEventResponseObject, error)
 }
 
 type StrictHandlerFunc func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error)
@@ -1248,6 +1238,37 @@ type strictHandler struct {
 	ssi         StrictServerInterface
 	middlewares []StrictMiddlewareFunc
 	options     StrictHTTPServerOptions
+}
+
+// AttachEvents operation middleware
+func (sh *strictHandler) AttachEvents(w http.ResponseWriter, r *http.Request) {
+	var request AttachEventsRequestObject
+
+	var body AttachEventsJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.AttachEvents(ctx, request.(AttachEventsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "AttachEvents")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(AttachEventsResponseObject); ok {
+		if err := validResponse.VisitAttachEventsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
 }
 
 // DeleteEvent operation middleware
@@ -1302,6 +1323,33 @@ func (sh *strictHandler) GetEvent(w http.ResponseWriter, r *http.Request, eventI
 	}
 }
 
+// DetachEvent operation middleware
+func (sh *strictHandler) DetachEvent(w http.ResponseWriter, r *http.Request, eventId EventId, investigationId InvestigationId) {
+	var request DetachEventRequestObject
+
+	request.EventId = eventId
+	request.InvestigationId = investigationId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DetachEvent(ctx, request.(DetachEventRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DetachEvent")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DetachEventResponseObject); ok {
+		if err := validResponse.VisitDetachEventResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // ListEvents operation middleware
 func (sh *strictHandler) ListEvents(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, params ListEventsParams) {
 	var request ListEventsRequestObject
@@ -1322,66 +1370,6 @@ func (sh *strictHandler) ListEvents(w http.ResponseWriter, r *http.Request, inve
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(ListEventsResponseObject); ok {
 		if err := validResponse.VisitListEventsResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// AttachEvents operation middleware
-func (sh *strictHandler) AttachEvents(w http.ResponseWriter, r *http.Request, investigationId InvestigationId) {
-	var request AttachEventsRequestObject
-
-	request.InvestigationId = investigationId
-
-	var body AttachEventsJSONRequestBody
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
-		return
-	}
-	request.Body = &body
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.AttachEvents(ctx, request.(AttachEventsRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "AttachEvents")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(AttachEventsResponseObject); ok {
-		if err := validResponse.VisitAttachEventsResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// DetachEvent operation middleware
-func (sh *strictHandler) DetachEvent(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, eventId EventId) {
-	var request DetachEventRequestObject
-
-	request.InvestigationId = investigationId
-	request.EventId = eventId
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.DetachEvent(ctx, request.(DetachEventRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "DetachEvent")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(DetachEventResponseObject); ok {
-		if err := validResponse.VisitDetachEventResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

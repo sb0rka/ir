@@ -41,6 +41,8 @@ paths:
         '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
         '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
         '422': { $ref: '../shared/responses.yaml#/components/responses/ValidationError' }
+
+  /entities:
     post:
       tags: [entities]
       summary: Add an entity by hand
@@ -70,31 +72,6 @@ paths:
         '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
         '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
         '422': { $ref: '../shared/responses.yaml#/components/responses/ValidationError' }
-
-  /investigations/{investigation_id}/entities/{entity_id}:
-    parameters:
-      - { $ref: '../shared/parameters.yaml#/components/parameters/InvestigationId' }
-      - { $ref: '../shared/parameters.yaml#/components/parameters/EntityId' }
-    delete:
-      tags: [entities]
-      summary: Drop an entity from the investigation
-      description: >-
-        Says "this does not belong to my case", not "this never existed". The
-        entity survives with its history intact and stays in every other case it
-        is part of; only the membership goes, taking this case's graph node and
-        the edges hanging off it.
-
-        Refused while an event of this case still mentions the entity — the
-        entity is a consequence of that evidence, so drop the event instead.
-      operationId: detachEntity
-      responses:
-        '204':
-          description: Dropped from the investigation
-        '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
-        '501': { $ref: '../shared/responses.yaml#/components/responses/NotImplemented' }
-        '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
-        '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
-        '409': { $ref: '../shared/responses.yaml#/components/responses/Conflict' }
 
   /entities/{entity_id}:
     parameters:
@@ -129,8 +106,8 @@ paths:
       summary: Delete an entity from the tenant
       description: >-
         Erases the entity everywhere, along with its history. Almost never what
-        is wanted — to remove it from one case use the per-investigation
-        endpoint, which leaves the other cases alone.
+        is wanted — to remove it from one case delete the membership instead,
+        which leaves the entity and the other cases alone.
 
         Refused while the entity is part of any investigation or mentioned by
         any event, so this only ever applies to something typed in by mistake.
@@ -163,6 +140,31 @@ paths:
         '501': { $ref: '../shared/responses.yaml#/components/responses/NotImplemented' }
         '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
         '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
+
+  /entities/{entity_id}/investigations/{investigation_id}:
+    parameters:
+      - { $ref: '../shared/parameters.yaml#/components/parameters/EntityId' }
+      - { $ref: '../shared/parameters.yaml#/components/parameters/InvestigationId' }
+    delete:
+      tags: [entities]
+      summary: Drop an entity from the investigation
+      description: >-
+        Says "this does not belong to my case", not "this never existed". The
+        entity survives with its history intact and stays in every other case it
+        is part of; only the membership goes, taking this case's graph node and
+        the edges hanging off it.
+
+        Refused while an event of this case still mentions the entity — the
+        entity is a consequence of that evidence, so drop the event instead.
+      operationId: detachEntity
+      responses:
+        '204':
+          description: Dropped from the investigation
+        '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '501': { $ref: '../shared/responses.yaml#/components/responses/NotImplemented' }
+        '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
+        '409': { $ref: '../shared/responses.yaml#/components/responses/Conflict' }
 
 components:
   schemas:
@@ -234,8 +236,14 @@ components:
     EntityCreate:
       type: object
       description: An entity entered by hand, before any event mentions it.
-      required: [type_code, canonical_key]
+      required: [investigation_id, type_code, canonical_key]
       properties:
+        investigation_id:
+          type: string
+          format: uuid
+          description: >-
+            Investigation to add the entity to. The entity itself belongs to the
+            tenant, so this says where it should show up, not who owns it.
         type_code:
           type: string
           description: >-

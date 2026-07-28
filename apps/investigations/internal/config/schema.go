@@ -23,9 +23,6 @@ type ServerConfig struct {
 
 	Auth AuthConfig
 
-	// BootstrapAdminSubjects — субъекты с ролью admin в обход role_bindings.
-	// Без них deny-by-default отказывает всем, включая того, кто должен раздать роли.
-	BootstrapAdminSubjects []string
 	// DefaultRole — роль субъекта без записей в role_bindings.
 	// Пусто = deny. В dev-стенде выставляется в l2, чтобы не раздавать роли руками.
 	DefaultRole string

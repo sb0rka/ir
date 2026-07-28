@@ -19,7 +19,6 @@ func Load() (Config, error) {
 			Addr:                   coreconfig.GetStringEnv("SERVER_ADDR", "0.0.0.0"),
 			Port:                   coreconfig.GetStringEnv("SERVER_PORT", "8090"),
 			CORSWhitelist:          coreconfig.ParseCORSWhitelist(coreconfig.GetStringEnv("SERVER_CORS_WHITELIST", "")),
-			BootstrapAdminSubjects: envList("INV_BOOTSTRAP_ADMIN_SUBJECTS"),
 			DefaultRole:            coreconfig.GetStringEnv("INV_DEFAULT_ROLE", ""),
 			Auth: AuthConfig{
 				AccessTokenIssuer:   coreconfig.GetStringEnv("ACCESS_TOKEN_ISSUER", ""),
@@ -139,19 +138,3 @@ func loadPrivateKey() (ed25519.PublicKey, error) {
 	return public, nil
 }
 
-// envList — списковых переменных в core пока нет; когда понадобятся второму
-// сервису, помощник переезжает туда.
-func envList(key string) []string {
-	raw := coreconfig.GetStringEnv(key, "")
-	if raw == "" {
-		return nil
-	}
-	items := strings.Split(raw, ",")
-	out := make([]string, 0, len(items))
-	for _, item := range items {
-		if item = strings.TrimSpace(item); item != "" {
-			out = append(out, item)
-		}
-	}
-	return out
-}

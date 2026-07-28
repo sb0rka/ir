@@ -20,8 +20,24 @@ export interface paths {
          */
         get: operations["listEvents"];
         put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
         /**
-         * Pull events into the investigation
+         * Pull events into an investigation
          * @description The way data enters the product. Takes either explicit references to source records or a query to run against a source. Each event is normalised, its entities are extracted, graph nodes are created and linking rules run — so the graph grows without an agent being involved.
          *     A record already ingested for this tenant is linked, not copied: the event keeps one identity across every case that touches it, which is what lets the entity card say where else something has been seen. Idempotent — re-pulling into the same case changes nothing. Up to 500 events per call; a larger selection has to be split.
          */
@@ -51,7 +67,7 @@ export interface paths {
         post?: never;
         /**
          * Delete an event from the tenant
-         * @description Erases the event everywhere. Almost never what is wanted — to remove it from one case use the per-investigation endpoint, which leaves the other cases alone.
+         * @description Erases the event everywhere. Almost never what is wanted — to remove it from one case delete the membership instead, which leaves the event and the other cases alone.
          *     Refused while the event is attached to any investigation, so this only ever applies to something ingested by mistake and not yet used.
          */
         delete: operations["deleteEvent"];
@@ -60,15 +76,15 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/investigations/{investigation_id}/events/{event_id}": {
+    "/events/{event_id}/investigations/{investigation_id}": {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
-                investigation_id: components["parameters"]["InvestigationId"];
                 /** @description Identifier of an event already pulled into an investigation. */
                 event_id: components["parameters"]["EventId"];
+                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
+                investigation_id: components["parameters"]["InvestigationId"];
             };
             cookie?: never;
         };
@@ -188,8 +204,13 @@ export interface components {
                 relation_code: string;
             }[];
         };
-        /** @description What to pull. Give either refs, when the records are already known, or query, to let the source find them — exactly one of the two. */
+        /** @description What to pull and where to. Give either refs, when the records are already known, or query, to let the source find them — exactly one of the two. */
         EventAttachRequest: {
+            /**
+             * Format: uuid
+             * @description Investigation to pull the events into. The events themselves belong to the tenant, so this says where they should show up, not who owns them.
+             */
+            investigation_id: string;
             /** @description Records addressed directly. Used when the analyst has already picked them out, or when an agent cites what it found. */
             refs?: {
                 /** @description Which tool holds the record. */
@@ -397,10 +418,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
-                investigation_id: components["parameters"]["InvestigationId"];
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody: {
@@ -485,10 +503,10 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
-                investigation_id: components["parameters"]["InvestigationId"];
                 /** @description Identifier of an event already pulled into an investigation. */
                 event_id: components["parameters"]["EventId"];
+                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
+                investigation_id: components["parameters"]["InvestigationId"];
             };
             cookie?: never;
         };
