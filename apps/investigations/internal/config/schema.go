@@ -6,8 +6,7 @@ import (
 	coreconfig "github.com/sb0rka/sb0rka/packages/core/config"
 )
 
-// Своего здесь только то, чего нет у остальных сервисов платформы: проверка
-// токена и роли SOC. Логи и база берутся типами из core.
+// Своего только то, чего нет у соседей: проверка токена и роли SOC.
 type Config struct {
 	Server   ServerConfig
 	Database coreconfig.DatabaseConfig

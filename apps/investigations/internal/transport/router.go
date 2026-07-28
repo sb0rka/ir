@@ -16,8 +16,7 @@ import (
 
 const baseURL = "/api/v1"
 
-// RoleResolver отдаёт тенант и роли субъекта. Реализация ходит в role_bindings;
-// интерфейс держит транспорт независимым от стора.
+// RoleResolver держит транспорт независимым от стора.
 type RoleResolver interface {
 	Resolve(ctx context.Context, subjectID string) (Roles, error)
 }
@@ -27,8 +26,7 @@ type Roles struct {
 	Roles     []string
 }
 
-// API — реализация контракта. Интерфейс на домен, а не один на 46 методов:
-// компилятор всё равно не даст забыть ручку, но забытый домен виден сразу.
+// API — интерфейс на домен, а не один общий: забытый домен виден сразу.
 type API interface {
 	entities.StrictServerInterface
 	events.StrictServerInterface
@@ -45,8 +43,7 @@ type Dependencies struct {
 	DB     Pinger
 }
 
-// Pinger — то, без чего сервис не может обслуживать запросы. Отдельным
-// интерфейсом, а не *psql.DB: транспорту нужен один метод, не весь стор.
+// Pinger, а не *psql.DB: транспорту нужен один метод, не весь стор.
 type Pinger interface {
 	Ping(ctx context.Context) error
 }
@@ -132,16 +129,14 @@ func registerDomains(mux *http.ServeMux, deps Dependencies) {
 
 }
 
-// liveness говорит только «процесс жив». Оркестратору этого мало: с мёртвым
-// соединением к базе сервис ответит OK и продолжит получать трафик — для
-// этого есть readiness ниже.
+// liveness говорит только «процесс жив»: с мёртвым соединением к базе он
+// всё равно ответит OK. Отличить «может обслуживать» — это readiness ниже.
 func liveness(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte(`{"status":"ok"}`))
 }
 
-// readiness проверяет то, без чего любой запрос упадёт.
 func readiness(db Pinger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

@@ -1,4 +1,4 @@
-// Package httperr переводит доменные ошибки в конверт §8.3 спеки.
+// Package httperr переводит доменные ошибки в конверт {"error":{...}}.
 package httperr
 
 import (
@@ -21,8 +21,7 @@ const (
 	CodeInternal          Code = "internal"
 )
 
-// Error — доменная ошибка, знающая свой HTTP-код. Хендлеры возвращают её,
-// транспорт разворачивает в конверт.
+// Error знает свой HTTP-код: хендлеру не нужно знать про транспорт.
 type Error struct {
 	Status  int
 	Code    Code

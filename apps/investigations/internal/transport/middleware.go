@@ -31,9 +31,8 @@ func chain(h http.Handler, middlewares ...middlewareChain) http.Handler {
 	return h
 }
 
-// recorder запоминает статус и факт первой записи. Нужен обоим middleware
-// ниже: логу — чтобы писать статус, recover — чтобы понимать, можно ли ещё
-// отдать конверт ошибки.
+// recorder нужен двоим: логу — чтобы писать статус, recover — чтобы понимать,
+// можно ли ещё отдать конверт ошибки.
 type recorder struct {
 	http.ResponseWriter
 	status  int
@@ -136,8 +135,6 @@ func corsMiddleware(cfg config.ServerConfig) middlewareChain {
 	}
 }
 
-// authMiddleware проверяет токен платформы публичным ключом и кладёт личность
-// в контекст. Роли подтягиваются резолвером — он ходит в role_bindings.
 func authMiddleware(cfg config.ServerConfig, log *slog.Logger, roles RoleResolver) middlewareChain {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

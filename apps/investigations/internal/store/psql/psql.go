@@ -11,9 +11,7 @@ import (
 	"github.com/sb0rka/ir/apps/investigations/internal/store"
 )
 
-// DB — пул платформы плюс запросы расследований. Сам пул, Ping и Close живут
-// в core: подключение к Postgres одинаково во всех сервисах, отличаются только
-// запросы поверх него.
+// Пул, Ping и Close живут в core: подключение одинаково во всех сервисах.
 type DB struct {
 	*corestore.Pool
 }
