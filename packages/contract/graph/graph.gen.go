@@ -408,6 +408,9 @@ type Conflict = ErrorResponse
 // Forbidden Body of every non-2xx response. Clients branch on `code`, not on the HTTP status: the status says what happened at the protocol level, the code says what happened in the domain.
 type Forbidden = ErrorResponse
 
+// InternalError Body of every non-2xx response. Clients branch on `code`, not on the HTTP status: the status says what happened at the protocol level, the code says what happened in the domain.
+type InternalError = ErrorResponse
+
 // NotFound Body of every non-2xx response. Clients branch on `code`, not on the HTTP status: the status says what happened at the protocol level, the code says what happened in the domain.
 type NotFound = ErrorResponse
 
@@ -1319,6 +1322,8 @@ type ConflictJSONResponse ErrorResponse
 
 type ForbiddenJSONResponse ErrorResponse
 
+type InternalErrorJSONResponse ErrorResponse
+
 type NotFoundJSONResponse ErrorResponse
 
 type NotImplementedJSONResponse ErrorResponse
@@ -1402,6 +1407,20 @@ func (response ListGraphEdges422JSONResponse) VisitListGraphEdgesResponse(w http
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListGraphEdges500JSONResponse struct{ InternalErrorJSONResponse }
+
+func (response ListGraphEdges500JSONResponse) VisitListGraphEdgesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -1513,6 +1532,20 @@ func (response CreateGraphEdge422JSONResponse) VisitCreateGraphEdgeResponse(w ht
 	return err
 }
 
+type CreateGraphEdge500JSONResponse struct{ InternalErrorJSONResponse }
+
+func (response CreateGraphEdge500JSONResponse) VisitCreateGraphEdgeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type CreateGraphEdge501JSONResponse struct{ NotImplementedJSONResponse }
 
 func (response CreateGraphEdge501JSONResponse) VisitCreateGraphEdgeResponse(w http.ResponseWriter) error {
@@ -1582,6 +1615,20 @@ func (response DeleteGraphEdge404JSONResponse) VisitDeleteGraphEdgeResponse(w ht
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteGraphEdge500JSONResponse struct{ InternalErrorJSONResponse }
+
+func (response DeleteGraphEdge500JSONResponse) VisitDeleteGraphEdgeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -1661,6 +1708,20 @@ func (response GetGraphEdge404JSONResponse) VisitGetGraphEdgeResponse(w http.Res
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetGraphEdge500JSONResponse struct{ InternalErrorJSONResponse }
+
+func (response GetGraphEdge500JSONResponse) VisitGetGraphEdgeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -1773,6 +1834,20 @@ func (response UpdateGraphEdge422JSONResponse) VisitUpdateGraphEdgeResponse(w ht
 	return err
 }
 
+type UpdateGraphEdge500JSONResponse struct{ InternalErrorJSONResponse }
+
+func (response UpdateGraphEdge500JSONResponse) VisitUpdateGraphEdgeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type UpdateGraphEdge501JSONResponse struct{ NotImplementedJSONResponse }
 
 func (response UpdateGraphEdge501JSONResponse) VisitUpdateGraphEdgeResponse(w http.ResponseWriter) error {
@@ -1848,6 +1923,20 @@ func (response ListGraphEdgeEvidence404JSONResponse) VisitListGraphEdgeEvidenceR
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListGraphEdgeEvidence500JSONResponse struct{ InternalErrorJSONResponse }
+
+func (response ListGraphEdgeEvidence500JSONResponse) VisitListGraphEdgeEvidenceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -1946,6 +2035,20 @@ func (response AddGraphEdgeEvidence422JSONResponse) VisitAddGraphEdgeEvidenceRes
 	return err
 }
 
+type AddGraphEdgeEvidence500JSONResponse struct{ InternalErrorJSONResponse }
+
+func (response AddGraphEdgeEvidence500JSONResponse) VisitAddGraphEdgeEvidenceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type AddGraphEdgeEvidence501JSONResponse struct{ NotImplementedJSONResponse }
 
 func (response AddGraphEdgeEvidence501JSONResponse) VisitAddGraphEdgeEvidenceResponse(w http.ResponseWriter) error {
@@ -2030,6 +2133,20 @@ func (response DeleteGraphEdgeEvidence422JSONResponse) VisitDeleteGraphEdgeEvide
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteGraphEdgeEvidence500JSONResponse struct{ InternalErrorJSONResponse }
+
+func (response DeleteGraphEdgeEvidence500JSONResponse) VisitDeleteGraphEdgeEvidenceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -2127,6 +2244,20 @@ func (response GetGraph422JSONResponse) VisitGetGraphResponse(w http.ResponseWri
 	return err
 }
 
+type GetGraph500JSONResponse struct{ InternalErrorJSONResponse }
+
+func (response GetGraph500JSONResponse) VisitGetGraphResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type GetGraph501JSONResponse struct{ NotImplementedJSONResponse }
 
 func (response GetGraph501JSONResponse) VisitGetGraphResponse(w http.ResponseWriter) error {
@@ -2216,6 +2347,20 @@ func (response ListNodes422JSONResponse) VisitListNodesResponse(w http.ResponseW
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListNodes500JSONResponse struct{ InternalErrorJSONResponse }
+
+func (response ListNodes500JSONResponse) VisitListNodesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -2313,6 +2458,20 @@ func (response CreateNode422JSONResponse) VisitCreateNodeResponse(w http.Respons
 	return err
 }
 
+type CreateNode500JSONResponse struct{ InternalErrorJSONResponse }
+
+func (response CreateNode500JSONResponse) VisitCreateNodeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type CreateNode501JSONResponse struct{ NotImplementedJSONResponse }
 
 func (response CreateNode501JSONResponse) VisitCreateNodeResponse(w http.ResponseWriter) error {
@@ -2382,6 +2541,20 @@ func (response DeleteNode404JSONResponse) VisitDeleteNodeResponse(w http.Respons
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteNode500JSONResponse struct{ InternalErrorJSONResponse }
+
+func (response DeleteNode500JSONResponse) VisitDeleteNodeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -2461,6 +2634,20 @@ func (response GetNode404JSONResponse) VisitGetNodeResponse(w http.ResponseWrite
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetNode500JSONResponse struct{ InternalErrorJSONResponse }
+
+func (response GetNode500JSONResponse) VisitGetNodeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -2568,6 +2755,20 @@ func (response ReviewGraphEdges422JSONResponse) VisitReviewGraphEdgesResponse(w 
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReviewGraphEdges500JSONResponse struct{ InternalErrorJSONResponse }
+
+func (response ReviewGraphEdges500JSONResponse) VisitReviewGraphEdgesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
 	_, err := buf.WriteTo(w)
 	return err
 }

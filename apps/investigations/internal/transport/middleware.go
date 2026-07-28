@@ -31,12 +31,45 @@ func chain(h http.Handler, middlewares ...middlewareChain) http.Handler {
 	return h
 }
 
+// recorder запоминает статус и факт первой записи. Нужен обоим middleware
+// ниже: логу — чтобы писать статус, recover — чтобы понимать, можно ли ещё
+// отдать конверт ошибки.
+type recorder struct {
+	http.ResponseWriter
+	status  int
+	written bool
+}
+
+func (rec *recorder) WriteHeader(status int) {
+	if rec.written {
+		return
+	}
+	rec.status = status
+	rec.written = true
+	rec.ResponseWriter.WriteHeader(status)
+}
+
+func (rec *recorder) Write(b []byte) (int, error) {
+	if !rec.written {
+		rec.WriteHeader(http.StatusOK)
+	}
+	return rec.ResponseWriter.Write(b)
+}
+
 func recoverMiddleware(log *slog.Logger) middlewareChain {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			rec, _ := w.(*recorder)
 			defer func() {
-				if rec := recover(); rec != nil {
-					log.Error("panic", "recover", rec, "path", r.URL.Path)
+				if p := recover(); p != nil {
+					log.Error("panic", "recover", p, "path", r.URL.Path)
+					// После первой записи дописать корректный ответ уже нельзя:
+					// второй WriteHeader даёт «superfluous WriteHeader» в логе
+					// вместо самой паники. Рвём соединение — клиент увидит
+					// обрыв, а не притворно успешный ответ.
+					if rec != nil && rec.written {
+						panic(http.ErrAbortHandler)
+					}
 					httperr.Write(w, log, httperr.New(
 						http.StatusInternalServerError, httperr.CodeInternal, "internal server error"))
 				}
@@ -50,10 +83,12 @@ func loggerMiddleware(log *slog.Logger) middlewareChain {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			started := time.Now()
-			next.ServeHTTP(w, r)
+			rec := &recorder{ResponseWriter: w, status: http.StatusOK}
+			next.ServeHTTP(rec, r)
 			log.Info("request",
 				"method", r.Method,
 				"path", r.URL.Path,
+				"status", rec.status,
 				"duration_ms", time.Since(started).Milliseconds())
 		})
 	}
@@ -88,6 +123,8 @@ func corsMiddleware(cfg config.ServerConfig) middlewareChain {
 				w.Header().Set("Access-Control-Allow-Origin", allowedOrigin)
 				w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS")
 				w.Header().Set("Access-Control-Allow-Headers", allowHeaders)
+				// Без этого префлайт летит перед каждым запросом.
+				w.Header().Set("Access-Control-Max-Age", "600")
 			}
 
 			if r.Method == http.MethodOptions {

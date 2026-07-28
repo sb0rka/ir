@@ -2,14 +2,17 @@ version: '3'
 
 # Запуск: task <имя>. Требует go-task (https://taskfile.dev).
 
+# Версии генераторов запинены: check-generated падает на любом diff между
+# спекой и сгенерированным, поэтому плавающая версия однажды уронит сборку
+# там, где спеку никто не трогал, и падение придёт не туда, где меняли.
 vars:
   MODULE: github.com/sb0rka/ir/packages/contract
   SERVER_DIR: apps/investigations/internal/server
-  REDOCLY: npx --yes @redocly/cli@latest
+  REDOCLY: npx --yes @redocly/cli@2.5.0
   CODEGEN: go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@v2.8.0
   IMPL: go run github.com/josharian/impl@v1.5.0
-  GOIMPORTS: go run golang.org/x/tools/cmd/goimports@latest
-  OPENAPI_TS: npx --yes openapi-typescript@7
+  GOIMPORTS: go run golang.org/x/tools/cmd/goimports@v0.40.0
+  OPENAPI_TS: npx --yes openapi-typescript@7.13.0
 
 tasks:
   default:
@@ -104,9 +107,10 @@ tasks:
           >> {{trimSuffix ".yaml" (osBase .ITEM)}}.go
       # impl пишет panic; нереализованной ручке лучше отвечать 501 с кодом
       # not_implemented — фронт отличит «ещё не сделано» от поломки.
+      # perl, а не sed -i: BSD-версия требует аргумент к -i, и на macOS падала.
       - >-
-        cd {{.SERVER_DIR}} && sed -i
-        's|panic("not implemented") // TODO: Implement|return nil, httperr.ErrNotImplemented|'
+        cd {{.SERVER_DIR}} && perl -pi -e
+        's|panic\("not implemented"\) // TODO: Implement|return nil, httperr.ErrNotImplemented|'
         *.go
       # goimports сам добавит httperr и уберёт импорты, ставшие ненужными
       # после того как ручку реализовали.

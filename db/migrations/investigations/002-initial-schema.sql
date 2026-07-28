@@ -155,6 +155,7 @@ CREATE TABLE IF NOT EXISTS events (
     dedup_key VARCHAR NOT NULL,
 
     CONSTRAINT pk_events PRIMARY KEY (id),
+    CONSTRAINT uq_events_id_project UNIQUE (id, project_id),
     -- Одна запись источника — одна строка на тенант. Затяжка в третий кейс
     -- ничего не копирует, только добавляет связь.
     CONSTRAINT uq_events_dedup UNIQUE (project_id, dedup_key),
@@ -188,6 +189,7 @@ CREATE TABLE IF NOT EXISTS entities (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
 
     CONSTRAINT pk_entities PRIMARY KEY (id),
+    CONSTRAINT uq_entities_id_project UNIQUE (id, project_id),
     -- Тип и ключ опознают вещь в пределах тенанта. Через границу тенанта не
     -- склеиваются: dc-01 заказчика A и заказчика B — разные хосты.
     CONSTRAINT uq_entities_scope_type_key UNIQUE (project_id, type_code, canonical_key),
@@ -205,6 +207,7 @@ EXECUTE FUNCTION set_updated_at();
 -- поэтому кейса здесь нет.
 CREATE TABLE IF NOT EXISTS event_entity_relations (
     id UUID DEFAULT gen_random_uuid() NOT NULL,
+    project_id VARCHAR(12) NOT NULL,
     event_id UUID NOT NULL,
     entity_id UUID NOT NULL,
 
@@ -212,10 +215,12 @@ CREATE TABLE IF NOT EXISTS event_entity_relations (
 
     CONSTRAINT pk_event_entity_relations PRIMARY KEY (id),
     CONSTRAINT uq_event_entity_relations UNIQUE (event_id, entity_id, relation_code),
-    CONSTRAINT fk_eer_event_id_events FOREIGN KEY (event_id)
-        REFERENCES events (id) ON DELETE CASCADE,
-    CONSTRAINT fk_eer_entity_id_entities FOREIGN KEY (entity_id)
-        REFERENCES entities (id) ON DELETE CASCADE,
+    -- Тенант в ключе с обеих сторон: без него событие одного заказчика
+    -- связывалось бы с сущностью другого, и база бы это пропустила.
+    CONSTRAINT fk_eer_event_id_events FOREIGN KEY (event_id, project_id)
+        REFERENCES events (id, project_id) ON DELETE CASCADE,
+    CONSTRAINT fk_eer_entity_id_entities FOREIGN KEY (entity_id, project_id)
+        REFERENCES entities (id, project_id) ON DELETE CASCADE,
     CONSTRAINT fk_eer_relation_code_relation_types FOREIGN KEY (relation_code)
         REFERENCES relation_types (code)
 );
@@ -334,10 +339,13 @@ CREATE TABLE IF NOT EXISTS edges (
         CHECK (status <> 'rejected' OR reject_reason IS NOT NULL),
     CONSTRAINT fk_edges_investigation_id_investigations FOREIGN KEY (investigation_id)
         REFERENCES investigations (id) ON DELETE CASCADE,
-    CONSTRAINT fk_edges_source_node_id_graph_nodes FOREIGN KEY (source_node_id)
-        REFERENCES graph_nodes (id) ON DELETE CASCADE,
-    CONSTRAINT fk_edges_target_node_id_graph_nodes FOREIGN KEY (target_node_id)
-        REFERENCES graph_nodes (id) ON DELETE CASCADE,
+    -- Составными, а не по одному id: иначе ребро одного расследования могло бы
+    -- связать узлы другого — обе строки валидны по отдельности, и заметить это
+    -- было бы нечем. Ключ uq_graph_nodes_id_investigation заведён ровно под это.
+    CONSTRAINT fk_edges_source_node_id_graph_nodes FOREIGN KEY (source_node_id, investigation_id)
+        REFERENCES graph_nodes (id, investigation_id) ON DELETE CASCADE,
+    CONSTRAINT fk_edges_target_node_id_graph_nodes FOREIGN KEY (target_node_id, investigation_id)
+        REFERENCES graph_nodes (id, investigation_id) ON DELETE CASCADE,
     CONSTRAINT fk_edges_relation_code_relation_types FOREIGN KEY (relation_code)
         REFERENCES relation_types (code)
 );

@@ -268,6 +268,9 @@ type Conflict = ErrorResponse
 // Forbidden Body of every non-2xx response. Clients branch on `code`, not on the HTTP status: the status says what happened at the protocol level, the code says what happened in the domain.
 type Forbidden = ErrorResponse
 
+// InternalError Body of every non-2xx response. Clients branch on `code`, not on the HTTP status: the status says what happened at the protocol level, the code says what happened in the domain.
+type InternalError = ErrorResponse
+
 // NotFound Body of every non-2xx response. Clients branch on `code`, not on the HTTP status: the status says what happened at the protocol level, the code says what happened in the domain.
 type NotFound = ErrorResponse
 
@@ -708,6 +711,8 @@ type ConflictJSONResponse ErrorResponse
 
 type ForbiddenJSONResponse ErrorResponse
 
+type InternalErrorJSONResponse ErrorResponse
+
 type NotFoundJSONResponse ErrorResponse
 
 type NotImplementedJSONResponse ErrorResponse
@@ -806,6 +811,20 @@ func (response AttachEvents422JSONResponse) VisitAttachEventsResponse(w http.Res
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AttachEvents500JSONResponse struct{ InternalErrorJSONResponse }
+
+func (response AttachEvents500JSONResponse) VisitAttachEventsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -910,6 +929,20 @@ func (response DeleteEvent409JSONResponse) VisitDeleteEventResponse(w http.Respo
 	return err
 }
 
+type DeleteEvent500JSONResponse struct{ InternalErrorJSONResponse }
+
+func (response DeleteEvent500JSONResponse) VisitDeleteEventResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type DeleteEvent501JSONResponse struct{ NotImplementedJSONResponse }
 
 func (response DeleteEvent501JSONResponse) VisitDeleteEventResponse(w http.ResponseWriter) error {
@@ -984,6 +1017,20 @@ func (response GetEvent404JSONResponse) VisitGetEventResponse(w http.ResponseWri
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetEvent500JSONResponse struct{ InternalErrorJSONResponse }
+
+func (response GetEvent500JSONResponse) VisitGetEventResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -1071,6 +1118,20 @@ func (response DetachEvent409JSONResponse) VisitDetachEventResponse(w http.Respo
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DetachEvent500JSONResponse struct{ InternalErrorJSONResponse }
+
+func (response DetachEvent500JSONResponse) VisitDetachEventResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -1164,6 +1225,20 @@ func (response ListEvents422JSONResponse) VisitListEventsResponse(w http.Respons
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListEvents500JSONResponse struct{ InternalErrorJSONResponse }
+
+func (response ListEvents500JSONResponse) VisitListEventsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
 	_, err := buf.WriteTo(w)
 	return err
 }

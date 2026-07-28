@@ -56,6 +56,16 @@ components:
         application/json:
           schema: { $ref: './errors.yaml#/components/schemas/ErrorResponse' }
 
+    InternalError:
+      description: >-
+        Unhandled failure or a panic. The service answers with the same error
+        envelope as everything else, so a client has one shape to parse; the
+        message is deliberately generic and the real cause goes to the log
+        (code=internal).
+      content:
+        application/json:
+          schema: { $ref: './errors.yaml#/components/schemas/ErrorResponse' }
+
     SourceUnavailable:
       description: >-
         An upstream security tool did not answer. The investigation itself is

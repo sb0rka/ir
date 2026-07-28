@@ -542,6 +542,15 @@ export interface components {
                 "application/json": components["schemas"]["ErrorResponse"];
             };
         };
+        /** @description Unhandled failure or a panic. The service answers with the same error envelope as everything else, so a client has one shape to parse; the message is deliberately generic and the real cause goes to the log (code=internal). */
+        InternalError: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
         /** @description The operation exists in the contract but has no implementation yet (code=not_implemented). Declared on every operation because the service is being built contract-first: a client can hide the control instead of showing an error, and knows this is not a failure. Goes away per operation as each one is written. */
         NotImplemented: {
             headers: {
@@ -613,6 +622,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             422: components["responses"]["ValidationError"];
+            500: components["responses"]["InternalError"];
             501: components["responses"]["NotImplemented"];
         };
     };
@@ -650,6 +660,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             422: components["responses"]["ValidationError"];
+            500: components["responses"]["InternalError"];
             501: components["responses"]["NotImplemented"];
         };
     };
@@ -682,6 +693,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             422: components["responses"]["ValidationError"];
+            500: components["responses"]["InternalError"];
             501: components["responses"]["NotImplemented"];
         };
     };
@@ -711,6 +723,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
             501: components["responses"]["NotImplemented"];
         };
     };
@@ -738,6 +751,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
             501: components["responses"]["NotImplemented"];
         };
     };
@@ -781,6 +795,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             422: components["responses"]["ValidationError"];
+            500: components["responses"]["InternalError"];
             501: components["responses"]["NotImplemented"];
         };
     };
@@ -814,6 +829,7 @@ export interface operations {
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
             422: components["responses"]["ValidationError"];
+            500: components["responses"]["InternalError"];
             501: components["responses"]["NotImplemented"];
         };
     };
@@ -843,6 +859,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
             501: components["responses"]["NotImplemented"];
         };
     };
@@ -870,6 +887,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
             501: components["responses"]["NotImplemented"];
         };
     };
@@ -905,6 +923,7 @@ export interface operations {
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
             422: components["responses"]["ValidationError"];
+            500: components["responses"]["InternalError"];
             501: components["responses"]["NotImplemented"];
         };
     };
@@ -934,6 +953,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
             501: components["responses"]["NotImplemented"];
         };
     };
@@ -968,6 +988,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             422: components["responses"]["ValidationError"];
+            500: components["responses"]["InternalError"];
             501: components["responses"]["NotImplemented"];
         };
     };
@@ -998,6 +1019,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             422: components["responses"]["ValidationError"];
+            500: components["responses"]["InternalError"];
             501: components["responses"]["NotImplemented"];
         };
     };
@@ -1031,6 +1053,7 @@ export interface operations {
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
             422: components["responses"]["ValidationError"];
+            500: components["responses"]["InternalError"];
             501: components["responses"]["NotImplemented"];
         };
     };

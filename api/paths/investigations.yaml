@@ -31,6 +31,7 @@ paths:
               schema: { $ref: '#/components/schemas/Investigation' }
         '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
         '501': { $ref: '../shared/responses.yaml#/components/responses/NotImplemented' }
+        '500': { $ref: '../shared/responses.yaml#/components/responses/InternalError' }
         '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
         '404':
           description: The parent named in parent_id does not exist in this tenant.
@@ -74,6 +75,7 @@ paths:
               schema: { $ref: '#/components/schemas/InvestigationPage' }
         '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
         '501': { $ref: '../shared/responses.yaml#/components/responses/NotImplemented' }
+        '500': { $ref: '../shared/responses.yaml#/components/responses/InternalError' }
         '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
         '422': { $ref: '../shared/responses.yaml#/components/responses/ValidationError' }
 
@@ -95,6 +97,7 @@ paths:
               schema: { $ref: '#/components/schemas/Investigation' }
         '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
         '501': { $ref: '../shared/responses.yaml#/components/responses/NotImplemented' }
+        '500': { $ref: '../shared/responses.yaml#/components/responses/InternalError' }
         '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
         '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
     patch:
@@ -122,6 +125,7 @@ paths:
               schema: { $ref: '#/components/schemas/Investigation' }
         '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
         '501': { $ref: '../shared/responses.yaml#/components/responses/NotImplemented' }
+        '500': { $ref: '../shared/responses.yaml#/components/responses/InternalError' }
         '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
         '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
         '409': { $ref: '../shared/responses.yaml#/components/responses/Conflict' }
@@ -141,6 +145,7 @@ paths:
           description: Deleted
         '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
         '501': { $ref: '../shared/responses.yaml#/components/responses/NotImplemented' }
+        '500': { $ref: '../shared/responses.yaml#/components/responses/InternalError' }
         '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
         '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
 
@@ -163,6 +168,7 @@ paths:
               schema: { $ref: '#/components/schemas/InvestigationTree' }
         '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
         '501': { $ref: '../shared/responses.yaml#/components/responses/NotImplemented' }
+        '500': { $ref: '../shared/responses.yaml#/components/responses/InternalError' }
         '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
         '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
 

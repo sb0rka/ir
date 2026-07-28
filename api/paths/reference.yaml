@@ -32,6 +32,7 @@ paths:
               schema: { $ref: '#/components/schemas/Reference' }
         '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
         '501': { $ref: '../shared/responses.yaml#/components/responses/NotImplemented' }
+        '500': { $ref: '../shared/responses.yaml#/components/responses/InternalError' }
         '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
 
 components:

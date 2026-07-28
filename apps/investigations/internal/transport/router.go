@@ -42,11 +42,19 @@ type Dependencies struct {
 	Log    *slog.Logger
 	Server API
 	Roles  RoleResolver
+	DB     Pinger
+}
+
+// Pinger — то, без чего сервис не может обслуживать запросы. Отдельным
+// интерфейсом, а не *psql.DB: транспорту нужен один метод, не весь стор.
+type Pinger interface {
+	Ping(ctx context.Context) error
 }
 
 func NewHandler(deps Dependencies) http.Handler {
 	public := http.NewServeMux()
 	public.HandleFunc("GET /healthz", liveness)
+	public.HandleFunc("GET /readyz", readiness(deps.DB))
 	// Документация без авторизации: она нужна до получения токена.
 	public.HandleFunc("GET /openapi.json", openAPISpec)
 	public.HandleFunc("GET /swagger", swaggerUI)
@@ -60,9 +68,11 @@ func NewHandler(deps Dependencies) http.Handler {
 	registerDomains(api, deps)
 	public.Handle(baseURL+"/", authMiddleware(deps.Cfg, deps.Log, deps.Roles)(api))
 
+	// Логгер снаружи recover: он оборачивает ResponseWriter, а recover по этой
+	// обёртке понимает, была ли уже запись в ответ.
 	return chain(public,
-		recoverMiddleware(deps.Log),
 		loggerMiddleware(deps.Log),
+		recoverMiddleware(deps.Log),
 		corsMiddleware(deps.Cfg),
 	)
 }
@@ -122,10 +132,27 @@ func registerDomains(mux *http.ServeMux, deps Dependencies) {
 
 }
 
-// liveness отвечает без авторизации: на него смотрит docker healthcheck
-// и тестовое окружение, которое ждёт готовности контейнера.
+// liveness говорит только «процесс жив». Оркестратору этого мало: с мёртвым
+// соединением к базе сервис ответит OK и продолжит получать трафик — для
+// этого есть readiness ниже.
 func liveness(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte(`{"status":"ok"}`))
+}
+
+// readiness проверяет то, без чего любой запрос упадёт.
+func readiness(db Pinger) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if db != nil {
+			if err := db.Ping(r.Context()); err != nil {
+				w.WriteHeader(http.StatusServiceUnavailable)
+				_, _ = w.Write([]byte(`{"status":"unavailable","reason":"database"}`))
+				return
+			}
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"status":"ready"}`))
+	}
 }

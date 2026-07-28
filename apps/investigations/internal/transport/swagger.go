@@ -3,6 +3,7 @@ package transport
 import (
 	"encoding/json"
 	"net/http"
+	"sync"
 
 	"github.com/sb0rka/ir/packages/contract/spec"
 )
@@ -11,14 +12,24 @@ import (
 // документация всегда соответствует запущенной версии сервиса — расхождение
 // «в UI одно, отвечает другое» невозможно.
 
-func openAPISpec(w http.ResponseWriter, _ *http.Request) {
+// Спека распаковывается и сериализуется один раз. Ручка публичная, то есть
+// без кэша это способ занять процесс, не имея ни токена, ни роли.
+var specJSON = sync.OnceValues(func() ([]byte, error) {
 	doc, err := spec.GetSwagger()
+	if err != nil {
+		return nil, err
+	}
+	return json.Marshal(doc)
+})
+
+func openAPISpec(w http.ResponseWriter, _ *http.Request) {
+	body, err := specJSON()
 	if err != nil {
 		http.Error(w, "spec unavailable", http.StatusInternalServerError)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(doc)
+	_, _ = w.Write(body)
 }
 
 func swaggerUI(w http.ResponseWriter, _ *http.Request) {
@@ -58,7 +69,6 @@ var swaggerPage = `<!DOCTYPE html>
     SwaggerUIBundle({
       url: '/openapi.json',
       dom_id: '#ui',
-      persistAuthorization: true,
       tryItOutEnabled: true
     });
   </script>
