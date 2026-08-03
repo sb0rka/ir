@@ -5,7 +5,7 @@
 -- таблица с parent_id; отдельной сущности «находка» нет, гипотеза это
 -- под-расследование со своим вердиктом.
 --
--- Ссылки на SOM (issues, workflows) внешними ключами не закрыты: другая база.
+-- Ссылки на SOM (issues, workspaces) внешними ключами не закрыты: другая база.
 -- Целостность этих ссылок держит сервис.
 
 BEGIN;
@@ -129,6 +129,21 @@ CREATE INDEX IF NOT EXISTS ix_investigations_parent
 
 CREATE INDEX IF NOT EXISTS ix_investigations_status
     ON investigations (project_id, status, created_at DESC);
+
+-- Логическая связь с SOM. Внешний UUID хранится без FK, потому что SOM живёт в другой БД.
+CREATE TABLE IF NOT EXISTS investigation_som_workspaces (
+    investigation_id UUID NOT NULL,
+    som_workspace_id UUID NOT NULL,
+
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
+
+    CONSTRAINT pk_investigation_som_workspaces PRIMARY KEY (investigation_id, som_workspace_id),
+    CONSTRAINT fk_investigation_som_workspaces_investigation FOREIGN KEY (investigation_id)
+        REFERENCES investigations (id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS ix_investigation_som_workspaces_workspace
+    ON investigation_som_workspaces (som_workspace_id);
 
 -- УЛИКИ
 --
@@ -273,10 +288,10 @@ CREATE TABLE IF NOT EXISTS investigation_entities (
 CREATE INDEX IF NOT EXISTS ix_inv_entities_entity ON investigation_entities (entity_id);
 
 -- ГРАФ
+-- Tenant графа однозначно задаёт investigation_id; project_id здесь не дублируется.
 
 CREATE TABLE IF NOT EXISTS graph_nodes (
     id UUID DEFAULT gen_random_uuid() NOT NULL,
-    project_id VARCHAR(12) NOT NULL,
     investigation_id UUID NOT NULL,
 
     node_type VARCHAR(8) NOT NULL CHECK (node_type IN ('entity', 'event')),
@@ -293,15 +308,15 @@ CREATE TABLE IF NOT EXISTS graph_nodes (
         (node_type = 'entity' AND entity_id IS NOT NULL AND event_id IS NULL) OR
         (node_type = 'event'  AND event_id  IS NOT NULL AND entity_id IS NULL)
     ),
-    CONSTRAINT fk_graph_nodes_investigation_id_investigations FOREIGN KEY (investigation_id, project_id)
-        REFERENCES investigations (id, project_id) ON DELETE CASCADE,
+    CONSTRAINT fk_graph_nodes_investigation_id_investigations FOREIGN KEY (investigation_id)
+        REFERENCES investigations (id) ON DELETE CASCADE,
     -- Ссылка не на общую строку, а на её принадлежность этому расследованию:
     -- на граф кейса не попадёт то, что в кейс не затянуто, а отвязка события
     -- унесёт узел и висящие на нём рёбра.
-    CONSTRAINT fk_graph_nodes_entity FOREIGN KEY (investigation_id, entity_id, project_id)
-        REFERENCES investigation_entities (investigation_id, entity_id, project_id) ON DELETE CASCADE,
-    CONSTRAINT fk_graph_nodes_event FOREIGN KEY (investigation_id, event_id, project_id)
-        REFERENCES investigation_events (investigation_id, event_id, project_id) ON DELETE CASCADE
+    CONSTRAINT fk_graph_nodes_entity FOREIGN KEY (investigation_id, entity_id)
+        REFERENCES investigation_entities (investigation_id, entity_id) ON DELETE CASCADE,
+    CONSTRAINT fk_graph_nodes_event FOREIGN KEY (investigation_id, event_id)
+        REFERENCES investigation_events (investigation_id, event_id) ON DELETE CASCADE
 );
 
 -- Одна сущность (событие) — один узел в расследовании, иначе рёбра расщепятся
@@ -310,9 +325,24 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_graph_nodes_entity
 CREATE UNIQUE INDEX IF NOT EXISTS uq_graph_nodes_event
     ON graph_nodes (investigation_id, event_id) WHERE event_id IS NOT NULL;
 
+-- Узел может быть связан с одной или несколькими задачами SOM.
+-- Целостность som_issue_id проверяет интеграционный слой: межбазового FK здесь быть не может.
+CREATE TABLE IF NOT EXISTS graph_node_som_issues (
+    graph_node_id UUID NOT NULL,
+    som_issue_id UUID NOT NULL,
+
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
+
+    CONSTRAINT pk_graph_node_som_issues PRIMARY KEY (graph_node_id, som_issue_id),
+    CONSTRAINT fk_graph_node_som_issues_node FOREIGN KEY (graph_node_id)
+        REFERENCES graph_nodes (id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS ix_graph_node_som_issues_issue
+    ON graph_node_som_issues (som_issue_id);
+
 CREATE TABLE IF NOT EXISTS edges (
     id UUID DEFAULT gen_random_uuid() NOT NULL,
-    project_id VARCHAR(12) NOT NULL,
     investigation_id UUID NOT NULL,
 
     source_node_id UUID NOT NULL,
@@ -339,8 +369,8 @@ CREATE TABLE IF NOT EXISTS edges (
     CONSTRAINT uq_edges_triple UNIQUE (investigation_id, source_node_id, target_node_id, relation_code),
     CONSTRAINT ck_edges_rejected_reason
         CHECK (status <> 'rejected' OR reject_reason IS NOT NULL),
-    CONSTRAINT fk_edges_investigation_id_investigations FOREIGN KEY (investigation_id, project_id)
-        REFERENCES investigations (id, project_id) ON DELETE CASCADE,
+    CONSTRAINT fk_edges_investigation_id_investigations FOREIGN KEY (investigation_id)
+        REFERENCES investigations (id) ON DELETE CASCADE,
     -- Составными, а не по одному id: иначе ребро одного расследования могло бы
     -- связать узлы другого — обе строки валидны по отдельности, и заметить это
     -- было бы нечем. Ключ uq_graph_nodes_id_investigation заведён ровно под это.

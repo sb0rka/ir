@@ -447,7 +447,7 @@ components:
       description: >-
         A point on the graph. Stands for exactly one entity or one event —
         never both, never neither.
-      required: [id, investigation_id, node_type, origin]
+      required: [id, investigation_id, node_type, origin, som_issue_ids]
       properties:
         id:
           type: string
@@ -475,6 +475,12 @@ components:
         origin:
           allOf: [{ $ref: '../shared/enums.yaml#/components/schemas/Origin' }]
           description: Who put this node on the graph.
+        som_issue_ids:
+          type: array
+          description: SOM issues linked to this node.
+          items:
+            type: string
+            format: uuid
         label:
           type: string
           description: >-
@@ -519,6 +525,13 @@ components:
           description: >-
             The event, when node_type is event. Must already belong to this
             investigation.
+        som_issue_ids:
+          type: array
+          description: SOM issues to link to the new graph node.
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
 
     GraphEdge:
       type: object

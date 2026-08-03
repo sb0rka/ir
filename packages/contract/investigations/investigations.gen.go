@@ -212,6 +212,9 @@ type Investigation struct {
 	// Severity How bad this looks. Set during triage and revised as evidence arrives. Absent until someone judges it.
 	Severity *Severity `json:"severity,omitempty"`
 
+	// SomWorkspaceIds SOM workspaces linked to this investigation.
+	SomWorkspaceIds []openapi_types.UUID `json:"som_workspace_ids"`
+
 	// Status Whether work is still going on. Independent of the verdict: a case can be open with no verdict yet, and closing requires one.
 	Status InvestigationStatus `json:"status"`
 
@@ -242,6 +245,9 @@ type InvestigationCreate struct {
 	// Severity Initial assessment. Can be revised later.
 	Severity *Severity `json:"severity,omitempty"`
 
+	// SomWorkspaceIds SOM workspaces to link to the new investigation.
+	SomWorkspaceIds *[]openapi_types.UUID `json:"som_workspace_ids,omitempty"`
+
 	// Title What is being investigated, or the claim being tested.
 	Title string `json:"title"`
 }
@@ -265,6 +271,9 @@ type InvestigationPatch struct {
 
 	// Severity Revised assessment of how bad this is.
 	Severity *Severity `json:"severity,omitempty"`
+
+	// SomWorkspaceIds Complete replacement for the investigation's SOM workspace links.
+	SomWorkspaceIds *[]openapi_types.UUID `json:"som_workspace_ids,omitempty"`
 
 	// Status Close the investigation, or reopen a closed one. Closing needs a verdict; reopening clears it.
 	Status *InvestigationStatus `json:"status,omitempty"`
@@ -336,6 +345,9 @@ type InvestigationTree struct {
 
 		// Severity How bad this looks. Set during triage and revised as evidence arrives. Absent until someone judges it.
 		Severity *Severity `json:"severity,omitempty"`
+
+		// SomWorkspaceIds SOM workspaces linked to this investigation.
+		SomWorkspaceIds []openapi_types.UUID `json:"som_workspace_ids"`
 
 		// Status Whether work is still going on. Independent of the verdict: a case can be open with no verdict yet, and closing requires one.
 		Status InvestigationStatus `json:"status"`

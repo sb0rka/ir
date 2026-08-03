@@ -184,7 +184,7 @@ components:
         A case or a hypothesis within one — the same shape at every level of the
         tree. It owns its evidence, its entities and its graph; nothing crosses
         from one investigation to another.
-      required: [id, project_id, title, status, version, created_at, updated_at, counters]
+      required: [id, project_id, title, status, version, som_workspace_ids, created_at, updated_at, counters]
       properties:
         id:
           type: string
@@ -262,6 +262,12 @@ components:
           description: >-
             Bumped on every change. Send the value you last read when updating;
             a mismatch means someone else edited it first.
+        som_workspace_ids:
+          type: array
+          description: SOM workspaces linked to this investigation.
+          items:
+            type: string
+            format: uuid
         counters:
           type: object
           description: >-
@@ -317,6 +323,13 @@ components:
         severity:
           allOf: [{ $ref: '../shared/enums.yaml#/components/schemas/Severity' }]
           description: Initial assessment. Can be revised later.
+        som_workspace_ids:
+          type: array
+          description: SOM workspaces to link to the new investigation.
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
 
     InvestigationPatch:
       type: object
@@ -357,6 +370,13 @@ components:
         severity:
           allOf: [{ $ref: '../shared/enums.yaml#/components/schemas/Severity' }]
           description: Revised assessment of how bad this is.
+        som_workspace_ids:
+          type: array
+          description: Complete replacement for the investigation's SOM workspace links.
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
 
     InvestigationStatus:
       type: string

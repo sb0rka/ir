@@ -292,6 +292,8 @@ export interface components {
             event_id?: string | null;
             /** @description Who put this node on the graph. */
             origin: components["schemas"]["Origin"];
+            /** @description SOM issues linked to this node. */
+            som_issue_ids: string[];
             /** @description Text to draw on the node — the entity's display name or a short summary of the event. */
             label?: string;
             /** @description Kind of entity, which is what picks the icon. Entity nodes only. */
@@ -318,6 +320,8 @@ export interface components {
              * @description The event, when node_type is event. Must already belong to this investigation.
              */
             event_id?: string;
+            /** @description SOM issues to link to the new graph node. */
+            som_issue_ids?: string[];
         };
         /** @description A claim that two nodes are related. Unlike an event, an edge can be wrong — hence a status, a stated reason, and the events it rests on. */
         GraphEdge: {

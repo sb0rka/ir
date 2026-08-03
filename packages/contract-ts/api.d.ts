@@ -911,6 +911,8 @@ export interface components {
             event_id?: string | null;
             /** @description Who put this node on the graph. */
             origin: components["schemas"]["Origin"];
+            /** @description SOM issues linked to this node. */
+            som_issue_ids: string[];
             /** @description Text to draw on the node — the entity's display name or a short summary of the event. */
             label?: string;
             /** @description Kind of entity, which is what picks the icon. Entity nodes only. */
@@ -937,6 +939,8 @@ export interface components {
              * @description The event, when node_type is event. Must already belong to this investigation.
              */
             event_id?: string;
+            /** @description SOM issues to link to the new graph node. */
+            som_issue_ids?: string[];
         };
         /** @description A claim that two nodes are related. Unlike an event, an edge can be wrong — hence a status, a stated reason, and the events it rests on. */
         GraphEdge: {
@@ -1164,6 +1168,8 @@ export interface components {
             origin_ref?: string | null;
             /** @description Bumped on every change. Send the value you last read when updating; a mismatch means someone else edited it first. */
             version: number;
+            /** @description SOM workspaces linked to this investigation. */
+            som_workspace_ids: string[];
             /** @description Size of the case at a glance, so the list does not need a query per row. */
             counters: {
                 /** @description Direct child investigations — the open hypotheses under this one. */
@@ -1204,6 +1210,8 @@ export interface components {
             parent_id?: string;
             /** @description Initial assessment. Can be revised later. */
             severity?: components["schemas"]["Severity"];
+            /** @description SOM workspaces to link to the new investigation. */
+            som_workspace_ids?: string[];
         };
         /** @description Fields to change. Anything omitted stays as it is; `version` is always required so concurrent edits cannot overwrite each other silently. */
         InvestigationPatch: {
@@ -1223,6 +1231,8 @@ export interface components {
             confidence?: number;
             /** @description Revised assessment of how bad this is. */
             severity?: components["schemas"]["Severity"];
+            /** @description Complete replacement for the investigation's SOM workspace links. */
+            som_workspace_ids?: string[];
         };
         /**
          * @description Whether work is still going on. Says nothing about the outcome — that is the verdict.

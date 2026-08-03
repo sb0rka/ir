@@ -320,6 +320,9 @@ type GraphNode struct {
 	// Origin Who put this node on the graph.
 	Origin Origin `json:"origin"`
 
+	// SomIssueIds SOM issues linked to this node.
+	SomIssueIds []openapi_types.UUID `json:"som_issue_ids"`
+
 	// TypeCode Kind of entity, which is what picks the icon. Entity nodes only.
 	TypeCode *string `json:"type_code,omitempty"`
 }
@@ -334,6 +337,9 @@ type NodeCreate struct {
 
 	// NodeType Which of the two ids below is being given.
 	NodeType NodeType `json:"node_type"`
+
+	// SomIssueIds SOM issues to link to the new graph node.
+	SomIssueIds *[]openapi_types.UUID `json:"som_issue_ids,omitempty"`
 }
 
 // NodePage One page of nodes.

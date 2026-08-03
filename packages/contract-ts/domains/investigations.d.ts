@@ -129,6 +129,8 @@ export interface components {
             origin_ref?: string | null;
             /** @description Bumped on every change. Send the value you last read when updating; a mismatch means someone else edited it first. */
             version: number;
+            /** @description SOM workspaces linked to this investigation. */
+            som_workspace_ids: string[];
             /** @description Size of the case at a glance, so the list does not need a query per row. */
             counters: {
                 /** @description Direct child investigations — the open hypotheses under this one. */
@@ -169,6 +171,8 @@ export interface components {
             parent_id?: string;
             /** @description Initial assessment. Can be revised later. */
             severity?: components["schemas"]["Severity"];
+            /** @description SOM workspaces to link to the new investigation. */
+            som_workspace_ids?: string[];
         };
         /** @description Fields to change. Anything omitted stays as it is; `version` is always required so concurrent edits cannot overwrite each other silently. */
         InvestigationPatch: {
@@ -188,6 +192,8 @@ export interface components {
             confidence?: number;
             /** @description Revised assessment of how bad this is. */
             severity?: components["schemas"]["Severity"];
+            /** @description Complete replacement for the investigation's SOM workspace links. */
+            som_workspace_ids?: string[];
         };
         /**
          * @description Whether work is still going on. Says nothing about the outcome — that is the verdict.
