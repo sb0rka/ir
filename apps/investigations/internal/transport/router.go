@@ -18,7 +18,7 @@ const baseURL = "/api/v1"
 
 // RoleResolver держит транспорт независимым от стора.
 type RoleResolver interface {
-	Resolve(ctx context.Context, subjectID string) (Roles, error)
+	Resolve(ctx context.Context, subjectID, projectID string) (Roles, error)
 }
 
 type Roles struct {

@@ -2,6 +2,17 @@
 
 components:
   parameters:
+    ProjectId:
+      name: X-Project-ID
+      in: header
+      required: true
+      description: >-
+        Sb0rka project selected for this request. The caller must have an IR
+        role binding in this project; roles from other projects are ignored.
+      schema:
+        type: string
+        pattern: '^[0-9a-f]{10,12}$'
+
     InvestigationId:
       name: investigation_id
       in: path

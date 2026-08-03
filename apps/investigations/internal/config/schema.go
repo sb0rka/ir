@@ -21,10 +21,6 @@ type ServerConfig struct {
 	CORSWhitelist map[string]bool
 
 	Auth AuthConfig
-
-	// DefaultRole — роль субъекта без записей в role_bindings.
-	// Пусто = deny. В dev-стенде выставляется в l2, чтобы не раздавать роли руками.
-	DefaultRole string
 }
 
 type AuthConfig struct {

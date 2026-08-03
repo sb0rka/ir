@@ -208,6 +208,9 @@ type InvestigationId = openapi_types.UUID
 // Limit defines model for Limit.
 type Limit = int
 
+// ProjectId defines model for ProjectId.
+type ProjectId = string
+
 // Conflict Body of every non-2xx response. Clients branch on `code`, not on the HTTP status: the status says what happened at the protocol level, the code says what happened in the domain.
 type Conflict = ErrorResponse
 
@@ -229,6 +232,36 @@ type Unauthorized = ErrorResponse
 // ValidationError Body of every non-2xx response. Clients branch on `code`, not on the HTTP status: the status says what happened at the protocol level, the code says what happened in the domain.
 type ValidationError = ErrorResponse
 
+// CreateEntityParams defines parameters for CreateEntity.
+type CreateEntityParams struct {
+	// XProjectID Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored.
+	XProjectID ProjectId `json:"X-Project-ID"`
+}
+
+// DeleteEntityParams defines parameters for DeleteEntity.
+type DeleteEntityParams struct {
+	// XProjectID Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored.
+	XProjectID ProjectId `json:"X-Project-ID"`
+}
+
+// GetEntityCardParams defines parameters for GetEntityCard.
+type GetEntityCardParams struct {
+	// XProjectID Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored.
+	XProjectID ProjectId `json:"X-Project-ID"`
+}
+
+// UpdateEntityParams defines parameters for UpdateEntity.
+type UpdateEntityParams struct {
+	// XProjectID Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored.
+	XProjectID ProjectId `json:"X-Project-ID"`
+}
+
+// DetachEntityParams defines parameters for DetachEntity.
+type DetachEntityParams struct {
+	// XProjectID Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored.
+	XProjectID ProjectId `json:"X-Project-ID"`
+}
+
 // ListEntitiesParams defines parameters for ListEntities.
 type ListEntitiesParams struct {
 	// TypeCode Keep only entities of this kind — host, user, ip, file_hash.
@@ -242,6 +275,9 @@ type ListEntitiesParams struct {
 
 	// Cursor Opaque keyset cursor taken from `next_cursor` of the previous page. Encodes a position, not a query — do not build one by hand. Omit it to start from the beginning.
 	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+
+	// XProjectID Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored.
+	XProjectID ProjectId `json:"X-Project-ID"`
 }
 
 // CreateEntityJSONRequestBody defines body for CreateEntity for application/json ContentType.
@@ -254,19 +290,19 @@ type UpdateEntityJSONRequestBody = EntityPatch
 type ServerInterface interface {
 	// CreateEntity Add an entity by hand
 	// (POST /entities)
-	CreateEntity(w http.ResponseWriter, r *http.Request)
+	CreateEntity(w http.ResponseWriter, r *http.Request, params CreateEntityParams)
 	// DeleteEntity Delete an entity from the tenant
 	// (DELETE /entities/{entity_id})
-	DeleteEntity(w http.ResponseWriter, r *http.Request, entityId EntityId)
+	DeleteEntity(w http.ResponseWriter, r *http.Request, entityId EntityId, params DeleteEntityParams)
 	// GetEntityCard Entity card
 	// (GET /entities/{entity_id})
-	GetEntityCard(w http.ResponseWriter, r *http.Request, entityId EntityId)
+	GetEntityCard(w http.ResponseWriter, r *http.Request, entityId EntityId, params GetEntityCardParams)
 	// UpdateEntity Edit an entity
 	// (PATCH /entities/{entity_id})
-	UpdateEntity(w http.ResponseWriter, r *http.Request, entityId EntityId)
+	UpdateEntity(w http.ResponseWriter, r *http.Request, entityId EntityId, params UpdateEntityParams)
 	// DetachEntity Drop an entity from the investigation
 	// (DELETE /entities/{entity_id}/investigations/{investigation_id})
-	DetachEntity(w http.ResponseWriter, r *http.Request, entityId EntityId, investigationId InvestigationId)
+	DetachEntity(w http.ResponseWriter, r *http.Request, entityId EntityId, investigationId InvestigationId, params DetachEntityParams)
 	// ListEntities Entities of the investigation
 	// (GET /investigations/{investigation_id}/entities)
 	ListEntities(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, params ListEntitiesParams)
@@ -284,8 +320,39 @@ type MiddlewareFunc func(http.Handler) http.Handler
 // CreateEntity operation middleware
 func (siw *ServerInterfaceWrapper) CreateEntity(w http.ResponseWriter, r *http.Request) {
 
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params CreateEntityParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "X-Project-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Project-ID")]; found {
+		var XProjectID ProjectId
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Project-ID", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Project-ID", valueList[0], &XProjectID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Project-ID", Err: err})
+			return
+		}
+
+		params.XProjectID = XProjectID
+
+	} else {
+		err := fmt.Errorf("Header parameter X-Project-ID is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Project-ID", Err: err})
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.CreateEntity(w, r)
+		siw.Handler.CreateEntity(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -310,8 +377,36 @@ func (siw *ServerInterfaceWrapper) DeleteEntity(w http.ResponseWriter, r *http.R
 		return
 	}
 
+	// Parameter object where we will unmarshal all parameters from the context
+	var params DeleteEntityParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "X-Project-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Project-ID")]; found {
+		var XProjectID ProjectId
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Project-ID", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Project-ID", valueList[0], &XProjectID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Project-ID", Err: err})
+			return
+		}
+
+		params.XProjectID = XProjectID
+
+	} else {
+		err := fmt.Errorf("Header parameter X-Project-ID is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Project-ID", Err: err})
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.DeleteEntity(w, r, entityId)
+		siw.Handler.DeleteEntity(w, r, entityId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -336,8 +431,36 @@ func (siw *ServerInterfaceWrapper) GetEntityCard(w http.ResponseWriter, r *http.
 		return
 	}
 
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetEntityCardParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "X-Project-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Project-ID")]; found {
+		var XProjectID ProjectId
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Project-ID", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Project-ID", valueList[0], &XProjectID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Project-ID", Err: err})
+			return
+		}
+
+		params.XProjectID = XProjectID
+
+	} else {
+		err := fmt.Errorf("Header parameter X-Project-ID is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Project-ID", Err: err})
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetEntityCard(w, r, entityId)
+		siw.Handler.GetEntityCard(w, r, entityId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -362,8 +485,36 @@ func (siw *ServerInterfaceWrapper) UpdateEntity(w http.ResponseWriter, r *http.R
 		return
 	}
 
+	// Parameter object where we will unmarshal all parameters from the context
+	var params UpdateEntityParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "X-Project-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Project-ID")]; found {
+		var XProjectID ProjectId
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Project-ID", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Project-ID", valueList[0], &XProjectID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Project-ID", Err: err})
+			return
+		}
+
+		params.XProjectID = XProjectID
+
+	} else {
+		err := fmt.Errorf("Header parameter X-Project-ID is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Project-ID", Err: err})
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.UpdateEntity(w, r, entityId)
+		siw.Handler.UpdateEntity(w, r, entityId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -397,8 +548,36 @@ func (siw *ServerInterfaceWrapper) DetachEntity(w http.ResponseWriter, r *http.R
 		return
 	}
 
+	// Parameter object where we will unmarshal all parameters from the context
+	var params DetachEntityParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "X-Project-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Project-ID")]; found {
+		var XProjectID ProjectId
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Project-ID", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Project-ID", valueList[0], &XProjectID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Project-ID", Err: err})
+			return
+		}
+
+		params.XProjectID = XProjectID
+
+	} else {
+		err := fmt.Errorf("Header parameter X-Project-ID is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Project-ID", Err: err})
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.DetachEntity(w, r, entityId, investigationId)
+		siw.Handler.DetachEntity(w, r, entityId, investigationId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -475,6 +654,31 @@ func (siw *ServerInterfaceWrapper) ListEntities(w http.ResponseWriter, r *http.R
 		} else {
 			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
 		}
+		return
+	}
+
+	headers := r.Header
+
+	// ------------- Required header parameter "X-Project-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Project-ID")]; found {
+		var XProjectID ProjectId
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Project-ID", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Project-ID", valueList[0], &XProjectID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Project-ID", Err: err})
+			return
+		}
+
+		params.XProjectID = XProjectID
+
+	} else {
+		err := fmt.Errorf("Header parameter X-Project-ID is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Project-ID", Err: err})
 		return
 	}
 
@@ -634,7 +838,8 @@ type UnauthorizedJSONResponse ErrorResponse
 type ValidationErrorJSONResponse ErrorResponse
 
 type CreateEntityRequestObject struct {
-	Body *CreateEntityJSONRequestBody
+	Params CreateEntityParams
+	Body   *CreateEntityJSONRequestBody
 }
 
 type CreateEntityResponseObject interface {
@@ -741,6 +946,7 @@ func (response CreateEntity501JSONResponse) VisitCreateEntityResponse(w http.Res
 
 type DeleteEntityRequestObject struct {
 	EntityId EntityId `json:"entity_id"`
+	Params   DeleteEntityParams
 }
 
 type DeleteEntityResponseObject interface {
@@ -841,6 +1047,7 @@ func (response DeleteEntity501JSONResponse) VisitDeleteEntityResponse(w http.Res
 
 type GetEntityCardRequestObject struct {
 	EntityId EntityId `json:"entity_id"`
+	Params   GetEntityCardParams
 }
 
 type GetEntityCardResponseObject interface {
@@ -933,6 +1140,7 @@ func (response GetEntityCard501JSONResponse) VisitGetEntityCardResponse(w http.R
 
 type UpdateEntityRequestObject struct {
 	EntityId EntityId `json:"entity_id"`
+	Params   UpdateEntityParams
 	Body     *UpdateEntityJSONRequestBody
 }
 
@@ -1041,6 +1249,7 @@ func (response UpdateEntity501JSONResponse) VisitUpdateEntityResponse(w http.Res
 type DetachEntityRequestObject struct {
 	EntityId        EntityId        `json:"entity_id"`
 	InvestigationId InvestigationId `json:"investigation_id"`
+	Params          DetachEntityParams
 }
 
 type DetachEntityResponseObject interface {
@@ -1308,8 +1517,10 @@ type strictHandler struct {
 }
 
 // CreateEntity operation middleware
-func (sh *strictHandler) CreateEntity(w http.ResponseWriter, r *http.Request) {
+func (sh *strictHandler) CreateEntity(w http.ResponseWriter, r *http.Request, params CreateEntityParams) {
 	var request CreateEntityRequestObject
+
+	request.Params = params
 
 	var body CreateEntityJSONRequestBody
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -1339,10 +1550,11 @@ func (sh *strictHandler) CreateEntity(w http.ResponseWriter, r *http.Request) {
 }
 
 // DeleteEntity operation middleware
-func (sh *strictHandler) DeleteEntity(w http.ResponseWriter, r *http.Request, entityId EntityId) {
+func (sh *strictHandler) DeleteEntity(w http.ResponseWriter, r *http.Request, entityId EntityId, params DeleteEntityParams) {
 	var request DeleteEntityRequestObject
 
 	request.EntityId = entityId
+	request.Params = params
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
 		return sh.ssi.DeleteEntity(ctx, request.(DeleteEntityRequestObject))
@@ -1365,10 +1577,11 @@ func (sh *strictHandler) DeleteEntity(w http.ResponseWriter, r *http.Request, en
 }
 
 // GetEntityCard operation middleware
-func (sh *strictHandler) GetEntityCard(w http.ResponseWriter, r *http.Request, entityId EntityId) {
+func (sh *strictHandler) GetEntityCard(w http.ResponseWriter, r *http.Request, entityId EntityId, params GetEntityCardParams) {
 	var request GetEntityCardRequestObject
 
 	request.EntityId = entityId
+	request.Params = params
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
 		return sh.ssi.GetEntityCard(ctx, request.(GetEntityCardRequestObject))
@@ -1391,10 +1604,11 @@ func (sh *strictHandler) GetEntityCard(w http.ResponseWriter, r *http.Request, e
 }
 
 // UpdateEntity operation middleware
-func (sh *strictHandler) UpdateEntity(w http.ResponseWriter, r *http.Request, entityId EntityId) {
+func (sh *strictHandler) UpdateEntity(w http.ResponseWriter, r *http.Request, entityId EntityId, params UpdateEntityParams) {
 	var request UpdateEntityRequestObject
 
 	request.EntityId = entityId
+	request.Params = params
 
 	var body UpdateEntityJSONRequestBody
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -1424,11 +1638,12 @@ func (sh *strictHandler) UpdateEntity(w http.ResponseWriter, r *http.Request, en
 }
 
 // DetachEntity operation middleware
-func (sh *strictHandler) DetachEntity(w http.ResponseWriter, r *http.Request, entityId EntityId, investigationId InvestigationId) {
+func (sh *strictHandler) DetachEntity(w http.ResponseWriter, r *http.Request, entityId EntityId, investigationId InvestigationId, params DetachEntityParams) {
 	var request DetachEntityRequestObject
 
 	request.EntityId = entityId
 	request.InvestigationId = investigationId
+	request.Params = params
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
 		return sh.ssi.DetachEntity(ctx, request.(DetachEntityRequestObject))

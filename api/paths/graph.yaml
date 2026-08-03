@@ -10,6 +10,7 @@ security:
 paths:
   /investigations/{investigation_id}/graph:
     parameters:
+      - { $ref: '../shared/parameters.yaml#/components/parameters/ProjectId' }
       - { $ref: '../shared/parameters.yaml#/components/parameters/InvestigationId' }
     get:
       tags: [graph]
@@ -58,6 +59,7 @@ paths:
 
   /investigations/{investigation_id}/nodes:
     parameters:
+      - { $ref: '../shared/parameters.yaml#/components/parameters/ProjectId' }
       - { $ref: '../shared/parameters.yaml#/components/parameters/InvestigationId' }
     get:
       tags: [graph]
@@ -122,6 +124,7 @@ paths:
 
   /investigations/{investigation_id}/nodes/{node_id}:
     parameters:
+      - { $ref: '../shared/parameters.yaml#/components/parameters/ProjectId' }
       - { $ref: '../shared/parameters.yaml#/components/parameters/InvestigationId' }
       - { $ref: '../shared/parameters.yaml#/components/parameters/NodeId' }
     get:
@@ -159,6 +162,7 @@ paths:
 
   /investigations/{investigation_id}/edges:
     parameters:
+      - { $ref: '../shared/parameters.yaml#/components/parameters/ProjectId' }
       - { $ref: '../shared/parameters.yaml#/components/parameters/InvestigationId' }
     get:
       tags: [graph]
@@ -240,6 +244,7 @@ paths:
 
   /investigations/{investigation_id}/edges/{edge_id}:
     parameters:
+      - { $ref: '../shared/parameters.yaml#/components/parameters/ProjectId' }
       - { $ref: '../shared/parameters.yaml#/components/parameters/InvestigationId' }
       - { $ref: '../shared/parameters.yaml#/components/parameters/GraphEdgeId' }
     get:
@@ -308,6 +313,7 @@ paths:
 
   /investigations/{investigation_id}/edges/{edge_id}/evidence:
     parameters:
+      - { $ref: '../shared/parameters.yaml#/components/parameters/ProjectId' }
       - { $ref: '../shared/parameters.yaml#/components/parameters/InvestigationId' }
       - { $ref: '../shared/parameters.yaml#/components/parameters/GraphEdgeId' }
     get:
@@ -359,6 +365,7 @@ paths:
 
   /investigations/{investigation_id}/edges/{edge_id}/evidence/{event_id}:
     parameters:
+      - { $ref: '../shared/parameters.yaml#/components/parameters/ProjectId' }
       - { $ref: '../shared/parameters.yaml#/components/parameters/InvestigationId' }
       - { $ref: '../shared/parameters.yaml#/components/parameters/GraphEdgeId' }
       - { $ref: '../shared/parameters.yaml#/components/parameters/EventId' }
@@ -382,6 +389,7 @@ paths:
 
   /investigations/{investigation_id}/review:
     parameters:
+      - { $ref: '../shared/parameters.yaml#/components/parameters/ProjectId' }
       - { $ref: '../shared/parameters.yaml#/components/parameters/InvestigationId' }
     post:
       tags: [graph]

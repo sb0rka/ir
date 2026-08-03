@@ -10,6 +10,7 @@ security:
 paths:
   /investigations/{investigation_id}/events:
     parameters:
+      - { $ref: '../shared/parameters.yaml#/components/parameters/ProjectId' }
       - { $ref: '../shared/parameters.yaml#/components/parameters/InvestigationId' }
     get:
       tags: [events]
@@ -65,6 +66,8 @@ paths:
         '422': { $ref: '../shared/responses.yaml#/components/responses/ValidationError' }
 
   /events:
+    parameters:
+      - { $ref: '../shared/parameters.yaml#/components/parameters/ProjectId' }
     post:
       tags: [events]
       summary: Pull events into an investigation
@@ -102,6 +105,7 @@ paths:
 
   /events/{event_id}:
     parameters:
+      - { $ref: '../shared/parameters.yaml#/components/parameters/ProjectId' }
       - { $ref: '../shared/parameters.yaml#/components/parameters/EventId' }
     get:
       tags: [events]
@@ -145,6 +149,7 @@ paths:
 
   /events/{event_id}/investigations/{investigation_id}:
     parameters:
+      - { $ref: '../shared/parameters.yaml#/components/parameters/ProjectId' }
       - { $ref: '../shared/parameters.yaml#/components/parameters/EventId' }
       - { $ref: '../shared/parameters.yaml#/components/parameters/InvestigationId' }
     delete:

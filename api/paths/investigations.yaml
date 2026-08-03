@@ -9,6 +9,8 @@ security:
 
 paths:
   /investigations:
+    parameters:
+      - { $ref: '../shared/parameters.yaml#/components/parameters/ProjectId' }
     post:
       tags: [investigations]
       summary: Open an investigation or a hypothesis under one
@@ -81,6 +83,7 @@ paths:
 
   /investigations/{investigation_id}:
     parameters:
+      - { $ref: '../shared/parameters.yaml#/components/parameters/ProjectId' }
       - { $ref: '../shared/parameters.yaml#/components/parameters/InvestigationId' }
     get:
       tags: [investigations]
@@ -151,6 +154,7 @@ paths:
 
   /investigations/{investigation_id}/tree:
     parameters:
+      - { $ref: '../shared/parameters.yaml#/components/parameters/ProjectId' }
       - { $ref: '../shared/parameters.yaml#/components/parameters/InvestigationId' }
     get:
       tags: [investigations]
@@ -310,15 +314,6 @@ components:
           format: uuid
           description: >-
             The investigation this one refines. Omit it to open a root case.
-        project_id:
-          type: string
-          description: >-
-            Project that owns the case — the tenant. Required for a root,
-            ignored for a child, which inherits its parent's.
-
-            Temporary: the tenant belongs in the token, not in a request body.
-            It is accepted for now so the frontend can work before auth is wired
-            up, and goes away once it is.
         severity:
           allOf: [{ $ref: '../shared/enums.yaml#/components/schemas/Severity' }]
           description: Initial assessment. Can be revised later.

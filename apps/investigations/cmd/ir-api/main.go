@@ -19,7 +19,7 @@ import (
 	"github.com/sb0rka/ir/apps/investigations/internal/transport"
 )
 
-const serviceName = "investigations"
+const serviceName = "ir-api"
 
 func main() {
 	if err := run(); err != nil {
@@ -59,15 +59,6 @@ func run() error {
 		Roles:  api,
 		DB:     db,
 	})
-
-	// Роль по умолчанию делает валидный токен достаточным для работы, минуя
-	// role_bindings. На стенде это удобно, в проде — дыра, поэтому о ней
-	// слышно при каждом старте.
-	if cfg.Server.DefaultRole != "" {
-		log.Warn("default_role_enabled",
-			"role", cfg.Server.DefaultRole,
-			"note", "любой валидный токен получает эту роль; для прода INV_DEFAULT_ROLE должен быть пуст")
-	}
 
 	srv := &http.Server{
 		Addr:              net.JoinHostPort(cfg.Server.Addr, cfg.Server.Port),

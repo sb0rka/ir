@@ -46,12 +46,12 @@ services:
           psql -h postgres -U postgres -d investigations -tAc "INSERT INTO inv.schema_versions (version) VALUES ('$$version') ON CONFLICT (version) DO NOTHING" >/dev/null 2>&1 || true
         done
 
-  api:
+  ir-api:
     build:
       context: .
       dockerfile: apps/investigations/Dockerfile
       args:
-        BINARY: api
+        BINARY: ir-api
     depends_on:
       postgres:
         condition: service_healthy
@@ -61,17 +61,15 @@ services:
     environment:
       SERVER_ADDR: "0.0.0.0"
       SERVER_PORT: "8090"
-      SERVER_CORS_WHITELIST: "*"
+      SERVER_CORS_WHITELIST: "${SERVER_CORS_WHITELIST:-http://localhost:5173,http://localhost:3000}"
       DATABASE_URI: "postgres://postgres:${POSTGRES_PASSWORD:-irdev}@postgres:5432/investigations?search_path=inv"
       LOG_FORMAT: "json"
       # Публичный ключ платформы. Без него сервис поднимется,
       # но любой запрос с токеном получит 401 — конфиг стенда неполон.
       ACCESS_TOKEN_PUBLIC_KEY_FILE_PATH: "${ACCESS_TOKEN_PUBLIC_KEY_FILE_PATH:-}"
       ACCESS_TOKEN_ISSUER: "${ACCESS_TOKEN_ISSUER:-auth.local}"
-      ACCESS_TOKEN_AUDIENCE: "${ACCESS_TOKEN_AUDIENCE:-ir.local}"
+      ACCESS_TOKEN_AUDIENCE: "${ACCESS_TOKEN_AUDIENCE:-api.local}"
       ACCESS_TOKEN_KID: "${ACCESS_TOKEN_KID:-ed25519-v1}"
-      # В dev любой залогиненный ведёт расследования, чтобы не раздавать роли руками.
-      INV_DEFAULT_ROLE: "l2"
     ports:
       - "${API_PORT:-8090}:8090"
     volumes:

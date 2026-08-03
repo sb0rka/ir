@@ -162,7 +162,7 @@ tasks:
   build:
     desc: Собрать сервисы в bin/
     cmds:
-      - go build -o bin/investigations-api ./apps/investigations/cmd/api
+      - go build -o bin/ir-api ./apps/investigations/cmd/ir-api
       - go build -o bin/irctl ./apps/investigations/cmd/irctl
 
   fmt:
@@ -190,7 +190,7 @@ tasks:
       - task: vet
 
   dev:
-    desc: Поднять локальный стенд (Postgres + api)
+    desc: Поднять локальный стенд (Postgres + ir-api)
     cmds:
       - docker compose -f docker-compose.dev.yml up -d --build
 
@@ -202,7 +202,7 @@ tasks:
   dev-logs:
     desc: Логи стенда
     cmds:
-      - docker compose -f docker-compose.dev.yml logs -f api
+      - docker compose -f docker-compose.dev.yml logs -f ir-api
 
   migrate:
     desc: Применить миграции к локальной базе

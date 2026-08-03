@@ -402,6 +402,9 @@ type Limit = int
 // NodeId defines model for NodeId.
 type NodeId = openapi_types.UUID
 
+// ProjectId defines model for ProjectId.
+type ProjectId = string
+
 // Conflict Body of every non-2xx response. Clients branch on `code`, not on the HTTP status: the status says what happened at the protocol level, the code says what happened in the domain.
 type Conflict = ErrorResponse
 
@@ -445,6 +448,51 @@ type ListGraphEdgesParams struct {
 
 	// Cursor Opaque keyset cursor taken from `next_cursor` of the previous page. Encodes a position, not a query — do not build one by hand. Omit it to start from the beginning.
 	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+
+	// XProjectID Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored.
+	XProjectID ProjectId `json:"X-Project-ID"`
+}
+
+// CreateGraphEdgeParams defines parameters for CreateGraphEdge.
+type CreateGraphEdgeParams struct {
+	// XProjectID Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored.
+	XProjectID ProjectId `json:"X-Project-ID"`
+}
+
+// DeleteGraphEdgeParams defines parameters for DeleteGraphEdge.
+type DeleteGraphEdgeParams struct {
+	// XProjectID Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored.
+	XProjectID ProjectId `json:"X-Project-ID"`
+}
+
+// GetGraphEdgeParams defines parameters for GetGraphEdge.
+type GetGraphEdgeParams struct {
+	// XProjectID Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored.
+	XProjectID ProjectId `json:"X-Project-ID"`
+}
+
+// UpdateGraphEdgeParams defines parameters for UpdateGraphEdge.
+type UpdateGraphEdgeParams struct {
+	// XProjectID Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored.
+	XProjectID ProjectId `json:"X-Project-ID"`
+}
+
+// ListGraphEdgeEvidenceParams defines parameters for ListGraphEdgeEvidence.
+type ListGraphEdgeEvidenceParams struct {
+	// XProjectID Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored.
+	XProjectID ProjectId `json:"X-Project-ID"`
+}
+
+// AddGraphEdgeEvidenceParams defines parameters for AddGraphEdgeEvidence.
+type AddGraphEdgeEvidenceParams struct {
+	// XProjectID Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored.
+	XProjectID ProjectId `json:"X-Project-ID"`
+}
+
+// DeleteGraphEdgeEvidenceParams defines parameters for DeleteGraphEdgeEvidence.
+type DeleteGraphEdgeEvidenceParams struct {
+	// XProjectID Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored.
+	XProjectID ProjectId `json:"X-Project-ID"`
 }
 
 // GetGraphParams defines parameters for GetGraph.
@@ -457,6 +505,9 @@ type GetGraphParams struct {
 
 	// Statuses Which edge states to include. Defaults to proposed and confirmed; pass rejected explicitly to see what was ruled out.
 	Statuses *[]GraphEdgeStatus `form:"statuses,omitempty" json:"statuses,omitempty"`
+
+	// XProjectID Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored.
+	XProjectID ProjectId `json:"X-Project-ID"`
 }
 
 // ListNodesParams defines parameters for ListNodes.
@@ -472,6 +523,33 @@ type ListNodesParams struct {
 
 	// Cursor Opaque keyset cursor taken from `next_cursor` of the previous page. Encodes a position, not a query — do not build one by hand. Omit it to start from the beginning.
 	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+
+	// XProjectID Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored.
+	XProjectID ProjectId `json:"X-Project-ID"`
+}
+
+// CreateNodeParams defines parameters for CreateNode.
+type CreateNodeParams struct {
+	// XProjectID Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored.
+	XProjectID ProjectId `json:"X-Project-ID"`
+}
+
+// DeleteNodeParams defines parameters for DeleteNode.
+type DeleteNodeParams struct {
+	// XProjectID Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored.
+	XProjectID ProjectId `json:"X-Project-ID"`
+}
+
+// GetNodeParams defines parameters for GetNode.
+type GetNodeParams struct {
+	// XProjectID Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored.
+	XProjectID ProjectId `json:"X-Project-ID"`
+}
+
+// ReviewGraphEdgesParams defines parameters for ReviewGraphEdges.
+type ReviewGraphEdgesParams struct {
+	// XProjectID Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored.
+	XProjectID ProjectId `json:"X-Project-ID"`
 }
 
 // CreateGraphEdgeJSONRequestBody defines body for CreateGraphEdge for application/json ContentType.
@@ -496,25 +574,25 @@ type ServerInterface interface {
 	ListGraphEdges(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, params ListGraphEdgesParams)
 	// CreateGraphEdge Draw an edge by hand
 	// (POST /investigations/{investigation_id}/edges)
-	CreateGraphEdge(w http.ResponseWriter, r *http.Request, investigationId InvestigationId)
+	CreateGraphEdge(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, params CreateGraphEdgeParams)
 	// DeleteGraphEdge Delete an edge
 	// (DELETE /investigations/{investigation_id}/edges/{edge_id})
-	DeleteGraphEdge(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, edgeId GraphEdgeId)
+	DeleteGraphEdge(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, edgeId GraphEdgeId, params DeleteGraphEdgeParams)
 	// GetGraphEdge One edge
 	// (GET /investigations/{investigation_id}/edges/{edge_id})
-	GetGraphEdge(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, edgeId GraphEdgeId)
+	GetGraphEdge(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, edgeId GraphEdgeId, params GetGraphEdgeParams)
 	// UpdateGraphEdge Edit one edge
 	// (PATCH /investigations/{investigation_id}/edges/{edge_id})
-	UpdateGraphEdge(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, edgeId GraphEdgeId)
+	UpdateGraphEdge(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, edgeId GraphEdgeId, params UpdateGraphEdgeParams)
 	// ListGraphEdgeEvidence What the edge rests on
 	// (GET /investigations/{investigation_id}/edges/{edge_id}/evidence)
-	ListGraphEdgeEvidence(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, edgeId GraphEdgeId)
+	ListGraphEdgeEvidence(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, edgeId GraphEdgeId, params ListGraphEdgeEvidenceParams)
 	// AddGraphEdgeEvidence Cite more events
 	// (POST /investigations/{investigation_id}/edges/{edge_id}/evidence)
-	AddGraphEdgeEvidence(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, edgeId GraphEdgeId)
+	AddGraphEdgeEvidence(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, edgeId GraphEdgeId, params AddGraphEdgeEvidenceParams)
 	// DeleteGraphEdgeEvidence Stop citing an event
 	// (DELETE /investigations/{investigation_id}/edges/{edge_id}/evidence/{event_id})
-	DeleteGraphEdgeEvidence(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, edgeId GraphEdgeId, eventId EventId)
+	DeleteGraphEdgeEvidence(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, edgeId GraphEdgeId, eventId EventId, params DeleteGraphEdgeEvidenceParams)
 	// GetGraph Graph of the investigation
 	// (GET /investigations/{investigation_id}/graph)
 	GetGraph(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, params GetGraphParams)
@@ -523,16 +601,16 @@ type ServerInterface interface {
 	ListNodes(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, params ListNodesParams)
 	// CreateNode Put a node on the graph
 	// (POST /investigations/{investigation_id}/nodes)
-	CreateNode(w http.ResponseWriter, r *http.Request, investigationId InvestigationId)
+	CreateNode(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, params CreateNodeParams)
 	// DeleteNode Take a node off the graph
 	// (DELETE /investigations/{investigation_id}/nodes/{node_id})
-	DeleteNode(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, nodeId NodeId)
+	DeleteNode(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, nodeId NodeId, params DeleteNodeParams)
 	// GetNode One node
 	// (GET /investigations/{investigation_id}/nodes/{node_id})
-	GetNode(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, nodeId NodeId)
+	GetNode(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, nodeId NodeId, params GetNodeParams)
 	// ReviewGraphEdges Review proposed edges in bulk
 	// (POST /investigations/{investigation_id}/review)
-	ReviewGraphEdges(w http.ResponseWriter, r *http.Request, investigationId InvestigationId)
+	ReviewGraphEdges(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, params ReviewGraphEdgesParams)
 }
 
 // ServerInterfaceWrapper converts contexts to parameters.
@@ -653,6 +731,31 @@ func (siw *ServerInterfaceWrapper) ListGraphEdges(w http.ResponseWriter, r *http
 		return
 	}
 
+	headers := r.Header
+
+	// ------------- Required header parameter "X-Project-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Project-ID")]; found {
+		var XProjectID ProjectId
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Project-ID", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Project-ID", valueList[0], &XProjectID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Project-ID", Err: err})
+			return
+		}
+
+		params.XProjectID = XProjectID
+
+	} else {
+		err := fmt.Errorf("Header parameter X-Project-ID is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Project-ID", Err: err})
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ListGraphEdges(w, r, investigationId, params)
 	}))
@@ -679,8 +782,36 @@ func (siw *ServerInterfaceWrapper) CreateGraphEdge(w http.ResponseWriter, r *htt
 		return
 	}
 
+	// Parameter object where we will unmarshal all parameters from the context
+	var params CreateGraphEdgeParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "X-Project-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Project-ID")]; found {
+		var XProjectID ProjectId
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Project-ID", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Project-ID", valueList[0], &XProjectID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Project-ID", Err: err})
+			return
+		}
+
+		params.XProjectID = XProjectID
+
+	} else {
+		err := fmt.Errorf("Header parameter X-Project-ID is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Project-ID", Err: err})
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.CreateGraphEdge(w, r, investigationId)
+		siw.Handler.CreateGraphEdge(w, r, investigationId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -714,8 +845,36 @@ func (siw *ServerInterfaceWrapper) DeleteGraphEdge(w http.ResponseWriter, r *htt
 		return
 	}
 
+	// Parameter object where we will unmarshal all parameters from the context
+	var params DeleteGraphEdgeParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "X-Project-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Project-ID")]; found {
+		var XProjectID ProjectId
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Project-ID", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Project-ID", valueList[0], &XProjectID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Project-ID", Err: err})
+			return
+		}
+
+		params.XProjectID = XProjectID
+
+	} else {
+		err := fmt.Errorf("Header parameter X-Project-ID is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Project-ID", Err: err})
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.DeleteGraphEdge(w, r, investigationId, edgeId)
+		siw.Handler.DeleteGraphEdge(w, r, investigationId, edgeId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -749,8 +908,36 @@ func (siw *ServerInterfaceWrapper) GetGraphEdge(w http.ResponseWriter, r *http.R
 		return
 	}
 
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetGraphEdgeParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "X-Project-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Project-ID")]; found {
+		var XProjectID ProjectId
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Project-ID", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Project-ID", valueList[0], &XProjectID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Project-ID", Err: err})
+			return
+		}
+
+		params.XProjectID = XProjectID
+
+	} else {
+		err := fmt.Errorf("Header parameter X-Project-ID is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Project-ID", Err: err})
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetGraphEdge(w, r, investigationId, edgeId)
+		siw.Handler.GetGraphEdge(w, r, investigationId, edgeId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -784,8 +971,36 @@ func (siw *ServerInterfaceWrapper) UpdateGraphEdge(w http.ResponseWriter, r *htt
 		return
 	}
 
+	// Parameter object where we will unmarshal all parameters from the context
+	var params UpdateGraphEdgeParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "X-Project-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Project-ID")]; found {
+		var XProjectID ProjectId
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Project-ID", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Project-ID", valueList[0], &XProjectID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Project-ID", Err: err})
+			return
+		}
+
+		params.XProjectID = XProjectID
+
+	} else {
+		err := fmt.Errorf("Header parameter X-Project-ID is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Project-ID", Err: err})
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.UpdateGraphEdge(w, r, investigationId, edgeId)
+		siw.Handler.UpdateGraphEdge(w, r, investigationId, edgeId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -819,8 +1034,36 @@ func (siw *ServerInterfaceWrapper) ListGraphEdgeEvidence(w http.ResponseWriter, 
 		return
 	}
 
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListGraphEdgeEvidenceParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "X-Project-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Project-ID")]; found {
+		var XProjectID ProjectId
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Project-ID", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Project-ID", valueList[0], &XProjectID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Project-ID", Err: err})
+			return
+		}
+
+		params.XProjectID = XProjectID
+
+	} else {
+		err := fmt.Errorf("Header parameter X-Project-ID is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Project-ID", Err: err})
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListGraphEdgeEvidence(w, r, investigationId, edgeId)
+		siw.Handler.ListGraphEdgeEvidence(w, r, investigationId, edgeId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -854,8 +1097,36 @@ func (siw *ServerInterfaceWrapper) AddGraphEdgeEvidence(w http.ResponseWriter, r
 		return
 	}
 
+	// Parameter object where we will unmarshal all parameters from the context
+	var params AddGraphEdgeEvidenceParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "X-Project-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Project-ID")]; found {
+		var XProjectID ProjectId
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Project-ID", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Project-ID", valueList[0], &XProjectID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Project-ID", Err: err})
+			return
+		}
+
+		params.XProjectID = XProjectID
+
+	} else {
+		err := fmt.Errorf("Header parameter X-Project-ID is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Project-ID", Err: err})
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.AddGraphEdgeEvidence(w, r, investigationId, edgeId)
+		siw.Handler.AddGraphEdgeEvidence(w, r, investigationId, edgeId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -898,8 +1169,36 @@ func (siw *ServerInterfaceWrapper) DeleteGraphEdgeEvidence(w http.ResponseWriter
 		return
 	}
 
+	// Parameter object where we will unmarshal all parameters from the context
+	var params DeleteGraphEdgeEvidenceParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "X-Project-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Project-ID")]; found {
+		var XProjectID ProjectId
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Project-ID", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Project-ID", valueList[0], &XProjectID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Project-ID", Err: err})
+			return
+		}
+
+		params.XProjectID = XProjectID
+
+	} else {
+		err := fmt.Errorf("Header parameter X-Project-ID is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Project-ID", Err: err})
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.DeleteGraphEdgeEvidence(w, r, investigationId, edgeId, eventId)
+		siw.Handler.DeleteGraphEdgeEvidence(w, r, investigationId, edgeId, eventId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -963,6 +1262,31 @@ func (siw *ServerInterfaceWrapper) GetGraph(w http.ResponseWriter, r *http.Reque
 		} else {
 			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "statuses", Err: err})
 		}
+		return
+	}
+
+	headers := r.Header
+
+	// ------------- Required header parameter "X-Project-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Project-ID")]; found {
+		var XProjectID ProjectId
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Project-ID", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Project-ID", valueList[0], &XProjectID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Project-ID", Err: err})
+			return
+		}
+
+		params.XProjectID = XProjectID
+
+	} else {
+		err := fmt.Errorf("Header parameter X-Project-ID is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Project-ID", Err: err})
 		return
 	}
 
@@ -1047,6 +1371,31 @@ func (siw *ServerInterfaceWrapper) ListNodes(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	headers := r.Header
+
+	// ------------- Required header parameter "X-Project-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Project-ID")]; found {
+		var XProjectID ProjectId
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Project-ID", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Project-ID", valueList[0], &XProjectID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Project-ID", Err: err})
+			return
+		}
+
+		params.XProjectID = XProjectID
+
+	} else {
+		err := fmt.Errorf("Header parameter X-Project-ID is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Project-ID", Err: err})
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ListNodes(w, r, investigationId, params)
 	}))
@@ -1073,8 +1422,36 @@ func (siw *ServerInterfaceWrapper) CreateNode(w http.ResponseWriter, r *http.Req
 		return
 	}
 
+	// Parameter object where we will unmarshal all parameters from the context
+	var params CreateNodeParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "X-Project-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Project-ID")]; found {
+		var XProjectID ProjectId
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Project-ID", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Project-ID", valueList[0], &XProjectID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Project-ID", Err: err})
+			return
+		}
+
+		params.XProjectID = XProjectID
+
+	} else {
+		err := fmt.Errorf("Header parameter X-Project-ID is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Project-ID", Err: err})
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.CreateNode(w, r, investigationId)
+		siw.Handler.CreateNode(w, r, investigationId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1108,8 +1485,36 @@ func (siw *ServerInterfaceWrapper) DeleteNode(w http.ResponseWriter, r *http.Req
 		return
 	}
 
+	// Parameter object where we will unmarshal all parameters from the context
+	var params DeleteNodeParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "X-Project-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Project-ID")]; found {
+		var XProjectID ProjectId
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Project-ID", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Project-ID", valueList[0], &XProjectID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Project-ID", Err: err})
+			return
+		}
+
+		params.XProjectID = XProjectID
+
+	} else {
+		err := fmt.Errorf("Header parameter X-Project-ID is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Project-ID", Err: err})
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.DeleteNode(w, r, investigationId, nodeId)
+		siw.Handler.DeleteNode(w, r, investigationId, nodeId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1143,8 +1548,36 @@ func (siw *ServerInterfaceWrapper) GetNode(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetNodeParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "X-Project-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Project-ID")]; found {
+		var XProjectID ProjectId
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Project-ID", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Project-ID", valueList[0], &XProjectID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Project-ID", Err: err})
+			return
+		}
+
+		params.XProjectID = XProjectID
+
+	} else {
+		err := fmt.Errorf("Header parameter X-Project-ID is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Project-ID", Err: err})
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetNode(w, r, investigationId, nodeId)
+		siw.Handler.GetNode(w, r, investigationId, nodeId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1169,8 +1602,36 @@ func (siw *ServerInterfaceWrapper) ReviewGraphEdges(w http.ResponseWriter, r *ht
 		return
 	}
 
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ReviewGraphEdgesParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "X-Project-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Project-ID")]; found {
+		var XProjectID ProjectId
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Project-ID", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Project-ID", valueList[0], &XProjectID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Project-ID", Err: err})
+			return
+		}
+
+		params.XProjectID = XProjectID
+
+	} else {
+		err := fmt.Errorf("Header parameter X-Project-ID is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Project-ID", Err: err})
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ReviewGraphEdges(w, r, investigationId)
+		siw.Handler.ReviewGraphEdges(w, r, investigationId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1441,6 +1902,7 @@ func (response ListGraphEdges501JSONResponse) VisitListGraphEdgesResponse(w http
 
 type CreateGraphEdgeRequestObject struct {
 	InvestigationId InvestigationId `json:"investigation_id"`
+	Params          CreateGraphEdgeParams
 	Body            *CreateGraphEdgeJSONRequestBody
 }
 
@@ -1563,6 +2025,7 @@ func (response CreateGraphEdge501JSONResponse) VisitCreateGraphEdgeResponse(w ht
 type DeleteGraphEdgeRequestObject struct {
 	InvestigationId InvestigationId `json:"investigation_id"`
 	EdgeId          GraphEdgeId     `json:"edge_id"`
+	Params          DeleteGraphEdgeParams
 }
 
 type DeleteGraphEdgeResponseObject interface {
@@ -1650,6 +2113,7 @@ func (response DeleteGraphEdge501JSONResponse) VisitDeleteGraphEdgeResponse(w ht
 type GetGraphEdgeRequestObject struct {
 	InvestigationId InvestigationId `json:"investigation_id"`
 	EdgeId          GraphEdgeId     `json:"edge_id"`
+	Params          GetGraphEdgeParams
 }
 
 type GetGraphEdgeResponseObject interface {
@@ -1743,6 +2207,7 @@ func (response GetGraphEdge501JSONResponse) VisitGetGraphEdgeResponse(w http.Res
 type UpdateGraphEdgeRequestObject struct {
 	InvestigationId InvestigationId `json:"investigation_id"`
 	EdgeId          GraphEdgeId     `json:"edge_id"`
+	Params          UpdateGraphEdgeParams
 	Body            *UpdateGraphEdgeJSONRequestBody
 }
 
@@ -1865,6 +2330,7 @@ func (response UpdateGraphEdge501JSONResponse) VisitUpdateGraphEdgeResponse(w ht
 type ListGraphEdgeEvidenceRequestObject struct {
 	InvestigationId InvestigationId `json:"investigation_id"`
 	EdgeId          GraphEdgeId     `json:"edge_id"`
+	Params          ListGraphEdgeEvidenceParams
 }
 
 type ListGraphEdgeEvidenceResponseObject interface {
@@ -1958,6 +2424,7 @@ func (response ListGraphEdgeEvidence501JSONResponse) VisitListGraphEdgeEvidenceR
 type AddGraphEdgeEvidenceRequestObject struct {
 	InvestigationId InvestigationId `json:"investigation_id"`
 	EdgeId          GraphEdgeId     `json:"edge_id"`
+	Params          AddGraphEdgeEvidenceParams
 	Body            *AddGraphEdgeEvidenceJSONRequestBody
 }
 
@@ -2067,6 +2534,7 @@ type DeleteGraphEdgeEvidenceRequestObject struct {
 	InvestigationId InvestigationId `json:"investigation_id"`
 	EdgeId          GraphEdgeId     `json:"edge_id"`
 	EventId         EventId         `json:"event_id"`
+	Params          DeleteGraphEdgeEvidenceParams
 }
 
 type DeleteGraphEdgeEvidenceResponseObject interface {
@@ -2381,6 +2849,7 @@ func (response ListNodes501JSONResponse) VisitListNodesResponse(w http.ResponseW
 
 type CreateNodeRequestObject struct {
 	InvestigationId InvestigationId `json:"investigation_id"`
+	Params          CreateNodeParams
 	Body            *CreateNodeJSONRequestBody
 }
 
@@ -2489,6 +2958,7 @@ func (response CreateNode501JSONResponse) VisitCreateNodeResponse(w http.Respons
 type DeleteNodeRequestObject struct {
 	InvestigationId InvestigationId `json:"investigation_id"`
 	NodeId          NodeId          `json:"node_id"`
+	Params          DeleteNodeParams
 }
 
 type DeleteNodeResponseObject interface {
@@ -2576,6 +3046,7 @@ func (response DeleteNode501JSONResponse) VisitDeleteNodeResponse(w http.Respons
 type GetNodeRequestObject struct {
 	InvestigationId InvestigationId `json:"investigation_id"`
 	NodeId          NodeId          `json:"node_id"`
+	Params          GetNodeParams
 }
 
 type GetNodeResponseObject interface {
@@ -2668,6 +3139,7 @@ func (response GetNode501JSONResponse) VisitGetNodeResponse(w http.ResponseWrite
 
 type ReviewGraphEdgesRequestObject struct {
 	InvestigationId InvestigationId `json:"investigation_id"`
+	Params          ReviewGraphEdgesParams
 	Body            *ReviewGraphEdgesJSONRequestBody
 }
 
@@ -2900,10 +3372,11 @@ func (sh *strictHandler) ListGraphEdges(w http.ResponseWriter, r *http.Request, 
 }
 
 // CreateGraphEdge operation middleware
-func (sh *strictHandler) CreateGraphEdge(w http.ResponseWriter, r *http.Request, investigationId InvestigationId) {
+func (sh *strictHandler) CreateGraphEdge(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, params CreateGraphEdgeParams) {
 	var request CreateGraphEdgeRequestObject
 
 	request.InvestigationId = investigationId
+	request.Params = params
 
 	var body CreateGraphEdgeJSONRequestBody
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -2933,11 +3406,12 @@ func (sh *strictHandler) CreateGraphEdge(w http.ResponseWriter, r *http.Request,
 }
 
 // DeleteGraphEdge operation middleware
-func (sh *strictHandler) DeleteGraphEdge(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, edgeId GraphEdgeId) {
+func (sh *strictHandler) DeleteGraphEdge(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, edgeId GraphEdgeId, params DeleteGraphEdgeParams) {
 	var request DeleteGraphEdgeRequestObject
 
 	request.InvestigationId = investigationId
 	request.EdgeId = edgeId
+	request.Params = params
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
 		return sh.ssi.DeleteGraphEdge(ctx, request.(DeleteGraphEdgeRequestObject))
@@ -2960,11 +3434,12 @@ func (sh *strictHandler) DeleteGraphEdge(w http.ResponseWriter, r *http.Request,
 }
 
 // GetGraphEdge operation middleware
-func (sh *strictHandler) GetGraphEdge(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, edgeId GraphEdgeId) {
+func (sh *strictHandler) GetGraphEdge(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, edgeId GraphEdgeId, params GetGraphEdgeParams) {
 	var request GetGraphEdgeRequestObject
 
 	request.InvestigationId = investigationId
 	request.EdgeId = edgeId
+	request.Params = params
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
 		return sh.ssi.GetGraphEdge(ctx, request.(GetGraphEdgeRequestObject))
@@ -2987,11 +3462,12 @@ func (sh *strictHandler) GetGraphEdge(w http.ResponseWriter, r *http.Request, in
 }
 
 // UpdateGraphEdge operation middleware
-func (sh *strictHandler) UpdateGraphEdge(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, edgeId GraphEdgeId) {
+func (sh *strictHandler) UpdateGraphEdge(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, edgeId GraphEdgeId, params UpdateGraphEdgeParams) {
 	var request UpdateGraphEdgeRequestObject
 
 	request.InvestigationId = investigationId
 	request.EdgeId = edgeId
+	request.Params = params
 
 	var body UpdateGraphEdgeJSONRequestBody
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -3021,11 +3497,12 @@ func (sh *strictHandler) UpdateGraphEdge(w http.ResponseWriter, r *http.Request,
 }
 
 // ListGraphEdgeEvidence operation middleware
-func (sh *strictHandler) ListGraphEdgeEvidence(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, edgeId GraphEdgeId) {
+func (sh *strictHandler) ListGraphEdgeEvidence(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, edgeId GraphEdgeId, params ListGraphEdgeEvidenceParams) {
 	var request ListGraphEdgeEvidenceRequestObject
 
 	request.InvestigationId = investigationId
 	request.EdgeId = edgeId
+	request.Params = params
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
 		return sh.ssi.ListGraphEdgeEvidence(ctx, request.(ListGraphEdgeEvidenceRequestObject))
@@ -3048,11 +3525,12 @@ func (sh *strictHandler) ListGraphEdgeEvidence(w http.ResponseWriter, r *http.Re
 }
 
 // AddGraphEdgeEvidence operation middleware
-func (sh *strictHandler) AddGraphEdgeEvidence(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, edgeId GraphEdgeId) {
+func (sh *strictHandler) AddGraphEdgeEvidence(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, edgeId GraphEdgeId, params AddGraphEdgeEvidenceParams) {
 	var request AddGraphEdgeEvidenceRequestObject
 
 	request.InvestigationId = investigationId
 	request.EdgeId = edgeId
+	request.Params = params
 
 	var body AddGraphEdgeEvidenceJSONRequestBody
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -3082,12 +3560,13 @@ func (sh *strictHandler) AddGraphEdgeEvidence(w http.ResponseWriter, r *http.Req
 }
 
 // DeleteGraphEdgeEvidence operation middleware
-func (sh *strictHandler) DeleteGraphEdgeEvidence(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, edgeId GraphEdgeId, eventId EventId) {
+func (sh *strictHandler) DeleteGraphEdgeEvidence(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, edgeId GraphEdgeId, eventId EventId, params DeleteGraphEdgeEvidenceParams) {
 	var request DeleteGraphEdgeEvidenceRequestObject
 
 	request.InvestigationId = investigationId
 	request.EdgeId = edgeId
 	request.EventId = eventId
+	request.Params = params
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
 		return sh.ssi.DeleteGraphEdgeEvidence(ctx, request.(DeleteGraphEdgeEvidenceRequestObject))
@@ -3164,10 +3643,11 @@ func (sh *strictHandler) ListNodes(w http.ResponseWriter, r *http.Request, inves
 }
 
 // CreateNode operation middleware
-func (sh *strictHandler) CreateNode(w http.ResponseWriter, r *http.Request, investigationId InvestigationId) {
+func (sh *strictHandler) CreateNode(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, params CreateNodeParams) {
 	var request CreateNodeRequestObject
 
 	request.InvestigationId = investigationId
+	request.Params = params
 
 	var body CreateNodeJSONRequestBody
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -3197,11 +3677,12 @@ func (sh *strictHandler) CreateNode(w http.ResponseWriter, r *http.Request, inve
 }
 
 // DeleteNode operation middleware
-func (sh *strictHandler) DeleteNode(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, nodeId NodeId) {
+func (sh *strictHandler) DeleteNode(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, nodeId NodeId, params DeleteNodeParams) {
 	var request DeleteNodeRequestObject
 
 	request.InvestigationId = investigationId
 	request.NodeId = nodeId
+	request.Params = params
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
 		return sh.ssi.DeleteNode(ctx, request.(DeleteNodeRequestObject))
@@ -3224,11 +3705,12 @@ func (sh *strictHandler) DeleteNode(w http.ResponseWriter, r *http.Request, inve
 }
 
 // GetNode operation middleware
-func (sh *strictHandler) GetNode(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, nodeId NodeId) {
+func (sh *strictHandler) GetNode(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, nodeId NodeId, params GetNodeParams) {
 	var request GetNodeRequestObject
 
 	request.InvestigationId = investigationId
 	request.NodeId = nodeId
+	request.Params = params
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
 		return sh.ssi.GetNode(ctx, request.(GetNodeRequestObject))
@@ -3251,10 +3733,11 @@ func (sh *strictHandler) GetNode(w http.ResponseWriter, r *http.Request, investi
 }
 
 // ReviewGraphEdges operation middleware
-func (sh *strictHandler) ReviewGraphEdges(w http.ResponseWriter, r *http.Request, investigationId InvestigationId) {
+func (sh *strictHandler) ReviewGraphEdges(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, params ReviewGraphEdgesParams) {
 	var request ReviewGraphEdgesRequestObject
 
 	request.InvestigationId = investigationId
+	request.Params = params
 
 	var body ReviewGraphEdgesJSONRequestBody
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {

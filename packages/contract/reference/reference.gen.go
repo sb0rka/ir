@@ -11,6 +11,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+
+	"github.com/oapi-codegen/runtime"
 )
 
 // Defines values for EntityCategory.
@@ -208,6 +210,9 @@ type Source struct {
 // SourceKind Class of security tool the source belongs to.
 type SourceKind string
 
+// ProjectId defines model for ProjectId.
+type ProjectId = string
+
 // Forbidden Body of every non-2xx response. Clients branch on `code`, not on the HTTP status: the status says what happened at the protocol level, the code says what happened in the domain.
 type Forbidden = ErrorResponse
 
@@ -220,11 +225,17 @@ type NotImplemented = ErrorResponse
 // Unauthorized Body of every non-2xx response. Clients branch on `code`, not on the HTTP status: the status says what happened at the protocol level, the code says what happened in the domain.
 type Unauthorized = ErrorResponse
 
+// GetReferenceParams defines parameters for GetReference.
+type GetReferenceParams struct {
+	// XProjectID Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored.
+	XProjectID ProjectId `json:"X-Project-ID"`
+}
+
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
 	// GetReference Every dictionary the UI needs
 	// (GET /reference)
-	GetReference(w http.ResponseWriter, r *http.Request)
+	GetReference(w http.ResponseWriter, r *http.Request, params GetReferenceParams)
 }
 
 // ServerInterfaceWrapper converts contexts to parameters.
@@ -239,8 +250,39 @@ type MiddlewareFunc func(http.Handler) http.Handler
 // GetReference operation middleware
 func (siw *ServerInterfaceWrapper) GetReference(w http.ResponseWriter, r *http.Request) {
 
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetReferenceParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "X-Project-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Project-ID")]; found {
+		var XProjectID ProjectId
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Project-ID", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Project-ID", valueList[0], &XProjectID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Project-ID", Err: err})
+			return
+		}
+
+		params.XProjectID = XProjectID
+
+	} else {
+		err := fmt.Errorf("Header parameter X-Project-ID is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Project-ID", Err: err})
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetReference(w, r)
+		siw.Handler.GetReference(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -384,6 +426,7 @@ type NotImplementedJSONResponse ErrorResponse
 type UnauthorizedJSONResponse ErrorResponse
 
 type GetReferenceRequestObject struct {
+	Params GetReferenceParams
 }
 
 type GetReferenceResponseObject interface {
@@ -507,8 +550,10 @@ type strictHandler struct {
 }
 
 // GetReference operation middleware
-func (sh *strictHandler) GetReference(w http.ResponseWriter, r *http.Request) {
+func (sh *strictHandler) GetReference(w http.ResponseWriter, r *http.Request, params GetReferenceParams) {
 	var request GetReferenceRequestObject
+
+	request.Params = params
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
 		return sh.ssi.GetReference(ctx, request.(GetReferenceRequestObject))

@@ -10,6 +10,7 @@ security:
 paths:
   /investigations/{investigation_id}/entities:
     parameters:
+      - { $ref: '../shared/parameters.yaml#/components/parameters/ProjectId' }
       - { $ref: '../shared/parameters.yaml#/components/parameters/InvestigationId' }
     get:
       tags: [entities]
@@ -44,6 +45,8 @@ paths:
         '422': { $ref: '../shared/responses.yaml#/components/responses/ValidationError' }
 
   /entities:
+    parameters:
+      - { $ref: '../shared/parameters.yaml#/components/parameters/ProjectId' }
     post:
       tags: [entities]
       summary: Add an entity by hand
@@ -77,6 +80,7 @@ paths:
 
   /entities/{entity_id}:
     parameters:
+      - { $ref: '../shared/parameters.yaml#/components/parameters/ProjectId' }
       - { $ref: '../shared/parameters.yaml#/components/parameters/EntityId' }
     patch:
       tags: [entities]
@@ -148,6 +152,7 @@ paths:
 
   /entities/{entity_id}/investigations/{investigation_id}:
     parameters:
+      - { $ref: '../shared/parameters.yaml#/components/parameters/ProjectId' }
       - { $ref: '../shared/parameters.yaml#/components/parameters/EntityId' }
       - { $ref: '../shared/parameters.yaml#/components/parameters/InvestigationId' }
     delete:

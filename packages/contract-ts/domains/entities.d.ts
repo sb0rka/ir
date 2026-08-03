@@ -7,7 +7,10 @@ export interface paths {
     "/investigations/{investigation_id}/entities": {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                /** @description Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
             path: {
                 /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
                 investigation_id: components["parameters"]["InvestigationId"];
@@ -30,7 +33,10 @@ export interface paths {
     "/entities": {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                /** @description Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -51,7 +57,10 @@ export interface paths {
     "/entities/{entity_id}": {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                /** @description Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
             path: {
                 /** @description Identifier of an entity — a host, account, process, address or hash. */
                 entity_id: components["parameters"]["EntityId"];
@@ -83,7 +92,10 @@ export interface paths {
     "/entities/{entity_id}/investigations/{investigation_id}": {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                /** @description Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
             path: {
                 /** @description Identifier of an entity — a host, account, process, address or hash. */
                 entity_id: components["parameters"]["EntityId"];
@@ -297,6 +309,8 @@ export interface components {
         };
     };
     parameters: {
+        /** @description Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored. */
+        ProjectId: string;
         /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
         InvestigationId: string;
         /** @description How many items to return. The server may return fewer, never more. */
@@ -324,7 +338,10 @@ export interface operations {
                 /** @description Opaque keyset cursor taken from `next_cursor` of the previous page. Encodes a position, not a query — do not build one by hand. Omit it to start from the beginning. */
                 cursor?: components["parameters"]["Cursor"];
             };
-            header?: never;
+            header: {
+                /** @description Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
             path: {
                 /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
                 investigation_id: components["parameters"]["InvestigationId"];
@@ -353,7 +370,10 @@ export interface operations {
     createEntity: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                /** @description Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -383,7 +403,10 @@ export interface operations {
     getEntityCard: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                /** @description Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
             path: {
                 /** @description Identifier of an entity — a host, account, process, address or hash. */
                 entity_id: components["parameters"]["EntityId"];
@@ -411,7 +434,10 @@ export interface operations {
     deleteEntity: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                /** @description Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
             path: {
                 /** @description Identifier of an entity — a host, account, process, address or hash. */
                 entity_id: components["parameters"]["EntityId"];
@@ -438,7 +464,10 @@ export interface operations {
     updateEntity: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                /** @description Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
             path: {
                 /** @description Identifier of an entity — a host, account, process, address or hash. */
                 entity_id: components["parameters"]["EntityId"];
@@ -471,7 +500,10 @@ export interface operations {
     detachEntity: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                /** @description Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
             path: {
                 /** @description Identifier of an entity — a host, account, process, address or hash. */
                 entity_id: components["parameters"]["EntityId"];

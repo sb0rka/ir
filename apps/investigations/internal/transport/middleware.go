@@ -1,13 +1,12 @@
 package transport
 
 import (
-	"crypto/ed25519"
 	"log/slog"
 	"net/http"
 	"strings"
 	"time"
 
-	"github.com/golang-jwt/jwt/v5"
+	coreauth "github.com/sb0rka/sb0rka/packages/core/auth"
 	coreauthctx "github.com/sb0rka/sb0rka/packages/core/transport/authctx"
 
 	"github.com/sb0rka/ir/apps/investigations/internal/config"
@@ -15,14 +14,9 @@ import (
 	"github.com/sb0rka/ir/apps/investigations/internal/transport/socctx"
 )
 
-// accessTokenClaims повторяет формат токена платформы sb0rka.
-type accessTokenClaims struct {
-	SessionID   string `json:"sid"`
-	SubjectKind string `json:"sk"`
-	jwt.RegisteredClaims
-}
-
 type middlewareChain func(http.Handler) http.Handler
+
+const projectIDHeader = "X-Project-ID"
 
 func chain(h http.Handler, middlewares ...middlewareChain) http.Handler {
 	for i := len(middlewares) - 1; i >= 0; i-- {
@@ -116,7 +110,7 @@ func corsMiddleware(cfg config.ServerConfig) middlewareChain {
 			if allowedOrigin != "" {
 				allowHeaders := "Content-Type"
 				if allowedOrigin != "*" {
-					allowHeaders += ", Authorization"
+					allowHeaders += ", Authorization, " + projectIDHeader
 					w.Header().Set("Access-Control-Allow-Credentials", "true")
 				}
 				w.Header().Set("Access-Control-Allow-Origin", allowedOrigin)
@@ -150,18 +144,21 @@ func authMiddleware(cfg config.ServerConfig, log *slog.Logger, roles RoleResolve
 				return
 			}
 
+			projectID := strings.TrimSpace(r.Header.Get(projectIDHeader))
+			if !validProjectID(projectID) {
+				httperr.Write(w, log, httperr.BadRequest("X-Project-ID must be 10-12 lowercase hexadecimal characters"))
+				return
+			}
+
 			var scope socctx.Scope
 			if roles != nil {
-				resolved, err := roles.Resolve(r.Context(), identity.SubjectID)
+				resolved, err := roles.Resolve(r.Context(), identity.SubjectID, projectID)
 				if err != nil {
 					httperr.Write(w, log, err)
 					return
 				}
 				scope.ProjectID = resolved.ProjectID
 				scope.Roles = resolved.Roles
-			}
-			if len(scope.Roles) == 0 && cfg.DefaultRole != "" {
-				scope.Roles = []string{cfg.DefaultRole}
 			}
 			// Deny-by-default: валидная подпись — ещё не право работать
 			// в продукте. Без единой роли доступа нет, иначе отзыв биндингов
@@ -179,64 +176,42 @@ func authMiddleware(cfg config.ServerConfig, log *slog.Logger, roles RoleResolve
 }
 
 func bearerToken(header string) (string, error) {
-	const prefix = "Bearer "
-	if !strings.HasPrefix(header, prefix) {
-		return "", httperr.ErrUnauthorized
-	}
-	token := strings.TrimSpace(strings.TrimPrefix(header, prefix))
-	if token == "" {
+	token, err := coreauth.ParseBearerToken(header)
+	if err != nil {
 		return "", httperr.ErrUnauthorized
 	}
 	return token, nil
 }
 
 func verify(raw string, cfg config.AuthConfig) (coreauthctx.Identity, error) {
-	if len(cfg.AccessTokenPublicKey) == 0 {
-		return coreauthctx.Identity{}, httperr.New(
-			http.StatusUnauthorized, httperr.CodeUnauthorized, "token verification is not configured")
-	}
-
-	// Проверки iss/aud навешиваются только если заданы: пустое значение
-	// в jwt.WithIssuer/WithAudience требует пустого поля в токене, то есть
-	// отклоняет вообще всё.
-	opts := []jwt.ParserOption{
-		jwt.WithValidMethods([]string{jwt.SigningMethodEdDSA.Alg()}),
-		jwt.WithExpirationRequired(),
-	}
-	if cfg.AccessTokenIssuer != "" {
-		opts = append(opts, jwt.WithIssuer(cfg.AccessTokenIssuer))
-	}
-	if cfg.AccessTokenAudience != "" {
-		opts = append(opts, jwt.WithAudience(cfg.AccessTokenAudience))
-	}
-
-	claims := &accessTokenClaims{}
-	_, err := jwt.ParseWithClaims(raw, claims, func(token *jwt.Token) (any, error) {
-		if cfg.AccessTokenKid != "" {
-			kid, _ := token.Header["kid"].(string)
-			if kid != cfg.AccessTokenKid {
-				return nil, jwt.ErrTokenUnverifiable
-			}
-		}
-		if cfg.AccessTokenTyp != "" {
-			typ, _ := token.Header["typ"].(string)
-			if typ != cfg.AccessTokenTyp {
-				return nil, jwt.ErrTokenUnverifiable
-			}
-		}
-		return ed25519.PublicKey(cfg.AccessTokenPublicKey), nil
-	}, opts...)
+	identity, err := coreauth.VerifyAccessToken(raw, coreauth.VerificationConfig{
+		PublicKey: cfg.AccessTokenPublicKey,
+		KeyID:     cfg.AccessTokenKid,
+		TokenType: cfg.AccessTokenTyp,
+		Issuer:    cfg.AccessTokenIssuer,
+		Audience:  cfg.AccessTokenAudience,
+	})
 	if err != nil {
-		return coreauthctx.Identity{}, httperr.ErrUnauthorized
-	}
-	if claims.Subject == "" || claims.SessionID == "" {
 		return coreauthctx.Identity{}, httperr.ErrUnauthorized
 	}
 
 	return coreauthctx.Identity{
-		SubjectID:   claims.Subject,
-		SubjectKind: claims.SubjectKind,
-		SessionID:   claims.SessionID,
-		JTI:         claims.ID,
+		SubjectID:   identity.SubjectID,
+		SubjectKind: identity.SubjectKind,
+		SessionID:   identity.SessionID,
+		JTI:         identity.JTI,
+		ClientID:    identity.ClientID,
 	}, nil
+}
+
+func validProjectID(projectID string) bool {
+	if len(projectID) < 10 || len(projectID) > 12 {
+		return false
+	}
+	for _, char := range projectID {
+		if (char < '0' || char > '9') && (char < 'a' || char > 'f') {
+			return false
+		}
+	}
+	return true
 }

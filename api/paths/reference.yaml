@@ -9,6 +9,8 @@ security:
 
 paths:
   /reference:
+    parameters:
+      - { $ref: '../shared/parameters.yaml#/components/parameters/ProjectId' }
     get:
       tags: [reference]
       summary: Every dictionary the UI needs

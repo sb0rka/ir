@@ -16,13 +16,12 @@ import (
 func Load() (Config, error) {
 	cfg := Config{
 		Server: ServerConfig{
-			Addr:                   coreconfig.GetStringEnv("SERVER_ADDR", "0.0.0.0"),
-			Port:                   coreconfig.GetStringEnv("SERVER_PORT", "8090"),
-			CORSWhitelist:          coreconfig.ParseCORSWhitelist(coreconfig.GetStringEnv("SERVER_CORS_WHITELIST", "")),
-			DefaultRole:            coreconfig.GetStringEnv("INV_DEFAULT_ROLE", ""),
+			Addr:          coreconfig.GetStringEnv("SERVER_ADDR", "0.0.0.0"),
+			Port:          coreconfig.GetStringEnv("SERVER_PORT", "8090"),
+			CORSWhitelist: coreconfig.ParseCORSWhitelist(coreconfig.GetStringEnv("SERVER_CORS_WHITELIST", "")),
 			Auth: AuthConfig{
 				AccessTokenIssuer:   coreconfig.GetStringEnv("ACCESS_TOKEN_ISSUER", ""),
-				AccessTokenAudience: coreconfig.GetStringEnv("ACCESS_TOKEN_AUDIENCE", ""),
+				AccessTokenAudience: coreconfig.GetStringEnv("ACCESS_TOKEN_AUDIENCE", "api.local"),
 				AccessTokenKid:      coreconfig.GetStringEnv("ACCESS_TOKEN_KID", ""),
 				AccessTokenTyp:      coreconfig.GetStringEnv("ACCESS_TOKEN_TYP", "access+jwt"),
 			},
@@ -137,4 +136,3 @@ func loadPrivateKey() (ed25519.PublicKey, error) {
 	}
 	return public, nil
 }
-

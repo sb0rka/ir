@@ -1,7 +1,7 @@
 # Контекст сборки — корень монорепы: нужен packages/contract по replace-директиве.
 FROM golang:1.25-alpine AS build
 
-ARG BINARY=api
+ARG BINARY=ir-api
 
 WORKDIR /src
 

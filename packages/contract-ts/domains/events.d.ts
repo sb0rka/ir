@@ -7,7 +7,10 @@ export interface paths {
     "/investigations/{investigation_id}/events": {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                /** @description Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
             path: {
                 /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
                 investigation_id: components["parameters"]["InvestigationId"];
@@ -30,7 +33,10 @@ export interface paths {
     "/events": {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                /** @description Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -51,7 +57,10 @@ export interface paths {
     "/events/{event_id}": {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                /** @description Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
             path: {
                 /** @description Identifier of an event already pulled into an investigation. */
                 event_id: components["parameters"]["EventId"];
@@ -79,7 +88,10 @@ export interface paths {
     "/events/{event_id}/investigations/{investigation_id}": {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                /** @description Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
             path: {
                 /** @description Identifier of an event already pulled into an investigation. */
                 event_id: components["parameters"]["EventId"];
@@ -363,6 +375,8 @@ export interface components {
         };
     };
     parameters: {
+        /** @description Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored. */
+        ProjectId: string;
         /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
         InvestigationId: string;
         /** @description How many items to return. The server may return fewer, never more. */
@@ -398,7 +412,10 @@ export interface operations {
                 /** @description Opaque keyset cursor taken from `next_cursor` of the previous page. Encodes a position, not a query — do not build one by hand. Omit it to start from the beginning. */
                 cursor?: components["parameters"]["Cursor"];
             };
-            header?: never;
+            header: {
+                /** @description Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
             path: {
                 /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
                 investigation_id: components["parameters"]["InvestigationId"];
@@ -427,7 +444,10 @@ export interface operations {
     attachEvents: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                /** @description Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -459,7 +479,10 @@ export interface operations {
     getEvent: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                /** @description Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
             path: {
                 /** @description Identifier of an event already pulled into an investigation. */
                 event_id: components["parameters"]["EventId"];
@@ -487,7 +510,10 @@ export interface operations {
     deleteEvent: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                /** @description Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
             path: {
                 /** @description Identifier of an event already pulled into an investigation. */
                 event_id: components["parameters"]["EventId"];
@@ -514,7 +540,10 @@ export interface operations {
     detachEvent: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                /** @description Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
             path: {
                 /** @description Identifier of an event already pulled into an investigation. */
                 event_id: components["parameters"]["EventId"];

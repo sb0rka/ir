@@ -239,10 +239,6 @@ type InvestigationCreate struct {
 	// ParentId The investigation this one refines. Omit it to open a root case.
 	ParentId *openapi_types.UUID `json:"parent_id,omitempty"`
 
-	// ProjectId Project that owns the case — the tenant. Required for a root, ignored for a child, which inherits its parent's.
-	// Temporary: the tenant belongs in the token, not in a request body. It is accepted for now so the frontend can work before auth is wired up, and goes away once it is.
-	ProjectId *string `json:"project_id,omitempty"`
-
 	// Severity Initial assessment. Can be revised later.
 	Severity *Severity `json:"severity,omitempty"`
 
@@ -382,6 +378,9 @@ type InvestigationId = openapi_types.UUID
 // Limit defines model for Limit.
 type Limit = int
 
+// ProjectId defines model for ProjectId.
+type ProjectId = string
+
 // Conflict Body of every non-2xx response. Clients branch on `code`, not on the HTTP status: the status says what happened at the protocol level, the code says what happened in the domain.
 type Conflict = ErrorResponse
 
@@ -422,6 +421,39 @@ type ListInvestigationsParams struct {
 
 	// Cursor Opaque keyset cursor taken from `next_cursor` of the previous page. Encodes a position, not a query — do not build one by hand. Omit it to start from the beginning.
 	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+
+	// XProjectID Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored.
+	XProjectID ProjectId `json:"X-Project-ID"`
+}
+
+// CreateInvestigationParams defines parameters for CreateInvestigation.
+type CreateInvestigationParams struct {
+	// XProjectID Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored.
+	XProjectID ProjectId `json:"X-Project-ID"`
+}
+
+// DeleteInvestigationParams defines parameters for DeleteInvestigation.
+type DeleteInvestigationParams struct {
+	// XProjectID Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored.
+	XProjectID ProjectId `json:"X-Project-ID"`
+}
+
+// GetInvestigationParams defines parameters for GetInvestigation.
+type GetInvestigationParams struct {
+	// XProjectID Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored.
+	XProjectID ProjectId `json:"X-Project-ID"`
+}
+
+// UpdateInvestigationParams defines parameters for UpdateInvestigation.
+type UpdateInvestigationParams struct {
+	// XProjectID Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored.
+	XProjectID ProjectId `json:"X-Project-ID"`
+}
+
+// GetInvestigationTreeParams defines parameters for GetInvestigationTree.
+type GetInvestigationTreeParams struct {
+	// XProjectID Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored.
+	XProjectID ProjectId `json:"X-Project-ID"`
 }
 
 // CreateInvestigationJSONRequestBody defines body for CreateInvestigation for application/json ContentType.
@@ -437,19 +469,19 @@ type ServerInterface interface {
 	ListInvestigations(w http.ResponseWriter, r *http.Request, params ListInvestigationsParams)
 	// CreateInvestigation Open an investigation or a hypothesis under one
 	// (POST /investigations)
-	CreateInvestigation(w http.ResponseWriter, r *http.Request)
+	CreateInvestigation(w http.ResponseWriter, r *http.Request, params CreateInvestigationParams)
 	// DeleteInvestigation Delete an investigation
 	// (DELETE /investigations/{investigation_id})
-	DeleteInvestigation(w http.ResponseWriter, r *http.Request, investigationId InvestigationId)
+	DeleteInvestigation(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, params DeleteInvestigationParams)
 	// GetInvestigation One investigation
 	// (GET /investigations/{investigation_id})
-	GetInvestigation(w http.ResponseWriter, r *http.Request, investigationId InvestigationId)
+	GetInvestigation(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, params GetInvestigationParams)
 	// UpdateInvestigation Update an investigation
 	// (PATCH /investigations/{investigation_id})
-	UpdateInvestigation(w http.ResponseWriter, r *http.Request, investigationId InvestigationId)
+	UpdateInvestigation(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, params UpdateInvestigationParams)
 	// GetInvestigationTree The whole subtree
 	// (GET /investigations/{investigation_id}/tree)
-	GetInvestigationTree(w http.ResponseWriter, r *http.Request, investigationId InvestigationId)
+	GetInvestigationTree(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, params GetInvestigationTreeParams)
 }
 
 // ServerInterfaceWrapper converts contexts to parameters.
@@ -548,6 +580,31 @@ func (siw *ServerInterfaceWrapper) ListInvestigations(w http.ResponseWriter, r *
 		return
 	}
 
+	headers := r.Header
+
+	// ------------- Required header parameter "X-Project-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Project-ID")]; found {
+		var XProjectID ProjectId
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Project-ID", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Project-ID", valueList[0], &XProjectID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Project-ID", Err: err})
+			return
+		}
+
+		params.XProjectID = XProjectID
+
+	} else {
+		err := fmt.Errorf("Header parameter X-Project-ID is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Project-ID", Err: err})
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ListInvestigations(w, r, params)
 	}))
@@ -562,8 +619,39 @@ func (siw *ServerInterfaceWrapper) ListInvestigations(w http.ResponseWriter, r *
 // CreateInvestigation operation middleware
 func (siw *ServerInterfaceWrapper) CreateInvestigation(w http.ResponseWriter, r *http.Request) {
 
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params CreateInvestigationParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "X-Project-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Project-ID")]; found {
+		var XProjectID ProjectId
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Project-ID", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Project-ID", valueList[0], &XProjectID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Project-ID", Err: err})
+			return
+		}
+
+		params.XProjectID = XProjectID
+
+	} else {
+		err := fmt.Errorf("Header parameter X-Project-ID is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Project-ID", Err: err})
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.CreateInvestigation(w, r)
+		siw.Handler.CreateInvestigation(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -588,8 +676,36 @@ func (siw *ServerInterfaceWrapper) DeleteInvestigation(w http.ResponseWriter, r 
 		return
 	}
 
+	// Parameter object where we will unmarshal all parameters from the context
+	var params DeleteInvestigationParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "X-Project-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Project-ID")]; found {
+		var XProjectID ProjectId
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Project-ID", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Project-ID", valueList[0], &XProjectID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Project-ID", Err: err})
+			return
+		}
+
+		params.XProjectID = XProjectID
+
+	} else {
+		err := fmt.Errorf("Header parameter X-Project-ID is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Project-ID", Err: err})
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.DeleteInvestigation(w, r, investigationId)
+		siw.Handler.DeleteInvestigation(w, r, investigationId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -614,8 +730,36 @@ func (siw *ServerInterfaceWrapper) GetInvestigation(w http.ResponseWriter, r *ht
 		return
 	}
 
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetInvestigationParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "X-Project-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Project-ID")]; found {
+		var XProjectID ProjectId
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Project-ID", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Project-ID", valueList[0], &XProjectID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Project-ID", Err: err})
+			return
+		}
+
+		params.XProjectID = XProjectID
+
+	} else {
+		err := fmt.Errorf("Header parameter X-Project-ID is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Project-ID", Err: err})
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetInvestigation(w, r, investigationId)
+		siw.Handler.GetInvestigation(w, r, investigationId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -640,8 +784,36 @@ func (siw *ServerInterfaceWrapper) UpdateInvestigation(w http.ResponseWriter, r 
 		return
 	}
 
+	// Parameter object where we will unmarshal all parameters from the context
+	var params UpdateInvestigationParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "X-Project-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Project-ID")]; found {
+		var XProjectID ProjectId
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Project-ID", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Project-ID", valueList[0], &XProjectID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Project-ID", Err: err})
+			return
+		}
+
+		params.XProjectID = XProjectID
+
+	} else {
+		err := fmt.Errorf("Header parameter X-Project-ID is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Project-ID", Err: err})
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.UpdateInvestigation(w, r, investigationId)
+		siw.Handler.UpdateInvestigation(w, r, investigationId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -666,8 +838,36 @@ func (siw *ServerInterfaceWrapper) GetInvestigationTree(w http.ResponseWriter, r
 		return
 	}
 
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetInvestigationTreeParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "X-Project-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Project-ID")]; found {
+		var XProjectID ProjectId
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Project-ID", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Project-ID", valueList[0], &XProjectID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Project-ID", Err: err})
+			return
+		}
+
+		params.XProjectID = XProjectID
+
+	} else {
+		err := fmt.Errorf("Header parameter X-Project-ID is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Project-ID", Err: err})
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetInvestigationTree(w, r, investigationId)
+		siw.Handler.GetInvestigationTree(w, r, investigationId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -914,7 +1114,8 @@ func (response ListInvestigations501JSONResponse) VisitListInvestigationsRespons
 }
 
 type CreateInvestigationRequestObject struct {
-	Body *CreateInvestigationJSONRequestBody
+	Params CreateInvestigationParams
+	Body   *CreateInvestigationJSONRequestBody
 }
 
 type CreateInvestigationResponseObject interface {
@@ -1021,6 +1222,7 @@ func (response CreateInvestigation501JSONResponse) VisitCreateInvestigationRespo
 
 type DeleteInvestigationRequestObject struct {
 	InvestigationId InvestigationId `json:"investigation_id"`
+	Params          DeleteInvestigationParams
 }
 
 type DeleteInvestigationResponseObject interface {
@@ -1107,6 +1309,7 @@ func (response DeleteInvestigation501JSONResponse) VisitDeleteInvestigationRespo
 
 type GetInvestigationRequestObject struct {
 	InvestigationId InvestigationId `json:"investigation_id"`
+	Params          GetInvestigationParams
 }
 
 type GetInvestigationResponseObject interface {
@@ -1199,6 +1402,7 @@ func (response GetInvestigation501JSONResponse) VisitGetInvestigationResponse(w 
 
 type UpdateInvestigationRequestObject struct {
 	InvestigationId InvestigationId `json:"investigation_id"`
+	Params          UpdateInvestigationParams
 	Body            *UpdateInvestigationJSONRequestBody
 }
 
@@ -1320,6 +1524,7 @@ func (response UpdateInvestigation501JSONResponse) VisitUpdateInvestigationRespo
 
 type GetInvestigationTreeRequestObject struct {
 	InvestigationId InvestigationId `json:"investigation_id"`
+	Params          GetInvestigationTreeParams
 }
 
 type GetInvestigationTreeResponseObject interface {
@@ -1498,8 +1703,10 @@ func (sh *strictHandler) ListInvestigations(w http.ResponseWriter, r *http.Reque
 }
 
 // CreateInvestigation operation middleware
-func (sh *strictHandler) CreateInvestigation(w http.ResponseWriter, r *http.Request) {
+func (sh *strictHandler) CreateInvestigation(w http.ResponseWriter, r *http.Request, params CreateInvestigationParams) {
 	var request CreateInvestigationRequestObject
+
+	request.Params = params
 
 	var body CreateInvestigationJSONRequestBody
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -1529,10 +1736,11 @@ func (sh *strictHandler) CreateInvestigation(w http.ResponseWriter, r *http.Requ
 }
 
 // DeleteInvestigation operation middleware
-func (sh *strictHandler) DeleteInvestigation(w http.ResponseWriter, r *http.Request, investigationId InvestigationId) {
+func (sh *strictHandler) DeleteInvestigation(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, params DeleteInvestigationParams) {
 	var request DeleteInvestigationRequestObject
 
 	request.InvestigationId = investigationId
+	request.Params = params
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
 		return sh.ssi.DeleteInvestigation(ctx, request.(DeleteInvestigationRequestObject))
@@ -1555,10 +1763,11 @@ func (sh *strictHandler) DeleteInvestigation(w http.ResponseWriter, r *http.Requ
 }
 
 // GetInvestigation operation middleware
-func (sh *strictHandler) GetInvestigation(w http.ResponseWriter, r *http.Request, investigationId InvestigationId) {
+func (sh *strictHandler) GetInvestigation(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, params GetInvestigationParams) {
 	var request GetInvestigationRequestObject
 
 	request.InvestigationId = investigationId
+	request.Params = params
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
 		return sh.ssi.GetInvestigation(ctx, request.(GetInvestigationRequestObject))
@@ -1581,10 +1790,11 @@ func (sh *strictHandler) GetInvestigation(w http.ResponseWriter, r *http.Request
 }
 
 // UpdateInvestigation operation middleware
-func (sh *strictHandler) UpdateInvestigation(w http.ResponseWriter, r *http.Request, investigationId InvestigationId) {
+func (sh *strictHandler) UpdateInvestigation(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, params UpdateInvestigationParams) {
 	var request UpdateInvestigationRequestObject
 
 	request.InvestigationId = investigationId
+	request.Params = params
 
 	var body UpdateInvestigationJSONRequestBody
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -1614,10 +1824,11 @@ func (sh *strictHandler) UpdateInvestigation(w http.ResponseWriter, r *http.Requ
 }
 
 // GetInvestigationTree operation middleware
-func (sh *strictHandler) GetInvestigationTree(w http.ResponseWriter, r *http.Request, investigationId InvestigationId) {
+func (sh *strictHandler) GetInvestigationTree(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, params GetInvestigationTreeParams) {
 	var request GetInvestigationTreeRequestObject
 
 	request.InvestigationId = investigationId
+	request.Params = params
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
 		return sh.ssi.GetInvestigationTree(ctx, request.(GetInvestigationTreeRequestObject))

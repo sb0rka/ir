@@ -262,6 +262,9 @@ type InvestigationId = openapi_types.UUID
 // Limit defines model for Limit.
 type Limit = int
 
+// ProjectId defines model for ProjectId.
+type ProjectId = string
+
 // Conflict Body of every non-2xx response. Clients branch on `code`, not on the HTTP status: the status says what happened at the protocol level, the code says what happened in the domain.
 type Conflict = ErrorResponse
 
@@ -285,6 +288,30 @@ type Unauthorized = ErrorResponse
 
 // ValidationError Body of every non-2xx response. Clients branch on `code`, not on the HTTP status: the status says what happened at the protocol level, the code says what happened in the domain.
 type ValidationError = ErrorResponse
+
+// AttachEventsParams defines parameters for AttachEvents.
+type AttachEventsParams struct {
+	// XProjectID Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored.
+	XProjectID ProjectId `json:"X-Project-ID"`
+}
+
+// DeleteEventParams defines parameters for DeleteEvent.
+type DeleteEventParams struct {
+	// XProjectID Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored.
+	XProjectID ProjectId `json:"X-Project-ID"`
+}
+
+// GetEventParams defines parameters for GetEvent.
+type GetEventParams struct {
+	// XProjectID Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored.
+	XProjectID ProjectId `json:"X-Project-ID"`
+}
+
+// DetachEventParams defines parameters for DetachEvent.
+type DetachEventParams struct {
+	// XProjectID Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored.
+	XProjectID ProjectId `json:"X-Project-ID"`
+}
 
 // ListEventsParams defines parameters for ListEvents.
 type ListEventsParams struct {
@@ -311,6 +338,9 @@ type ListEventsParams struct {
 
 	// Cursor Opaque keyset cursor taken from `next_cursor` of the previous page. Encodes a position, not a query — do not build one by hand. Omit it to start from the beginning.
 	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+
+	// XProjectID Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored.
+	XProjectID ProjectId `json:"X-Project-ID"`
 }
 
 // AttachEventsJSONRequestBody defines body for AttachEvents for application/json ContentType.
@@ -320,16 +350,16 @@ type AttachEventsJSONRequestBody = EventAttachRequest
 type ServerInterface interface {
 	// AttachEvents Pull events into an investigation
 	// (POST /events)
-	AttachEvents(w http.ResponseWriter, r *http.Request)
+	AttachEvents(w http.ResponseWriter, r *http.Request, params AttachEventsParams)
 	// DeleteEvent Delete an event from the tenant
 	// (DELETE /events/{event_id})
-	DeleteEvent(w http.ResponseWriter, r *http.Request, eventId EventId)
+	DeleteEvent(w http.ResponseWriter, r *http.Request, eventId EventId, params DeleteEventParams)
 	// GetEvent One event in full
 	// (GET /events/{event_id})
-	GetEvent(w http.ResponseWriter, r *http.Request, eventId EventId)
+	GetEvent(w http.ResponseWriter, r *http.Request, eventId EventId, params GetEventParams)
 	// DetachEvent Drop an event from the investigation
 	// (DELETE /events/{event_id}/investigations/{investigation_id})
-	DetachEvent(w http.ResponseWriter, r *http.Request, eventId EventId, investigationId InvestigationId)
+	DetachEvent(w http.ResponseWriter, r *http.Request, eventId EventId, investigationId InvestigationId, params DetachEventParams)
 	// ListEvents Timeline of the investigation
 	// (GET /investigations/{investigation_id}/events)
 	ListEvents(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, params ListEventsParams)
@@ -347,8 +377,39 @@ type MiddlewareFunc func(http.Handler) http.Handler
 // AttachEvents operation middleware
 func (siw *ServerInterfaceWrapper) AttachEvents(w http.ResponseWriter, r *http.Request) {
 
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params AttachEventsParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "X-Project-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Project-ID")]; found {
+		var XProjectID ProjectId
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Project-ID", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Project-ID", valueList[0], &XProjectID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Project-ID", Err: err})
+			return
+		}
+
+		params.XProjectID = XProjectID
+
+	} else {
+		err := fmt.Errorf("Header parameter X-Project-ID is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Project-ID", Err: err})
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.AttachEvents(w, r)
+		siw.Handler.AttachEvents(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -373,8 +434,36 @@ func (siw *ServerInterfaceWrapper) DeleteEvent(w http.ResponseWriter, r *http.Re
 		return
 	}
 
+	// Parameter object where we will unmarshal all parameters from the context
+	var params DeleteEventParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "X-Project-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Project-ID")]; found {
+		var XProjectID ProjectId
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Project-ID", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Project-ID", valueList[0], &XProjectID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Project-ID", Err: err})
+			return
+		}
+
+		params.XProjectID = XProjectID
+
+	} else {
+		err := fmt.Errorf("Header parameter X-Project-ID is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Project-ID", Err: err})
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.DeleteEvent(w, r, eventId)
+		siw.Handler.DeleteEvent(w, r, eventId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -399,8 +488,36 @@ func (siw *ServerInterfaceWrapper) GetEvent(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetEventParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "X-Project-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Project-ID")]; found {
+		var XProjectID ProjectId
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Project-ID", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Project-ID", valueList[0], &XProjectID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Project-ID", Err: err})
+			return
+		}
+
+		params.XProjectID = XProjectID
+
+	} else {
+		err := fmt.Errorf("Header parameter X-Project-ID is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Project-ID", Err: err})
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetEvent(w, r, eventId)
+		siw.Handler.GetEvent(w, r, eventId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -434,8 +551,36 @@ func (siw *ServerInterfaceWrapper) DetachEvent(w http.ResponseWriter, r *http.Re
 		return
 	}
 
+	// Parameter object where we will unmarshal all parameters from the context
+	var params DetachEventParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "X-Project-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Project-ID")]; found {
+		var XProjectID ProjectId
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Project-ID", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Project-ID", valueList[0], &XProjectID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Project-ID", Err: err})
+			return
+		}
+
+		params.XProjectID = XProjectID
+
+	} else {
+		err := fmt.Errorf("Header parameter X-Project-ID is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Project-ID", Err: err})
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.DetachEvent(w, r, eventId, investigationId)
+		siw.Handler.DetachEvent(w, r, eventId, investigationId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -564,6 +709,31 @@ func (siw *ServerInterfaceWrapper) ListEvents(w http.ResponseWriter, r *http.Req
 		} else {
 			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
 		}
+		return
+	}
+
+	headers := r.Header
+
+	// ------------- Required header parameter "X-Project-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Project-ID")]; found {
+		var XProjectID ProjectId
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Project-ID", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Project-ID", valueList[0], &XProjectID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Project-ID", Err: err})
+			return
+		}
+
+		params.XProjectID = XProjectID
+
+	} else {
+		err := fmt.Errorf("Header parameter X-Project-ID is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Project-ID", Err: err})
 		return
 	}
 
@@ -724,7 +894,8 @@ type UnauthorizedJSONResponse ErrorResponse
 type ValidationErrorJSONResponse ErrorResponse
 
 type AttachEventsRequestObject struct {
-	Body *AttachEventsJSONRequestBody
+	Params AttachEventsParams
+	Body   *AttachEventsJSONRequestBody
 }
 
 type AttachEventsResponseObject interface {
@@ -859,6 +1030,7 @@ func (response AttachEvents502JSONResponse) VisitAttachEventsResponse(w http.Res
 
 type DeleteEventRequestObject struct {
 	EventId EventId `json:"event_id"`
+	Params  DeleteEventParams
 }
 
 type DeleteEventResponseObject interface {
@@ -959,6 +1131,7 @@ func (response DeleteEvent501JSONResponse) VisitDeleteEventResponse(w http.Respo
 
 type GetEventRequestObject struct {
 	EventId EventId `json:"event_id"`
+	Params  GetEventParams
 }
 
 type GetEventResponseObject interface {
@@ -1052,6 +1225,7 @@ func (response GetEvent501JSONResponse) VisitGetEventResponse(w http.ResponseWri
 type DetachEventRequestObject struct {
 	EventId         EventId         `json:"event_id"`
 	InvestigationId InvestigationId `json:"investigation_id"`
+	Params          DetachEventParams
 }
 
 type DetachEventResponseObject interface {
@@ -1316,8 +1490,10 @@ type strictHandler struct {
 }
 
 // AttachEvents operation middleware
-func (sh *strictHandler) AttachEvents(w http.ResponseWriter, r *http.Request) {
+func (sh *strictHandler) AttachEvents(w http.ResponseWriter, r *http.Request, params AttachEventsParams) {
 	var request AttachEventsRequestObject
+
+	request.Params = params
 
 	var body AttachEventsJSONRequestBody
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -1347,10 +1523,11 @@ func (sh *strictHandler) AttachEvents(w http.ResponseWriter, r *http.Request) {
 }
 
 // DeleteEvent operation middleware
-func (sh *strictHandler) DeleteEvent(w http.ResponseWriter, r *http.Request, eventId EventId) {
+func (sh *strictHandler) DeleteEvent(w http.ResponseWriter, r *http.Request, eventId EventId, params DeleteEventParams) {
 	var request DeleteEventRequestObject
 
 	request.EventId = eventId
+	request.Params = params
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
 		return sh.ssi.DeleteEvent(ctx, request.(DeleteEventRequestObject))
@@ -1373,10 +1550,11 @@ func (sh *strictHandler) DeleteEvent(w http.ResponseWriter, r *http.Request, eve
 }
 
 // GetEvent operation middleware
-func (sh *strictHandler) GetEvent(w http.ResponseWriter, r *http.Request, eventId EventId) {
+func (sh *strictHandler) GetEvent(w http.ResponseWriter, r *http.Request, eventId EventId, params GetEventParams) {
 	var request GetEventRequestObject
 
 	request.EventId = eventId
+	request.Params = params
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
 		return sh.ssi.GetEvent(ctx, request.(GetEventRequestObject))
@@ -1399,11 +1577,12 @@ func (sh *strictHandler) GetEvent(w http.ResponseWriter, r *http.Request, eventI
 }
 
 // DetachEvent operation middleware
-func (sh *strictHandler) DetachEvent(w http.ResponseWriter, r *http.Request, eventId EventId, investigationId InvestigationId) {
+func (sh *strictHandler) DetachEvent(w http.ResponseWriter, r *http.Request, eventId EventId, investigationId InvestigationId, params DetachEventParams) {
 	var request DetachEventRequestObject
 
 	request.EventId = eventId
 	request.InvestigationId = investigationId
+	request.Params = params
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
 		return sh.ssi.DetachEvent(ctx, request.(DetachEventRequestObject))

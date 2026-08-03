@@ -54,5 +54,5 @@ components:
       description: >-
         Ed25519-signed access token issued by sb0rka auth. The service verifies
         it with the public key only — it never holds signing material. The
-        tenant comes from the token, so no request body can widen a caller's
-        scope.
+        required X-Project-ID header selects the tenant, and access is granted
+        only when the token subject has an IR role in that project.

@@ -46,8 +46,8 @@ github.com/rogpeppe/go-internal v1.15.0 h1:D0RCU5rMAp+SpgkiNdrjfJ+LX4J1M32V2NeCY
 github.com/rogpeppe/go-internal v1.15.0/go.mod h1:DrUVZyrJU+txYW5/1kwtXQSMFio52ZOxX7yM1VHvnxs=
 github.com/santhosh-tekuri/jsonschema/v6 v6.0.2 h1:KRzFb2m7YtdldCEkzs6KqmJw4nqEVZGK7IN2kJkjTuQ=
 github.com/santhosh-tekuri/jsonschema/v6 v6.0.2/go.mod h1:JXeL+ps8p7/KNMjDQk3TCwPpBy0wYklyWTfbkIzdIFU=
-github.com/sb0rka/sb0rka/packages/core v0.0.1 h1:BpeXgfbgk0mTiYH9KPat5kP789nQEYtynrHAYDvAjp0=
-github.com/sb0rka/sb0rka/packages/core v0.0.1/go.mod h1:HTNT89Roafw+jv5mh/fkUHWd+JGrmohzZhAoZjKtkc8=
+github.com/sb0rka/sb0rka/packages/core v0.0.2-0.20260802194243-a949d19b8cab h1:KUyjaxj+DDfzat9qqPIecfHuCnhiCpANFNIB8tAr2nc=
+github.com/sb0rka/sb0rka/packages/core v0.0.2-0.20260802194243-a949d19b8cab/go.mod h1:Y+i4GHnhZzDZ7YJ+dHLbWvOsdw/vnUsE7NBsn1w6Qvk=
 github.com/spkg/bom v0.0.0-20160624110644-59b7046e48ad/go.mod h1:qLr4V1qq6nMqFKkMo8ZTx3f+BZEkzsRUY10Xsm2mwU0=
 github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
 github.com/stretchr/testify v1.3.0/go.mod h1:M5WIy9Dh21IEIfnGCwXGc5bZfKNJtfHm1UVUgZn+9EI=

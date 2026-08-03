@@ -107,8 +107,8 @@ CREATE TABLE IF NOT EXISTS investigations (
 
     CONSTRAINT pk_investigations PRIMARY KEY (id),
     CONSTRAINT uq_investigations_id_project UNIQUE (id, project_id),
-    CONSTRAINT fk_investigations_parent_id_investigations FOREIGN KEY (parent_id)
-        REFERENCES investigations (id) ON DELETE CASCADE,
+    CONSTRAINT fk_investigations_parent_id_investigations FOREIGN KEY (parent_id, project_id)
+        REFERENCES investigations (id, project_id) ON DELETE CASCADE,
     CONSTRAINT ck_investigations_closed_verdict
         CHECK (status <> 'closed' OR verdict IS NOT NULL),
     CONSTRAINT ck_investigations_rejected_reason
@@ -242,10 +242,11 @@ CREATE TABLE IF NOT EXISTS investigation_events (
     reason VARCHAR,
 
     CONSTRAINT pk_investigation_events PRIMARY KEY (investigation_id, event_id),
-    CONSTRAINT fk_inv_events_investigation FOREIGN KEY (investigation_id)
-        REFERENCES investigations (id) ON DELETE CASCADE,
-    CONSTRAINT fk_inv_events_event FOREIGN KEY (event_id)
-        REFERENCES events (id) ON DELETE CASCADE
+    CONSTRAINT uq_inv_events_tenant UNIQUE (investigation_id, event_id, project_id),
+    CONSTRAINT fk_inv_events_investigation FOREIGN KEY (investigation_id, project_id)
+        REFERENCES investigations (id, project_id) ON DELETE CASCADE,
+    CONSTRAINT fk_inv_events_event FOREIGN KEY (event_id, project_id)
+        REFERENCES events (id, project_id) ON DELETE CASCADE
 );
 
 CREATE INDEX IF NOT EXISTS ix_inv_events_event ON investigation_events (event_id);
@@ -262,10 +263,11 @@ CREATE TABLE IF NOT EXISTS investigation_entities (
     added_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
 
     CONSTRAINT pk_investigation_entities PRIMARY KEY (investigation_id, entity_id),
-    CONSTRAINT fk_inv_entities_investigation FOREIGN KEY (investigation_id)
-        REFERENCES investigations (id) ON DELETE CASCADE,
-    CONSTRAINT fk_inv_entities_entity FOREIGN KEY (entity_id)
-        REFERENCES entities (id) ON DELETE CASCADE
+    CONSTRAINT uq_inv_entities_tenant UNIQUE (investigation_id, entity_id, project_id),
+    CONSTRAINT fk_inv_entities_investigation FOREIGN KEY (investigation_id, project_id)
+        REFERENCES investigations (id, project_id) ON DELETE CASCADE,
+    CONSTRAINT fk_inv_entities_entity FOREIGN KEY (entity_id, project_id)
+        REFERENCES entities (id, project_id) ON DELETE CASCADE
 );
 
 CREATE INDEX IF NOT EXISTS ix_inv_entities_entity ON investigation_entities (entity_id);
@@ -291,15 +293,15 @@ CREATE TABLE IF NOT EXISTS graph_nodes (
         (node_type = 'entity' AND entity_id IS NOT NULL AND event_id IS NULL) OR
         (node_type = 'event'  AND event_id  IS NOT NULL AND entity_id IS NULL)
     ),
-    CONSTRAINT fk_graph_nodes_investigation_id_investigations FOREIGN KEY (investigation_id)
-        REFERENCES investigations (id) ON DELETE CASCADE,
+    CONSTRAINT fk_graph_nodes_investigation_id_investigations FOREIGN KEY (investigation_id, project_id)
+        REFERENCES investigations (id, project_id) ON DELETE CASCADE,
     -- Ссылка не на общую строку, а на её принадлежность этому расследованию:
     -- на граф кейса не попадёт то, что в кейс не затянуто, а отвязка события
     -- унесёт узел и висящие на нём рёбра.
-    CONSTRAINT fk_graph_nodes_entity FOREIGN KEY (investigation_id, entity_id)
-        REFERENCES investigation_entities (investigation_id, entity_id) ON DELETE CASCADE,
-    CONSTRAINT fk_graph_nodes_event FOREIGN KEY (investigation_id, event_id)
-        REFERENCES investigation_events (investigation_id, event_id) ON DELETE CASCADE
+    CONSTRAINT fk_graph_nodes_entity FOREIGN KEY (investigation_id, entity_id, project_id)
+        REFERENCES investigation_entities (investigation_id, entity_id, project_id) ON DELETE CASCADE,
+    CONSTRAINT fk_graph_nodes_event FOREIGN KEY (investigation_id, event_id, project_id)
+        REFERENCES investigation_events (investigation_id, event_id, project_id) ON DELETE CASCADE
 );
 
 -- Одна сущность (событие) — один узел в расследовании, иначе рёбра расщепятся
@@ -337,8 +339,8 @@ CREATE TABLE IF NOT EXISTS edges (
     CONSTRAINT uq_edges_triple UNIQUE (investigation_id, source_node_id, target_node_id, relation_code),
     CONSTRAINT ck_edges_rejected_reason
         CHECK (status <> 'rejected' OR reject_reason IS NOT NULL),
-    CONSTRAINT fk_edges_investigation_id_investigations FOREIGN KEY (investigation_id)
-        REFERENCES investigations (id) ON DELETE CASCADE,
+    CONSTRAINT fk_edges_investigation_id_investigations FOREIGN KEY (investigation_id, project_id)
+        REFERENCES investigations (id, project_id) ON DELETE CASCADE,
     -- Составными, а не по одному id: иначе ребро одного расследования могло бы
     -- связать узлы другого — обе строки валидны по отдельности, и заметить это
     -- было бы нечем. Ключ uq_graph_nodes_id_investigation заведён ровно под это.
