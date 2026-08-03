@@ -71,7 +71,7 @@ paths:
       summary: Pull events into an investigation
       description: >-
         Ingests events from explicit source references or a source query, then
-        links them to an investigation. Existing tenant events are reused.
+        links them to an investigation. Existing project events are reused.
         Repeated links are ignored; a request may include at most 500 events.
       operationId: attachEvents
       requestBody:
@@ -116,9 +116,9 @@ paths:
         '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
     delete:
       tags: [events]
-      summary: Delete an event from the tenant
+      summary: Delete an event from the project
       description: >-
-        Deletes a tenant event. Returns 409 while it is linked to any
+        Deletes a project event. Returns 409 while it is linked to any
         investigation.
       operationId: deleteEvent
       responses:
@@ -141,7 +141,7 @@ paths:
       summary: Drop an event from the investigation
       description: >-
         Removes the investigation link, graph node and connected edges. The
-        tenant event remains. Returns 409 if a confirmed edge cites the event.
+        project event remains. Returns 409 if a confirmed edge cites the event.
       operationId: detachEvent
       responses:
         '204':
@@ -158,14 +158,14 @@ components:
     Event:
       type: object
       description: >-
-        An immutable tenant event. Investigation membership is stored
+        An immutable project event. Investigation membership is stored
         separately, so one event may be linked to multiple investigations.
       required: [id, source_code, source_event_id, event_type, occurred_at, ingested_at]
       properties:
         id:
           type: string
           format: uuid
-          description: Identifier of the event within the tenant.
+          description: Identifier of the event within the project.
         investigation_ids:
           type: array
           description: Investigations linked to this event.
@@ -231,7 +231,7 @@ components:
         id:
           type: string
           format: uuid
-          description: Identifier of the event within the tenant.
+          description: Identifier of the event within the project.
         attached_at:
           type: string
           format: date-time
@@ -356,7 +356,7 @@ components:
           description: Events newly added to the case, whether ingested now or already known.
         reused:
           type: integer
-          description: Existing tenant events newly linked to the investigation.
+          description: Existing project events newly linked to the investigation.
         duplicates:
           type: integer
           description: Events already linked to the investigation and skipped.

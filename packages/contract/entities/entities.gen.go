@@ -78,7 +78,7 @@ func (e ErrorResponseErrorCode) Valid() bool {
 	}
 }
 
-// Entity A tenant-scoped host, account, process, address or hash. Investigation membership is stored separately.
+// Entity A project-scoped host, account, process, address or hash. Investigation membership is stored separately.
 type Entity struct {
 	// AddedVia How the entity was linked to the listed investigation.
 	AddedVia *EntityOrigin `json:"added_via,omitempty"`
@@ -89,13 +89,13 @@ type Entity struct {
 	// DisplayName Label for the UI. Falls back to canonical_key when absent.
 	DisplayName *string `json:"display_name,omitempty"`
 
-	// FirstSeen Earliest tenant event that mentions the entity.
+	// FirstSeen Earliest project event that mentions the entity.
 	FirstSeen *time.Time `json:"first_seen,omitempty"`
 
-	// Id Identifier of the entity within the tenant.
+	// Id Identifier of the entity within the project.
 	Id openapi_types.UUID `json:"id"`
 
-	// LastSeen Latest tenant event that mentions the entity.
+	// LastSeen Latest project event that mentions the entity.
 	LastSeen *time.Time `json:"last_seen,omitempty"`
 
 	// Metadata Source-specific attributes.
@@ -105,12 +105,12 @@ type Entity struct {
 	TypeCode string `json:"type_code"`
 }
 
-// EntityCard Tenant-wide context for an entity.
+// EntityCard Project-wide context for an entity.
 type EntityCard struct {
 	// Entity The entity this card is about.
 	Entity Entity `json:"entity"`
 
-	// EventsCount Events across the tenant the entity takes part in. Per-case counts are in `occurrences`.
+	// EventsCount Events across the project the entity takes part in. Per-case counts are in `occurrences`.
 	EventsCount int `json:"events_count"`
 
 	// Neighbors Entities connected by confirmed edges.
@@ -290,7 +290,7 @@ type ServerInterface interface {
 	// CreateEntity Add an entity by hand
 	// (POST /entities)
 	CreateEntity(w http.ResponseWriter, r *http.Request, params CreateEntityParams)
-	// DeleteEntity Delete an entity from the tenant
+	// DeleteEntity Delete an entity from the project
 	// (DELETE /entities/{entity_id})
 	DeleteEntity(w http.ResponseWriter, r *http.Request, entityId EntityId, params DeleteEntityParams)
 	// GetEntityCard Entity card
@@ -1459,7 +1459,7 @@ type StrictServerInterface interface {
 	// CreateEntity Add an entity by hand
 	// (POST /entities)
 	CreateEntity(ctx context.Context, request CreateEntityRequestObject) (CreateEntityResponseObject, error)
-	// DeleteEntity Delete an entity from the tenant
+	// DeleteEntity Delete an entity from the project
 	// (DELETE /entities/{entity_id})
 	DeleteEntity(ctx context.Context, request DeleteEntityRequestObject) (DeleteEntityResponseObject, error)
 	// GetEntityCard Entity card

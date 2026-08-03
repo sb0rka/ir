@@ -44,7 +44,7 @@ export interface paths {
         put?: never;
         /**
          * Add an entity by hand
-         * @description Creates a tenant entity or reuses one with the same type and canonical key, then links it to the investigation.
+         * @description Creates a project entity or reuses one with the same type and canonical key, then links it to the investigation.
          */
         post: operations["createEntity"];
         delete?: never;
@@ -68,14 +68,14 @@ export interface paths {
         };
         /**
          * Entity card
-         * @description Returns tenant-wide event counts, investigation occurrences and graph neighbors for one entity.
+         * @description Returns project-wide event counts, investigation occurrences and graph neighbors for one entity.
          */
         get: operations["getEntityCard"];
         put?: never;
         post?: never;
         /**
-         * Delete an entity from the tenant
-         * @description Deletes a tenant entity. Returns 409 while it is linked to an investigation or referenced by an event.
+         * Delete an entity from the project
+         * @description Deletes a project entity. Returns 409 while it is linked to an investigation or referenced by an event.
          */
         delete: operations["deleteEntity"];
         options?: never;
@@ -107,7 +107,7 @@ export interface paths {
         post?: never;
         /**
          * Drop an entity from the investigation
-         * @description Removes the investigation link, graph node and connected edges. The tenant entity remains. Returns 409 if an attached event references it.
+         * @description Removes the investigation link, graph node and connected edges. The project entity remains. Returns 409 if an attached event references it.
          */
         delete: operations["detachEntity"];
         options?: never;
@@ -119,11 +119,11 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        /** @description A tenant-scoped host, account, process, address or hash. Investigation membership is stored separately. */
+        /** @description A project-scoped host, account, process, address or hash. Investigation membership is stored separately. */
         Entity: {
             /**
              * Format: uuid
-             * @description Identifier of the entity within the tenant.
+             * @description Identifier of the entity within the project.
              */
             id: string;
             /** @description How the entity was linked to the listed investigation. */
@@ -140,12 +140,12 @@ export interface components {
             };
             /**
              * Format: date-time
-             * @description Earliest tenant event that mentions the entity.
+             * @description Earliest project event that mentions the entity.
              */
             first_seen?: string | null;
             /**
              * Format: date-time
-             * @description Latest tenant event that mentions the entity.
+             * @description Latest project event that mentions the entity.
              */
             last_seen?: string | null;
         };
@@ -188,11 +188,11 @@ export interface components {
             /** @description Pass as `cursor` to get the next page. Absent on the last page. */
             next_cursor?: string | null;
         };
-        /** @description Tenant-wide context for an entity. */
+        /** @description Project-wide context for an entity. */
         EntityCard: {
             /** @description The entity this card is about. */
             entity: components["schemas"]["Entity"];
-            /** @description Events across the tenant the entity takes part in. Per-case counts are in `occurrences`. */
+            /** @description Events across the project the entity takes part in. Per-case counts are in `occurrences`. */
             events_count: number;
             /** @description Investigations linked to the entity, with event counts. */
             occurrences: {
@@ -247,7 +247,7 @@ export interface components {
                 "application/json": components["schemas"]["ErrorResponse"];
             };
         };
-        /** @description Caller is authenticated but holds no role in the tenant, or the role does not grant this action (code=forbidden). */
+        /** @description Caller is authenticated but holds no role in the selected project, or the role does not grant this action (code=forbidden). */
         Forbidden: {
             headers: {
                 [name: string]: unknown;
@@ -256,7 +256,7 @@ export interface components {
                 "application/json": components["schemas"]["ErrorResponse"];
             };
         };
-        /** @description No such record in the caller's tenant. Returned instead of 403 for records that exist elsewhere, so the response does not reveal them (code=not_found). */
+        /** @description No such record in the selected project. Returned instead of 403 for records that exist elsewhere, so the response does not reveal them (code=not_found). */
         NotFound: {
             headers: {
                 [name: string]: unknown;

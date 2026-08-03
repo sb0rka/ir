@@ -53,7 +53,7 @@ export interface paths {
         post?: never;
         /**
          * Delete an investigation
-         * @description Deletes the investigation subtree, its graph data and its links to shared events and entities. Tenant event and entity records remain.
+         * @description Deletes the investigation subtree, its graph data and its links to shared events and entities. Project event and entity records remain.
          */
         delete: operations["deleteInvestigation"];
         options?: never;
@@ -102,7 +102,7 @@ export interface components {
              * @description Identifier of the investigation.
              */
             id: string;
-            /** @description Project that owns the case — the tenant. Every child inherits it unchanged, so a whole tree belongs to one tenant. */
+            /** @description Project that owns the case. Every child inherits it unchanged, so a whole tree belongs to one project. */
             project_id: string;
             /**
              * Format: uuid
@@ -263,7 +263,7 @@ export interface components {
                 "application/json": components["schemas"]["ErrorResponse"];
             };
         };
-        /** @description Caller is authenticated but holds no role in the tenant, or the role does not grant this action (code=forbidden). */
+        /** @description Caller is authenticated but holds no role in the selected project, or the role does not grant this action (code=forbidden). */
         Forbidden: {
             headers: {
                 [name: string]: unknown;
@@ -299,7 +299,7 @@ export interface components {
                 "application/json": components["schemas"]["ErrorResponse"];
             };
         };
-        /** @description No such record in the caller's tenant. Returned instead of 403 for records that exist elsewhere, so the response does not reveal them (code=not_found). */
+        /** @description No such record in the selected project. Returned instead of 403 for records that exist elsewhere, so the response does not reveal them (code=not_found). */
         NotFound: {
             headers: {
                 [name: string]: unknown;
@@ -402,7 +402,7 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
-            /** @description The parent named in parent_id does not exist in this tenant. */
+            /** @description The parent named in parent_id does not exist in this project. */
             404: {
                 headers: {
                     [name: string]: unknown;

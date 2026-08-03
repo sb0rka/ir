@@ -114,7 +114,7 @@ export interface components {
                 "application/json": components["schemas"]["ErrorResponse"];
             };
         };
-        /** @description Caller is authenticated but holds no role in the tenant, or the role does not grant this action (code=forbidden). */
+        /** @description Caller is authenticated but holds no role in the selected project, or the role does not grant this action (code=forbidden). */
         Forbidden: {
             headers: {
                 [name: string]: unknown;

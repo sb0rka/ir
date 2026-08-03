@@ -32,7 +32,7 @@ paths:
         '500': { $ref: '../shared/responses.yaml#/components/responses/InternalError' }
         '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
         '404':
-          description: The parent named in parent_id does not exist in this tenant.
+          description: The parent named in parent_id does not exist in this project.
           content:
             application/json:
               schema: { $ref: '../shared/errors.yaml#/components/schemas/ErrorResponse' }
@@ -132,7 +132,7 @@ paths:
       summary: Delete an investigation
       description: >-
         Deletes the investigation subtree, its graph data and its links to
-        shared events and entities. Tenant event and entity records remain.
+        shared events and entities. Project event and entity records remain.
       operationId: deleteInvestigation
       responses:
         '204':
@@ -181,8 +181,8 @@ components:
         project_id:
           type: string
           description: >-
-            Project that owns the case — the tenant. Every child inherits it
-            unchanged, so a whole tree belongs to one tenant.
+            Project that owns the case. Every child inherits it unchanged, so a
+            whole tree belongs to one project.
         parent_id:
           type: string
           format: uuid

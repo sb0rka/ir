@@ -15,9 +15,9 @@ tags:
   - name: investigations
     description: Cases and nested hypotheses.
   - name: events
-    description: Tenant events and their investigation links.
+    description: Project events and their investigation links.
   - name: entities
-    description: Tenant entities extracted from events or added by analysts.
+    description: Project entities extracted from events or added by analysts.
   - name: graph
     description: Investigation graph nodes, edges and evidence.
   - name: reference

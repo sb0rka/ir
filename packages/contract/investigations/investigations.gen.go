@@ -206,7 +206,7 @@ type Investigation struct {
 	// ParentId The investigation this one refines. Null means it is a root case; anything else means it is a hypothesis inside a larger case.
 	ParentId *openapi_types.UUID `json:"parent_id,omitempty"`
 
-	// ProjectId Project that owns the case — the tenant. Every child inherits it unchanged, so a whole tree belongs to one tenant.
+	// ProjectId Project that owns the case. Every child inherits it unchanged, so a whole tree belongs to one project.
 	ProjectId string `json:"project_id"`
 
 	// Severity How bad this looks. Set during triage and revised as evidence arrives. Absent until someone judges it.
@@ -340,7 +340,7 @@ type InvestigationTree struct {
 		// ParentId The investigation this one refines. Null means it is a root case; anything else means it is a hypothesis inside a larger case.
 		ParentId *openapi_types.UUID `json:"parent_id,omitempty"`
 
-		// ProjectId Project that owns the case — the tenant. Every child inherits it unchanged, so a whole tree belongs to one tenant.
+		// ProjectId Project that owns the case. Every child inherits it unchanged, so a whole tree belongs to one project.
 		ProjectId string `json:"project_id"`
 
 		// Severity How bad this looks. Set during triage and revised as evidence arrives. Absent until someone judges it.

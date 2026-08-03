@@ -37,7 +37,7 @@ Redocly `join` объединяет карты `paths` из доменных д�
 
 ## Конвенции
 
-- Auth: Bearer JWT платформы с audience `api.local`; tenant выбирается обязательным
+- Auth: Bearer JWT платформы с audience `api.local`; project выбирается обязательным
   заголовком `X-Project-ID` и проверяется по `role_bindings`.
 - Ошибка: `{"error":{"code","message","details?"}}`.
 - Пагинация: `limit` + `cursor`, ответ `items` + `next_cursor`.

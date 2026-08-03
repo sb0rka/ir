@@ -96,7 +96,7 @@ type ErrorResponse struct {
 // ErrorResponseErrorCode Machine-readable reason, stable across releases. `validation` covers both a malformed body (400) and a well-formed but invalid one (422). `not_implemented` means the operation exists in the contract but has no implementation yet — a client can hide the control instead of showing an error.
 type ErrorResponseErrorCode string
 
-// Event An immutable tenant event. Investigation membership is stored separately, so one event may be linked to multiple investigations.
+// Event An immutable project event. Investigation membership is stored separately, so one event may be linked to multiple investigations.
 type Event struct {
 	// Entities Who took part and in what capacity. Extracted during ingestion by the source's mapping profile.
 	Entities *[]struct {
@@ -110,7 +110,7 @@ type Event struct {
 	// EventType Normalized event type, such as process_start or logon.
 	EventType string `json:"event_type"`
 
-	// Id Identifier of the event within the tenant.
+	// Id Identifier of the event within the project.
 	Id openapi_types.UUID `json:"id"`
 
 	// IngestedAt When the event was ingested.
@@ -191,7 +191,7 @@ type EventAttachResult struct {
 	// EntitiesExtracted Entities created or updated from the new events. Counts entities, not mentions.
 	EntitiesExtracted int `json:"entities_extracted"`
 
-	// Reused Existing tenant events newly linked to the investigation.
+	// Reused Existing project events newly linked to the investigation.
 	Reused *int `json:"reused,omitempty"`
 }
 
@@ -224,7 +224,7 @@ type EventSummary struct {
 	// EventType Normalized event type.
 	EventType string `json:"event_type"`
 
-	// Id Identifier of the event within the tenant.
+	// Id Identifier of the event within the project.
 	Id openapi_types.UUID `json:"id"`
 
 	// IngestedAt When it was pulled into the investigation.
@@ -350,7 +350,7 @@ type ServerInterface interface {
 	// AttachEvents Pull events into an investigation
 	// (POST /events)
 	AttachEvents(w http.ResponseWriter, r *http.Request, params AttachEventsParams)
-	// DeleteEvent Delete an event from the tenant
+	// DeleteEvent Delete an event from the project
 	// (DELETE /events/{event_id})
 	DeleteEvent(w http.ResponseWriter, r *http.Request, eventId EventId, params DeleteEventParams)
 	// GetEvent One event in full
@@ -1435,7 +1435,7 @@ type StrictServerInterface interface {
 	// AttachEvents Pull events into an investigation
 	// (POST /events)
 	AttachEvents(ctx context.Context, request AttachEventsRequestObject) (AttachEventsResponseObject, error)
-	// DeleteEvent Delete an event from the tenant
+	// DeleteEvent Delete an event from the project
 	// (DELETE /events/{event_id})
 	DeleteEvent(ctx context.Context, request DeleteEventRequestObject) (DeleteEventResponseObject, error)
 	// GetEvent One event in full

@@ -48,7 +48,7 @@ paths:
       tags: [entities]
       summary: Add an entity by hand
       description: >-
-        Creates a tenant entity or reuses one with the same type and canonical
+        Creates a project entity or reuses one with the same type and canonical
         key, then links it to the investigation.
       operationId: createEntity
       requestBody:
@@ -99,9 +99,9 @@ paths:
         '422': { $ref: '../shared/responses.yaml#/components/responses/ValidationError' }
     delete:
       tags: [entities]
-      summary: Delete an entity from the tenant
+      summary: Delete an entity from the project
       description: >-
-        Deletes a tenant entity. Returns 409 while it is linked to an
+        Deletes a project entity. Returns 409 while it is linked to an
         investigation or referenced by an event.
       operationId: deleteEntity
       responses:
@@ -117,7 +117,7 @@ paths:
       tags: [entities]
       summary: Entity card
       description: >-
-        Returns tenant-wide event counts, investigation occurrences and graph
+        Returns project-wide event counts, investigation occurrences and graph
         neighbors for one entity.
       operationId: getEntityCard
       responses:
@@ -142,7 +142,7 @@ paths:
       summary: Drop an entity from the investigation
       description: >-
         Removes the investigation link, graph node and connected edges. The
-        tenant entity remains. Returns 409 if an attached event references it.
+        project entity remains. Returns 409 if an attached event references it.
       operationId: detachEntity
       responses:
         '204':
@@ -159,14 +159,14 @@ components:
     Entity:
       type: object
       description: >-
-        A tenant-scoped host, account, process, address or hash. Investigation
+        A project-scoped host, account, process, address or hash. Investigation
         membership is stored separately.
       required: [id, type_code, canonical_key]
       properties:
         id:
           type: string
           format: uuid
-          description: Identifier of the entity within the tenant.
+          description: Identifier of the entity within the project.
         added_via:
           allOf: [{ $ref: '#/components/schemas/EntityOrigin' }]
           description: How the entity was linked to the listed investigation.
@@ -188,12 +188,12 @@ components:
           type: string
           format: date-time
           nullable: true
-          description: Earliest tenant event that mentions the entity.
+          description: Earliest project event that mentions the entity.
         last_seen:
           type: string
           format: date-time
           nullable: true
-          description: Latest tenant event that mentions the entity.
+          description: Latest project event that mentions the entity.
 
     EntityOrigin:
       type: string
@@ -253,7 +253,7 @@ components:
 
     EntityCard:
       type: object
-      description: Tenant-wide context for an entity.
+      description: Project-wide context for an entity.
       required: [entity, events_count, occurrences]
       properties:
         entity:
@@ -262,7 +262,7 @@ components:
         events_count:
           type: integer
           description: >-
-            Events across the tenant the entity takes part in. Per-case counts
+            Events across the project the entity takes part in. Per-case counts
             are in `occurrences`.
         occurrences:
           type: array

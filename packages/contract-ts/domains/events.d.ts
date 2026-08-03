@@ -44,7 +44,7 @@ export interface paths {
         put?: never;
         /**
          * Pull events into an investigation
-         * @description Ingests events from explicit source references or a source query, then links them to an investigation. Existing tenant events are reused. Repeated links are ignored; a request may include at most 500 events.
+         * @description Ingests events from explicit source references or a source query, then links them to an investigation. Existing project events are reused. Repeated links are ignored; a request may include at most 500 events.
          */
         post: operations["attachEvents"];
         delete?: never;
@@ -74,8 +74,8 @@ export interface paths {
         put?: never;
         post?: never;
         /**
-         * Delete an event from the tenant
-         * @description Deletes a tenant event. Returns 409 while it is linked to any investigation.
+         * Delete an event from the project
+         * @description Deletes a project event. Returns 409 while it is linked to any investigation.
          */
         delete: operations["deleteEvent"];
         options?: never;
@@ -103,7 +103,7 @@ export interface paths {
         post?: never;
         /**
          * Drop an event from the investigation
-         * @description Removes the investigation link, graph node and connected edges. The tenant event remains. Returns 409 if a confirmed edge cites the event.
+         * @description Removes the investigation link, graph node and connected edges. The project event remains. Returns 409 if a confirmed edge cites the event.
          */
         delete: operations["detachEvent"];
         options?: never;
@@ -115,11 +115,11 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        /** @description An immutable tenant event. Investigation membership is stored separately, so one event may be linked to multiple investigations. */
+        /** @description An immutable project event. Investigation membership is stored separately, so one event may be linked to multiple investigations. */
         Event: {
             /**
              * Format: uuid
-             * @description Identifier of the event within the tenant.
+             * @description Identifier of the event within the project.
              */
             id: string;
             /** @description Investigations linked to this event. */
@@ -165,7 +165,7 @@ export interface components {
         EventSummary: {
             /**
              * Format: uuid
-             * @description Identifier of the event within the tenant.
+             * @description Identifier of the event within the project.
              */
             id: string;
             /**
@@ -255,7 +255,7 @@ export interface components {
         EventAttachResult: {
             /** @description Events newly added to the case, whether ingested now or already known. */
             attached: number;
-            /** @description Existing tenant events newly linked to the investigation. */
+            /** @description Existing project events newly linked to the investigation. */
             reused?: number;
             /** @description Events already linked to the investigation and skipped. */
             duplicates: number;
@@ -304,7 +304,7 @@ export interface components {
                 "application/json": components["schemas"]["ErrorResponse"];
             };
         };
-        /** @description Caller is authenticated but holds no role in the tenant, or the role does not grant this action (code=forbidden). */
+        /** @description Caller is authenticated but holds no role in the selected project, or the role does not grant this action (code=forbidden). */
         Forbidden: {
             headers: {
                 [name: string]: unknown;
@@ -313,7 +313,7 @@ export interface components {
                 "application/json": components["schemas"]["ErrorResponse"];
             };
         };
-        /** @description No such record in the caller's tenant. Returned instead of 403 for records that exist elsewhere, so the response does not reveal them (code=not_found). */
+        /** @description No such record in the selected project. Returned instead of 403 for records that exist elsewhere, so the response does not reveal them (code=not_found). */
         NotFound: {
             headers: {
                 [name: string]: unknown;

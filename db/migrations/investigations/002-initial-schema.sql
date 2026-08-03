@@ -147,7 +147,7 @@ CREATE INDEX IF NOT EXISTS ix_investigation_som_workspaces_workspace
 
 -- УЛИКИ
 --
--- События и сущности принадлежат тенанту, а не расследованию: один и тот же
+-- События и сущности принадлежат проекту, а не расследованию: один и тот же
 -- хост или одна и та же сработка штатно фигурируют в нескольких кейсах, и
 -- копировать их на каждый — значит потерять ответ на вопрос «где ещё это
 -- встречалось», ради которого карточка сущности и существует.
@@ -171,7 +171,7 @@ CREATE TABLE IF NOT EXISTS events (
 
     CONSTRAINT pk_events PRIMARY KEY (id),
     CONSTRAINT uq_events_id_project UNIQUE (id, project_id),
-    -- Одна запись источника — одна строка на тенант. Затяжка в третий кейс
+    -- Одна запись источника — одна строка на проект. Затяжка в третий кейс
     -- ничего не копирует, только добавляет связь.
     CONSTRAINT uq_events_dedup UNIQUE (project_id, dedup_key),
     CONSTRAINT uq_events_source UNIQUE (project_id, source_code, source_event_id),
@@ -205,7 +205,7 @@ CREATE TABLE IF NOT EXISTS entities (
 
     CONSTRAINT pk_entities PRIMARY KEY (id),
     CONSTRAINT uq_entities_id_project UNIQUE (id, project_id),
-    -- Тип и ключ опознают вещь в пределах тенанта. Через границу тенанта не
+    -- Тип и ключ опознают вещь в пределах проекта. Между проектами записи не
     -- склеиваются: dc-01 заказчика A и заказчика B — разные хосты.
     CONSTRAINT uq_entities_scope_type_key UNIQUE (project_id, type_code, canonical_key),
     CONSTRAINT fk_entities_type_code_entity_types FOREIGN KEY (type_code)
@@ -230,7 +230,7 @@ CREATE TABLE IF NOT EXISTS event_entity_relations (
 
     CONSTRAINT pk_event_entity_relations PRIMARY KEY (id),
     CONSTRAINT uq_event_entity_relations UNIQUE (event_id, entity_id, relation_code),
-    -- Тенант в ключе с обеих сторон: без него событие одного заказчика
+    -- project_id в ключе с обеих сторон: без него событие одного проекта
     -- связывалось бы с сущностью другого, и база бы это пропустила.
     CONSTRAINT fk_eer_event_id_events FOREIGN KEY (event_id, project_id)
         REFERENCES events (id, project_id) ON DELETE CASCADE,
@@ -257,7 +257,7 @@ CREATE TABLE IF NOT EXISTS investigation_events (
     reason VARCHAR,
 
     CONSTRAINT pk_investigation_events PRIMARY KEY (investigation_id, event_id),
-    CONSTRAINT uq_inv_events_tenant UNIQUE (investigation_id, event_id, project_id),
+    CONSTRAINT uq_inv_events_project UNIQUE (investigation_id, event_id, project_id),
     CONSTRAINT fk_inv_events_investigation FOREIGN KEY (investigation_id, project_id)
         REFERENCES investigations (id, project_id) ON DELETE CASCADE,
     CONSTRAINT fk_inv_events_event FOREIGN KEY (event_id, project_id)
@@ -278,7 +278,7 @@ CREATE TABLE IF NOT EXISTS investigation_entities (
     added_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
 
     CONSTRAINT pk_investigation_entities PRIMARY KEY (investigation_id, entity_id),
-    CONSTRAINT uq_inv_entities_tenant UNIQUE (investigation_id, entity_id, project_id),
+    CONSTRAINT uq_inv_entities_project UNIQUE (investigation_id, entity_id, project_id),
     CONSTRAINT fk_inv_entities_investigation FOREIGN KEY (investigation_id, project_id)
         REFERENCES investigations (id, project_id) ON DELETE CASCADE,
     CONSTRAINT fk_inv_entities_entity FOREIGN KEY (entity_id, project_id)
@@ -288,7 +288,7 @@ CREATE TABLE IF NOT EXISTS investigation_entities (
 CREATE INDEX IF NOT EXISTS ix_inv_entities_entity ON investigation_entities (entity_id);
 
 -- ГРАФ
--- Tenant графа однозначно задаёт investigation_id; project_id здесь не дублируется.
+-- Проект графа однозначно задаёт investigation_id; project_id здесь не дублируется.
 
 CREATE TABLE IF NOT EXISTS graph_nodes (
     id UUID DEFAULT gen_random_uuid() NOT NULL,
@@ -395,7 +395,7 @@ CREATE INDEX IF NOT EXISTS ix_edges_target ON edges (target_node_id);
 
 -- Основания связи. Инвариант тот же — цитируемое событие принадлежит тому же
 -- расследованию, что и ребро, — но держится теперь через состав кейса:
--- события общие на тенант, «своим» его делает запись в investigation_events.
+-- события общие для проекта, «своим» его делает запись в investigation_events.
 -- Отвязали событие от кейса — основания в нём отвалились вместе с ним.
 CREATE TABLE IF NOT EXISTS edge_evidence (
     edge_id UUID NOT NULL,
