@@ -1,0 +1,4 @@
+interface:
+  display_name: "Gateway: add provider"
+  short_description: "Add a provider or capability to Gateway"
+  default_prompt: "Use $gateway-add-tool to add a normalized security-tool provider to Gateway."

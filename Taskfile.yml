@@ -27,7 +27,23 @@ tasks:
       - task: gen-go
       - task: gen-stubs
       - task: gen-ts
+      - task: gateway-gen
       - gofmt -w packages/contract {{.SERVER_DIR}}
+
+  gateway-spec:
+    desc: Проверить OpenAPI Gateway
+    cmds:
+      - '{{.REDOCLY}} lint apps/gateway/api/openapi.yaml'
+
+  gateway-gen:
+    desc: Сгенерировать Go-контракт Gateway
+    deps: [gateway-spec]
+    cmds:
+      - >-
+        cd apps/gateway &&
+        {{.CODEGEN}} -package api -generate models,std-http-server
+        -o api/api.gen.go api/openapi.yaml
+      - gofmt -w apps/gateway/api/api.gen.go
 
   gen-prune:
     desc: Убрать сгенерированное для доменов, которых больше нет в api/paths
@@ -142,23 +158,24 @@ tasks:
       # перегенерация что-то изменила — спеку правили, а результат не
       # закоммитили. Только *.go: рядом с заготовками лежит рукописный README.
       - cmd: |
-          git diff --exit-code -- packages '{{.SERVER_DIR}}/*.go' || {
+          git diff --exit-code -- packages '{{.SERVER_DIR}}/*.go' apps/gateway/api/api.gen.go || {
             echo ""
             echo "Сгенерированный код разошёлся со спекой."
             echo "Почините: task gen, затем закоммитьте изменения."
             exit 1
           }
       - cmd: |
-          test -z "$(git status --porcelain -- packages '{{.SERVER_DIR}}/*.go')" || {
+          test -z "$(git status --porcelain -- packages '{{.SERVER_DIR}}/*.go' apps/gateway/api/api.gen.go)" || {
             echo ""
             echo "Появились несохранённые сгенерированные файлы:"
-            git status --short -- packages '{{.SERVER_DIR}}/*.go'
+            git status --short -- packages '{{.SERVER_DIR}}/*.go' apps/gateway/api/api.gen.go
             exit 1
           }
 
   build:
     desc: Собрать сервисы в bin/
     cmds:
+      - go build -o bin/gateway ./apps/gateway/cmd/gateway
       - go build -o bin/ir-api ./apps/investigations/cmd/ir-api
       - go build -o bin/irctl ./apps/investigations/cmd/irctl
 
@@ -170,12 +187,14 @@ tasks:
   vet:
     desc: go vet помодульно (из-за go.work)
     cmds:
+      - cd apps/gateway && go vet ./...
       - cd apps/investigations && go vet ./...
       - cd packages/contract && go vet ./...
 
   test:
     desc: Go-тесты во всех модулях
     cmds:
+      - cd apps/gateway && go test ./...
       - cd apps/investigations && go test ./...
       - cd packages/contract && go test ./...
 
@@ -187,6 +206,7 @@ tasks:
   tidy:
     desc: go mod tidy в каждом модуле
     cmds:
+      - cd apps/gateway && go mod tidy
       - cd apps/investigations && go mod tidy
       - cd packages/contract && go mod tidy
 
@@ -212,7 +232,7 @@ tasks:
   dev-logs:
     desc: Логи стенда
     cmds:
-      - docker compose -f docker-compose.dev.yml logs -f ir-api
+      - docker compose -f docker-compose.dev.yml logs -f ir-api gateway
 
   migrate:
     desc: Применить миграции к локальной базе

@@ -79,6 +79,24 @@ services:
       interval: 10s
       timeout: 3s
       retries: 5
+  gateway:
+    build:
+      context: .
+      dockerfile: apps/gateway/Dockerfile
+    restart: unless-stopped
+    environment:
+      SERVER_ADDR: "0.0.0.0"
+      SERVER_PORT: "8091"
+      SERVER_CORS_WHITELIST: "${SERVER_CORS_WHITELIST:-http://localhost:5173,http://localhost:3000}"
+      AUTH_DISABLED: "true"
+      LOG_FORMAT: "json"
+    ports:
+      - "${GATEWAY_PORT:-8091}:8091"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8091/readyz || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
 
 
 volumes:

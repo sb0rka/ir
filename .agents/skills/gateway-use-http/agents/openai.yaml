@@ -1,0 +1,4 @@
+interface:
+  display_name: "Gateway HTTP API"
+  short_description: "Query external tools through Gateway HTTP"
+  default_prompt: "Use $gateway-use-http to query external security tools through the normalized Gateway API."
