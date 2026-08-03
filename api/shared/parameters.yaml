@@ -1,0 +1,64 @@
+# Parameters shared by more than one domain.
+
+components:
+  parameters:
+    ProjectId:
+      name: X-Project-ID
+      in: header
+      required: true
+      description: >-
+        Sb0rka project selected for this request. The caller must have an IR
+        role binding in this project; roles from other projects are ignored.
+      schema:
+        type: string
+        pattern: '^[0-9a-f]{10,12}$'
+
+    InvestigationId:
+      name: investigation_id
+      in: path
+      required: true
+      description: Identifier of an investigation in the selected project.
+      schema: { type: string, format: uuid }
+
+    EventId:
+      name: event_id
+      in: path
+      required: true
+      description: Identifier of an event in the selected project.
+      schema: { type: string, format: uuid }
+
+    EntityId:
+      name: entity_id
+      in: path
+      required: true
+      description: Identifier of an entity — a host, account, process, address or hash.
+      schema: { type: string, format: uuid }
+
+    NodeId:
+      name: node_id
+      in: path
+      required: true
+      description: Identifier of a graph node. Edges reference this, not the entity or event behind it.
+      schema: { type: string, format: uuid }
+
+    GraphEdgeId:
+      name: edge_id
+      in: path
+      required: true
+      description: Identifier of an edge — one claim that two nodes are related.
+      schema: { type: string, format: uuid }
+
+    Limit:
+      name: limit
+      in: query
+      description: How many items to return. The server may return fewer, never more.
+      schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+
+    Cursor:
+      name: cursor
+      in: query
+      description: >-
+        Opaque keyset cursor taken from `next_cursor` of the previous page.
+        Encodes a position, not a query — do not build one by hand. Omit it to
+        start from the beginning.
+      schema: { type: string }

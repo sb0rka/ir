@@ -1,0 +1,31 @@
+{
+  "name": "@ir/contract",
+  "version": "0.0.1",
+  "description": "Типы и клиент Investigations API, сгенерированные из OpenAPI",
+  "type": "module",
+  "types": "./api.d.ts",
+  "exports": {
+    ".": {
+      "types": "./api.d.ts",
+      "default": "./client.ts"
+    },
+    "./domains/*": {
+      "types": "./domains/*.d.ts"
+    }
+  },
+  "files": [
+    "domains",
+    "api.d.ts",
+    "client.ts"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "openapi-typescript": "^7.4.0",
+    "typescript": "^5.6.0"
+  },
+  "dependencies": {
+    "openapi-fetch": "^0.13.0"
+  }
+}

@@ -1,0 +1,220 @@
+version: '3'
+
+# Запуск: task <имя>. Требует go-task (https://taskfile.dev).
+
+# Версии генераторов запинены: check-generated падает на любом diff между
+# спекой и сгенерированным, поэтому плавающая версия однажды уронит сборку
+# там, где спеку никто не трогал, и падение придёт не туда, где меняли.
+vars:
+  MODULE: github.com/sb0rka/ir/packages/contract
+  SERVER_DIR: apps/investigations/internal/server
+  REDOCLY: npx --yes @redocly/cli@2.5.0
+  CODEGEN: go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@v2.8.0
+  IMPL: go run github.com/josharian/impl@v1.5.0
+  GOIMPORTS: go run golang.org/x/tools/cmd/goimports@v0.40.0
+  OPENAPI_TS: npx --yes openapi-typescript@7.13.0
+
+tasks:
+  default:
+    cmds:
+      - task --list
+
+  gen:
+    desc: Перегенерировать всё из api/ — одна команда на всю генерацию
+    cmds:
+      - task: spec
+      - task: gen-prune
+      - task: gen-go
+      - task: gen-stubs
+      - task: gen-ts
+      - gofmt -w packages/contract {{.SERVER_DIR}}
+
+  gen-prune:
+    desc: Убрать сгенерированное для доменов, которых больше нет в api/paths
+    cmds:
+      # Генераторы только создают и перезаписывают. Без этого шага удаление
+      # домена оставляет живой Go-пакет и .d.ts, которые компилируются,
+      # импортируются и ничего не обслуживают.
+      - >-
+        node -e "const fs=require('fs');
+        const exists=n=>fs.existsSync('api/paths/'+n+'.yaml');
+        for(const e of fs.readdirSync('packages/contract',{withFileTypes:true}))
+        if(e.isDirectory()&&e.name!=='spec'&&!exists(e.name))
+        fs.rmSync('packages/contract/'+e.name,{recursive:true,force:true});
+        for(const f of fs.readdirSync('packages/contract-ts/domains'))
+        if(f.endsWith('.d.ts')&&!exists(f.slice(0,-5)))
+        fs.rmSync('packages/contract-ts/domains/'+f,{force:true});
+        for(const f of fs.readdirSync('{{.SERVER_DIR}}'))
+        if(f.endsWith('.go')&&f!=='server.go'&&!exists(f.slice(0,-3)))
+        fs.rmSync('{{.SERVER_DIR}}/'+f,{force:true});"
+
+  spec:
+    desc: Собрать спеку и проверить
+    cmds:
+      - task: spec-domains
+      - '{{.REDOCLY}} join api/openapi.yaml api/paths/*.yaml -o api/bundle.yaml --without-x-tag-groups'
+      - '{{.REDOCLY}} lint api/bundle.yaml'
+
+  spec-domains:
+    desc: Развернуть каждый доменный файл в самостоятельный документ
+    sources: ['api/paths/*.yaml']
+    method: none
+    cmds:
+      # Каталог пересоздаётся, а не дополняется: иначе удалённый домен оставит
+      # здесь свой файл, и gen-go с gen-ts будут вечно генерировать мёртвый
+      # пакет — check-generated этого не заметит, потому что diff пустой.
+      - cmd: rm -rf api/build && mkdir -p api/build
+      - for: sources
+        cmd: "{{.REDOCLY}} bundle '{{.ITEM}}' -o api/build/{{osBase .ITEM}}"
+
+  gen-go:
+    desc: Go-контракт — пакет на домен
+    sources: ['api/build/*.yaml']
+    method: none
+    cmds:
+      - for: sources
+        cmd: >-
+          cd packages/contract &&
+          {{.CODEGEN}} -package {{trimSuffix ".yaml" (osBase .ITEM)}}
+          -generate models,std-http-server,strict-server
+          -o {{trimSuffix ".yaml" (osBase .ITEM)}}/{{trimSuffix ".yaml" (osBase .ITEM)}}.gen.go
+          '../../{{.ITEM}}'
+      - cd packages/contract && {{.CODEGEN}} -package spec -generate embedded-spec -o spec/spec.gen.go ../../api/bundle.yaml
+
+  gen-stubs:
+    desc: Заготовки для новых ручек
+    sources: ['api/paths/*.yaml']
+    method: none
+    cmds:
+      # Новый домен: impl дописывает в конец файла, но перед этим разбирает
+      # весь пакет, а пустой файл без package-строки разбор роняет. Поэтому
+      # заготовку заводим сами — иначе добавление домена требовало бы ручного
+      # шага, которого в `task gen` быть не должно.
+      - for: sources
+        cmd: >-
+          cd {{.SERVER_DIR}} &&
+          { test -s '{{trimSuffix ".yaml" (osBase .ITEM)}}.go' ||
+          printf 'package server\n' > '{{trimSuffix ".yaml" (osBase .ITEM)}}.go' ; }
+      # impl дописывает только отсутствующие методы, готовый код не трогает.
+      - for: sources
+        cmd: >-
+          cd {{.SERVER_DIR}} && {{.IMPL}} 's *Server'
+          {{.MODULE}}/{{trimSuffix ".yaml" (osBase .ITEM)}}.StrictServerInterface
+          >> {{trimSuffix ".yaml" (osBase .ITEM)}}.go
+      # impl пишет panic; нереализованной ручке лучше отвечать 501 с кодом
+      # not_implemented — фронт отличит «ещё не сделано» от поломки.
+      - >-
+        cd {{.SERVER_DIR}} && node -e "const fs=require('fs');
+        for(const f of fs.readdirSync('.').filter(f=>f.endsWith('.go'))){
+        const s=fs.readFileSync(f,'utf8');
+        fs.writeFileSync(f,s.replaceAll('panic(\"not implemented\") // TODO: Implement',
+        'return nil, httperr.ErrNotImplemented'));}"
+      # goimports сам добавит httperr и уберёт импорты, ставшие ненужными
+      # после того как ручку реализовали.
+      - cd {{.SERVER_DIR}} && {{.GOIMPORTS}} -w .
+
+  gen-ts:
+    desc: TypeScript — по домену плюс общий api.d.ts для клиента
+    sources: ['api/build/*.yaml']
+    method: none
+    cmds:
+      - for: sources
+        cmd: >-
+          {{.OPENAPI_TS}} '{{.ITEM}}'
+          -o packages/contract-ts/domains/{{trimSuffix ".yaml" (osBase .ITEM)}}.d.ts
+      # Клиенту нужен один paths на весь API — берём из собранной спеки.
+      - '{{.OPENAPI_TS}} api/bundle.yaml -o packages/contract-ts/api.d.ts'
+
+  spec-docs:
+    desc: Собрать документацию API в api/docs.html
+    deps: [spec]
+    cmds:
+      - '{{.REDOCLY}} build-docs api/bundle.yaml -o api/docs.html'
+      # Сами не открываем: у Task свой шелл, а `start` — не исполняемый файл,
+      # а встроенная команда cmd.exe, и вызов через неё ведёт себя непредсказуемо.
+      - cmd: echo "готово, откройте api/docs.html"
+
+  check-generated:
+    desc: Проверить, что сгенерированное соответствует спеке
+    cmds:
+      - task: gen
+      # Одна проверка на всё: Go-контракт, заготовки, TypeScript. Если
+      # перегенерация что-то изменила — спеку правили, а результат не
+      # закоммитили. Только *.go: рядом с заготовками лежит рукописный README.
+      - cmd: |
+          git diff --exit-code -- packages '{{.SERVER_DIR}}/*.go' || {
+            echo ""
+            echo "Сгенерированный код разошёлся со спекой."
+            echo "Почините: task gen, затем закоммитьте изменения."
+            exit 1
+          }
+      - cmd: |
+          test -z "$(git status --porcelain -- packages '{{.SERVER_DIR}}/*.go')" || {
+            echo ""
+            echo "Появились несохранённые сгенерированные файлы:"
+            git status --short -- packages '{{.SERVER_DIR}}/*.go'
+            exit 1
+          }
+
+  build:
+    desc: Собрать сервисы в bin/
+    cmds:
+      - go build -o bin/ir-api ./apps/investigations/cmd/ir-api
+      - go build -o bin/irctl ./apps/investigations/cmd/irctl
+
+  fmt:
+    desc: gofmt по всем модулям
+    cmds:
+      - gofmt -w apps packages
+
+  vet:
+    desc: go vet помодульно (из-за go.work)
+    cmds:
+      - cd apps/investigations && go vet ./...
+      - cd packages/contract && go vet ./...
+
+  test:
+    desc: Go-тесты во всех модулях
+    cmds:
+      - cd apps/investigations && go test ./...
+      - cd packages/contract && go test ./...
+
+  typecheck:
+    desc: Проверить TypeScript-контракт
+    cmds:
+      - npm --prefix packages/contract-ts run typecheck
+
+  tidy:
+    desc: go mod tidy в каждом модуле
+    cmds:
+      - cd apps/investigations && go mod tidy
+      - cd packages/contract && go mod tidy
+
+  check:
+    desc: Проверить генерацию, сборку, Go и TypeScript
+    cmds:
+      - task: check-generated
+      - task: build
+      - task: vet
+      - task: test
+      - task: typecheck
+
+  dev:
+    desc: Поднять локальный стенд (Postgres + ir-api)
+    cmds:
+      - docker compose -f docker-compose.dev.yml up -d --build
+
+  dev-down:
+    desc: Остановить стенд
+    cmds:
+      - docker compose -f docker-compose.dev.yml down
+
+  dev-logs:
+    desc: Логи стенда
+    cmds:
+      - docker compose -f docker-compose.dev.yml logs -f ir-api
+
+  migrate:
+    desc: Применить миграции к локальной базе
+    cmds:
+      - docker compose -f docker-compose.dev.yml up migrate --exit-code-from migrate

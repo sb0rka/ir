@@ -1,0 +1,303 @@
+openapi: 3.0.3
+info:
+  title: IR — entities
+  version: 0.0.1
+servers:
+  - url: /api/v1
+security:
+  - bearerAuth: []
+
+paths:
+  /investigations/{investigation_id}/entities:
+    parameters:
+      - { $ref: '../shared/parameters.yaml#/components/parameters/ProjectId' }
+      - { $ref: '../shared/parameters.yaml#/components/parameters/InvestigationId' }
+    get:
+      tags: [entities]
+      summary: Entities of the investigation
+      description: Entities linked to the investigation, newest first.
+      operationId: listEntities
+      parameters:
+        - name: type_code
+          in: query
+          description: Keep only entities of this kind — host, user, ip, file_hash.
+          schema: { type: string }
+        - name: q
+          in: query
+          description: Substring match on the canonical key and the display name.
+          schema: { type: string }
+        - { $ref: '../shared/parameters.yaml#/components/parameters/Limit' }
+        - { $ref: '../shared/parameters.yaml#/components/parameters/Cursor' }
+      responses:
+        '200':
+          description: One page of entities
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EntityPage' }
+        '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '501': { $ref: '../shared/responses.yaml#/components/responses/NotImplemented' }
+        '500': { $ref: '../shared/responses.yaml#/components/responses/InternalError' }
+        '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
+        '422': { $ref: '../shared/responses.yaml#/components/responses/ValidationError' }
+
+  /entities:
+    parameters:
+      - { $ref: '../shared/parameters.yaml#/components/parameters/ProjectId' }
+    post:
+      tags: [entities]
+      summary: Add an entity by hand
+      description: >-
+        Creates a project entity or reuses one with the same type and canonical
+        key, then links it to the investigation.
+      operationId: createEntity
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EntityCreate' }
+      responses:
+        '201':
+          description: The entity, whether it was just created or already there
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Entity' }
+        '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '501': { $ref: '../shared/responses.yaml#/components/responses/NotImplemented' }
+        '500': { $ref: '../shared/responses.yaml#/components/responses/InternalError' }
+        '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
+        '422': { $ref: '../shared/responses.yaml#/components/responses/ValidationError' }
+
+  /entities/{entity_id}:
+    parameters:
+      - { $ref: '../shared/parameters.yaml#/components/parameters/ProjectId' }
+      - { $ref: '../shared/parameters.yaml#/components/parameters/EntityId' }
+    patch:
+      tags: [entities]
+      summary: Edit an entity
+      description: >-
+        Updates the display name and metadata. Type and canonical key are
+        immutable.
+      operationId: updateEntity
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EntityPatch' }
+      responses:
+        '200':
+          description: The updated entity
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Entity' }
+        '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '501': { $ref: '../shared/responses.yaml#/components/responses/NotImplemented' }
+        '500': { $ref: '../shared/responses.yaml#/components/responses/InternalError' }
+        '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
+        '422': { $ref: '../shared/responses.yaml#/components/responses/ValidationError' }
+    delete:
+      tags: [entities]
+      summary: Delete an entity from the project
+      description: >-
+        Deletes a project entity. Returns 409 while it is linked to an
+        investigation or referenced by an event.
+      operationId: deleteEntity
+      responses:
+        '204':
+          description: Deleted
+        '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '501': { $ref: '../shared/responses.yaml#/components/responses/NotImplemented' }
+        '500': { $ref: '../shared/responses.yaml#/components/responses/InternalError' }
+        '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
+        '409': { $ref: '../shared/responses.yaml#/components/responses/Conflict' }
+    get:
+      tags: [entities]
+      summary: Entity card
+      description: >-
+        Returns project-wide event counts, investigation occurrences and graph
+        neighbors for one entity.
+      operationId: getEntityCard
+      responses:
+        '200':
+          description: The card
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EntityCard' }
+        '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '501': { $ref: '../shared/responses.yaml#/components/responses/NotImplemented' }
+        '500': { $ref: '../shared/responses.yaml#/components/responses/InternalError' }
+        '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
+
+  /entities/{entity_id}/investigations/{investigation_id}:
+    parameters:
+      - { $ref: '../shared/parameters.yaml#/components/parameters/ProjectId' }
+      - { $ref: '../shared/parameters.yaml#/components/parameters/EntityId' }
+      - { $ref: '../shared/parameters.yaml#/components/parameters/InvestigationId' }
+    delete:
+      tags: [entities]
+      summary: Drop an entity from the investigation
+      description: >-
+        Removes the investigation link, graph node and connected edges. The
+        project entity remains. Returns 409 if an attached event references it.
+      operationId: detachEntity
+      responses:
+        '204':
+          description: Dropped from the investigation
+        '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '501': { $ref: '../shared/responses.yaml#/components/responses/NotImplemented' }
+        '500': { $ref: '../shared/responses.yaml#/components/responses/InternalError' }
+        '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
+        '409': { $ref: '../shared/responses.yaml#/components/responses/Conflict' }
+
+components:
+  schemas:
+    Entity:
+      type: object
+      description: >-
+        A project-scoped host, account, process, address or hash. Investigation
+        membership is stored separately.
+      required: [id, type_code, canonical_key]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Identifier of the entity within the project.
+        added_via:
+          allOf: [{ $ref: '#/components/schemas/EntityOrigin' }]
+          description: How the entity was linked to the listed investigation.
+        type_code:
+          type: string
+          description: Entity type code from the reference dictionary.
+        canonical_key:
+          type: string
+          description: Normalized identity unique within an entity type.
+        display_name:
+          type: string
+          nullable: true
+          description: Label for the UI. Falls back to canonical_key when absent.
+        metadata:
+          type: object
+          description: Source-specific attributes.
+          additionalProperties: true
+        first_seen:
+          type: string
+          format: date-time
+          nullable: true
+          description: Earliest project event that mentions the entity.
+        last_seen:
+          type: string
+          format: date-time
+          nullable: true
+          description: Latest project event that mentions the entity.
+
+    EntityOrigin:
+      type: string
+      description: How an entity came to be part of an investigation.
+      enum: [event, ioc, agent, analyst]
+
+    EntityCreate:
+      type: object
+      description: An entity entered by hand, before any event mentions it.
+      required: [investigation_id, type_code, canonical_key]
+      properties:
+        investigation_id:
+          type: string
+          format: uuid
+          description: Investigation to link the entity to.
+        type_code:
+          type: string
+          description: Entity type code from the reference dictionary.
+        canonical_key:
+          type: string
+          description: Normalized identity unique within the entity type.
+        display_name:
+          type: string
+          description: Label for the UI. Falls back to the canonical key when absent.
+        metadata:
+          type: object
+          description: Anything else worth carrying — where the indicator came from, notes.
+          additionalProperties: true
+
+    EntityPatch:
+      type: object
+      description: >-
+        Fields to change. Anything omitted stays as it is. Identity — the type
+        and the canonical key — is not editable.
+      properties:
+        display_name:
+          type: string
+          description: New label for the UI.
+        metadata:
+          type: object
+          description: Replaces the stored attributes wholesale, not merged into them.
+          additionalProperties: true
+
+    EntityPage:
+      type: object
+      description: One page of entities.
+      required: [items]
+      properties:
+        items:
+          type: array
+          description: The entities on this page.
+          items: { $ref: '#/components/schemas/Entity' }
+        next_cursor:
+          type: string
+          nullable: true
+          description: Pass as `cursor` to get the next page. Absent on the last page.
+
+    EntityCard:
+      type: object
+      description: Project-wide context for an entity.
+      required: [entity, events_count, occurrences]
+      properties:
+        entity:
+          allOf: [{ $ref: '#/components/schemas/Entity' }]
+          description: The entity this card is about.
+        events_count:
+          type: integer
+          description: >-
+            Events across the project the entity takes part in. Per-case counts
+            are in `occurrences`.
+        occurrences:
+          type: array
+          description: Investigations linked to the entity, with event counts.
+          items:
+            type: object
+            required: [investigation_id, title, events_count]
+            properties:
+              investigation_id:
+                type: string
+                format: uuid
+                description: The investigation.
+              title:
+                type: string
+                description: Its title, so the analyst can judge relevance without opening it.
+              events_count:
+                type: integer
+                description: How many of its events involve the entity.
+        neighbors:
+          type: array
+          description: Entities connected by confirmed edges.
+          items:
+            type: object
+            required: [entity_id, relation_code]
+            properties:
+              entity_id:
+                type: string
+                format: uuid
+                description: The neighbouring entity.
+              display_name:
+                type: string
+                nullable: true
+                description: Its label for the UI.
+              relation_code:
+                type: string
+                description: >-
+                  How they are related — parent_process, logged_in,
+                  connected_to, executed, resolved_to, same_host.
