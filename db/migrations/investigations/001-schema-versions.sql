@@ -15,4 +15,10 @@ CREATE TABLE IF NOT EXISTS schema_versions (
     CONSTRAINT pk_schema_versions PRIMARY KEY (version)
 );
 
+CREATE TABLE IF NOT EXISTS version_investigations (
+    version_num VARCHAR(32) NOT NULL,
+
+    CONSTRAINT pk_version_investigations PRIMARY KEY (version_num)
+);
+
 COMMIT;

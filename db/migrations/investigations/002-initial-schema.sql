@@ -428,4 +428,14 @@ CREATE TABLE IF NOT EXISTS role_bindings (
 
 CREATE INDEX IF NOT EXISTS ix_role_bindings_subject ON role_bindings (subject_id);
 
+WITH updated AS (
+    UPDATE version_investigations
+    SET version_num = '90ed76030198'
+    RETURNING version_num
+)
+INSERT INTO version_investigations (version_num)
+SELECT '90ed76030198'
+WHERE NOT EXISTS (SELECT 1 FROM updated)
+RETURNING version_num;
+
 COMMIT;
