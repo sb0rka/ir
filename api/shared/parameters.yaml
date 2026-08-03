@@ -17,16 +17,14 @@ components:
       name: investigation_id
       in: path
       required: true
-      description: >-
-        Investigation the request works in. Every piece of evidence, entity and
-        edge belongs to exactly one, and nothing crosses that boundary.
+      description: Identifier of an investigation in the selected project.
       schema: { type: string, format: uuid }
 
     EventId:
       name: event_id
       in: path
       required: true
-      description: Identifier of an event already pulled into an investigation.
+      description: Identifier of an event in the selected project.
       schema: { type: string, format: uuid }
 
     EntityId:

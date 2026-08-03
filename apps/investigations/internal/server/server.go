@@ -1,6 +1,4 @@
-// Package server реализует контракт: файл на домен, метод на ручку.
-// Заготовки дописывает `task gen` через josharian/impl — они возвращают 501,
-// пока не написана реализация.
+// Package server implements the generated API contracts.
 package server
 
 import (
@@ -22,7 +20,6 @@ func New(db store.Database, log *slog.Logger) *Server {
 	return &Server{db: db, log: log}
 }
 
-// Resolve возвращает только роли субъекта в явно выбранном проекте.
 func (s *Server) Resolve(ctx context.Context, subjectID, projectID string) (transport.Roles, error) {
 	roles, err := s.db.RoleBindings(ctx, subjectID, projectID)
 	if err != nil {

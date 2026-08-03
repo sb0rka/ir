@@ -15,9 +15,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Every dictionary the UI needs
-         * @description Vocabularies the rest of the API refers to by code — entity types, edge relations and configured sources. The client fetches this once at startup and caches it: without it a `type_code` is an opaque string with no icon, a `relation_code` has no human label, and the ingest dialog has no source to offer.
-         *     Returned as one payload rather than three endpoints because all of it is needed together, before anything else can render. Dictionaries are deployment-wide, not per-tenant, so the response is the same for every caller.
+         * Reference dictionaries
+         * @description Returns entity types, relation types and configured sources.
          */
         get: operations["getReference"];
         put?: never;
@@ -41,7 +40,7 @@ export interface components {
             /** @description Security tools events can be pulled from. Disabled ones are omitted. */
             sources: components["schemas"]["Source"][];
         };
-        /** @description A kind of thing an incident revolves around. The core set is fixed in code; anything peripheral is a dictionary row, which is why the client must read this rather than hardcode the list. */
+        /** @description Entity type available to the API. */
         EntityType: {
             /** @description What `type_code` on an entity or a graph node holds — host, user, account, email, process, ip, domain, url, file_hash. */
             code: string;

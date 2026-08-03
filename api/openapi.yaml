@@ -5,19 +5,7 @@ info:
   license:
     name: Apache-2.0
     url: https://www.apache.org/licenses/LICENSE-2.0
-  description: |
-    REST API for SOC incident investigation.
-
-    The product is one graph of evidence per case. Events are pulled in from
-    security tools, entities are extracted from them, and edges claim how those
-    things are related. Everything a machine proposes is born unconfirmed and
-    must be reviewed by a human, and every claim that survives review cites the
-    source events it rests on — so any conclusion can be traced back to a record
-    in the customer's own system.
-
-    Investigations form a tree: a root is a case, a child is a hypothesis inside
-    it. There is no separate "finding" type — a hypothesis that holds up is
-    simply a closed child with a confirmed verdict.
+  description: REST API for SOC investigations and their evidence graphs.
 servers:
   - url: /api/v1
 security:
@@ -25,25 +13,15 @@ security:
 
 tags:
   - name: investigations
-    description: >-
-      The tree of cases and hypotheses. A root is an incident under
-      investigation; a child is a claim being tested inside it.
+    description: Cases and nested hypotheses.
   - name: events
-    description: >-
-      Evidence — records pulled from security tools into one investigation.
-      Facts, never edited, never given a status.
+    description: Tenant events and their investigation links.
   - name: entities
-    description: >-
-      Hosts, accounts, processes, addresses and hashes extracted from events,
-      with the cross-case history that answers "have we seen this before".
+    description: Tenant entities extracted from events or added by analysts.
   - name: graph
-    description: >-
-      Nodes, the edges claiming how they relate, and the review that turns a
-      machine's suggestion into an established fact.
+    description: Investigation graph nodes, edges and evidence.
   - name: reference
-    description: >-
-      Dictionaries the rest of the API refers to by code — entity types, edge
-      relations, configured sources. Read once at startup.
+    description: Entity types, relations and configured sources.
 
 components:
   securitySchemes:
@@ -52,7 +30,5 @@ components:
       scheme: bearer
       bearerFormat: JWT
       description: >-
-        Ed25519-signed access token issued by sb0rka auth. The service verifies
-        it with the public key only — it never holds signing material. The
-        required X-Project-ID header selects the tenant, and access is granted
-        only when the token subject has an IR role in that project.
+        Access token issued by sb0rka auth. X-Project-ID selects the project;
+        the subject must have an IR role in it.

@@ -12,14 +12,14 @@ export interface paths {
                 "X-Project-ID": components["parameters"]["ProjectId"];
             };
             path: {
-                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
+                /** @description Identifier of an investigation in the selected project. */
                 investigation_id: components["parameters"]["InvestigationId"];
             };
             cookie?: never;
         };
         /**
          * Entities of the investigation
-         * @description Everything the case has extracted so far, newest first. Backs the entity panel next to the graph and the picker used when drawing an edge by hand.
+         * @description Entities linked to the investigation, newest first.
          */
         get: operations["listEntities"];
         put?: never;
@@ -44,8 +44,7 @@ export interface paths {
         put?: never;
         /**
          * Add an entity by hand
-         * @description Entities normally arrive with events, but an analyst often starts from an indicator someone handed them — a hash from a bulletin, an address from a colleague — before any event mentions it. This creates that entity so it can be placed on the graph and reasoned about immediately.
-         *     Idempotent on type and key: adding one that already exists returns the existing entity rather than a duplicate, so the same indicator entered twice stays one node.
+         * @description Creates a tenant entity or reuses one with the same type and canonical key, then links it to the investigation.
          */
         post: operations["createEntity"];
         delete?: never;
@@ -69,22 +68,21 @@ export interface paths {
         };
         /**
          * Entity card
-         * @description Everything known about one host, account, process, address or hash across the whole tenant: how much evidence mentions it, which investigations it turns up in, and what it is connected to. The cross-case part is what answers "have we seen this before", and it works precisely because the entity is one row rather than a copy per case.
+         * @description Returns tenant-wide event counts, investigation occurrences and graph neighbors for one entity.
          */
         get: operations["getEntityCard"];
         put?: never;
         post?: never;
         /**
          * Delete an entity from the tenant
-         * @description Erases the entity everywhere, along with its history. Almost never what is wanted — to remove it from one case delete the membership instead, which leaves the entity and the other cases alone.
-         *     Refused while the entity is part of any investigation or mentioned by any event, so this only ever applies to something typed in by mistake.
+         * @description Deletes a tenant entity. Returns 409 while it is linked to an investigation or referenced by an event.
          */
         delete: operations["deleteEntity"];
         options?: never;
         head?: never;
         /**
          * Edit an entity
-         * @description Changes only what a human can meaningfully improve — the label shown on the graph and the extra attributes. The type and the canonical key are fixed: they are the entity's identity, and rewriting them would silently turn one thing into another under every edge already attached to it.
+         * @description Updates the display name and metadata. Type and canonical key are immutable.
          */
         patch: operations["updateEntity"];
         trace?: never;
@@ -99,7 +97,7 @@ export interface paths {
             path: {
                 /** @description Identifier of an entity — a host, account, process, address or hash. */
                 entity_id: components["parameters"]["EntityId"];
-                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
+                /** @description Identifier of an investigation in the selected project. */
                 investigation_id: components["parameters"]["InvestigationId"];
             };
             cookie?: never;
@@ -109,8 +107,7 @@ export interface paths {
         post?: never;
         /**
          * Drop an entity from the investigation
-         * @description Says "this does not belong to my case", not "this never existed". The entity survives with its history intact and stays in every other case it is part of; only the membership goes, taking this case's graph node and the edges hanging off it.
-         *     Refused while an event of this case still mentions the entity — the entity is a consequence of that evidence, so drop the event instead.
+         * @description Removes the investigation link, graph node and connected edges. The tenant entity remains. Returns 409 if an attached event references it.
          */
         delete: operations["detachEntity"];
         options?: never;
@@ -126,14 +123,14 @@ export interface paths {
                 "X-Project-ID": components["parameters"]["ProjectId"];
             };
             path: {
-                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
+                /** @description Identifier of an investigation in the selected project. */
                 investigation_id: components["parameters"]["InvestigationId"];
             };
             cookie?: never;
         };
         /**
          * Timeline of the investigation
-         * @description Events already pulled into the case, oldest first. Ordered by occurred_at then id, which is what makes the cursor stable when several events share a timestamp. Raw payloads are omitted here — fetch a single event for those.
+         * @description Events linked to the investigation, ordered by occurred_at and id. Raw payloads are available from the single-event endpoint.
          */
         get: operations["listEvents"];
         put?: never;
@@ -158,8 +155,7 @@ export interface paths {
         put?: never;
         /**
          * Pull events into an investigation
-         * @description The way data enters the product. Takes either explicit references to source records or a query to run against a source. Each event is normalised, its entities are extracted, graph nodes are created and linking rules run — so the graph grows without an agent being involved.
-         *     A record already ingested for this tenant is linked, not copied: the event keeps one identity across every case that touches it, which is what lets the entity card say where else something has been seen. Idempotent — re-pulling into the same case changes nothing. Up to 500 events per call; a larger selection has to be split.
+         * @description Ingests events from explicit source references or a source query, then links them to an investigation. Existing tenant events are reused. Repeated links are ignored; a request may include at most 500 events.
          */
         post: operations["attachEvents"];
         delete?: never;
@@ -176,22 +172,21 @@ export interface paths {
                 "X-Project-ID": components["parameters"]["ProjectId"];
             };
             path: {
-                /** @description Identifier of an event already pulled into an investigation. */
+                /** @description Identifier of an event in the selected project. */
                 event_id: components["parameters"]["EventId"];
             };
             cookie?: never;
         };
         /**
          * One event in full
-         * @description The whole record, including the raw source payload and the link back to the originating console. This is the end of the provenance chain: every finding leads here, and here leads to the source system.
+         * @description Returns the normalized event, raw payload and source link.
          */
         get: operations["getEvent"];
         put?: never;
         post?: never;
         /**
          * Delete an event from the tenant
-         * @description Erases the event everywhere. Almost never what is wanted — to remove it from one case delete the membership instead, which leaves the event and the other cases alone.
-         *     Refused while the event is attached to any investigation, so this only ever applies to something ingested by mistake and not yet used.
+         * @description Deletes a tenant event. Returns 409 while it is linked to any investigation.
          */
         delete: operations["deleteEvent"];
         options?: never;
@@ -207,9 +202,9 @@ export interface paths {
                 "X-Project-ID": components["parameters"]["ProjectId"];
             };
             path: {
-                /** @description Identifier of an event already pulled into an investigation. */
+                /** @description Identifier of an event in the selected project. */
                 event_id: components["parameters"]["EventId"];
-                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
+                /** @description Identifier of an investigation in the selected project. */
                 investigation_id: components["parameters"]["InvestigationId"];
             };
             cookie?: never;
@@ -219,8 +214,7 @@ export interface paths {
         post?: never;
         /**
          * Drop an event from the investigation
-         * @description Undoes a pull that brought in the wrong thing. The event leaves this timeline, its node on this graph goes with it, and so do the edges that hung off that node.
-         *     The event itself survives, along with its place in every other case — which is the point of events being shared rather than copied. Refused while a confirmed edge of this case cites it: removing it would leave an established claim resting on nothing.
+         * @description Removes the investigation link, graph node and connected edges. The tenant event remains. Returns 409 if a confirmed edge cites the event.
          */
         delete: operations["detachEvent"];
         options?: never;
@@ -236,7 +230,7 @@ export interface paths {
                 "X-Project-ID": components["parameters"]["ProjectId"];
             };
             path: {
-                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
+                /** @description Identifier of an investigation in the selected project. */
                 investigation_id: components["parameters"]["InvestigationId"];
             };
             cookie?: never;
@@ -262,7 +256,7 @@ export interface paths {
                 "X-Project-ID": components["parameters"]["ProjectId"];
             };
             path: {
-                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
+                /** @description Identifier of an investigation in the selected project. */
                 investigation_id: components["parameters"]["InvestigationId"];
             };
             cookie?: never;
@@ -275,8 +269,7 @@ export interface paths {
         put?: never;
         /**
          * Put a node on the graph
-         * @description Entity nodes appear on their own when events are pulled in, but events stay on the timeline until someone decides one matters. This is that decision — the analyst promotes an event from the timeline onto the graph so edges can be drawn from it, which is how an attack chain gets reconstructed by hand.
-         *     Idempotent: promoting something already on the graph returns the existing node rather than failing, so the button is safe to press twice.
+         * @description Creates an entity or event node. If the node already exists, returns the existing node.
          */
         post: operations["createNode"];
         delete?: never;
@@ -293,7 +286,7 @@ export interface paths {
                 "X-Project-ID": components["parameters"]["ProjectId"];
             };
             path: {
-                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
+                /** @description Identifier of an investigation in the selected project. */
                 investigation_id: components["parameters"]["InvestigationId"];
                 /** @description Identifier of a graph node. Edges reference this, not the entity or event behind it. */
                 node_id: components["parameters"]["NodeId"];
@@ -325,7 +318,7 @@ export interface paths {
                 "X-Project-ID": components["parameters"]["ProjectId"];
             };
             path: {
-                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
+                /** @description Identifier of an investigation in the selected project. */
                 investigation_id: components["parameters"]["InvestigationId"];
             };
             cookie?: never;
@@ -338,7 +331,7 @@ export interface paths {
         put?: never;
         /**
          * Draw an edge by hand
-         * @description The analyst's manual correction of the graph. An edge created here is born confirmed — a human asserting it is the assertion. The relation must exist in the dictionary and its declared endpoints must match the node kinds, so an event-to-event relation cannot be hung between two entities. Re-creating the same triple returns 409 rather than a duplicate.
+         * @description Creates a confirmed edge. The relation must exist and support the source and target node kinds. A duplicate source-relation-target triple returns 409.
          */
         post: operations["createGraphEdge"];
         delete?: never;
@@ -355,7 +348,7 @@ export interface paths {
                 "X-Project-ID": components["parameters"]["ProjectId"];
             };
             path: {
-                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
+                /** @description Identifier of an investigation in the selected project. */
                 investigation_id: components["parameters"]["InvestigationId"];
                 /** @description Identifier of an edge — one claim that two nodes are related. */
                 edge_id: components["parameters"]["GraphEdgeId"];
@@ -371,15 +364,14 @@ export interface paths {
         post?: never;
         /**
          * Delete an edge
-         * @description For an edge drawn by mistake. A claim that was considered and found wrong should be rejected with a reason instead — that survives into the report as "checked and excluded", while deleting leaves no trace that anyone looked.
+         * @description Deletes an edge from the investigation graph.
          */
         delete: operations["deleteGraphEdge"];
         options?: never;
         head?: never;
         /**
          * Edit one edge
-         * @description Reviewing a single edge, plus corrections to what it claims. Rejecting requires a reason. The endpoints and the relation are fixed — an edge between different nodes is a different claim, so delete this one and draw the right one.
-         *     Use the batch review endpoint when handling a queue; this is for the one edge open in front of you.
+         * @description Updates review fields for one edge. Rejecting requires a reason. Source, target and relation are immutable.
          */
         patch: operations["updateGraphEdge"];
         trace?: never;
@@ -392,7 +384,7 @@ export interface paths {
                 "X-Project-ID": components["parameters"]["ProjectId"];
             };
             path: {
-                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
+                /** @description Identifier of an investigation in the selected project. */
                 investigation_id: components["parameters"]["InvestigationId"];
                 /** @description Identifier of an edge — one claim that two nodes are related. */
                 edge_id: components["parameters"]["GraphEdgeId"];
@@ -401,13 +393,13 @@ export interface paths {
         };
         /**
          * What the edge rests on
-         * @description The cited events in full. This is the provenance chain the product is built to defend: from a claim on the graph to the events behind it, and from each event to the record in the source tool.
+         * @description Returns the events cited as evidence for the edge.
          */
         get: operations["listGraphEdgeEvidence"];
         put?: never;
         /**
          * Cite more events
-         * @description Adds grounds to an edge that already exists — the case for a claim usually accumulates rather than arriving complete. Events must belong to the same investigation; citing another case's evidence is refused by the database, not merely by the service. Already-cited events are ignored rather than duplicated.
+         * @description Adds investigation events as edge evidence. Existing evidence links are ignored.
          */
         post: operations["addGraphEdgeEvidence"];
         delete?: never;
@@ -424,11 +416,11 @@ export interface paths {
                 "X-Project-ID": components["parameters"]["ProjectId"];
             };
             path: {
-                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
+                /** @description Identifier of an investigation in the selected project. */
                 investigation_id: components["parameters"]["InvestigationId"];
                 /** @description Identifier of an edge — one claim that two nodes are related. */
                 edge_id: components["parameters"]["GraphEdgeId"];
-                /** @description Identifier of an event already pulled into an investigation. */
+                /** @description Identifier of an event in the selected project. */
                 event_id: components["parameters"]["EventId"];
             };
             cookie?: never;
@@ -438,7 +430,7 @@ export interface paths {
         post?: never;
         /**
          * Stop citing an event
-         * @description Removes one ground from an edge. Refused if it is the last one on a confirmed edge: an established claim resting on nothing is exactly what the product exists to prevent. Reject the edge instead.
+         * @description Removes one evidence link. Removing the last evidence item from a confirmed edge returns 422.
          */
         delete: operations["deleteGraphEdgeEvidence"];
         options?: never;
@@ -454,7 +446,7 @@ export interface paths {
                 "X-Project-ID": components["parameters"]["ProjectId"];
             };
             path: {
-                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
+                /** @description Identifier of an investigation in the selected project. */
                 investigation_id: components["parameters"]["InvestigationId"];
             };
             cookie?: never;
@@ -490,7 +482,7 @@ export interface paths {
         put?: never;
         /**
          * Open an investigation or a hypothesis under one
-         * @description A root investigation is a case. A child is a hypothesis inside it — "the account was compromised", "this was the initial access". The tree is the same object at every level, so a hypothesis that grows can carry its own children without being converted into anything.
+         * @description A root investigation is a case; a child is a hypothesis.
          */
         post: operations["createInvestigation"];
         delete?: never;
@@ -507,7 +499,7 @@ export interface paths {
                 "X-Project-ID": components["parameters"]["ProjectId"];
             };
             path: {
-                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
+                /** @description Identifier of an investigation in the selected project. */
                 investigation_id: components["parameters"]["InvestigationId"];
             };
             cookie?: never;
@@ -521,14 +513,14 @@ export interface paths {
         post?: never;
         /**
          * Delete an investigation
-         * @description Removes the investigation and everything it owns — its events, entities, graph and edges — along with the whole subtree beneath it. Irreversible, and meant for cases opened by mistake; a case that was actually worked on should be closed with a verdict instead, so the reasoning survives.
+         * @description Deletes the investigation subtree, its graph data and its links to shared events and entities. Tenant event and entity records remain.
          */
         delete: operations["deleteInvestigation"];
         options?: never;
         head?: never;
         /**
          * Update an investigation
-         * @description Edits the fields sent and nothing else. Closing requires a verdict, and rejecting requires a stated reason — a case cannot be closed silently. Confirming a hypothesis requires at least one attached event, which is the invariant the whole product rests on; violating it returns 422 with `details.reason=evidence_required`. A closed investigation refuses further changes with 409, except reopening it: sending status=open clears the verdict and is written to the audit log.
+         * @description Updates only the supplied fields. Closing requires a verdict; rejecting requires a reason. Confirming a hypothesis without an attached event returns 422 with `details.reason=evidence_required`. A closed investigation can only be reopened; reopening clears the verdict.
          */
         patch: operations["updateInvestigation"];
         trace?: never;
@@ -541,7 +533,7 @@ export interface paths {
                 "X-Project-ID": components["parameters"]["ProjectId"];
             };
             path: {
-                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
+                /** @description Identifier of an investigation in the selected project. */
                 investigation_id: components["parameters"]["InvestigationId"];
             };
             cookie?: never;
@@ -570,9 +562,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Every dictionary the UI needs
-         * @description Vocabularies the rest of the API refers to by code — entity types, edge relations and configured sources. The client fetches this once at startup and caches it: without it a `type_code` is an opaque string with no icon, a `relation_code` has no human label, and the ingest dialog has no source to offer.
-         *     Returned as one payload rather than three endpoints because all of it is needed together, before anything else can render. Dictionaries are deployment-wide, not per-tenant, so the response is the same for every caller.
+         * Reference dictionaries
+         * @description Returns entity types, relation types and configured sources.
          */
         get: operations["getReference"];
         put?: never;
@@ -587,36 +578,33 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        /**
-         * @description A named thing an incident revolves around — a host, account, process, address or hash — extracted from source events during ingestion.
-         *     An entity belongs to the tenant, not to one investigation: one host is one row no matter how many cases touch it. That is what makes first_seen, last_seen and the cross-case history on the card mean anything. Across tenants nothing is merged — dc-01 of two different customers stays two hosts.
-         */
+        /** @description A tenant-scoped host, account, process, address or hash. Investigation membership is stored separately. */
         Entity: {
             /**
              * Format: uuid
              * @description Identifier of the entity within the tenant.
              */
             id: string;
-            /** @description How it got into the investigation being listed. A property of the membership, not of the entity — extracted from an event in one case, typed in as an indicator in another. */
+            /** @description How the entity was linked to the listed investigation. */
             added_via?: components["schemas"]["EntityOrigin"];
-            /** @description Kind of thing this is — host, user, account, email, process, ip, domain, url, file_hash. The core set is fixed; peripheral kinds are added as dictionary rows without a migration. */
+            /** @description Entity type code from the reference dictionary. */
             type_code: string;
-            /** @description Normalised identity used for matching: fqdn for a host, SID for an account, GUID for a process, sha256 for a file. Two records with the same type and key are the same thing, so linking rules join on it. */
+            /** @description Normalized identity unique within an entity type. */
             canonical_key: string;
             /** @description Label for the UI. Falls back to canonical_key when absent. */
             display_name?: string | null;
-            /** @description Extra attributes carried over from the source — OS version, owner, geolocation. Free-form on purpose: sources differ. */
+            /** @description Source-specific attributes. */
             metadata?: {
                 [key: string]: unknown;
             };
             /**
              * Format: date-time
-             * @description Earliest event mentioning the entity anywhere in the tenant, not just in the case at hand.
+             * @description Earliest tenant event that mentions the entity.
              */
             first_seen?: string | null;
             /**
              * Format: date-time
-             * @description Latest event mentioning it. Together with first_seen this bounds the window the entity was active in, across every investigation.
+             * @description Latest tenant event that mentions the entity.
              */
             last_seen?: string | null;
         };
@@ -629,12 +617,12 @@ export interface components {
         EntityCreate: {
             /**
              * Format: uuid
-             * @description Investigation to add the entity to. The entity itself belongs to the tenant, so this says where it should show up, not who owns it.
+             * @description Investigation to link the entity to.
              */
             investigation_id: string;
-            /** @description Kind of thing, from the entity-type dictionary. Rejected if unknown, so a typo cannot invent a type. */
+            /** @description Entity type code from the reference dictionary. */
             type_code: string;
-            /** @description Normalised identity — fqdn for a host, SID for an account, sha256 for a file. Together with the type this is what makes two records the same thing, so it is worth normalising before sending. */
+            /** @description Normalized identity unique within the entity type. */
             canonical_key: string;
             /** @description Label for the UI. Falls back to the canonical key when absent. */
             display_name?: string;
@@ -659,13 +647,13 @@ export interface components {
             /** @description Pass as `cursor` to get the next page. Absent on the last page. */
             next_cursor?: string | null;
         };
-        /** @description Entity plus the context an analyst needs to judge it: how much of this case it touches, where else it has surfaced, and who it talks to. */
+        /** @description Tenant-wide context for an entity. */
         EntityCard: {
             /** @description The entity this card is about. */
             entity: components["schemas"]["Entity"];
             /** @description Events across the tenant the entity takes part in. Per-case counts are in `occurrences`. */
             events_count: number;
-            /** @description Investigations the entity is part of, with its weight in each. This is the spread assessment: a hash in five cases means five hosts to check. Since the entity is one row rather than a copy per case, this is a plain lookup, not a match on type and key. */
+            /** @description Investigations linked to the entity, with event counts. */
             occurrences: {
                 /**
                  * Format: uuid
@@ -677,7 +665,7 @@ export interface components {
                 /** @description How many of its events involve the entity. */
                 events_count: number;
             }[];
-            /** @description Entities reachable over confirmed edges only. Proposed links are left out — a card should show what is established, not what is suspected. */
+            /** @description Entities connected by confirmed edges. */
             neighbors?: {
                 /**
                  * Format: uuid
@@ -707,25 +695,22 @@ export interface components {
                 };
             };
         };
-        /**
-         * @description A fact from a security tool. Events are never edited and carry no status: a fact cannot be confirmed or rejected, only cited.
-         *     An event belongs to the tenant, not to one investigation — the same source record routinely turns up in several cases, and copying it into each would destroy the answer to "where else has this been seen". Membership is a separate link, so pulling an event into a third case adds a relation rather than a duplicate.
-         */
+        /** @description An immutable tenant event. Investigation membership is stored separately, so one event may be linked to multiple investigations. */
         Event: {
             /**
              * Format: uuid
              * @description Identifier of the event within the tenant.
              */
             id: string;
-            /** @description Investigations this event has been pulled into. More than one is normal and is itself a signal: the same record appearing in several cases suggests they are related. */
+            /** @description Investigations linked to this event. */
             investigation_ids?: string[];
             /** @description Which tool it came from — siem, edr, ndr, infra. */
             source_code: string;
             /** @description Identifier of the record in that tool. Stable address for going back to the original. */
             source_event_id: string;
-            /** @description Ready-made link or query that opens the record in the source console. What turns "we claim" into "go and check". */
+            /** @description Link or query that opens the source record. */
             source_ref?: string | null;
-            /** @description What happened, in the product's vocabulary — process_start, network_session, logon, detection. */
+            /** @description Normalized event type, such as process_start or logon. */
             event_type: string;
             /**
              * Format: date-time
@@ -734,14 +719,14 @@ export interface components {
             occurred_at: string;
             /**
              * Format: date-time
-             * @description When it was pulled in. Differs from occurred_at whenever an analyst reaches back in time, which is most of the time.
+             * @description When the event was ingested.
              */
             ingested_at: string;
             /** @description The event mapped onto the common envelope — subject, action, object, status — so events from different tools can be compared and searched. */
             normalized_data?: {
                 [key: string]: unknown;
             };
-            /** @description Original payload as the source returned it. Kept for the cases where normalisation lost something. Omitted from list responses. */
+            /** @description Original source payload. Omitted from list responses. */
             raw_data?: {
                 [key: string]: unknown;
             } | null;
@@ -756,7 +741,7 @@ export interface components {
                 relation_code: string;
             }[];
         };
-        /** @description Event without the raw payload. A timeline page carries hundreds of events and raw payloads run to kilobytes each; the full record is available one at a time. */
+        /** @description Event without the raw payload. */
         EventSummary: {
             /**
              * Format: uuid
@@ -770,7 +755,7 @@ export interface components {
             attached_at?: string;
             /** @description Who pulled it into this investigation. */
             attached_by?: components["schemas"]["Actor"];
-            /** @description Why it was pulled in. Part of the case narrative, and likewise per-investigation. */
+            /** @description Explanation stored on the investigation-event link. */
             reason?: string | null;
             /** @description Which tool it came from. */
             source_code: string;
@@ -778,7 +763,7 @@ export interface components {
             source_event_id: string;
             /** @description Link that opens the record in the source console. */
             source_ref?: string | null;
-            /** @description What happened, in the product's vocabulary. */
+            /** @description Normalized event type. */
             event_type: string;
             /**
              * Format: date-time
@@ -805,11 +790,11 @@ export interface components {
                 relation_code: string;
             }[];
         };
-        /** @description What to pull and where to. Give either refs, when the records are already known, or query, to let the source find them — exactly one of the two. */
+        /** @description Events to ingest and link. Exactly one of refs and query must be set. */
         EventAttachRequest: {
             /**
              * Format: uuid
-             * @description Investigation to pull the events into. The events themselves belong to the tenant, so this says where they should show up, not who owns them.
+             * @description Investigation to link the events to.
              */
             investigation_id: string;
             /** @description Records addressed directly. Used when the analyst has already picked them out, or when an agent cites what it found. */
@@ -819,7 +804,7 @@ export interface components {
                 /** @description Its identifier in that tool. */
                 source_event_id: string;
             }[];
-            /** @description A selection to run against one source. This is the pivot: give it an entity key and a window, and whatever the source returns lands in the case. */
+            /** @description Selection to run against one source. */
             query?: {
                 /** @description Which source to query. */
                 source_code: string;
@@ -843,20 +828,20 @@ export interface components {
                  */
                 limit: number;
             };
-            /** @description Why this was pulled. Goes into the audit log and into the case narrative — the record of what the analyst was thinking. */
+            /** @description Explanation stored on the investigation-event link. */
             reason?: string;
         };
         /** @description What the pull changed in the investigation. */
         EventAttachResult: {
             /** @description Events newly added to the case, whether ingested now or already known. */
             attached: number;
-            /** @description Of those, how many already existed for the tenant and were linked rather than ingested. Non-zero means this case overlaps another — worth a look. */
+            /** @description Existing tenant events newly linked to the investigation. */
             reused?: number;
-            /** @description Events already in this case and therefore skipped. Normal, not an error: overlapping pulls are expected. */
+            /** @description Events already linked to the investigation and skipped. */
             duplicates: number;
             /** @description Entities created or updated from the new events. Counts entities, not mentions. */
             entities_extracted: number;
-            /** @description Edges linking rules produced from the new events. This is the graph growing without an agent: rules alone connect what obviously belongs together. */
+            /** @description Edges created by linking rules. */
             edges_created: number;
         };
         /** @description One page of the timeline. */
@@ -1099,7 +1084,7 @@ export interface components {
                 /** @description Version the client last saw. Guards against a concurrent edit. */
                 version: number;
             }[];
-            /** @description Edges the analyst rules out. They are kept, not deleted — a checked and excluded lead is a result too. */
+            /** @description Edges to reject while retaining their review result. */
             reject?: {
                 /**
                  * Format: uuid
@@ -1108,7 +1093,7 @@ export interface components {
                 id: string;
                 /** @description Version the client last saw. */
                 version: number;
-                /** @description Why it does not hold. Required — an unexplained rejection is worthless in the report. */
+                /** @description Rejection reason. */
                 reason: string;
             }[];
         };
@@ -1120,7 +1105,7 @@ export interface components {
             rejected: string[];
         };
         /**
-         * @description Where an edge stands in review. Proposed until a human accepts it. Rejected edges are kept rather than deleted, so that "checked and excluded" survives into the report.
+         * @description Review state. Rejected edges remain stored with their review result.
          * @enum {string}
          */
         GraphEdgeStatus: "proposed" | "confirmed" | "rejected";
@@ -1134,7 +1119,7 @@ export interface components {
          * @enum {string}
          */
         Origin: "analyst" | "rule" | "agent";
-        /** @description A case or a hypothesis within one — the same shape at every level of the tree. It owns its evidence, its entities and its graph; nothing crosses from one investigation to another. */
+        /** @description A case or a nested hypothesis in the selected project. */
         Investigation: {
             /**
              * Format: uuid
@@ -1158,11 +1143,11 @@ export interface components {
             severity?: components["schemas"]["Severity"];
             /** @description The conclusion. Absent while the investigation is still open, required to close it. Which values are allowed depends on whether this is a root case or a hypothesis — see Verdict. */
             verdict?: components["schemas"]["Verdict"];
-            /** @description Why that conclusion. Required when rejecting — a rejected hypothesis without a reason teaches nobody anything. */
+            /** @description Reason for the verdict. Required when rejecting. */
             verdict_reason?: string | null;
             /** @description How sure the conclusion is. Meaningful for a hypothesis, rarely used on a root case. */
             confidence?: number | null;
-            /** @description Who opened it — an analyst through the API, a linking rule, or an agent. Set by the server from how the request arrived; a client cannot claim it. */
+            /** @description Creator type, assigned by the server. */
             origin?: components["schemas"]["Origin"];
             /** @description Which one exactly — the analyst's subject id, the rule's code, or the agent run's identifier. */
             origin_ref?: string | null;
@@ -1178,7 +1163,7 @@ export interface components {
                 events: number;
                 /** @description Distinct entities extracted from those events. */
                 entities: number;
-                /** @description Edges still waiting for review. This is the analyst's queue — non-zero means there is work to do here. */
+                /** @description Edges waiting for review. */
                 proposed_edges: number;
             };
             /**
@@ -1278,7 +1263,7 @@ export interface components {
             /** @description Security tools events can be pulled from. Disabled ones are omitted. */
             sources: components["schemas"]["Source"][];
         };
-        /** @description A kind of thing an incident revolves around. The core set is fixed in code; anything peripheral is a dictionary row, which is why the client must read this rather than hardcode the list. */
+        /** @description Entity type available to the API. */
         EntityType: {
             /** @description What `type_code` on an entity or a graph node holds — host, user, account, email, process, ip, domain, url, file_hash. */
             code: string;
@@ -1397,7 +1382,7 @@ export interface components {
     parameters: {
         /** @description Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored. */
         ProjectId: string;
-        /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
+        /** @description Identifier of an investigation in the selected project. */
         InvestigationId: string;
         /** @description How many items to return. The server may return fewer, never more. */
         Limit: number;
@@ -1405,7 +1390,7 @@ export interface components {
         Cursor: string;
         /** @description Identifier of an entity — a host, account, process, address or hash. */
         EntityId: string;
-        /** @description Identifier of an event already pulled into an investigation. */
+        /** @description Identifier of an event in the selected project. */
         EventId: string;
         /** @description Identifier of a graph node. Edges reference this, not the entity or event behind it. */
         NodeId: string;
@@ -1435,7 +1420,7 @@ export interface operations {
                 "X-Project-ID": components["parameters"]["ProjectId"];
             };
             path: {
-                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
+                /** @description Identifier of an investigation in the selected project. */
                 investigation_id: components["parameters"]["InvestigationId"];
             };
             cookie?: never;
@@ -1599,7 +1584,7 @@ export interface operations {
             path: {
                 /** @description Identifier of an entity — a host, account, process, address or hash. */
                 entity_id: components["parameters"]["EntityId"];
-                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
+                /** @description Identifier of an investigation in the selected project. */
                 investigation_id: components["parameters"]["InvestigationId"];
             };
             cookie?: never;
@@ -1646,7 +1631,7 @@ export interface operations {
                 "X-Project-ID": components["parameters"]["ProjectId"];
             };
             path: {
-                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
+                /** @description Identifier of an investigation in the selected project. */
                 investigation_id: components["parameters"]["InvestigationId"];
             };
             cookie?: never;
@@ -1713,7 +1698,7 @@ export interface operations {
                 "X-Project-ID": components["parameters"]["ProjectId"];
             };
             path: {
-                /** @description Identifier of an event already pulled into an investigation. */
+                /** @description Identifier of an event in the selected project. */
                 event_id: components["parameters"]["EventId"];
             };
             cookie?: never;
@@ -1744,7 +1729,7 @@ export interface operations {
                 "X-Project-ID": components["parameters"]["ProjectId"];
             };
             path: {
-                /** @description Identifier of an event already pulled into an investigation. */
+                /** @description Identifier of an event in the selected project. */
                 event_id: components["parameters"]["EventId"];
             };
             cookie?: never;
@@ -1774,9 +1759,9 @@ export interface operations {
                 "X-Project-ID": components["parameters"]["ProjectId"];
             };
             path: {
-                /** @description Identifier of an event already pulled into an investigation. */
+                /** @description Identifier of an event in the selected project. */
                 event_id: components["parameters"]["EventId"];
-                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
+                /** @description Identifier of an investigation in the selected project. */
                 investigation_id: components["parameters"]["InvestigationId"];
             };
             cookie?: never;
@@ -1813,7 +1798,7 @@ export interface operations {
                 "X-Project-ID": components["parameters"]["ProjectId"];
             };
             path: {
-                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
+                /** @description Identifier of an investigation in the selected project. */
                 investigation_id: components["parameters"]["InvestigationId"];
             };
             cookie?: never;
@@ -1854,7 +1839,7 @@ export interface operations {
                 "X-Project-ID": components["parameters"]["ProjectId"];
             };
             path: {
-                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
+                /** @description Identifier of an investigation in the selected project. */
                 investigation_id: components["parameters"]["InvestigationId"];
             };
             cookie?: never;
@@ -1886,7 +1871,7 @@ export interface operations {
                 "X-Project-ID": components["parameters"]["ProjectId"];
             };
             path: {
-                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
+                /** @description Identifier of an investigation in the selected project. */
                 investigation_id: components["parameters"]["InvestigationId"];
             };
             cookie?: never;
@@ -1922,7 +1907,7 @@ export interface operations {
                 "X-Project-ID": components["parameters"]["ProjectId"];
             };
             path: {
-                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
+                /** @description Identifier of an investigation in the selected project. */
                 investigation_id: components["parameters"]["InvestigationId"];
                 /** @description Identifier of a graph node. Edges reference this, not the entity or event behind it. */
                 node_id: components["parameters"]["NodeId"];
@@ -1955,7 +1940,7 @@ export interface operations {
                 "X-Project-ID": components["parameters"]["ProjectId"];
             };
             path: {
-                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
+                /** @description Identifier of an investigation in the selected project. */
                 investigation_id: components["parameters"]["InvestigationId"];
                 /** @description Identifier of a graph node. Edges reference this, not the entity or event behind it. */
                 node_id: components["parameters"]["NodeId"];
@@ -2001,7 +1986,7 @@ export interface operations {
                 "X-Project-ID": components["parameters"]["ProjectId"];
             };
             path: {
-                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
+                /** @description Identifier of an investigation in the selected project. */
                 investigation_id: components["parameters"]["InvestigationId"];
             };
             cookie?: never;
@@ -2033,7 +2018,7 @@ export interface operations {
                 "X-Project-ID": components["parameters"]["ProjectId"];
             };
             path: {
-                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
+                /** @description Identifier of an investigation in the selected project. */
                 investigation_id: components["parameters"]["InvestigationId"];
             };
             cookie?: never;
@@ -2070,7 +2055,7 @@ export interface operations {
                 "X-Project-ID": components["parameters"]["ProjectId"];
             };
             path: {
-                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
+                /** @description Identifier of an investigation in the selected project. */
                 investigation_id: components["parameters"]["InvestigationId"];
                 /** @description Identifier of an edge — one claim that two nodes are related. */
                 edge_id: components["parameters"]["GraphEdgeId"];
@@ -2103,7 +2088,7 @@ export interface operations {
                 "X-Project-ID": components["parameters"]["ProjectId"];
             };
             path: {
-                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
+                /** @description Identifier of an investigation in the selected project. */
                 investigation_id: components["parameters"]["InvestigationId"];
                 /** @description Identifier of an edge — one claim that two nodes are related. */
                 edge_id: components["parameters"]["GraphEdgeId"];
@@ -2134,7 +2119,7 @@ export interface operations {
                 "X-Project-ID": components["parameters"]["ProjectId"];
             };
             path: {
-                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
+                /** @description Identifier of an investigation in the selected project. */
                 investigation_id: components["parameters"]["InvestigationId"];
                 /** @description Identifier of an edge — one claim that two nodes are related. */
                 edge_id: components["parameters"]["GraphEdgeId"];
@@ -2173,7 +2158,7 @@ export interface operations {
                 "X-Project-ID": components["parameters"]["ProjectId"];
             };
             path: {
-                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
+                /** @description Identifier of an investigation in the selected project. */
                 investigation_id: components["parameters"]["InvestigationId"];
                 /** @description Identifier of an edge — one claim that two nodes are related. */
                 edge_id: components["parameters"]["GraphEdgeId"];
@@ -2206,7 +2191,7 @@ export interface operations {
                 "X-Project-ID": components["parameters"]["ProjectId"];
             };
             path: {
-                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
+                /** @description Identifier of an investigation in the selected project. */
                 investigation_id: components["parameters"]["InvestigationId"];
                 /** @description Identifier of an edge — one claim that two nodes are related. */
                 edge_id: components["parameters"]["GraphEdgeId"];
@@ -2244,11 +2229,11 @@ export interface operations {
                 "X-Project-ID": components["parameters"]["ProjectId"];
             };
             path: {
-                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
+                /** @description Identifier of an investigation in the selected project. */
                 investigation_id: components["parameters"]["InvestigationId"];
                 /** @description Identifier of an edge — one claim that two nodes are related. */
                 edge_id: components["parameters"]["GraphEdgeId"];
-                /** @description Identifier of an event already pulled into an investigation. */
+                /** @description Identifier of an event in the selected project. */
                 event_id: components["parameters"]["EventId"];
             };
             cookie?: never;
@@ -2278,7 +2263,7 @@ export interface operations {
                 "X-Project-ID": components["parameters"]["ProjectId"];
             };
             path: {
-                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
+                /** @description Identifier of an investigation in the selected project. */
                 investigation_id: components["parameters"]["InvestigationId"];
             };
             cookie?: never;
@@ -2397,7 +2382,7 @@ export interface operations {
                 "X-Project-ID": components["parameters"]["ProjectId"];
             };
             path: {
-                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
+                /** @description Identifier of an investigation in the selected project. */
                 investigation_id: components["parameters"]["InvestigationId"];
             };
             cookie?: never;
@@ -2428,7 +2413,7 @@ export interface operations {
                 "X-Project-ID": components["parameters"]["ProjectId"];
             };
             path: {
-                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
+                /** @description Identifier of an investigation in the selected project. */
                 investigation_id: components["parameters"]["InvestigationId"];
             };
             cookie?: never;
@@ -2457,7 +2442,7 @@ export interface operations {
                 "X-Project-ID": components["parameters"]["ProjectId"];
             };
             path: {
-                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
+                /** @description Identifier of an investigation in the selected project. */
                 investigation_id: components["parameters"]["InvestigationId"];
             };
             cookie?: never;
@@ -2494,7 +2479,7 @@ export interface operations {
                 "X-Project-ID": components["parameters"]["ProjectId"];
             };
             path: {
-                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
+                /** @description Identifier of an investigation in the selected project. */
                 investigation_id: components["parameters"]["InvestigationId"];
             };
             cookie?: never;

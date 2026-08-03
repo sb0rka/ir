@@ -132,7 +132,7 @@ func (e SourceKind) Valid() bool {
 // EntityCategory Family of entity types, coarse enough to stay stable as new types are added.
 type EntityCategory string
 
-// EntityType A kind of thing an incident revolves around. The core set is fixed in code; anything peripheral is a dictionary row, which is why the client must read this rather than hardcode the list.
+// EntityType Entity type available to the API.
 type EntityType struct {
 	// Category Broad family the type belongs to. Lets the graph colour related kinds alike without knowing every code.
 	Category EntityCategory `json:"category"`
@@ -233,7 +233,7 @@ type GetReferenceParams struct {
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
-	// GetReference Every dictionary the UI needs
+	// GetReference Reference dictionaries
 	// (GET /reference)
 	GetReference(w http.ResponseWriter, r *http.Request, params GetReferenceParams)
 }
@@ -505,7 +505,7 @@ func (response GetReference501JSONResponse) VisitGetReferenceResponse(w http.Res
 
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
-	// GetReference Every dictionary the UI needs
+	// GetReference Reference dictionaries
 	// (GET /reference)
 	GetReference(ctx context.Context, request GetReferenceRequestObject) (GetReferenceResponseObject, error)
 }

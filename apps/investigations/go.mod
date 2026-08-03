@@ -5,7 +5,7 @@ go 1.25.5
 require (
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/sb0rka/ir/packages/contract v0.0.0
-	github.com/sb0rka/sb0rka/packages/core v0.0.2-0.20260802194243-a949d19b8cab
+	github.com/sb0rka/sb0rka/packages/core v0.0.2-0.20260803112915-e905e3325eb9
 )
 
 require (

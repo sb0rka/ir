@@ -22,7 +22,7 @@ export interface paths {
         put?: never;
         /**
          * Open an investigation or a hypothesis under one
-         * @description A root investigation is a case. A child is a hypothesis inside it — "the account was compromised", "this was the initial access". The tree is the same object at every level, so a hypothesis that grows can carry its own children without being converted into anything.
+         * @description A root investigation is a case; a child is a hypothesis.
          */
         post: operations["createInvestigation"];
         delete?: never;
@@ -39,7 +39,7 @@ export interface paths {
                 "X-Project-ID": components["parameters"]["ProjectId"];
             };
             path: {
-                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
+                /** @description Identifier of an investigation in the selected project. */
                 investigation_id: components["parameters"]["InvestigationId"];
             };
             cookie?: never;
@@ -53,14 +53,14 @@ export interface paths {
         post?: never;
         /**
          * Delete an investigation
-         * @description Removes the investigation and everything it owns — its events, entities, graph and edges — along with the whole subtree beneath it. Irreversible, and meant for cases opened by mistake; a case that was actually worked on should be closed with a verdict instead, so the reasoning survives.
+         * @description Deletes the investigation subtree, its graph data and its links to shared events and entities. Tenant event and entity records remain.
          */
         delete: operations["deleteInvestigation"];
         options?: never;
         head?: never;
         /**
          * Update an investigation
-         * @description Edits the fields sent and nothing else. Closing requires a verdict, and rejecting requires a stated reason — a case cannot be closed silently. Confirming a hypothesis requires at least one attached event, which is the invariant the whole product rests on; violating it returns 422 with `details.reason=evidence_required`. A closed investigation refuses further changes with 409, except reopening it: sending status=open clears the verdict and is written to the audit log.
+         * @description Updates only the supplied fields. Closing requires a verdict; rejecting requires a reason. Confirming a hypothesis without an attached event returns 422 with `details.reason=evidence_required`. A closed investigation can only be reopened; reopening clears the verdict.
          */
         patch: operations["updateInvestigation"];
         trace?: never;
@@ -73,7 +73,7 @@ export interface paths {
                 "X-Project-ID": components["parameters"]["ProjectId"];
             };
             path: {
-                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
+                /** @description Identifier of an investigation in the selected project. */
                 investigation_id: components["parameters"]["InvestigationId"];
             };
             cookie?: never;
@@ -95,7 +95,7 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        /** @description A case or a hypothesis within one — the same shape at every level of the tree. It owns its evidence, its entities and its graph; nothing crosses from one investigation to another. */
+        /** @description A case or a nested hypothesis in the selected project. */
         Investigation: {
             /**
              * Format: uuid
@@ -119,11 +119,11 @@ export interface components {
             severity?: components["schemas"]["Severity"];
             /** @description The conclusion. Absent while the investigation is still open, required to close it. Which values are allowed depends on whether this is a root case or a hypothesis — see Verdict. */
             verdict?: components["schemas"]["Verdict"];
-            /** @description Why that conclusion. Required when rejecting — a rejected hypothesis without a reason teaches nobody anything. */
+            /** @description Reason for the verdict. Required when rejecting. */
             verdict_reason?: string | null;
             /** @description How sure the conclusion is. Meaningful for a hypothesis, rarely used on a root case. */
             confidence?: number | null;
-            /** @description Who opened it — an analyst through the API, a linking rule, or an agent. Set by the server from how the request arrived; a client cannot claim it. */
+            /** @description Creator type, assigned by the server. */
             origin?: components["schemas"]["Origin"];
             /** @description Which one exactly — the analyst's subject id, the rule's code, or the agent run's identifier. */
             origin_ref?: string | null;
@@ -139,7 +139,7 @@ export interface components {
                 events: number;
                 /** @description Distinct entities extracted from those events. */
                 entities: number;
-                /** @description Edges still waiting for review. This is the analyst's queue — non-zero means there is work to do here. */
+                /** @description Edges waiting for review. */
                 proposed_edges: number;
             };
             /**
@@ -325,7 +325,7 @@ export interface components {
         Limit: number;
         /** @description Opaque keyset cursor taken from `next_cursor` of the previous page. Encodes a position, not a query — do not build one by hand. Omit it to start from the beginning. */
         Cursor: string;
-        /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
+        /** @description Identifier of an investigation in the selected project. */
         InvestigationId: string;
     };
     requestBodies: never;
@@ -424,7 +424,7 @@ export interface operations {
                 "X-Project-ID": components["parameters"]["ProjectId"];
             };
             path: {
-                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
+                /** @description Identifier of an investigation in the selected project. */
                 investigation_id: components["parameters"]["InvestigationId"];
             };
             cookie?: never;
@@ -455,7 +455,7 @@ export interface operations {
                 "X-Project-ID": components["parameters"]["ProjectId"];
             };
             path: {
-                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
+                /** @description Identifier of an investigation in the selected project. */
                 investigation_id: components["parameters"]["InvestigationId"];
             };
             cookie?: never;
@@ -484,7 +484,7 @@ export interface operations {
                 "X-Project-ID": components["parameters"]["ProjectId"];
             };
             path: {
-                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
+                /** @description Identifier of an investigation in the selected project. */
                 investigation_id: components["parameters"]["InvestigationId"];
             };
             cookie?: never;
@@ -521,7 +521,7 @@ export interface operations {
                 "X-Project-ID": components["parameters"]["ProjectId"];
             };
             path: {
-                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
+                /** @description Identifier of an investigation in the selected project. */
                 investigation_id: components["parameters"]["InvestigationId"];
             };
             cookie?: never;

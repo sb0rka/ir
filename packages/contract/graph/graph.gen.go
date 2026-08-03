@@ -288,7 +288,7 @@ type GraphEdgePatch struct {
 	Why *string `json:"why,omitempty"`
 }
 
-// GraphEdgeStatus Where an edge stands in review. Proposed until a human accepts it. Rejected edges are kept rather than deleted, so that "checked and excluded" survives into the report.
+// GraphEdgeStatus Review state. Rejected edges remain stored with their review result.
 type GraphEdgeStatus string
 
 // GraphNode A point on the graph. Stands for exactly one entity or one event — never both, never neither.
@@ -368,12 +368,12 @@ type ReviewRequest struct {
 		Version int `json:"version"`
 	} `json:"confirm,omitempty"`
 
-	// Reject Edges the analyst rules out. They are kept, not deleted — a checked and excluded lead is a result too.
+	// Reject Edges to reject while retaining their review result.
 	Reject *[]struct {
 		// Id The edge.
 		Id openapi_types.UUID `json:"id"`
 
-		// Reason Why it does not hold. Required — an unexplained rejection is worthless in the report.
+		// Reason Rejection reason.
 		Reason string `json:"reason"`
 
 		// Version Version the client last saw.

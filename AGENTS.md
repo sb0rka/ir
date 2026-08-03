@@ -10,9 +10,11 @@
 
 ## Границы кода
 
-- Зависимости направлены так: `transport -> server -> store -> domain/model`.
-- SQL доступен только через `store.Database`; реализация находится в
-  `internal/store/psql`.
+- `cmd/ir-api` связывает `server`, `transport` и `store/psql`; `server` зависит
+  от `store.Database` и транспортных интерфейсов, а `transport` не импортирует
+  `server`.
+- HTTP-обработчики работают с SQL через `store.Database`. `irctl` выполняет
+  административные запросы напрямую через пул из `core/store`.
 - Общий код для `api`, `auth` и `ir-api` сначала проверять в
   `github.com/sb0rka/sb0rka/packages/core`. Не копировать конфиг, логирование,
   PostgreSQL-пул и auth context.

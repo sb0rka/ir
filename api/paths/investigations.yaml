@@ -14,11 +14,7 @@ paths:
     post:
       tags: [investigations]
       summary: Open an investigation or a hypothesis under one
-      description: >-
-        A root investigation is a case. A child is a hypothesis inside it —
-        "the account was compromised", "this was the initial access". The tree
-        is the same object at every level, so a hypothesis that grows can carry
-        its own children without being converted into anything.
+      description: A root investigation is a case; a child is a hypothesis.
       operationId: createInvestigation
       requestBody:
         required: true
@@ -107,13 +103,10 @@ paths:
       tags: [investigations]
       summary: Update an investigation
       description: >-
-        Edits the fields sent and nothing else. Closing requires a verdict, and
-        rejecting requires a stated reason — a case cannot be closed silently.
-        Confirming a hypothesis requires at least one attached event, which is
-        the invariant the whole product rests on; violating it returns 422 with
-        `details.reason=evidence_required`. A closed investigation refuses
-        further changes with 409, except reopening it: sending status=open
-        clears the verdict and is written to the audit log.
+        Updates only the supplied fields. Closing requires a verdict; rejecting
+        requires a reason. Confirming a hypothesis without an attached event
+        returns 422 with `details.reason=evidence_required`. A closed
+        investigation can only be reopened; reopening clears the verdict.
       operationId: updateInvestigation
       requestBody:
         required: true
@@ -138,10 +131,8 @@ paths:
       tags: [investigations]
       summary: Delete an investigation
       description: >-
-        Removes the investigation and everything it owns — its events, entities,
-        graph and edges — along with the whole subtree beneath it. Irreversible,
-        and meant for cases opened by mistake; a case that was actually worked on
-        should be closed with a verdict instead, so the reasoning survives.
+        Deletes the investigation subtree, its graph data and its links to
+        shared events and entities. Tenant event and entity records remain.
       operationId: deleteInvestigation
       responses:
         '204':
@@ -180,10 +171,7 @@ components:
   schemas:
     Investigation:
       type: object
-      description: >-
-        A case or a hypothesis within one — the same shape at every level of the
-        tree. It owns its evidence, its entities and its graph; nothing crosses
-        from one investigation to another.
+      description: A case or a nested hypothesis in the selected project.
       required: [id, project_id, title, status, version, som_workspace_ids, created_at, updated_at, counters]
       properties:
         id:
@@ -234,9 +222,7 @@ components:
         verdict_reason:
           type: string
           nullable: true
-          description: >-
-            Why that conclusion. Required when rejecting — a rejected hypothesis
-            without a reason teaches nobody anything.
+          description: Reason for the verdict. Required when rejecting.
         confidence:
           type: number
           minimum: 0
@@ -247,10 +233,7 @@ components:
             on a root case.
         origin:
           allOf: [{ $ref: '../shared/enums.yaml#/components/schemas/Origin' }]
-          description: >-
-            Who opened it — an analyst through the API, a linking rule, or an
-            agent. Set by the server from how the request arrived; a client
-            cannot claim it.
+          description: Creator type, assigned by the server.
         origin_ref:
           type: string
           nullable: true
@@ -286,9 +269,7 @@ components:
               description: Distinct entities extracted from those events.
             proposed_edges:
               type: integer
-              description: >-
-                Edges still waiting for review. This is the analyst's queue —
-                non-zero means there is work to do here.
+              description: Edges waiting for review.
         created_at:
           type: string
           format: date-time

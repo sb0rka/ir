@@ -165,7 +165,7 @@ type ErrorResponse struct {
 // ErrorResponseErrorCode Machine-readable reason, stable across releases. `validation` covers both a malformed body (400) and a well-formed but invalid one (422). `not_implemented` means the operation exists in the contract but has no implementation yet — a client can hide the control instead of showing an error.
 type ErrorResponseErrorCode string
 
-// Investigation A case or a hypothesis within one — the same shape at every level of the tree. It owns its evidence, its entities and its graph; nothing crosses from one investigation to another.
+// Investigation A case or a nested hypothesis in the selected project.
 type Investigation struct {
 	// ClosedAt When it was closed. Cleared if the investigation is reopened.
 	ClosedAt *time.Time `json:"closed_at,omitempty"`
@@ -184,7 +184,7 @@ type Investigation struct {
 		// Events Events pulled into this investigation.
 		Events int `json:"events"`
 
-		// ProposedEdges Edges still waiting for review. This is the analyst's queue — non-zero means there is work to do here.
+		// ProposedEdges Edges waiting for review.
 		ProposedEdges int `json:"proposed_edges"`
 	} `json:"counters"`
 
@@ -197,7 +197,7 @@ type Investigation struct {
 	// Id Identifier of the investigation.
 	Id openapi_types.UUID `json:"id"`
 
-	// Origin Who opened it — an analyst through the API, a linking rule, or an agent. Set by the server from how the request arrived; a client cannot claim it.
+	// Origin Creator type, assigned by the server.
 	Origin *Origin `json:"origin,omitempty"`
 
 	// OriginRef Which one exactly — the analyst's subject id, the rule's code, or the agent run's identifier.
@@ -227,7 +227,7 @@ type Investigation struct {
 	// Verdict The conclusion. Absent while the investigation is still open, required to close it. Which values are allowed depends on whether this is a root case or a hypothesis — see Verdict.
 	Verdict *Verdict `json:"verdict,omitempty"`
 
-	// VerdictReason Why that conclusion. Required when rejecting — a rejected hypothesis without a reason teaches nobody anything.
+	// VerdictReason Reason for the verdict. Required when rejecting.
 	VerdictReason *string `json:"verdict_reason,omitempty"`
 
 	// Version Bumped on every change. Send the value you last read when updating; a mismatch means someone else edited it first.
@@ -315,7 +315,7 @@ type InvestigationTree struct {
 			// Events Events pulled into this investigation.
 			Events int `json:"events"`
 
-			// ProposedEdges Edges still waiting for review. This is the analyst's queue — non-zero means there is work to do here.
+			// ProposedEdges Edges waiting for review.
 			ProposedEdges int `json:"proposed_edges"`
 		} `json:"counters"`
 
@@ -331,7 +331,7 @@ type InvestigationTree struct {
 		// Id Identifier of the investigation.
 		Id openapi_types.UUID `json:"id"`
 
-		// Origin Who opened it — an analyst through the API, a linking rule, or an agent. Set by the server from how the request arrived; a client cannot claim it.
+		// Origin Creator type, assigned by the server.
 		Origin *Origin `json:"origin,omitempty"`
 
 		// OriginRef Which one exactly — the analyst's subject id, the rule's code, or the agent run's identifier.
@@ -361,7 +361,7 @@ type InvestigationTree struct {
 		// Verdict The conclusion. Absent while the investigation is still open, required to close it. Which values are allowed depends on whether this is a root case or a hypothesis — see Verdict.
 		Verdict *Verdict `json:"verdict,omitempty"`
 
-		// VerdictReason Why that conclusion. Required when rejecting — a rejected hypothesis without a reason teaches nobody anything.
+		// VerdictReason Reason for the verdict. Required when rejecting.
 		VerdictReason *string `json:"verdict_reason,omitempty"`
 
 		// Version Bumped on every change. Send the value you last read when updating; a mismatch means someone else edited it first.

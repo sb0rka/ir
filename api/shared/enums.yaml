@@ -34,7 +34,5 @@ components:
     GraphEdgeStatus:
       type: string
       description: >-
-        Where an edge stands in review. Proposed until a human accepts it.
-        Rejected edges are kept rather than deleted, so that "checked and
-        excluded" survives into the report.
+        Review state. Rejected edges remain stored with their review result.
       enum: [proposed, confirmed, rejected]

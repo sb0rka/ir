@@ -2,21 +2,18 @@ import createClient from "openapi-fetch";
 
 import type { paths } from "./api.d.ts";
 
-/**
- * Типизированный клиент Investigations API.
- *
- * Пути, параметры и тела запросов проверяются компилятором против OpenAPI:
- * опечатка в пути или лишнее поле в теле — ошибка сборки, а не 422 в рантайме.
- */
+/** Creates a typed Investigations API client. */
 export function createIrClient(options: {
   baseUrl: string;
-  /** Токен платформы. Функция, а не строка, — чтобы переживать refresh. */
+  projectId: string;
   token: () => string | null;
 }) {
   const client = createClient<paths>({ baseUrl: options.baseUrl });
 
   client.use({
     onRequest({ request }) {
+      request.headers.set("X-Project-ID", options.projectId);
+
       const token = options.token();
       if (token) {
         request.headers.set("Authorization", `Bearer ${token}`);
@@ -30,8 +27,5 @@ export function createIrClient(options: {
 
 export type { paths };
 
-// Типы доменов импортируются напрямую из ./domains/<домен>: раскладка та же,
-// что в api/paths, поэтому искать не приходится.
-//
 //   import type { components } from "@ir/contract/domains/graph";
-//   type Edge = components["schemas"]["Edge"];
+//   type GraphEdge = components["schemas"]["GraphEdge"];

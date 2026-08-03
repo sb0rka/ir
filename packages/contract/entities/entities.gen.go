@@ -78,35 +78,34 @@ func (e ErrorResponseErrorCode) Valid() bool {
 	}
 }
 
-// Entity A named thing an incident revolves around — a host, account, process, address or hash — extracted from source events during ingestion.
-// An entity belongs to the tenant, not to one investigation: one host is one row no matter how many cases touch it. That is what makes first_seen, last_seen and the cross-case history on the card mean anything. Across tenants nothing is merged — dc-01 of two different customers stays two hosts.
+// Entity A tenant-scoped host, account, process, address or hash. Investigation membership is stored separately.
 type Entity struct {
-	// AddedVia How it got into the investigation being listed. A property of the membership, not of the entity — extracted from an event in one case, typed in as an indicator in another.
+	// AddedVia How the entity was linked to the listed investigation.
 	AddedVia *EntityOrigin `json:"added_via,omitempty"`
 
-	// CanonicalKey Normalised identity used for matching: fqdn for a host, SID for an account, GUID for a process, sha256 for a file. Two records with the same type and key are the same thing, so linking rules join on it.
+	// CanonicalKey Normalized identity unique within an entity type.
 	CanonicalKey string `json:"canonical_key"`
 
 	// DisplayName Label for the UI. Falls back to canonical_key when absent.
 	DisplayName *string `json:"display_name,omitempty"`
 
-	// FirstSeen Earliest event mentioning the entity anywhere in the tenant, not just in the case at hand.
+	// FirstSeen Earliest tenant event that mentions the entity.
 	FirstSeen *time.Time `json:"first_seen,omitempty"`
 
 	// Id Identifier of the entity within the tenant.
 	Id openapi_types.UUID `json:"id"`
 
-	// LastSeen Latest event mentioning it. Together with first_seen this bounds the window the entity was active in, across every investigation.
+	// LastSeen Latest tenant event that mentions the entity.
 	LastSeen *time.Time `json:"last_seen,omitempty"`
 
-	// Metadata Extra attributes carried over from the source — OS version, owner, geolocation. Free-form on purpose: sources differ.
+	// Metadata Source-specific attributes.
 	Metadata *map[string]interface{} `json:"metadata,omitempty"`
 
-	// TypeCode Kind of thing this is — host, user, account, email, process, ip, domain, url, file_hash. The core set is fixed; peripheral kinds are added as dictionary rows without a migration.
+	// TypeCode Entity type code from the reference dictionary.
 	TypeCode string `json:"type_code"`
 }
 
-// EntityCard Entity plus the context an analyst needs to judge it: how much of this case it touches, where else it has surfaced, and who it talks to.
+// EntityCard Tenant-wide context for an entity.
 type EntityCard struct {
 	// Entity The entity this card is about.
 	Entity Entity `json:"entity"`
@@ -114,7 +113,7 @@ type EntityCard struct {
 	// EventsCount Events across the tenant the entity takes part in. Per-case counts are in `occurrences`.
 	EventsCount int `json:"events_count"`
 
-	// Neighbors Entities reachable over confirmed edges only. Proposed links are left out — a card should show what is established, not what is suspected.
+	// Neighbors Entities connected by confirmed edges.
 	Neighbors *[]struct {
 		// DisplayName Its label for the UI.
 		DisplayName *string `json:"display_name,omitempty"`
@@ -126,7 +125,7 @@ type EntityCard struct {
 		RelationCode string `json:"relation_code"`
 	} `json:"neighbors,omitempty"`
 
-	// Occurrences Investigations the entity is part of, with its weight in each. This is the spread assessment: a hash in five cases means five hosts to check. Since the entity is one row rather than a copy per case, this is a plain lookup, not a match on type and key.
+	// Occurrences Investigations linked to the entity, with event counts.
 	Occurrences []struct {
 		// EventsCount How many of its events involve the entity.
 		EventsCount int `json:"events_count"`
@@ -141,19 +140,19 @@ type EntityCard struct {
 
 // EntityCreate An entity entered by hand, before any event mentions it.
 type EntityCreate struct {
-	// CanonicalKey Normalised identity — fqdn for a host, SID for an account, sha256 for a file. Together with the type this is what makes two records the same thing, so it is worth normalising before sending.
+	// CanonicalKey Normalized identity unique within the entity type.
 	CanonicalKey string `json:"canonical_key"`
 
 	// DisplayName Label for the UI. Falls back to the canonical key when absent.
 	DisplayName *string `json:"display_name,omitempty"`
 
-	// InvestigationId Investigation to add the entity to. The entity itself belongs to the tenant, so this says where it should show up, not who owns it.
+	// InvestigationId Investigation to link the entity to.
 	InvestigationId openapi_types.UUID `json:"investigation_id"`
 
 	// Metadata Anything else worth carrying — where the indicator came from, notes.
 	Metadata *map[string]interface{} `json:"metadata,omitempty"`
 
-	// TypeCode Kind of thing, from the entity-type dictionary. Rejected if unknown, so a typo cannot invent a type.
+	// TypeCode Entity type code from the reference dictionary.
 	TypeCode string `json:"type_code"`
 }
 

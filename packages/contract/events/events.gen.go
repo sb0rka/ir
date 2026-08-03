@@ -96,8 +96,7 @@ type ErrorResponse struct {
 // ErrorResponseErrorCode Machine-readable reason, stable across releases. `validation` covers both a malformed body (400) and a well-formed but invalid one (422). `not_implemented` means the operation exists in the contract but has no implementation yet — a client can hide the control instead of showing an error.
 type ErrorResponseErrorCode string
 
-// Event A fact from a security tool. Events are never edited and carry no status: a fact cannot be confirmed or rejected, only cited.
-// An event belongs to the tenant, not to one investigation — the same source record routinely turns up in several cases, and copying it into each would destroy the answer to "where else has this been seen". Membership is a separate link, so pulling an event into a third case adds a relation rather than a duplicate.
+// Event An immutable tenant event. Investigation membership is stored separately, so one event may be linked to multiple investigations.
 type Event struct {
 	// Entities Who took part and in what capacity. Extracted during ingestion by the source's mapping profile.
 	Entities *[]struct {
@@ -108,16 +107,16 @@ type Event struct {
 		RelationCode string `json:"relation_code"`
 	} `json:"entities,omitempty"`
 
-	// EventType What happened, in the product's vocabulary — process_start, network_session, logon, detection.
+	// EventType Normalized event type, such as process_start or logon.
 	EventType string `json:"event_type"`
 
 	// Id Identifier of the event within the tenant.
 	Id openapi_types.UUID `json:"id"`
 
-	// IngestedAt When it was pulled in. Differs from occurred_at whenever an analyst reaches back in time, which is most of the time.
+	// IngestedAt When the event was ingested.
 	IngestedAt time.Time `json:"ingested_at"`
 
-	// InvestigationIds Investigations this event has been pulled into. More than one is normal and is itself a signal: the same record appearing in several cases suggests they are related.
+	// InvestigationIds Investigations linked to this event.
 	InvestigationIds *[]openapi_types.UUID `json:"investigation_ids,omitempty"`
 
 	// NormalizedData The event mapped onto the common envelope — subject, action, object, status — so events from different tools can be compared and searched.
@@ -126,7 +125,7 @@ type Event struct {
 	// OccurredAt When it happened, per the source. This is what the timeline sorts by.
 	OccurredAt time.Time `json:"occurred_at"`
 
-	// RawData Original payload as the source returned it. Kept for the cases where normalisation lost something. Omitted from list responses.
+	// RawData Original source payload. Omitted from list responses.
 	RawData *map[string]interface{} `json:"raw_data,omitempty"`
 
 	// SourceCode Which tool it came from — siem, edr, ndr, infra.
@@ -135,16 +134,16 @@ type Event struct {
 	// SourceEventId Identifier of the record in that tool. Stable address for going back to the original.
 	SourceEventId string `json:"source_event_id"`
 
-	// SourceRef Ready-made link or query that opens the record in the source console. What turns "we claim" into "go and check".
+	// SourceRef Link or query that opens the source record.
 	SourceRef *string `json:"source_ref,omitempty"`
 }
 
-// EventAttachRequest What to pull and where to. Give either refs, when the records are already known, or query, to let the source find them — exactly one of the two.
+// EventAttachRequest Events to ingest and link. Exactly one of refs and query must be set.
 type EventAttachRequest struct {
-	// InvestigationId Investigation to pull the events into. The events themselves belong to the tenant, so this says where they should show up, not who owns them.
+	// InvestigationId Investigation to link the events to.
 	InvestigationId openapi_types.UUID `json:"investigation_id"`
 
-	// Query A selection to run against one source. This is the pivot: give it an entity key and a window, and whatever the source returns lands in the case.
+	// Query Selection to run against one source.
 	Query *struct {
 		// EntityKey Value to pivot on — a hostname, account, address or hash. Matched against the source's own fields.
 		EntityKey *string `json:"entity_key,omitempty"`
@@ -165,7 +164,7 @@ type EventAttachRequest struct {
 		To *time.Time `json:"to,omitempty"`
 	} `json:"query,omitempty"`
 
-	// Reason Why this was pulled. Goes into the audit log and into the case narrative — the record of what the analyst was thinking.
+	// Reason Explanation stored on the investigation-event link.
 	Reason *string `json:"reason,omitempty"`
 
 	// Refs Records addressed directly. Used when the analyst has already picked them out, or when an agent cites what it found.
@@ -183,16 +182,16 @@ type EventAttachResult struct {
 	// Attached Events newly added to the case, whether ingested now or already known.
 	Attached int `json:"attached"`
 
-	// Duplicates Events already in this case and therefore skipped. Normal, not an error: overlapping pulls are expected.
+	// Duplicates Events already linked to the investigation and skipped.
 	Duplicates int `json:"duplicates"`
 
-	// EdgesCreated Edges linking rules produced from the new events. This is the graph growing without an agent: rules alone connect what obviously belongs together.
+	// EdgesCreated Edges created by linking rules.
 	EdgesCreated int `json:"edges_created"`
 
 	// EntitiesExtracted Entities created or updated from the new events. Counts entities, not mentions.
 	EntitiesExtracted int `json:"entities_extracted"`
 
-	// Reused Of those, how many already existed for the tenant and were linked rather than ingested. Non-zero means this case overlaps another — worth a look.
+	// Reused Existing tenant events newly linked to the investigation.
 	Reused *int `json:"reused,omitempty"`
 }
 
@@ -205,7 +204,7 @@ type EventPage struct {
 	NextCursor *string `json:"next_cursor,omitempty"`
 }
 
-// EventSummary Event without the raw payload. A timeline page carries hundreds of events and raw payloads run to kilobytes each; the full record is available one at a time.
+// EventSummary Event without the raw payload.
 type EventSummary struct {
 	// AttachedAt When the event was pulled into the investigation being listed. A property of the membership, not of the event — the same event has a different value in another case.
 	AttachedAt *time.Time `json:"attached_at,omitempty"`
@@ -222,7 +221,7 @@ type EventSummary struct {
 		RelationCode string `json:"relation_code"`
 	} `json:"entities,omitempty"`
 
-	// EventType What happened, in the product's vocabulary.
+	// EventType Normalized event type.
 	EventType string `json:"event_type"`
 
 	// Id Identifier of the event within the tenant.
@@ -237,7 +236,7 @@ type EventSummary struct {
 	// OccurredAt When it happened, per the source.
 	OccurredAt time.Time `json:"occurred_at"`
 
-	// Reason Why it was pulled in. Part of the case narrative, and likewise per-investigation.
+	// Reason Explanation stored on the investigation-event link.
 	Reason *string `json:"reason,omitempty"`
 
 	// SourceCode Which tool it came from.

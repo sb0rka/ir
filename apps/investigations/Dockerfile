@@ -8,7 +8,7 @@ WORKDIR /src
 COPY go.work ./
 COPY packages/contract/go.mod packages/contract/go.sum* ./packages/contract/
 COPY apps/investigations/go.mod apps/investigations/go.sum* ./apps/investigations/
-RUN go mod download all || true
+RUN go mod download all
 
 COPY packages ./packages
 COPY apps ./apps

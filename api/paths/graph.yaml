@@ -95,14 +95,8 @@ paths:
       tags: [graph]
       summary: Put a node on the graph
       description: >-
-        Entity nodes appear on their own when events are pulled in, but events
-        stay on the timeline until someone decides one matters. This is that
-        decision — the analyst promotes an event from the timeline onto the
-        graph so edges can be drawn from it, which is how an attack chain gets
-        reconstructed by hand.
-
-        Idempotent: promoting something already on the graph returns the
-        existing node rather than failing, so the button is safe to press twice.
+        Creates an entity or event node. If the node already exists, returns the
+        existing node.
       operationId: createNode
       requestBody:
         required: true
@@ -216,12 +210,9 @@ paths:
       tags: [graph]
       summary: Draw an edge by hand
       description: >-
-        The analyst's manual correction of the graph. An edge created here is
-        born confirmed — a human asserting it is the assertion. The relation
-        must exist in the dictionary and its declared endpoints must match the
-        node kinds, so an event-to-event relation cannot be hung between two
-        entities. Re-creating the same triple returns 409 rather than a
-        duplicate.
+        Creates a confirmed edge. The relation must exist and support the source
+        and target node kinds. A duplicate source-relation-target triple returns
+        409.
       operationId: createGraphEdge
       requestBody:
         required: true
@@ -267,13 +258,8 @@ paths:
       tags: [graph]
       summary: Edit one edge
       description: >-
-        Reviewing a single edge, plus corrections to what it claims. Rejecting
-        requires a reason. The endpoints and the relation are fixed — an edge
-        between different nodes is a different claim, so delete this one and
-        draw the right one.
-
-        Use the batch review endpoint when handling a queue; this is for the one
-        edge open in front of you.
+        Updates review fields for one edge. Rejecting requires a reason. Source,
+        target and relation are immutable.
       operationId: updateGraphEdge
       requestBody:
         required: true
@@ -296,11 +282,7 @@ paths:
     delete:
       tags: [graph]
       summary: Delete an edge
-      description: >-
-        For an edge drawn by mistake. A claim that was considered and found
-        wrong should be rejected with a reason instead — that survives into the
-        report as "checked and excluded", while deleting leaves no trace that
-        anyone looked.
+      description: Deletes an edge from the investigation graph.
       operationId: deleteGraphEdge
       responses:
         '204':
@@ -319,10 +301,7 @@ paths:
     get:
       tags: [graph]
       summary: What the edge rests on
-      description: >-
-        The cited events in full. This is the provenance chain the product is
-        built to defend: from a claim on the graph to the events behind it, and
-        from each event to the record in the source tool.
+      description: Returns the events cited as evidence for the edge.
       operationId: listGraphEdgeEvidence
       responses:
         '200':
@@ -339,11 +318,8 @@ paths:
       tags: [graph]
       summary: Cite more events
       description: >-
-        Adds grounds to an edge that already exists — the case for a claim
-        usually accumulates rather than arriving complete. Events must belong to
-        the same investigation; citing another case's evidence is refused by the
-        database, not merely by the service. Already-cited events are ignored
-        rather than duplicated.
+        Adds investigation events as edge evidence. Existing evidence links are
+        ignored.
       operationId: addGraphEdgeEvidence
       requestBody:
         required: true
@@ -373,9 +349,8 @@ paths:
       tags: [graph]
       summary: Stop citing an event
       description: >-
-        Removes one ground from an edge. Refused if it is the last one on a
-        confirmed edge: an established claim resting on nothing is exactly what
-        the product exists to prevent. Reject the edge instead.
+        Removes one evidence link. Removing the last evidence item from a
+        confirmed edge returns 422.
       operationId: deleteGraphEdgeEvidence
       responses:
         '204':
@@ -797,9 +772,7 @@ components:
                 description: Version the client last saw. Guards against a concurrent edit.
         reject:
           type: array
-          description: >-
-            Edges the analyst rules out. They are kept, not deleted — a checked
-            and excluded lead is a result too.
+          description: Edges to reject while retaining their review result.
           items:
             type: object
             required: [id, version, reason]
@@ -813,9 +786,7 @@ components:
                 description: Version the client last saw.
               reason:
                 type: string
-                description: >-
-                  Why it does not hold. Required — an unexplained rejection is
-                  worthless in the report.
+                description: Rejection reason.
 
     ReviewResult:
       type: object

@@ -12,14 +12,14 @@ export interface paths {
                 "X-Project-ID": components["parameters"]["ProjectId"];
             };
             path: {
-                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
+                /** @description Identifier of an investigation in the selected project. */
                 investigation_id: components["parameters"]["InvestigationId"];
             };
             cookie?: never;
         };
         /**
          * Timeline of the investigation
-         * @description Events already pulled into the case, oldest first. Ordered by occurred_at then id, which is what makes the cursor stable when several events share a timestamp. Raw payloads are omitted here — fetch a single event for those.
+         * @description Events linked to the investigation, ordered by occurred_at and id. Raw payloads are available from the single-event endpoint.
          */
         get: operations["listEvents"];
         put?: never;
@@ -44,8 +44,7 @@ export interface paths {
         put?: never;
         /**
          * Pull events into an investigation
-         * @description The way data enters the product. Takes either explicit references to source records or a query to run against a source. Each event is normalised, its entities are extracted, graph nodes are created and linking rules run — so the graph grows without an agent being involved.
-         *     A record already ingested for this tenant is linked, not copied: the event keeps one identity across every case that touches it, which is what lets the entity card say where else something has been seen. Idempotent — re-pulling into the same case changes nothing. Up to 500 events per call; a larger selection has to be split.
+         * @description Ingests events from explicit source references or a source query, then links them to an investigation. Existing tenant events are reused. Repeated links are ignored; a request may include at most 500 events.
          */
         post: operations["attachEvents"];
         delete?: never;
@@ -62,22 +61,21 @@ export interface paths {
                 "X-Project-ID": components["parameters"]["ProjectId"];
             };
             path: {
-                /** @description Identifier of an event already pulled into an investigation. */
+                /** @description Identifier of an event in the selected project. */
                 event_id: components["parameters"]["EventId"];
             };
             cookie?: never;
         };
         /**
          * One event in full
-         * @description The whole record, including the raw source payload and the link back to the originating console. This is the end of the provenance chain: every finding leads here, and here leads to the source system.
+         * @description Returns the normalized event, raw payload and source link.
          */
         get: operations["getEvent"];
         put?: never;
         post?: never;
         /**
          * Delete an event from the tenant
-         * @description Erases the event everywhere. Almost never what is wanted — to remove it from one case delete the membership instead, which leaves the event and the other cases alone.
-         *     Refused while the event is attached to any investigation, so this only ever applies to something ingested by mistake and not yet used.
+         * @description Deletes a tenant event. Returns 409 while it is linked to any investigation.
          */
         delete: operations["deleteEvent"];
         options?: never;
@@ -93,9 +91,9 @@ export interface paths {
                 "X-Project-ID": components["parameters"]["ProjectId"];
             };
             path: {
-                /** @description Identifier of an event already pulled into an investigation. */
+                /** @description Identifier of an event in the selected project. */
                 event_id: components["parameters"]["EventId"];
-                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
+                /** @description Identifier of an investigation in the selected project. */
                 investigation_id: components["parameters"]["InvestigationId"];
             };
             cookie?: never;
@@ -105,8 +103,7 @@ export interface paths {
         post?: never;
         /**
          * Drop an event from the investigation
-         * @description Undoes a pull that brought in the wrong thing. The event leaves this timeline, its node on this graph goes with it, and so do the edges that hung off that node.
-         *     The event itself survives, along with its place in every other case — which is the point of events being shared rather than copied. Refused while a confirmed edge of this case cites it: removing it would leave an established claim resting on nothing.
+         * @description Removes the investigation link, graph node and connected edges. The tenant event remains. Returns 409 if a confirmed edge cites the event.
          */
         delete: operations["detachEvent"];
         options?: never;
@@ -118,25 +115,22 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        /**
-         * @description A fact from a security tool. Events are never edited and carry no status: a fact cannot be confirmed or rejected, only cited.
-         *     An event belongs to the tenant, not to one investigation — the same source record routinely turns up in several cases, and copying it into each would destroy the answer to "where else has this been seen". Membership is a separate link, so pulling an event into a third case adds a relation rather than a duplicate.
-         */
+        /** @description An immutable tenant event. Investigation membership is stored separately, so one event may be linked to multiple investigations. */
         Event: {
             /**
              * Format: uuid
              * @description Identifier of the event within the tenant.
              */
             id: string;
-            /** @description Investigations this event has been pulled into. More than one is normal and is itself a signal: the same record appearing in several cases suggests they are related. */
+            /** @description Investigations linked to this event. */
             investigation_ids?: string[];
             /** @description Which tool it came from — siem, edr, ndr, infra. */
             source_code: string;
             /** @description Identifier of the record in that tool. Stable address for going back to the original. */
             source_event_id: string;
-            /** @description Ready-made link or query that opens the record in the source console. What turns "we claim" into "go and check". */
+            /** @description Link or query that opens the source record. */
             source_ref?: string | null;
-            /** @description What happened, in the product's vocabulary — process_start, network_session, logon, detection. */
+            /** @description Normalized event type, such as process_start or logon. */
             event_type: string;
             /**
              * Format: date-time
@@ -145,14 +139,14 @@ export interface components {
             occurred_at: string;
             /**
              * Format: date-time
-             * @description When it was pulled in. Differs from occurred_at whenever an analyst reaches back in time, which is most of the time.
+             * @description When the event was ingested.
              */
             ingested_at: string;
             /** @description The event mapped onto the common envelope — subject, action, object, status — so events from different tools can be compared and searched. */
             normalized_data?: {
                 [key: string]: unknown;
             };
-            /** @description Original payload as the source returned it. Kept for the cases where normalisation lost something. Omitted from list responses. */
+            /** @description Original source payload. Omitted from list responses. */
             raw_data?: {
                 [key: string]: unknown;
             } | null;
@@ -167,7 +161,7 @@ export interface components {
                 relation_code: string;
             }[];
         };
-        /** @description Event without the raw payload. A timeline page carries hundreds of events and raw payloads run to kilobytes each; the full record is available one at a time. */
+        /** @description Event without the raw payload. */
         EventSummary: {
             /**
              * Format: uuid
@@ -181,7 +175,7 @@ export interface components {
             attached_at?: string;
             /** @description Who pulled it into this investigation. */
             attached_by?: components["schemas"]["Actor"];
-            /** @description Why it was pulled in. Part of the case narrative, and likewise per-investigation. */
+            /** @description Explanation stored on the investigation-event link. */
             reason?: string | null;
             /** @description Which tool it came from. */
             source_code: string;
@@ -189,7 +183,7 @@ export interface components {
             source_event_id: string;
             /** @description Link that opens the record in the source console. */
             source_ref?: string | null;
-            /** @description What happened, in the product's vocabulary. */
+            /** @description Normalized event type. */
             event_type: string;
             /**
              * Format: date-time
@@ -216,11 +210,11 @@ export interface components {
                 relation_code: string;
             }[];
         };
-        /** @description What to pull and where to. Give either refs, when the records are already known, or query, to let the source find them — exactly one of the two. */
+        /** @description Events to ingest and link. Exactly one of refs and query must be set. */
         EventAttachRequest: {
             /**
              * Format: uuid
-             * @description Investigation to pull the events into. The events themselves belong to the tenant, so this says where they should show up, not who owns them.
+             * @description Investigation to link the events to.
              */
             investigation_id: string;
             /** @description Records addressed directly. Used when the analyst has already picked them out, or when an agent cites what it found. */
@@ -230,7 +224,7 @@ export interface components {
                 /** @description Its identifier in that tool. */
                 source_event_id: string;
             }[];
-            /** @description A selection to run against one source. This is the pivot: give it an entity key and a window, and whatever the source returns lands in the case. */
+            /** @description Selection to run against one source. */
             query?: {
                 /** @description Which source to query. */
                 source_code: string;
@@ -254,20 +248,20 @@ export interface components {
                  */
                 limit: number;
             };
-            /** @description Why this was pulled. Goes into the audit log and into the case narrative — the record of what the analyst was thinking. */
+            /** @description Explanation stored on the investigation-event link. */
             reason?: string;
         };
         /** @description What the pull changed in the investigation. */
         EventAttachResult: {
             /** @description Events newly added to the case, whether ingested now or already known. */
             attached: number;
-            /** @description Of those, how many already existed for the tenant and were linked rather than ingested. Non-zero means this case overlaps another — worth a look. */
+            /** @description Existing tenant events newly linked to the investigation. */
             reused?: number;
-            /** @description Events already in this case and therefore skipped. Normal, not an error: overlapping pulls are expected. */
+            /** @description Events already linked to the investigation and skipped. */
             duplicates: number;
             /** @description Entities created or updated from the new events. Counts entities, not mentions. */
             entities_extracted: number;
-            /** @description Edges linking rules produced from the new events. This is the graph growing without an agent: rules alone connect what obviously belongs together. */
+            /** @description Edges created by linking rules. */
             edges_created: number;
         };
         /** @description One page of the timeline. */
@@ -377,13 +371,13 @@ export interface components {
     parameters: {
         /** @description Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored. */
         ProjectId: string;
-        /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
+        /** @description Identifier of an investigation in the selected project. */
         InvestigationId: string;
         /** @description How many items to return. The server may return fewer, never more. */
         Limit: number;
         /** @description Opaque keyset cursor taken from `next_cursor` of the previous page. Encodes a position, not a query — do not build one by hand. Omit it to start from the beginning. */
         Cursor: string;
-        /** @description Identifier of an event already pulled into an investigation. */
+        /** @description Identifier of an event in the selected project. */
         EventId: string;
     };
     requestBodies: never;
@@ -417,7 +411,7 @@ export interface operations {
                 "X-Project-ID": components["parameters"]["ProjectId"];
             };
             path: {
-                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
+                /** @description Identifier of an investigation in the selected project. */
                 investigation_id: components["parameters"]["InvestigationId"];
             };
             cookie?: never;
@@ -484,7 +478,7 @@ export interface operations {
                 "X-Project-ID": components["parameters"]["ProjectId"];
             };
             path: {
-                /** @description Identifier of an event already pulled into an investigation. */
+                /** @description Identifier of an event in the selected project. */
                 event_id: components["parameters"]["EventId"];
             };
             cookie?: never;
@@ -515,7 +509,7 @@ export interface operations {
                 "X-Project-ID": components["parameters"]["ProjectId"];
             };
             path: {
-                /** @description Identifier of an event already pulled into an investigation. */
+                /** @description Identifier of an event in the selected project. */
                 event_id: components["parameters"]["EventId"];
             };
             cookie?: never;
@@ -545,9 +539,9 @@ export interface operations {
                 "X-Project-ID": components["parameters"]["ProjectId"];
             };
             path: {
-                /** @description Identifier of an event already pulled into an investigation. */
+                /** @description Identifier of an event in the selected project. */
                 event_id: components["parameters"]["EventId"];
-                /** @description Investigation the request works in. Every piece of evidence, entity and edge belongs to exactly one, and nothing crosses that boundary. */
+                /** @description Identifier of an investigation in the selected project. */
                 investigation_id: components["parameters"]["InvestigationId"];
             };
             cookie?: never;
