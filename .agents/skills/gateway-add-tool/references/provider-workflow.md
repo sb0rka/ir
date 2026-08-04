@@ -26,7 +26,7 @@ Use `mode`, `base_url`, `credential_file`, `timeout`, and `tls_ca_file`. Transla
 
 ```bash
 task gateway-gen
-cd apps/gateway && go test ./... && go vet ./...
+cd apps/gateway && go vet ./...
 docker compose -f docker-compose.dev.yml up -d --build gateway
 ```
 

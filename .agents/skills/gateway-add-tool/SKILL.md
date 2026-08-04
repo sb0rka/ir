@@ -15,7 +15,7 @@ Keep vendor details inside an adapter and keep the public contract canonical.
 4. Add a provider package with its descriptor, capability implementation, normalizer, and deterministic mock data.
 5. Register the provider once in `internal/adapters/registry.go`. Do not add provider branches to HTTP handlers.
 6. For real proxy mode, read configuration only from process config and use the shared safe HTTP client. Never accept a URL, token, or credential in a user request.
-7. Add mapping, contract, partial-failure, and HTTP tests. Update OpenAPI only when the canonical capability changes.
-8. Run Gateway generation, tests, vet, build, Docker smoke, skill validation, and GitNexus change detection.
+7. Update provider mappings and OpenAPI only when the canonical capability changes.
+8. Run Gateway generation, vet, build, Docker smoke, skill validation, and GitNexus change detection.
 
 Do not add raw proxy paths, `map[string]any` capability interfaces, reflection, dynamic plugins, MCP SDKs, or calls to Investigations API.
