@@ -17,6 +17,12 @@ import (
 const (
 	DefaultRequestTimeout = 15 * time.Second
 	DefaultSourceTimeout  = 10 * time.Second
+	DefaultMockEvents     = 50_000
+	DefaultMockEndpoints  = 5_000
+	DefaultMockHistory    = 90
+	MaxMockEvents         = 1_000_000
+	MaxMockEndpoints      = 100_000
+	MaxMockHistory        = 3_650
 )
 
 var SourceCodes = []string{"maxpatrol-siem", "pt-nad", "maxpatrol-edr", "pt-sandbox", "pt-fusion"}
@@ -25,8 +31,15 @@ type Config struct {
 	Server         ServerConfig
 	Auth           AuthConfig
 	Log            coreconfig.LoggerConfig
+	Mock           MockConfig
 	Sources        map[string]SourceConfig
 	ProjectSources map[string]map[string]bool
+}
+
+type MockConfig struct {
+	EventCount    int
+	EndpointCount int
+	HistoryDays   int
 }
 
 type ServerConfig struct {
@@ -74,6 +87,11 @@ func Load() (Config, error) {
 			Level:  coreconfig.GetStringEnv("LOG_LEVEL", "info"),
 			Format: coreconfig.GetStringEnv("LOG_FORMAT", "json"),
 		},
+		Mock: MockConfig{
+			EventCount:    coreconfig.GetIntEnv("MOCK_EVENT_COUNT", DefaultMockEvents),
+			EndpointCount: coreconfig.GetIntEnv("MOCK_ENDPOINT_COUNT", DefaultMockEndpoints),
+			HistoryDays:   coreconfig.GetIntEnv("MOCK_HISTORY_DAYS", DefaultMockHistory),
+		},
 		Sources: make(map[string]SourceConfig, len(SourceCodes)),
 	}
 	projectSources, err := parseProjectSources(coreconfig.GetStringEnv("PROJECT_SOURCE_ALLOWLISTS", ""))
@@ -87,6 +105,15 @@ func Load() (Config, error) {
 	}
 	if cfg.Server.SourceTimeout > cfg.Server.RequestTimeout {
 		return Config{}, fmt.Errorf("source timeout must not exceed request timeout")
+	}
+	if cfg.Mock.EventCount < 1 || cfg.Mock.EventCount > MaxMockEvents {
+		return Config{}, fmt.Errorf("MOCK_EVENT_COUNT must be between 1 and %d", MaxMockEvents)
+	}
+	if cfg.Mock.EndpointCount < 1 || cfg.Mock.EndpointCount > MaxMockEndpoints {
+		return Config{}, fmt.Errorf("MOCK_ENDPOINT_COUNT must be between 1 and %d", MaxMockEndpoints)
+	}
+	if cfg.Mock.HistoryDays < 1 || cfg.Mock.HistoryDays > MaxMockHistory {
+		return Config{}, fmt.Errorf("MOCK_HISTORY_DAYS must be between 1 and %d", MaxMockHistory)
 	}
 
 	key, err := loadPublicKey()

@@ -4,7 +4,7 @@
       "id": "host-ggubin",
       "type": "host",
       "data": {
-        "label": "ggubin.qa-ptlab.ru\n10.125.8.10",
+        "label": "ggubin.qa-ptlab.ru",
         "kind": "host",
         "system": "MaxPatrol",
         "severity": "critical",
@@ -12,7 +12,9 @@
         "sourceUrl": "https://maxpatrol.qa-ptlab.ru/console/assets/ggubin.qa-ptlab.ru",
         "details": {
           "role": "Точка входа (фишинг)",
-          "account": "ggubin"
+          "account": "ggubin",
+          "ip": "10.125.10.44",
+          "status": "online"
         }
       }
     },
@@ -323,7 +325,9 @@
         "isIoc": true,
         "sourceUrl": "https://maxpatrol.qa-ptlab.ru/console/assets/euskova.qa-ptlab.ru",
         "details": {
-          "role": "Цель латерального перемещения"
+          "role": "Цель латерального перемещения",
+          "ip": "10.125.10.62",
+          "status": "offline"
         }
       }
     },

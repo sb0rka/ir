@@ -90,6 +90,9 @@ services:
       SERVER_CORS_WHITELIST: "${SERVER_CORS_WHITELIST:-http://localhost:5173,http://localhost:3000}"
       AUTH_DISABLED: "true"
       LOG_FORMAT: "json"
+      MOCK_EVENT_COUNT: "${GATEWAY_MOCK_EVENT_COUNT:-50000}"
+      MOCK_ENDPOINT_COUNT: "${GATEWAY_MOCK_ENDPOINT_COUNT:-5000}"
+      MOCK_HISTORY_DAYS: "${GATEWAY_MOCK_HISTORY_DAYS:-90}"
     ports:
       - "${GATEWAY_PORT:-8091}:8091"
     healthcheck:

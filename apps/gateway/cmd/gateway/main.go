@@ -42,6 +42,14 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("load mock scenario: %w", err)
 	}
+	value, err = scenario.Expand(value, scenario.GenerateOptions{
+		EventCount:    cfg.Mock.EventCount,
+		EndpointCount: cfg.Mock.EndpointCount,
+		HistoryDays:   cfg.Mock.HistoryDays,
+	})
+	if err != nil {
+		return fmt.Errorf("generate mock scenario: %w", err)
+	}
 	providerRegistry, err := adapters.NewMockRegistry(value)
 	if err != nil {
 		return fmt.Errorf("build provider registry: %w", err)
@@ -62,7 +70,13 @@ func run() error {
 
 	errCh := make(chan error, 1)
 	go func() {
-		log.Info("gateway_started", "addr", server.Addr, "auth_disabled", cfg.Auth.Disabled)
+		log.Info("gateway_started",
+			"addr", server.Addr,
+			"auth_disabled", cfg.Auth.Disabled,
+			"mock_events", len(value.Events),
+			"mock_endpoints", cfg.Mock.EndpointCount,
+			"mock_history_days", cfg.Mock.HistoryDays,
+		)
 		if serveErr := server.ListenAndServe(); serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) {
 			errCh <- serveErr
 		}

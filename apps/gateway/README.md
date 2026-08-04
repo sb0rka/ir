@@ -2,6 +2,8 @@
 
 Gateway exposes normalized data from external security tools. Version `0.0.1` runs five deterministic mock providers; it does not call Investigations API and does not expose vendor payloads.
 
+The default mock dataset contains 50,000 events and 5,000 endpoints spread over 90 days ending at `2026-07-23T12:00:00Z`. It is generated deterministically on startup, so IDs, timestamps, filters, and cursors are reproducible. Configure it with `MOCK_EVENT_COUNT`, `MOCK_ENDPOINT_COUNT`, and `MOCK_HISTORY_DAYS`; the supported maxima are 1,000,000 events, 100,000 endpoints, and 3,650 days.
+
 ## Run
 
 ```bash
@@ -18,5 +20,11 @@ curl -s http://localhost:8091/api/v1/sources \
 Configuration for a provider uses `SOURCE_<CODE>_MODE`, `BASE_URL`, `CREDENTIAL_FILE`, `TIMEOUT_SEC`, and `TLS_CA_FILE` (hyphens become underscores). Only `mock` mode is implemented in `0.0.1`; selecting `proxy` stops startup with an explicit error.
 
 Optional project allowlists are process configuration: `PROJECT_SOURCE_ALLOWLISTS={"abcdef1234":["maxpatrol-siem","pt-nad"]}`. Projects absent from the map can use every enabled source.
+
+For a smaller local dataset:
+
+```bash
+MOCK_EVENT_COUNT=1000 MOCK_ENDPOINT_COUNT=100 MOCK_HISTORY_DAYS=30 go run ./apps/gateway/cmd/gateway
+```
 
 See [architecture](docs/architecture.md), [provider mappings](docs/providers.md), and the [OpenAPI contract](api/openapi.yaml).

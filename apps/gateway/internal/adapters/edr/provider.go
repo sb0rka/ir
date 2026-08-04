@@ -98,13 +98,13 @@ func buildEndpoints(value scenario.Scenario) []domain.Endpoint {
 		if node.Data.Kind != "host" {
 			continue
 		}
-		hostname := strings.TrimSuffix(node.Data.Label, "...")
+		hostname := strings.TrimSpace(strings.Split(node.Data.Label, "\n")[0])
 		externalID := "agent-" + strings.Split(hostname, ".")[0]
-		ip := "10.125.10.44"
-		status := "online"
+		ip := detailString(node.Data.Details, "ip", "10.125.10.44")
+		status := detailString(node.Data.Details, "status", "online")
 		if strings.HasPrefix(hostname, "euskova") {
-			ip = "10.125.10.62"
-			status = "offline"
+			ip = detailString(node.Data.Details, "ip", "10.125.10.62")
+			status = detailString(node.Data.Details, "status", "offline")
 		}
 		items = append(items, domain.Endpoint{
 			ID:          domain.StableID("endpoint", SourceCode, externalID),
@@ -121,4 +121,12 @@ func buildEndpoints(value scenario.Scenario) []domain.Endpoint {
 	}
 	sort.Slice(items, func(i, j int) bool { return items[i].Hostname < items[j].Hostname })
 	return items
+}
+
+func detailString(details map[string]any, key, fallback string) string {
+	value, ok := details[key].(string)
+	if !ok || strings.TrimSpace(value) == "" {
+		return fallback
+	}
+	return strings.TrimSpace(value)
 }

@@ -405,7 +405,7 @@ func decodeJSON(w http.ResponseWriter, r *http.Request, target any) error {
 }
 
 func respondJSON(w http.ResponseWriter, status int, body any) {
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(body)

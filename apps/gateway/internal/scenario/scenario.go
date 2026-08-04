@@ -14,6 +14,8 @@ type Scenario struct {
 	Nodes  []Node  `json:"nodes"`
 	Edges  []Edge  `json:"edges"`
 	Events []Event `json:"events"`
+
+	nodeIndex map[string]Node
 }
 
 type Node struct {
@@ -57,16 +59,28 @@ func Load(raw []byte) (Scenario, error) {
 	if len(value.Nodes) == 0 || len(value.Events) == 0 {
 		return Scenario{}, fmt.Errorf("mock scenario is empty")
 	}
+	value.reindex()
 	return value, nil
 }
 
 func (value Scenario) Node(id string) (Node, bool) {
+	if value.nodeIndex != nil {
+		node, ok := value.nodeIndex[id]
+		return node, ok
+	}
 	for _, node := range value.Nodes {
 		if node.ID == id {
 			return node, true
 		}
 	}
 	return Node{}, false
+}
+
+func (value *Scenario) reindex() {
+	value.nodeIndex = make(map[string]Node, len(value.Nodes))
+	for _, node := range value.Nodes {
+		value.nodeIndex[node.ID] = node
+	}
 }
 
 func (value Scenario) NodesForSystem(system string) []Node {

@@ -1,6 +1,6 @@
 # Provider mappings
 
-The mock providers describe one attack scenario. Their IDs and timestamps are deterministic. The source fixture is parsed into canonical records; UI-only `position`, `style`, and `animated` fields are not part of the scenario model or responses.
+The mock providers combine one hand-written attack scenario with a deterministic generated dataset. The default profile contains 50,000 events and 5,000 endpoints over 90 days. Generated records cover multiple event classes, severities, hosts, sites, departments, operating systems, protocols, ports, traffic volumes, and endpoint statuses. UI-only `position`, `style`, and `animated` fields from the source fixture are not part of the scenario model or responses.
 
 ## MaxPatrol SIEM (`maxpatrol-siem`)
 
