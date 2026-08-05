@@ -9,7 +9,7 @@ HTTP client
   -> transport/http (auth, ProjectID, CORS, OpenAPI)
   -> application (fan-out, timeouts, pagination)
   -> registry (provider selection by capability)
-  -> adapter (mock now, vendor client later)
+  -> adapter (mock or vendor implementation)
   -> normalization (canonical values, merge, sort)
 ```
 
@@ -18,6 +18,10 @@ The domain and application packages do not depend on HTTP. A future `transport/m
 ## Provider contract
 
 Providers register a descriptor and only the capability interfaces they implement. Adding another provider for an existing capability changes the provider package and registry construction, not the router or OpenAPI.
+
+Capability interfaces in `internal/capability` are the boundary between the Gateway and provider implementations. All temporary data, scenario generation, fixtures, and mock providers live under `internal/adapters/mock`. The composition root imports only `mock.NewRegistry`; domain, application, registry, normalization, and HTTP transport do not import the mock package.
+
+A real client belongs under `internal/adapters/proxy/<provider>` and implements the same capability interfaces. Replacing the temporary implementation requires changing the composition root and deleting `internal/adapters/mock`; it does not change the application or public API.
 
 Requests without `sources` fan out to all registered providers with the requested capability. Calls run concurrently with a 10-second source timeout inside a 15-second request timeout. Successful data is returned with `source_errors` when only part of the fan-out fails; failure of every selected source returns `502`.
 

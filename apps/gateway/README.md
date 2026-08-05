@@ -2,6 +2,8 @@
 
 Gateway exposes normalized data from external security tools. Version `0.0.1` runs five deterministic mock providers; it does not call Investigations API and does not expose vendor payloads.
 
+All temporary implementations and fixtures are isolated in `internal/adapters/mock`; application and HTTP code depend only on provider capability interfaces.
+
 The default mock dataset contains 50,000 events and 5,000 endpoints spread over 90 days ending at `2026-07-23T12:00:00Z`. It is generated deterministically on startup, so IDs, timestamps, filters, and cursors are reproducible. Configure it with `MOCK_EVENT_COUNT`, `MOCK_ENDPOINT_COUNT`, and `MOCK_HISTORY_DAYS`; the supported maxima are 1,000,000 events, 100,000 endpoints, and 3,650 days.
 
 ## Run

@@ -3,11 +3,11 @@ package maxpatrol
 import (
 	"strings"
 
-	"github.com/sb0rka/ir/apps/gateway/internal/adapters/entitymock"
-	"github.com/sb0rka/ir/apps/gateway/internal/adapters/eventmock"
+	"github.com/sb0rka/ir/apps/gateway/internal/adapters/mock/entitymock"
+	"github.com/sb0rka/ir/apps/gateway/internal/adapters/mock/eventmock"
+	"github.com/sb0rka/ir/apps/gateway/internal/adapters/mock/scenario"
 	"github.com/sb0rka/ir/apps/gateway/internal/domain"
 	"github.com/sb0rka/ir/apps/gateway/internal/registry"
-	"github.com/sb0rka/ir/apps/gateway/internal/scenario"
 )
 
 const SourceCode = "maxpatrol-siem"

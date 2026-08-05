@@ -14,11 +14,9 @@ import (
 
 	corelog "github.com/sb0rka/sb0rka/packages/core/log"
 
-	"github.com/sb0rka/ir/apps/gateway/fixtures"
-	"github.com/sb0rka/ir/apps/gateway/internal/adapters"
+	adaptermock "github.com/sb0rka/ir/apps/gateway/internal/adapters/mock"
 	"github.com/sb0rka/ir/apps/gateway/internal/application"
 	"github.com/sb0rka/ir/apps/gateway/internal/config"
-	"github.com/sb0rka/ir/apps/gateway/internal/scenario"
 	httptransport "github.com/sb0rka/ir/apps/gateway/internal/transport/http"
 )
 
@@ -38,21 +36,13 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("create logger: %w", err)
 	}
-	value, err := scenario.Load(fixtures.Investigation)
-	if err != nil {
-		return fmt.Errorf("load mock scenario: %w", err)
-	}
-	value, err = scenario.Expand(value, scenario.GenerateOptions{
+	providerRegistry, mockStats, err := adaptermock.NewRegistry(adaptermock.Options{
 		EventCount:    cfg.Mock.EventCount,
 		EndpointCount: cfg.Mock.EndpointCount,
 		HistoryDays:   cfg.Mock.HistoryDays,
 	})
 	if err != nil {
-		return fmt.Errorf("generate mock scenario: %w", err)
-	}
-	providerRegistry, err := adapters.NewMockRegistry(value)
-	if err != nil {
-		return fmt.Errorf("build provider registry: %w", err)
+		return fmt.Errorf("build mock provider registry: %w", err)
 	}
 	service := application.New(providerRegistry, cfg.Server.RequestTimeout, cfg.Server.SourceTimeout)
 	handler := httptransport.NewHandler(cfg, log, service)
@@ -73,8 +63,8 @@ func run() error {
 		log.Info("gateway_started",
 			"addr", server.Addr,
 			"auth_disabled", cfg.Auth.Disabled,
-			"mock_events", len(value.Events),
-			"mock_endpoints", cfg.Mock.EndpointCount,
+			"mock_events", mockStats.EventCount,
+			"mock_endpoints", mockStats.EndpointCount,
 			"mock_history_days", cfg.Mock.HistoryDays,
 		)
 		if serveErr := server.ListenAndServe(); serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) {

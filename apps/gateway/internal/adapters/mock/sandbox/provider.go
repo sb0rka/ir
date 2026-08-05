@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sb0rka/ir/apps/gateway/internal/adapters/mockdata"
+	"github.com/sb0rka/ir/apps/gateway/internal/adapters/mock/mockdata"
 	"github.com/sb0rka/ir/apps/gateway/internal/capability"
 	"github.com/sb0rka/ir/apps/gateway/internal/domain"
 	"github.com/sb0rka/ir/apps/gateway/internal/registry"

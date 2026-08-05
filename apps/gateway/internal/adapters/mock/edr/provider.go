@@ -8,10 +8,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sb0rka/ir/apps/gateway/internal/adapters/mock/scenario"
 	"github.com/sb0rka/ir/apps/gateway/internal/capability"
 	"github.com/sb0rka/ir/apps/gateway/internal/domain"
 	"github.com/sb0rka/ir/apps/gateway/internal/registry"
-	"github.com/sb0rka/ir/apps/gateway/internal/scenario"
 )
 
 const SourceCode = "maxpatrol-edr"

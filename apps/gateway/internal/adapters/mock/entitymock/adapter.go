@@ -5,10 +5,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sb0rka/ir/apps/gateway/internal/adapters/mock/scenario"
 	"github.com/sb0rka/ir/apps/gateway/internal/capability"
 	"github.com/sb0rka/ir/apps/gateway/internal/domain"
 	"github.com/sb0rka/ir/apps/gateway/internal/normalization"
-	"github.com/sb0rka/ir/apps/gateway/internal/scenario"
 )
 
 var fetchedAt = time.Date(2026, 7, 23, 12, 0, 0, 0, time.UTC)
