@@ -1,0 +1,20 @@
+post:
+  summary: Look up an entity
+  operationId: lookupEntity
+  parameters:
+    - $ref: '../shared/parameters.yaml#/ProjectId'
+  requestBody:
+    required: true
+    content:
+      application/json:
+        schema:
+          $ref: '../shared/schemas.yaml#/LookupEntityRequest'
+  responses:
+    '200':
+      description: Context gathered for an entity.
+      content:
+        application/json:
+          schema:
+            $ref: '../shared/schemas.yaml#/LookupEntityResponse'
+    default:
+      $ref: '../shared/responses.yaml#/ErrorResponse'

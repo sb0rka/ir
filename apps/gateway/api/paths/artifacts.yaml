@@ -1,0 +1,42 @@
+create:
+  post:
+    summary: Analyze an artifact
+    operationId: createArtifactAnalysis
+    parameters:
+      - $ref: '../shared/parameters.yaml#/ProjectId'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../shared/schemas.yaml#/CreateArtifactAnalysisRequest'
+    responses:
+      '202':
+        description: Completed mock analysis.
+        content:
+          application/json:
+            schema:
+              $ref: '../shared/schemas.yaml#/Analysis'
+      default:
+        $ref: '../shared/responses.yaml#/ErrorResponse'
+get:
+  get:
+    summary: Get an artifact analysis
+    operationId: getArtifactAnalysis
+    parameters:
+      - $ref: '../shared/parameters.yaml#/ProjectId'
+      - name: analysis_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    responses:
+      '200':
+        description: Artifact analysis.
+        content:
+          application/json:
+            schema:
+              $ref: '../shared/schemas.yaml#/Analysis'
+      default:
+        $ref: '../shared/responses.yaml#/ErrorResponse'

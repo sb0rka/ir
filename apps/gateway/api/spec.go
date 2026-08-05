@@ -2,7 +2,7 @@ package api
 
 import _ "embed"
 
-//go:embed openapi.yaml
+//go:embed bundle.yaml
 var OpenAPI []byte
 
 const SwaggerHTML = `<!doctype html>

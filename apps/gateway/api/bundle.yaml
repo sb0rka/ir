@@ -1,0 +1,699 @@
+openapi: 3.0.3
+info:
+  title: Sb0rka external tools gateway
+  version: 0.0.1
+  description: Normalized access to external security tools.
+servers:
+  - url: http://localhost:8091
+security:
+  - bearerAuth: []
+paths:
+  /healthz:
+    get:
+      summary: Check process health
+      operationId: healthz
+      security: []
+      responses:
+        '200':
+          $ref: '#/components/responses/HealthResponse'
+  /readyz:
+    get:
+      summary: Check service readiness
+      operationId: readyz
+      security: []
+      responses:
+        '200':
+          $ref: '#/components/responses/HealthResponse'
+  /api/v1/sources:
+    get:
+      summary: List registered sources
+      operationId: listSources
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      responses:
+        '200':
+          description: Registered sources.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - items
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Source'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+  /api/v1/events/search:
+    post:
+      summary: Search normalized events
+      operationId: searchEvents
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SearchEventsRequest'
+      responses:
+        '200':
+          description: Normalized events and their context.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchEventsResponse'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+  /api/v1/entities/lookup:
+    post:
+      summary: Look up an entity
+      operationId: lookupEntity
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LookupEntityRequest'
+      responses:
+        '200':
+          description: Context gathered for an entity.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LookupEntityResponse'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+  /api/v1/artifact-analyses:
+    post:
+      summary: Analyze an artifact
+      operationId: createArtifactAnalysis
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateArtifactAnalysisRequest'
+      responses:
+        '202':
+          description: Completed mock analysis.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Analysis'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+  /api/v1/artifact-analyses/{analysis_id}:
+    get:
+      summary: Get an artifact analysis
+      operationId: getArtifactAnalysis
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - name: analysis_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Artifact analysis.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Analysis'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+  /api/v1/endpoints/search:
+    post:
+      summary: Search endpoints
+      operationId: searchEndpoints
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SearchEndpointsRequest'
+      responses:
+        '200':
+          description: EDR endpoints.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchEndpointsResponse'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+  /api/v1/sources/{source}/endpoints/{external_id}/response-actions:
+    get:
+      summary: List endpoint response actions
+      operationId: listResponseActions
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - name: source
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: external_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Read-only response action catalogue.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - items
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ResponseAction'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    Health:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          type: string
+          enum:
+            - ok
+    ErrorEnvelope:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: object
+          required:
+            - code
+            - message
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+    Capability:
+      type: string
+      enum:
+        - events
+        - entity_lookup
+        - artifact_analysis
+        - endpoints
+        - response_catalog
+    Source:
+      type: object
+      required:
+        - code
+        - name
+        - kind
+        - mode
+        - status
+        - capabilities
+      properties:
+        code:
+          type: string
+        name:
+          type: string
+        kind:
+          type: string
+          enum:
+            - siem
+            - ndr
+            - edr
+            - sandbox
+            - threat_intelligence
+        mode:
+          type: string
+          enum:
+            - mock
+            - proxy
+        status:
+          type: string
+          enum:
+            - available
+            - unavailable
+        capabilities:
+          type: array
+          items:
+            $ref: '#/components/schemas/Capability'
+    TimeRange:
+      type: object
+      required:
+        - from
+        - to
+      properties:
+        from:
+          type: string
+          format: date-time
+        to:
+          type: string
+          format: date-time
+    EntityRef:
+      type: object
+      required:
+        - type
+        - value
+      properties:
+        type:
+          type: string
+        value:
+          type: string
+    SearchEventsRequest:
+      type: object
+      properties:
+        sources:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+        time_range:
+          $ref: '#/components/schemas/TimeRange'
+        query:
+          type: string
+          maxLength: 1000
+        entities:
+          type: array
+          maxItems: 100
+          items:
+            $ref: '#/components/schemas/EntityRef'
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 50
+        cursor:
+          type: string
+    Provenance:
+      type: object
+      required:
+        - source
+        - external_id
+        - fetched_at
+      properties:
+        source:
+          type: string
+        external_id:
+          type: string
+        source_url:
+          type: string
+          format: uri
+        fetched_at:
+          type: string
+          format: date-time
+    Event:
+      type: object
+      required:
+        - id
+        - type
+        - title
+        - severity
+        - occurred_at
+        - entity_ids
+        - attributes
+        - provenance
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+        title:
+          type: string
+        severity:
+          type: string
+          enum:
+            - info
+            - low
+            - medium
+            - high
+            - critical
+            - unknown
+        occurred_at:
+          type: string
+          format: date-time
+        entity_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+        attributes:
+          type: object
+          additionalProperties: true
+        provenance:
+          $ref: '#/components/schemas/Provenance'
+    Entity:
+      type: object
+      required:
+        - id
+        - type
+        - value
+        - attributes
+        - provenance
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+        value:
+          type: string
+        attributes:
+          type: object
+          additionalProperties: true
+        provenance:
+          type: array
+          items:
+            $ref: '#/components/schemas/Provenance'
+    Relation:
+      type: object
+      required:
+        - id
+        - type
+        - source_entity_id
+        - target_entity_id
+        - provenance
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+        source_entity_id:
+          type: string
+          format: uuid
+        target_entity_id:
+          type: string
+          format: uuid
+        occurred_at:
+          type: string
+          format: date-time
+        provenance:
+          $ref: '#/components/schemas/Provenance'
+    SourceError:
+      type: object
+      required:
+        - source
+        - code
+        - message
+        - retryable
+      properties:
+        source:
+          type: string
+        code:
+          type: string
+        message:
+          type: string
+        retryable:
+          type: boolean
+    SearchEventsResponse:
+      type: object
+      required:
+        - events
+        - entities
+        - relations
+        - source_errors
+      properties:
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/Event'
+        entities:
+          type: array
+          items:
+            $ref: '#/components/schemas/Entity'
+        relations:
+          type: array
+          items:
+            $ref: '#/components/schemas/Relation'
+        next_cursor:
+          type: string
+        source_errors:
+          type: array
+          items:
+            $ref: '#/components/schemas/SourceError'
+    LookupEntityRequest:
+      type: object
+      required:
+        - entity
+      properties:
+        sources:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+        entity:
+          $ref: '#/components/schemas/EntityRef'
+    Verdict:
+      type: object
+      required:
+        - value
+        - confidence
+        - labels
+        - provider
+      properties:
+        value:
+          type: string
+          enum:
+            - malicious
+            - suspicious
+            - clean
+            - unknown
+        confidence:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 1
+        labels:
+          type: array
+          items:
+            type: string
+        provider:
+          type: string
+    LookupEntityResponse:
+      type: object
+      required:
+        - entities
+        - relations
+        - verdicts
+        - source_errors
+      properties:
+        entities:
+          type: array
+          items:
+            $ref: '#/components/schemas/Entity'
+        relations:
+          type: array
+          items:
+            $ref: '#/components/schemas/Relation'
+        verdicts:
+          type: array
+          items:
+            $ref: '#/components/schemas/Verdict'
+        source_errors:
+          type: array
+          items:
+            $ref: '#/components/schemas/SourceError'
+    Hashes:
+      type: object
+      properties:
+        md5:
+          type: string
+        sha1:
+          type: string
+        sha256:
+          type: string
+    CreateArtifactAnalysisRequest:
+      type: object
+      required:
+        - source
+        - artifact
+      properties:
+        source:
+          type: string
+        artifact:
+          type: object
+          required:
+            - name
+          properties:
+            name:
+              type: string
+            mime:
+              type: string
+            hashes:
+              $ref: '#/components/schemas/Hashes'
+    Artifact:
+      type: object
+      required:
+        - id
+        - name
+        - hashes
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        mime:
+          type: string
+        size:
+          type: integer
+          format: int64
+          minimum: 0
+        hashes:
+          $ref: '#/components/schemas/Hashes'
+    Analysis:
+      type: object
+      required:
+        - id
+        - status
+        - artifact
+        - verdict
+        - artifacts
+        - provenance
+      properties:
+        id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum:
+            - completed
+        artifact:
+          $ref: '#/components/schemas/Artifact'
+        verdict:
+          $ref: '#/components/schemas/Verdict'
+        artifacts:
+          type: array
+          items:
+            $ref: '#/components/schemas/Artifact'
+        attributes:
+          type: object
+          additionalProperties: true
+        provenance:
+          $ref: '#/components/schemas/Provenance'
+    SearchEndpointsRequest:
+      type: object
+      properties:
+        sources:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+        query:
+          type: string
+          maxLength: 1000
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 50
+        cursor:
+          type: string
+    Endpoint:
+      type: object
+      required:
+        - id
+        - external_id
+        - hostname
+        - status
+        - attributes
+        - provenance
+      properties:
+        id:
+          type: string
+          format: uuid
+        external_id:
+          type: string
+        hostname:
+          type: string
+        ip_addresses:
+          type: array
+          items:
+            type: string
+        status:
+          type: string
+          enum:
+            - online
+            - offline
+            - unknown
+        attributes:
+          type: object
+          additionalProperties: true
+        provenance:
+          $ref: '#/components/schemas/Provenance'
+    SearchEndpointsResponse:
+      type: object
+      required:
+        - items
+        - source_errors
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Endpoint'
+        next_cursor:
+          type: string
+        source_errors:
+          type: array
+          items:
+            $ref: '#/components/schemas/SourceError'
+    ResponseAction:
+      type: object
+      required:
+        - code
+        - title
+        - destructive
+        - enabled
+      properties:
+        code:
+          type: string
+        title:
+          type: string
+        destructive:
+          type: boolean
+        enabled:
+          type: boolean
+  responses:
+    HealthResponse:
+      description: Service health.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Health'
+    ErrorResponse:
+      description: Error response.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+  parameters:
+    ProjectId:
+      name: X-Project-ID
+      in: header
+      required: true
+      description: Sb0rka project whose integration allowlist is used.
+      schema:
+        type: string
+        pattern: ^[a-f0-9]{10,12}$

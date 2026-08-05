@@ -1,0 +1,20 @@
+post:
+  summary: Search normalized events
+  operationId: searchEvents
+  parameters:
+    - $ref: '../shared/parameters.yaml#/ProjectId'
+  requestBody:
+    required: true
+    content:
+      application/json:
+        schema:
+          $ref: '../shared/schemas.yaml#/SearchEventsRequest'
+  responses:
+    '200':
+      description: Normalized events and their context.
+      content:
+        application/json:
+          schema:
+            $ref: '../shared/schemas.yaml#/SearchEventsResponse'
+    default:
+      $ref: '../shared/responses.yaml#/ErrorResponse'

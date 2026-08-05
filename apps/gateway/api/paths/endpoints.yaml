@@ -1,0 +1,52 @@
+search:
+  post:
+    summary: Search endpoints
+    operationId: searchEndpoints
+    parameters:
+      - $ref: '../shared/parameters.yaml#/ProjectId'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../shared/schemas.yaml#/SearchEndpointsRequest'
+    responses:
+      '200':
+        description: EDR endpoints.
+        content:
+          application/json:
+            schema:
+              $ref: '../shared/schemas.yaml#/SearchEndpointsResponse'
+      default:
+        $ref: '../shared/responses.yaml#/ErrorResponse'
+responseActions:
+  get:
+    summary: List endpoint response actions
+    operationId: listResponseActions
+    parameters:
+      - $ref: '../shared/parameters.yaml#/ProjectId'
+      - name: source
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: external_id
+        in: path
+        required: true
+        schema:
+          type: string
+    responses:
+      '200':
+        description: Read-only response action catalogue.
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [items]
+              properties:
+                items:
+                  type: array
+                  items:
+                    $ref: '../shared/schemas.yaml#/ResponseAction'
+      default:
+        $ref: '../shared/responses.yaml#/ErrorResponse'

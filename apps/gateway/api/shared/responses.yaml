@@ -1,0 +1,12 @@
+HealthResponse:
+  description: Service health.
+  content:
+    application/json:
+      schema:
+        $ref: './schemas.yaml#/Health'
+ErrorResponse:
+  description: Error response.
+  content:
+    application/json:
+      schema:
+        $ref: './schemas.yaml#/ErrorEnvelope'
