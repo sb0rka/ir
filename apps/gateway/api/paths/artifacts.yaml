@@ -28,6 +28,7 @@ get:
       - name: analysis_id
         in: path
         required: true
+        description: Gateway identifier of the artifact analysis.
         schema:
           type: string
           format: uuid

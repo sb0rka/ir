@@ -44,3 +44,4 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
+      description: Sb0rka access token passed as `Bearer <token>`.

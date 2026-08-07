@@ -28,11 +28,13 @@ responseActions:
       - name: source
         in: path
         required: true
+        description: Source code of the endpoint-security product.
         schema:
           type: string
       - name: external_id
         in: path
         required: true
+        description: Endpoint identifier in the selected source system.
         schema:
           type: string
     responses:
@@ -46,6 +48,7 @@ responseActions:
               properties:
                 items:
                   type: array
+                  description: Response operations currently advertised for the endpoint.
                   items:
                     $ref: '../shared/schemas.yaml#/ResponseAction'
       default:

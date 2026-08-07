@@ -209,234 +209,409 @@ func (e VerdictValue) Valid() bool {
 	}
 }
 
-// Analysis defines model for Analysis.
+// Analysis Normalized result of an artifact analysis.
 type Analysis struct {
-	Artifact   Artifact                `json:"artifact"`
-	Artifacts  []Artifact              `json:"artifacts"`
+	// Artifact Primary artifact that was analyzed.
+	Artifact Artifact `json:"artifact"`
+
+	// Artifacts Additional artifacts extracted or discovered during analysis.
+	Artifacts []Artifact `json:"artifacts"`
+
+	// Attributes Selected engine and behavior details from the analysis provider.
 	Attributes *map[string]interface{} `json:"attributes,omitempty"`
-	Id         openapi_types.UUID      `json:"id"`
-	Provenance Provenance              `json:"provenance"`
-	Status     AnalysisStatus          `json:"status"`
-	Verdict    Verdict                 `json:"verdict"`
+
+	// Id Gateway identifier of the analysis.
+	Id openapi_types.UUID `json:"id"`
+
+	// Provenance Source task from which this result was normalized.
+	Provenance Provenance `json:"provenance"`
+
+	// Status Current processing state of the analysis.
+	Status AnalysisStatus `json:"status"`
+
+	// Verdict Final normalized assessment of the primary artifact.
+	Verdict Verdict `json:"verdict"`
 }
 
-// AnalysisStatus defines model for Analysis.Status.
+// AnalysisStatus Current processing state of the analysis.
 type AnalysisStatus string
 
-// Artifact defines model for Artifact.
+// Artifact File or payload submitted to or produced by an analysis.
 type Artifact struct {
-	Hashes Hashes             `json:"hashes"`
-	Id     openapi_types.UUID `json:"id"`
-	Mime   *string            `json:"mime,omitempty"`
-	Name   string             `json:"name"`
-	Size   *int64             `json:"size,omitempty"`
+	// Hashes Checksums known for the artifact.
+	Hashes Hashes `json:"hashes"`
+
+	// Id Deterministic Gateway identifier of the artifact.
+	Id openapi_types.UUID `json:"id"`
+
+	// Mime Reported or detected MIME type.
+	Mime *string `json:"mime,omitempty"`
+
+	// Name File name reported by the source or caller.
+	Name string `json:"name"`
+
+	// Size Artifact size in bytes.
+	Size *int64 `json:"size,omitempty"`
 }
 
-// Capability defines model for Capability.
+// Capability Operation that a source can perform through the Gateway.
 type Capability string
 
-// CreateArtifactAnalysisRequest defines model for CreateArtifactAnalysisRequest.
+// CreateArtifactAnalysisRequest Request to analyze a known artifact with one source.
 type CreateArtifactAnalysisRequest struct {
+	// Artifact Metadata used to identify the artifact for analysis.
 	Artifact struct {
+		// Hashes Checksums known by the caller.
 		Hashes *Hashes `json:"hashes,omitempty"`
-		Mime   *string `json:"mime,omitempty"`
-		Name   string  `json:"name"`
+
+		// Mime MIME type when known by the caller.
+		Mime *string `json:"mime,omitempty"`
+
+		// Name File name of the artifact.
+		Name string `json:"name"`
 	} `json:"artifact"`
+
+	// Source Source code of the artifact-analysis provider.
 	Source string `json:"source"`
 }
 
-// Endpoint defines model for Endpoint.
+// Endpoint Endpoint asset reported by an endpoint-security source.
 type Endpoint struct {
-	Attributes  map[string]interface{} `json:"attributes"`
-	ExternalId  string                 `json:"external_id"`
-	Hostname    string                 `json:"hostname"`
-	Id          openapi_types.UUID     `json:"id"`
-	IpAddresses *[]string              `json:"ip_addresses,omitempty"`
-	Provenance  Provenance             `json:"provenance"`
-	Status      EndpointStatus         `json:"status"`
+	// Attributes Selected inventory and agent fields from the source.
+	Attributes map[string]interface{} `json:"attributes"`
+
+	// ExternalId Endpoint or agent identifier in the source system.
+	ExternalId string `json:"external_id"`
+
+	// Hostname Host name reported for the endpoint.
+	Hostname string `json:"hostname"`
+
+	// Id Deterministic identifier derived from the source and external endpoint ID.
+	Id openapi_types.UUID `json:"id"`
+
+	// IpAddresses IP addresses currently associated with the endpoint.
+	IpAddresses *[]string `json:"ip_addresses,omitempty"`
+
+	// Provenance Source record from which the endpoint was normalized.
+	Provenance Provenance `json:"provenance"`
+
+	// Status Normalized endpoint connectivity state.
+	Status EndpointStatus `json:"status"`
 }
 
-// EndpointStatus defines model for Endpoint.Status.
+// EndpointStatus Normalized endpoint connectivity state.
 type EndpointStatus string
 
-// Entity defines model for Entity.
+// Entity Canonical representation of an observable or asset.
 type Entity struct {
+	// Attributes Selected source-specific fields; never the complete vendor response.
 	Attributes map[string]interface{} `json:"attributes"`
-	Id         openapi_types.UUID     `json:"id"`
-	Provenance []Provenance           `json:"provenance"`
-	Type       string                 `json:"type"`
-	Value      string                 `json:"value"`
-}
 
-// EntityRef defines model for EntityRef.
-type EntityRef struct {
-	Type  string `json:"type"`
+	// Id Deterministic identifier derived from the entity type and canonical value.
+	Id openapi_types.UUID `json:"id"`
+
+	// Provenance Source records in which this entity was observed.
+	Provenance []Provenance `json:"provenance"`
+
+	// Type Canonical entity kind.
+	Type string `json:"type"`
+
+	// Value Normalized entity value used for deduplication.
 	Value string `json:"value"`
 }
 
-// ErrorEnvelope defines model for ErrorEnvelope.
+// EntityRef Entity value used as a search or lookup condition.
+type EntityRef struct {
+	// Type Canonical entity kind, such as ip, domain, hostname, email, or hash.
+	Type string `json:"type"`
+
+	// Value Entity value to normalize and look up.
+	Value string `json:"value"`
+}
+
+// ErrorEnvelope Error returned when a request cannot be completed.
 type ErrorEnvelope struct {
+	// Error Structured error details.
 	Error struct {
-		Code    string `json:"code"`
+		// Code Stable machine-readable error code.
+		Code string `json:"code"`
+
+		// Message Safe human-readable error summary.
 		Message string `json:"message"`
 	} `json:"error"`
 }
 
-// Event defines model for Event.
+// Event Security event normalized from one source record.
 type Event struct {
+	// Attributes Selected event fields that have no canonical top-level property.
 	Attributes map[string]interface{} `json:"attributes"`
-	EntityIds  []openapi_types.UUID   `json:"entity_ids"`
-	Id         openapi_types.UUID     `json:"id"`
-	OccurredAt time.Time              `json:"occurred_at"`
-	Provenance Provenance             `json:"provenance"`
-	Severity   EventSeverity          `json:"severity"`
-	Title      string                 `json:"title"`
-	Type       string                 `json:"type"`
+
+	// EntityIds Canonical entities mentioned by the event.
+	EntityIds []openapi_types.UUID `json:"entity_ids"`
+
+	// Id Deterministic identifier derived from the source and external event ID.
+	Id openapi_types.UUID `json:"id"`
+
+	// OccurredAt Time when the event occurred in the source system.
+	OccurredAt time.Time `json:"occurred_at"`
+
+	// Provenance Source record from which the event was normalized.
+	Provenance Provenance `json:"provenance"`
+
+	// Severity Severity mapped to the Gateway scale.
+	Severity EventSeverity `json:"severity"`
+
+	// Title Short human-readable event summary.
+	Title string `json:"title"`
+
+	// Type Normalized event class.
+	Type string `json:"type"`
 }
 
-// EventSeverity defines model for Event.Severity.
+// EventSeverity Severity mapped to the Gateway scale.
 type EventSeverity string
 
-// Hashes defines model for Hashes.
+// Hashes Cryptographic checksums available for an artifact.
 type Hashes struct {
-	Md5    *string `json:"md5,omitempty"`
-	Sha1   *string `json:"sha1,omitempty"`
+	// Md5 MD5 checksum in hexadecimal form.
+	Md5 *string `json:"md5,omitempty"`
+
+	// Sha1 SHA-1 checksum in hexadecimal form.
+	Sha1 *string `json:"sha1,omitempty"`
+
+	// Sha256 SHA-256 checksum in hexadecimal form.
 	Sha256 *string `json:"sha256,omitempty"`
 }
 
-// Health defines model for Health.
+// Health Service health response.
 type Health struct {
+	// Status Current health state of the checked component.
 	Status HealthStatus `json:"status"`
 }
 
-// HealthStatus defines model for Health.Status.
+// HealthStatus Current health state of the checked component.
 type HealthStatus string
 
-// LookupEntityRequest defines model for LookupEntityRequest.
+// LookupEntityRequest Request to enrich one entity from one or more sources.
 type LookupEntityRequest struct {
-	Entity  EntityRef `json:"entity"`
+	// Entity Entity to normalize and enrich.
+	Entity EntityRef `json:"entity"`
+
+	// Sources Source codes to query; omit to use every allowed source with entity lookup.
 	Sources *[]string `json:"sources,omitempty"`
 }
 
-// LookupEntityResponse defines model for LookupEntityResponse.
+// LookupEntityResponse Entity enrichment merged from the selected sources.
 type LookupEntityResponse struct {
-	Entities     []Entity      `json:"entities"`
-	Relations    []Relation    `json:"relations"`
+	// Entities Matched entity and related canonical entities.
+	Entities []Entity `json:"entities"`
+
+	// Relations Relationships between entities in this response.
+	Relations []Relation `json:"relations"`
+
+	// SourceErrors Per-source failures when at least one selected source succeeded.
 	SourceErrors []SourceError `json:"source_errors"`
-	Verdicts     []Verdict     `json:"verdicts"`
+
+	// Verdicts Security assessments returned for the requested entity.
+	Verdicts []Verdict `json:"verdicts"`
 }
 
-// Provenance defines model for Provenance.
+// Provenance Origin of a normalized record.
 type Provenance struct {
-	ExternalId string    `json:"external_id"`
-	FetchedAt  time.Time `json:"fetched_at"`
-	Source     string    `json:"source"`
-	SourceUrl  *string   `json:"source_url,omitempty"`
+	// ExternalId Identifier of the record in the source system.
+	ExternalId string `json:"external_id"`
+
+	// FetchedAt Time when the Gateway obtained the source data.
+	FetchedAt time.Time `json:"fetched_at"`
+
+	// Source Source code that supplied the record.
+	Source string `json:"source"`
+
+	// SourceUrl Optional link to the record in the source system.
+	SourceUrl *string `json:"source_url,omitempty"`
 }
 
-// Relation defines model for Relation.
+// Relation Normalized relationship between two canonical entities.
 type Relation struct {
-	Id             openapi_types.UUID `json:"id"`
-	OccurredAt     *time.Time         `json:"occurred_at,omitempty"`
-	Provenance     Provenance         `json:"provenance"`
+	// Id Deterministic identifier of the relationship.
+	Id openapi_types.UUID `json:"id"`
+
+	// OccurredAt Optional time when the relationship was observed.
+	OccurredAt *time.Time `json:"occurred_at,omitempty"`
+
+	// Provenance Source record supporting the relationship.
+	Provenance Provenance `json:"provenance"`
+
+	// SourceEntityId Identifier of the entity from which the relationship starts.
 	SourceEntityId openapi_types.UUID `json:"source_entity_id"`
+
+	// TargetEntityId Identifier of the entity at which the relationship ends.
 	TargetEntityId openapi_types.UUID `json:"target_entity_id"`
-	Type           string             `json:"type"`
+
+	// Type Normalized relationship type, such as connected_to or resolves_to.
+	Type string `json:"type"`
 }
 
-// ResponseAction defines model for ResponseAction.
+// ResponseAction Response operation advertised for an endpoint; the Gateway does not execute it.
 type ResponseAction struct {
-	Code        string `json:"code"`
-	Destructive bool   `json:"destructive"`
-	Enabled     bool   `json:"enabled"`
-	Title       string `json:"title"`
+	// Code Stable source action code.
+	Code string `json:"code"`
+
+	// Destructive Whether executing the action may disrupt or alter the endpoint.
+	Destructive bool `json:"destructive"`
+
+	// Enabled Whether the source currently allows the action for the endpoint.
+	Enabled bool `json:"enabled"`
+
+	// Title Human-readable action name.
+	Title string `json:"title"`
 }
 
-// SearchEndpointsRequest defines model for SearchEndpointsRequest.
+// SearchEndpointsRequest Filters for endpoint inventory search.
 type SearchEndpointsRequest struct {
-	Cursor  *string   `json:"cursor,omitempty"`
-	Limit   *int      `json:"limit,omitempty"`
-	Query   *string   `json:"query,omitempty"`
+	// Cursor Opaque next_cursor from the previous response with the same filters.
+	Cursor *string `json:"cursor,omitempty"`
+
+	// Limit Maximum number of endpoints returned after merging all sources.
+	Limit *int `json:"limit,omitempty"`
+
+	// Query Free-text query matched against endpoint inventory fields.
+	Query *string `json:"query,omitempty"`
+
+	// Sources Source codes to query; omit to use every allowed endpoint source.
 	Sources *[]string `json:"sources,omitempty"`
 }
 
-// SearchEndpointsResponse defines model for SearchEndpointsResponse.
+// SearchEndpointsResponse Merged endpoint inventory page.
 type SearchEndpointsResponse struct {
-	Items        []Endpoint    `json:"items"`
-	NextCursor   *string       `json:"next_cursor,omitempty"`
+	// Items Normalized endpoints in the current page.
+	Items []Endpoint `json:"items"`
+
+	// NextCursor Opaque cursor for the next page; absent when the search is exhausted.
+	NextCursor *string `json:"next_cursor,omitempty"`
+
+	// SourceErrors Per-source failures when at least one selected source succeeded.
 	SourceErrors []SourceError `json:"source_errors"`
 }
 
-// SearchEventsRequest defines model for SearchEventsRequest.
+// SearchEventsRequest Filters for a normalized multi-source event search.
 type SearchEventsRequest struct {
-	Cursor    *string      `json:"cursor,omitempty"`
-	Entities  *[]EntityRef `json:"entities,omitempty"`
-	Limit     *int         `json:"limit,omitempty"`
-	Query     *string      `json:"query,omitempty"`
-	Sources   *[]string    `json:"sources,omitempty"`
-	TimeRange *TimeRange   `json:"time_range,omitempty"`
+	// Cursor Opaque next_cursor from the previous response with the same filters.
+	Cursor *string `json:"cursor,omitempty"`
+
+	// Entities Entity conditions; an event matches when it contains at least one listed entity.
+	Entities *[]EntityRef `json:"entities,omitempty"`
+
+	// Limit Maximum number of events returned after merging all sources.
+	Limit *int `json:"limit,omitempty"`
+
+	// Query Free-text query interpreted by each selected source.
+	Query *string `json:"query,omitempty"`
+
+	// Sources Source codes to query; omit to use every allowed source with event search.
+	Sources *[]string `json:"sources,omitempty"`
+
+	// TimeRange Optional occurrence-time interval.
+	TimeRange *TimeRange `json:"time_range,omitempty"`
 }
 
-// SearchEventsResponse defines model for SearchEventsResponse.
+// SearchEventsResponse Merged event page with the entities and relations needed to interpret it.
 type SearchEventsResponse struct {
-	Entities     []Entity      `json:"entities"`
-	Events       []Event       `json:"events"`
-	NextCursor   *string       `json:"next_cursor,omitempty"`
-	Relations    []Relation    `json:"relations"`
+	// Entities Canonical entities referenced by the returned events.
+	Entities []Entity `json:"entities"`
+
+	// Events Normalized events in the current page.
+	Events []Event `json:"events"`
+
+	// NextCursor Opaque cursor for the next page; absent when the search is exhausted.
+	NextCursor *string `json:"next_cursor,omitempty"`
+
+	// Relations Relationships whose endpoints are present in the returned entities.
+	Relations []Relation `json:"relations"`
+
+	// SourceErrors Per-source failures when at least one selected source succeeded.
 	SourceErrors []SourceError `json:"source_errors"`
 }
 
-// Source defines model for Source.
+// Source External security product registered in the Gateway.
 type Source struct {
+	// Capabilities Operations implemented by this source.
 	Capabilities []Capability `json:"capabilities"`
-	Code         string       `json:"code"`
-	Kind         SourceKind   `json:"kind"`
-	Mode         SourceMode   `json:"mode"`
-	Name         string       `json:"name"`
-	Status       SourceStatus `json:"status"`
+
+	// Code Stable source identifier used in requests and provenance.
+	Code string `json:"code"`
+
+	// Kind Functional class of the security product.
+	Kind SourceKind `json:"kind"`
+
+	// Mode Adapter mode currently backing the source.
+	Mode SourceMode `json:"mode"`
+
+	// Name Human-readable product name.
+	Name string `json:"name"`
+
+	// Status Whether the source is available for requests.
+	Status SourceStatus `json:"status"`
 }
 
-// SourceKind defines model for Source.Kind.
+// SourceKind Functional class of the security product.
 type SourceKind string
 
-// SourceMode defines model for Source.Mode.
+// SourceMode Adapter mode currently backing the source.
 type SourceMode string
 
-// SourceStatus defines model for Source.Status.
+// SourceStatus Whether the source is available for requests.
 type SourceStatus string
 
-// SourceError defines model for SourceError.
+// SourceError Failure reported by one source during a multi-source request.
 type SourceError struct {
-	Code      string `json:"code"`
-	Message   string `json:"message"`
-	Retryable bool   `json:"retryable"`
-	Source    string `json:"source"`
+	// Code Stable machine-readable failure code.
+	Code string `json:"code"`
+
+	// Message Safe human-readable failure summary.
+	Message string `json:"message"`
+
+	// Retryable Whether repeating the source request may succeed without changing it.
+	Retryable bool `json:"retryable"`
+
+	// Source Source code that failed.
+	Source string `json:"source"`
 }
 
-// TimeRange defines model for TimeRange.
+// TimeRange Inclusive event occurrence-time interval.
 type TimeRange struct {
+	// From Inclusive lower boundary of event occurrence time.
 	From time.Time `json:"from"`
-	To   time.Time `json:"to"`
+
+	// To Inclusive upper boundary of event occurrence time.
+	To time.Time `json:"to"`
 }
 
-// Verdict defines model for Verdict.
+// Verdict Normalized security assessment returned by a source.
 type Verdict struct {
-	Confidence float64      `json:"confidence"`
-	Labels     []string     `json:"labels"`
-	Provider   string       `json:"provider"`
-	Value      VerdictValue `json:"value"`
+	// Confidence Provider confidence from 0 to 1.
+	Confidence float64 `json:"confidence"`
+
+	// Labels Provider classifications preserved as short labels.
+	Labels []string `json:"labels"`
+
+	// Provider Source code of the provider that produced the verdict.
+	Provider string `json:"provider"`
+
+	// Value Normalized assessment of the object.
+	Value VerdictValue `json:"value"`
 }
 
-// VerdictValue defines model for Verdict.Value.
+// VerdictValue Normalized assessment of the object.
 type VerdictValue string
 
 // ProjectId defines model for ProjectId.
 type ProjectId = string
 
-// ErrorResponse defines model for ErrorResponse.
+// ErrorResponse Error returned when a request cannot be completed.
 type ErrorResponse = ErrorEnvelope
 
-// HealthResponse defines model for HealthResponse.
+// HealthResponse Service health response.
 type HealthResponse = Health
 
 // CreateArtifactAnalysisParams defines parameters for CreateArtifactAnalysis.
