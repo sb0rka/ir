@@ -1,4 +1,4 @@
-![Sb0rka Incident Response](docs/imgs/ir-background.png)
+![Sb0rka Incident Response](docs/imgs/ir-background-op.png)
 
 Incident Response — Единая картина инцидента и AI-автоматизация расследований.
 

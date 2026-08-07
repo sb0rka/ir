@@ -1,9 +1,23 @@
-name: Check
+name: Check generated
 
 on:
   pull_request:
+    paths:
+      - 'api/**'
+      - 'packages/contract/**'
+      - 'packages/contract-ts/**'
+      - 'apps/investigations/internal/server/**'
+      - 'Taskfile.yml'
+      - '.github/workflows/check_generated.yml'
   push:
     branches: [main]
+    paths:
+      - 'api/**'
+      - 'packages/contract/**'
+      - 'packages/contract-ts/**'
+      - 'apps/investigations/internal/server/**'
+      - 'Taskfile.yml'
+      - '.github/workflows/check_generated.yml'
 
 permissions:
   contents: read

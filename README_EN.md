@@ -1,4 +1,4 @@
-![Sb0rka Incident Response](docs/imgs/ir-background.png)
+![Sb0rka Incident Response](docs/imgs/ir-background-op.png)
 
 Incident Response — A unified incident picture and AI-driven investigation automation.
 
