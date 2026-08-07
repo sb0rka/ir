@@ -1,0 +1,75 @@
+# Error responses shared by every domain.
+
+components:
+  responses:
+    Unauthorized:
+      description: >-
+        Token is missing, malformed, expired or signed by an unknown key
+        (code=unauthorized).
+      content:
+        application/json:
+          schema: { $ref: './errors.yaml#/components/schemas/ErrorResponse' }
+
+    Forbidden:
+      description: >-
+        Caller is authenticated but holds no role in the selected project, or the role
+        does not grant this action (code=forbidden).
+      content:
+        application/json:
+          schema: { $ref: './errors.yaml#/components/schemas/ErrorResponse' }
+
+    NotFound:
+      description: >-
+        No such record in the selected project. Returned instead of 403 for
+        records that exist elsewhere, so the response does not reveal them
+        (code=not_found).
+      content:
+        application/json:
+          schema: { $ref: './errors.yaml#/components/schemas/ErrorResponse' }
+
+    Conflict:
+      description: >-
+        The record changed since the version the client sent, the write would
+        duplicate an existing one, or the investigation is already closed.
+        `details.conflicts` lists the ids that clashed (code=conflict).
+      content:
+        application/json:
+          schema: { $ref: './errors.yaml#/components/schemas/ErrorResponse' }
+
+    ValidationError:
+      description: >-
+        Request parsed but violates a rule of the domain — an impossible status
+        transition, a confirmation without evidence, a malformed cursor
+        (code=validation).
+      content:
+        application/json:
+          schema: { $ref: './errors.yaml#/components/schemas/ErrorResponse' }
+
+    NotImplemented:
+      description: >-
+        The operation exists in the contract but has no implementation yet
+        (code=not_implemented). Declared on every operation because the service
+        is being built contract-first: a client can hide the control instead of
+        showing an error, and knows this is not a failure. Goes away per
+        operation as each one is written.
+      content:
+        application/json:
+          schema: { $ref: './errors.yaml#/components/schemas/ErrorResponse' }
+
+    InternalError:
+      description: >-
+        Unhandled failure or a panic. The service answers with the same error
+        envelope as everything else, so a client has one shape to parse; the
+        message is deliberately generic and the real cause goes to the log
+        (code=internal).
+      content:
+        application/json:
+          schema: { $ref: './errors.yaml#/components/schemas/ErrorResponse' }
+
+    SourceUnavailable:
+      description: >-
+        An upstream security tool did not answer. The investigation itself is
+        intact — retry, or narrow the query (code=source_unavailable).
+      content:
+        application/json:
+          schema: { $ref: './errors.yaml#/components/schemas/ErrorResponse' }

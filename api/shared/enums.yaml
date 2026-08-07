@@ -1,0 +1,38 @@
+# Vocabularies used by more than one domain.
+
+components:
+  schemas:
+    Severity:
+      type: string
+      description: >-
+        How much damage the case could cause. Set on triage and adjusted as
+        evidence accumulates.
+      enum: [low, medium, high, critical]
+
+    Origin:
+      type: string
+      description: >-
+        Who produced the record: a human acting through the API, a deterministic
+        linking rule, or an agent run. Anything not produced by a human is born
+        unconfirmed and has to be reviewed.
+      enum: [analyst, rule, agent]
+
+    Actor:
+      type: string
+      description: >-
+        Who performed an action — a human through the API, an agent run, or the
+        service itself acting on a schedule.
+      enum: [analyst, agent, system]
+
+    NodeType:
+      type: string
+      description: >-
+        What a graph node stands for. An entity node is a host, account, process,
+        address or hash; an event node is a source record promoted onto the graph.
+      enum: [entity, event]
+
+    GraphEdgeStatus:
+      type: string
+      description: >-
+        Review state. Rejected edges remain stored with their review result.
+      enum: [proposed, confirmed, rejected]
