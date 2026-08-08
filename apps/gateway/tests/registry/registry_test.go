@@ -1,9 +1,13 @@
-package mock
+package registry_test
 
-import "testing"
+import (
+	"testing"
+
+	adaptermock "github.com/sb0rka/ir/apps/gateway/internal/adapters/mock"
+)
 
 func TestRegistryIncludesOnlyContractBackedProviders(t *testing.T) {
-	providers, _, err := NewRegistry(Options{EventCount: 1, EndpointCount: 1, HistoryDays: 1})
+	providers, _, err := adaptermock.NewRegistry(adaptermock.Options{EventCount: 1, EndpointCount: 1, HistoryDays: 1})
 	if err != nil {
 		t.Fatal(err)
 	}

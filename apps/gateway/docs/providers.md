@@ -2,7 +2,7 @@
 
 Only providers backed by a reviewed vendor operation are registered by the mock composition root. Their deterministic scenario data is first expressed as vendor DTOs and then passed through the same mapper intended for a real proxy. UI-only `position`, `style`, and `animated` fields from the source fixture are not part of any response.
 
-Vendor DTOs live in `internal/adapters/proxy/<provider>/schema.go` and never enter the public Gateway contract. Contract samples and provenance are stored beside them under `testdata/`.
+Vendor DTOs live in `internal/adapters/proxy/<provider>/schema.go` and never enter the public Gateway contract. Black-box tests, contract samples, and provenance live under `tests/<provider>/`.
 
 | Provider | Gateway capability | Vendor operation | Product version | Contract status |
 | --- | --- | --- | --- | --- |
