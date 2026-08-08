@@ -3,11 +3,8 @@ package mock
 import (
 	"fmt"
 
-	"github.com/sb0rka/ir/apps/gateway/internal/adapters/mock/edr"
 	"github.com/sb0rka/ir/apps/gateway/internal/adapters/mock/fixtures"
-	"github.com/sb0rka/ir/apps/gateway/internal/adapters/mock/fusion"
 	"github.com/sb0rka/ir/apps/gateway/internal/adapters/mock/maxpatrol"
-	"github.com/sb0rka/ir/apps/gateway/internal/adapters/mock/ptnad"
 	"github.com/sb0rka/ir/apps/gateway/internal/adapters/mock/sandbox"
 	"github.com/sb0rka/ir/apps/gateway/internal/adapters/mock/scenario"
 	"github.com/sb0rka/ir/apps/gateway/internal/registry"
@@ -39,10 +36,7 @@ func NewRegistry(options Options) (*registry.Registry, Stats, error) {
 	}
 	providers, err := registry.New(
 		maxpatrol.NewMock(value),
-		ptnad.NewMock(value),
-		edr.NewMock(value),
 		sandbox.NewMock(),
-		fusion.NewMock(),
 	)
 	if err != nil {
 		return nil, Stats{}, err

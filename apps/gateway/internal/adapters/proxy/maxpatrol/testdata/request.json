@@ -1,0 +1,28 @@
+{
+  "filter": {
+    "aggregateBy": [],
+    "aliases": null,
+    "distributeBy": [],
+    "groupBy": [],
+    "orderBy": [
+      {
+        "field": "time",
+        "sortOrder": "descending"
+      }
+    ],
+    "select": [
+      "time",
+      "event_src.host",
+      "text",
+      "id",
+      "uuid",
+      "correlation_name",
+      "object.type"
+    ],
+    "top": null,
+    "where": ""
+  },
+  "groupValues": [],
+  "timeFrom": 1615826187,
+  "timeTo": 1615912587
+}
