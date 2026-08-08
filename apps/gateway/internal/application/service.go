@@ -240,15 +240,17 @@ func (service *Service) AnalyzeArtifact(ctx context.Context, source string, requ
 	return provider.ArtifactAnalyzer.AnalyzeArtifact(requestCtx, request)
 }
 
-func (service *Service) GetAnalysis(ctx context.Context, analysisID string) (domain.Analysis, error) {
-	providers, err := service.registry.Select(nil, domain.CapabilityArtifactAnalysis)
+func (service *Service) GetAnalysis(ctx context.Context, sources []string, analysisID string) (domain.Analysis, error) {
+	providers, err := service.registry.Select(sources, domain.CapabilityArtifactAnalysis)
 	if err != nil {
 		return domain.Analysis{}, err
 	}
+	requestCtx, cancel := context.WithTimeout(ctx, service.requestTimeout)
+	defer cancel()
 	for _, provider := range providers {
-		requestCtx, cancel := context.WithTimeout(ctx, service.sourceTimeout)
-		analysis, callErr := provider.ArtifactAnalyzer.GetAnalysis(requestCtx, analysisID)
-		cancel()
+		sourceCtx, sourceCancel := context.WithTimeout(requestCtx, service.sourceTimeout)
+		analysis, callErr := provider.ArtifactAnalyzer.GetAnalysis(sourceCtx, analysisID)
+		sourceCancel()
 		if callErr == nil {
 			return analysis, nil
 		}

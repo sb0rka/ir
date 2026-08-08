@@ -17,6 +17,8 @@ Vendor DTOs live in `internal/adapters/proxy/<provider>/schema.go` and never ent
 
 Registered capability: event search. Raw and correlated records become canonical events through `proxy/maxpatrol.ToEventPage`; correlation metadata and selected dynamic fields stay in bounded attributes. Entity lookup is not registered until its contract blocker is resolved. Reference: [MaxPatrol SIEM event list API](https://help.ptsecurity.com/ru-RU/projects/siem/8.1/help/10836123659).
 
+The deterministic mock uses a Gateway-only `token:offset` continuation to exercise canonical pagination. It is not claimed as the SIEM continuation protocol; a proxy implementation must confirm the vendor token exchange separately.
+
 ## PT NAD (`pt-nad`)
 
 Not registered. The current `SessionDocument` draft is a selected subset of an Elasticsearch mapping, not a REST request or response schema. An OpenAPI document or anonymized HTTP JSON exchange is required before mapper or mock work continues. Reference: [PT NAD REST API entry point](https://help.ptsecurity.com/en-US/projects/nad/12.0/help/4750761739).

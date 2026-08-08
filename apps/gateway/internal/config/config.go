@@ -25,7 +25,7 @@ const (
 	MaxMockHistory        = 3_650
 )
 
-var SourceCodes = []string{"maxpatrol-siem", "pt-nad", "maxpatrol-edr", "pt-sandbox", "pt-fusion"}
+var SourceCodes = []string{"maxpatrol-siem", "pt-sandbox"}
 
 type Config struct {
 	Server         ServerConfig

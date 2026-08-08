@@ -9,3 +9,5 @@
 - Error fixture: the operation documents HTTP 400 and 401 but does not publish an error body; `error.json` is deliberately `null` instead of an invented envelope
 
 Entity lookup is not claimed for this provider until a documented operation or a reviewed event-search predicate is available.
+
+The mock `token:offset` cursor is internal Gateway behavior and is not evidence of the vendor continuation protocol. A real proxy must verify how the response token is exchanged before implementing subsequent-page requests.

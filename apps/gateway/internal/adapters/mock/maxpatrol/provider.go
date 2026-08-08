@@ -84,6 +84,10 @@ func (adapter *mock) SearchEvents(ctx context.Context, request capability.Search
 }
 
 func toEventsRequest(request capability.SearchEventsRequest) maxpatrolapi.EventsRequest {
+	top := int64(request.Limit)
+	if top < 1 || top > 100 {
+		top = 50
+	}
 	return maxpatrolapi.EventsRequest{
 		Filter: maxpatrolapi.EventsFilter{
 			GroupBy: []string{},
@@ -92,6 +96,7 @@ func toEventsRequest(request capability.SearchEventsRequest) maxpatrolapi.Events
 				"time", "uuid", "id", "text", "importance", "event_src.host",
 				"event_src.ip", "src.ip", "dst.ip", "dst.port", "correlation_name",
 			},
+			Top: &top,
 		},
 		GroupValues: []string{},
 		TimeFrom:    unixOrZero(request.TimeFrom),

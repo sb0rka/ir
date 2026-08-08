@@ -21,7 +21,7 @@ curl -s http://localhost:8091/api/v1/sources \
 
 Configuration for a provider uses `SOURCE_<CODE>_MODE`, `BASE_URL`, `CREDENTIAL_FILE`, `TIMEOUT_SEC`, and `TLS_CA_FILE` (hyphens become underscores). Only `mock` mode is implemented in `0.0.1`; selecting `proxy` stops startup with an explicit error.
 
-Optional project allowlists are process configuration: `PROJECT_SOURCE_ALLOWLISTS={"abcdef1234":["maxpatrol-siem","pt-nad"]}`. Projects absent from the map can use every enabled source.
+Optional project allowlists are process configuration: `PROJECT_SOURCE_ALLOWLISTS={"abcdef1234":["maxpatrol-siem","pt-sandbox"]}`. Only registered sources are accepted; projects absent from the map can use every enabled source.
 
 For a smaller local dataset:
 

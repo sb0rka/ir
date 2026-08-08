@@ -41,5 +41,5 @@ func NewRegistry(options Options) (*registry.Registry, Stats, error) {
 	if err != nil {
 		return nil, Stats{}, err
 	}
-	return providers, Stats{EventCount: len(value.Events), EndpointCount: options.EndpointCount}, nil
+	return providers, Stats{EventCount: len(value.EventsForSource("MaxPatrol")), EndpointCount: options.EndpointCount}, nil
 }

@@ -186,7 +186,12 @@ func (server *Server) CreateArtifactAnalysis(w http.ResponseWriter, r *http.Requ
 }
 
 func (server *Server) GetArtifactAnalysis(w http.ResponseWriter, r *http.Request, analysisID uuid.UUID, _ api.GetArtifactAnalysisParams) {
-	analysis, err := server.service.GetAnalysis(r.Context(), analysisID.String())
+	sources, err := server.constrainSources(r.Context(), nil)
+	if err != nil {
+		server.writeServiceError(w, err)
+		return
+	}
+	analysis, err := server.service.GetAnalysis(r.Context(), sources, analysisID.String())
 	if err != nil {
 		server.writeServiceError(w, err)
 		return

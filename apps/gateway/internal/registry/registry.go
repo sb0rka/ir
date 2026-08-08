@@ -62,6 +62,9 @@ func (registry *Registry) Select(codes []string, capabilityName domain.Capabilit
 				providers = append(providers, provider)
 			}
 		}
+		if len(providers) == 0 {
+			return nil, fmt.Errorf("%w: no registered source supports %s", domain.ErrUnsupportedCapability, capabilityName)
+		}
 		sort.Slice(providers, func(i, j int) bool { return providers[i].Source.Code < providers[j].Source.Code })
 		return providers, nil
 	}

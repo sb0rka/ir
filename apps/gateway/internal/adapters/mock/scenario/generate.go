@@ -36,12 +36,12 @@ func Expand(base Scenario, options GenerateOptions) (Scenario, error) {
 		value.Nodes = append(value.Nodes, node)
 		hostIDs = append(hostIDs, node.ID)
 	}
-	nadHostIDs := addNADHostViews(&value, hostIDs)
-
-	targetEvents := max(options.EventCount, len(value.Events))
-	for len(value.Events) < targetEvents {
+	maxPatrolEvents := len(value.EventsForSource("MaxPatrol"))
+	targetEvents := max(options.EventCount, maxPatrolEvents)
+	for maxPatrolEvents < targetEvents {
 		serial := len(value.Events) + 1
-		value.Events = append(value.Events, syntheticEvent(serial, hostIDs, nadHostIDs, options.HistoryDays))
+		value.Events = append(value.Events, syntheticEvent(serial, hostIDs, options.HistoryDays))
+		maxPatrolEvents++
 	}
 	value.reindex()
 	return value, nil
@@ -88,25 +88,7 @@ func syntheticHost(serial int) Node {
 	}
 }
 
-func addNADHostViews(value *Scenario, hostIDs []string) []string {
-	value.reindex()
-	result := make([]string, 0, len(hostIDs))
-	for _, hostID := range hostIDs {
-		host, ok := value.Node(hostID)
-		if !ok {
-			continue
-		}
-		host.ID = "nad-" + host.ID
-		host.Data.System = "PT NAD"
-		host.Data.SourceURL = "https://nad.mock.local/hosts/" + host.Data.Label
-		host.Data.Details = copyMap(host.Data.Details)
-		value.Nodes = append(value.Nodes, host)
-		result = append(result, host.ID)
-	}
-	return result
-}
-
-func syntheticEvent(serial int, siemHostIDs, nadHostIDs []string, historyDays int) Event {
+func syntheticEvent(serial int, hostIDs []string, historyDays int) Event {
 	severityWeights := []string{
 		"info", "info", "info", "info", "info",
 		"low", "low", "low", "low",
@@ -119,24 +101,7 @@ func syntheticEvent(serial int, siemHostIDs, nadHostIDs []string, historyDays in
 		"Lateral Movement", "Correlation Alert", "Privilege Escalation", "Account Change",
 		"Network Connection", "Policy Violation",
 	}
-	nadClasses := []string{
-		"Network Session", "Suspicious DNS", "File Download", "C2 Connection",
-		"Data Exfiltration", "Port Scan", "Web Shell Download", "Malicious Connection",
-	}
-
-	source := "MaxPatrol"
-	prefix := "siem"
-	classes := siemClasses
-	classIndex := serial
-	hostIDs := siemHostIDs
-	if serial%4 == 0 {
-		source = "PT NAD"
-		prefix = "nad"
-		classes = nadClasses
-		classIndex = serial / 4
-		hostIDs = nadHostIDs
-	}
-	eventClass := classes[classIndex%len(classes)]
+	eventClass := siemClasses[serial%len(siemClasses)]
 	severity := severityWeights[(serial*7+serial/4)%len(severityWeights)]
 	sourceHost := hostIDs[(serial*37)%len(hostIDs)]
 	targetHost := hostIDs[(serial*101+1)%len(hostIDs)]
@@ -145,8 +110,8 @@ func syntheticEvent(serial int, siemHostIDs, nadHostIDs []string, historyDays in
 	timestamp := syntheticAnchor.Add(-time.Duration(offset) * time.Second)
 
 	return Event{
-		ID:         fmt.Sprintf("mock-%s-%08d", prefix, serial),
-		Source:     source,
+		ID:         fmt.Sprintf("mock-siem-%08d", serial),
+		Source:     "MaxPatrol",
 		EventClass: eventClass,
 		EventTS:    timestamp.Format(time.RFC3339),
 		Title:      fmt.Sprintf("%s on %s targeting %s", eventClass, sourceHost, targetHost),

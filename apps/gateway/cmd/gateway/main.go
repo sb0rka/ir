@@ -64,7 +64,7 @@ func run() error {
 			"addr", server.Addr,
 			"auth_disabled", cfg.Auth.Disabled,
 			"mock_events", mockStats.EventCount,
-			"mock_endpoints", mockStats.EndpointCount,
+			"mock_hosts", mockStats.EndpointCount,
 			"mock_history_days", cfg.Mock.HistoryDays,
 		)
 		if serveErr := server.ListenAndServe(); serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) {
