@@ -5,92 +5,30 @@ info:
   description: Normalized access to external security tools.
 servers:
   - url: http://localhost:8091
-security:
-  - bearerAuth: []
+tags:
+  - name: health
+    description: Gateway process health and readiness.
+    x-displayName: health
+  - name: sources
+    description: Registered external security products.
+    x-displayName: sources
+  - name: events
+    description: Normalized event search.
+    x-displayName: events
+  - name: entities
+    description: Entity lookup across security products.
+    x-displayName: entities
+  - name: artifacts
+    description: Artifact analysis operations.
+    x-displayName: artifacts
+  - name: endpoints
+    description: Endpoint search and response capabilities.
+    x-displayName: endpoints
 paths:
-  /healthz:
-    get:
-      summary: Check process health
-      operationId: healthz
-      security: []
-      responses:
-        '200':
-          $ref: '#/components/responses/HealthResponse'
-  /readyz:
-    get:
-      summary: Check service readiness
-      operationId: readyz
-      security: []
-      responses:
-        '200':
-          $ref: '#/components/responses/HealthResponse'
-  /api/v1/sources:
-    get:
-      summary: List registered sources
-      operationId: listSources
-      parameters:
-        - $ref: '#/components/parameters/ProjectId'
-      responses:
-        '200':
-          description: Registered sources.
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                  - items
-                properties:
-                  items:
-                    type: array
-                    description: External security products registered for use through the Gateway.
-                    items:
-                      $ref: '#/components/schemas/Source'
-        default:
-          $ref: '#/components/responses/ErrorResponse'
-  /api/v1/events/search:
-    post:
-      summary: Search normalized events
-      operationId: searchEvents
-      parameters:
-        - $ref: '#/components/parameters/ProjectId'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/SearchEventsRequest'
-      responses:
-        '200':
-          description: Normalized events and their context.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SearchEventsResponse'
-        default:
-          $ref: '#/components/responses/ErrorResponse'
-  /api/v1/entities/lookup:
-    post:
-      summary: Look up an entity
-      operationId: lookupEntity
-      parameters:
-        - $ref: '#/components/parameters/ProjectId'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/LookupEntityRequest'
-      responses:
-        '200':
-          description: Context gathered for an entity.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/LookupEntityResponse'
-        default:
-          $ref: '#/components/responses/ErrorResponse'
   /api/v1/artifact-analyses:
     post:
+      tags:
+        - artifacts
       summary: Analyze an artifact
       operationId: createArtifactAnalysis
       parameters:
@@ -110,8 +48,12 @@ paths:
                 $ref: '#/components/schemas/Analysis'
         default:
           $ref: '#/components/responses/ErrorResponse'
+      security:
+        - bearerAuth: []
   /api/v1/artifact-analyses/{analysis_id}:
     get:
+      tags:
+        - artifacts
       summary: Get an artifact analysis
       operationId: getArtifactAnalysis
       parameters:
@@ -132,8 +74,12 @@ paths:
                 $ref: '#/components/schemas/Analysis'
         default:
           $ref: '#/components/responses/ErrorResponse'
+      security:
+        - bearerAuth: []
   /api/v1/endpoints/search:
     post:
+      tags:
+        - endpoints
       summary: Search endpoints
       operationId: searchEndpoints
       parameters:
@@ -153,8 +99,12 @@ paths:
                 $ref: '#/components/schemas/SearchEndpointsResponse'
         default:
           $ref: '#/components/responses/ErrorResponse'
+      security:
+        - bearerAuth: []
   /api/v1/sources/{source}/endpoints/{external_id}/response-actions:
     get:
+      tags:
+        - endpoints
       summary: List endpoint response actions
       operationId: listResponseActions
       parameters:
@@ -188,6 +138,107 @@ paths:
                       $ref: '#/components/schemas/ResponseAction'
         default:
           $ref: '#/components/responses/ErrorResponse'
+      security:
+        - bearerAuth: []
+  /api/v1/entities/lookup:
+    post:
+      tags:
+        - entities
+      summary: Look up an entity
+      operationId: lookupEntity
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LookupEntityRequest'
+      responses:
+        '200':
+          description: Context gathered for an entity.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LookupEntityResponse'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+      security:
+        - bearerAuth: []
+  /api/v1/events/search:
+    post:
+      tags:
+        - events
+      summary: Search normalized events
+      operationId: searchEvents
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SearchEventsRequest'
+      responses:
+        '200':
+          description: Normalized events and their context.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchEventsResponse'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+      security:
+        - bearerAuth: []
+  /healthz:
+    get:
+      tags:
+        - health
+      summary: Check process health
+      operationId: healthz
+      security: []
+      responses:
+        '200':
+          $ref: '#/components/responses/HealthResponse'
+  /readyz:
+    get:
+      tags:
+        - health
+      summary: Check service readiness
+      operationId: readyz
+      security: []
+      responses:
+        '200':
+          $ref: '#/components/responses/HealthResponse'
+  /api/v1/sources:
+    get:
+      tags:
+        - sources
+      summary: List registered sources
+      operationId: listSources
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      responses:
+        '200':
+          description: Registered sources.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - items
+                properties:
+                  items:
+                    type: array
+                    description: >-
+                      External security products registered for use through the
+                      Gateway.
+                    items:
+                      $ref: '#/components/schemas/Source'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+      security:
+        - bearerAuth: []
 components:
   securitySchemes:
     bearerAuth:
@@ -195,414 +246,16 @@ components:
       scheme: bearer
       bearerFormat: JWT
       description: Sb0rka access token passed as `Bearer <token>`.
+  parameters:
+    ProjectId:
+      name: X-Project-ID
+      in: header
+      required: true
+      description: Sb0rka project whose integration allowlist is used.
+      schema:
+        type: string
+        pattern: ^[a-f0-9]{10,12}$
   schemas:
-    Health:
-      type: object
-      description: Service health response.
-      required:
-        - status
-      properties:
-        status:
-          type: string
-          description: Current health state of the checked component.
-          enum:
-            - ok
-    ErrorEnvelope:
-      type: object
-      description: Error returned when a request cannot be completed.
-      required:
-        - error
-      properties:
-        error:
-          type: object
-          description: Structured error details.
-          required:
-            - code
-            - message
-          properties:
-            code:
-              type: string
-              description: Stable machine-readable error code.
-            message:
-              type: string
-              description: Safe human-readable error summary.
-    Capability:
-      type: string
-      description: Operation that a source can perform through the Gateway.
-      enum:
-        - events
-        - entity_lookup
-        - artifact_analysis
-        - endpoints
-        - response_catalog
-    Source:
-      type: object
-      description: External security product registered in the Gateway.
-      required:
-        - code
-        - name
-        - kind
-        - mode
-        - status
-        - capabilities
-      properties:
-        code:
-          type: string
-          description: Stable source identifier used in requests and provenance.
-        name:
-          type: string
-          description: Human-readable product name.
-        kind:
-          type: string
-          description: Functional class of the security product.
-          enum:
-            - siem
-            - ndr
-            - edr
-            - sandbox
-            - threat_intelligence
-        mode:
-          type: string
-          description: Adapter mode currently backing the source.
-          enum:
-            - mock
-            - proxy
-        status:
-          type: string
-          description: Whether the source is available for requests.
-          enum:
-            - available
-            - unavailable
-        capabilities:
-          type: array
-          description: Operations implemented by this source.
-          items:
-            $ref: '#/components/schemas/Capability'
-    TimeRange:
-      type: object
-      description: Inclusive event occurrence-time interval.
-      required:
-        - from
-        - to
-      properties:
-        from:
-          type: string
-          format: date-time
-          description: Inclusive lower boundary of event occurrence time.
-        to:
-          type: string
-          format: date-time
-          description: Inclusive upper boundary of event occurrence time.
-    EntityRef:
-      type: object
-      description: Entity value used as a search or lookup condition.
-      required:
-        - type
-        - value
-      properties:
-        type:
-          type: string
-          description: Canonical entity kind, such as ip, domain, hostname, email, or hash.
-        value:
-          type: string
-          description: Entity value to normalize and look up.
-    SearchEventsRequest:
-      type: object
-      description: Filters for a normalized multi-source event search.
-      properties:
-        sources:
-          type: array
-          uniqueItems: true
-          description: Source codes to query; omit to use every allowed source with event search.
-          items:
-            type: string
-        time_range:
-          description: Optional occurrence-time interval.
-          allOf:
-            - $ref: '#/components/schemas/TimeRange'
-        query:
-          type: string
-          maxLength: 1000
-          description: Free-text query interpreted by each selected source.
-        entities:
-          type: array
-          maxItems: 100
-          description: Entity conditions; an event matches when it contains at least one listed entity.
-          items:
-            $ref: '#/components/schemas/EntityRef'
-        limit:
-          type: integer
-          minimum: 1
-          maximum: 100
-          default: 50
-          description: Maximum number of events returned after merging all sources.
-        cursor:
-          type: string
-          description: Opaque next_cursor from the previous response with the same filters.
-    Provenance:
-      type: object
-      description: Origin of a normalized record.
-      required:
-        - source
-        - external_id
-        - fetched_at
-      properties:
-        source:
-          type: string
-          description: Source code that supplied the record.
-        external_id:
-          type: string
-          description: Identifier of the record in the source system.
-        source_url:
-          type: string
-          format: uri
-          description: Optional link to the record in the source system.
-        fetched_at:
-          type: string
-          format: date-time
-          description: Time when the Gateway obtained the source data.
-    Event:
-      type: object
-      description: Security event normalized from one source record.
-      required:
-        - id
-        - type
-        - title
-        - severity
-        - occurred_at
-        - entity_ids
-        - attributes
-        - provenance
-      properties:
-        id:
-          type: string
-          format: uuid
-          description: Deterministic identifier derived from the source and external event ID.
-        type:
-          type: string
-          description: Normalized event class.
-        title:
-          type: string
-          description: Short human-readable event summary.
-        severity:
-          type: string
-          description: Severity mapped to the Gateway scale.
-          enum:
-            - info
-            - low
-            - medium
-            - high
-            - critical
-            - unknown
-        occurred_at:
-          type: string
-          format: date-time
-          description: Time when the event occurred in the source system.
-        entity_ids:
-          type: array
-          description: Canonical entities mentioned by the event.
-          items:
-            type: string
-            format: uuid
-        attributes:
-          type: object
-          description: Selected event fields that have no canonical top-level property.
-          additionalProperties: true
-        provenance:
-          description: Source record from which the event was normalized.
-          allOf:
-            - $ref: '#/components/schemas/Provenance'
-    Entity:
-      type: object
-      description: Canonical representation of an observable or asset.
-      required:
-        - id
-        - type
-        - value
-        - attributes
-        - provenance
-      properties:
-        id:
-          type: string
-          format: uuid
-          description: Deterministic identifier derived from the entity type and canonical value.
-        type:
-          type: string
-          description: Canonical entity kind.
-        value:
-          type: string
-          description: Normalized entity value used for deduplication.
-        attributes:
-          type: object
-          description: Selected source-specific fields; never the complete vendor response.
-          additionalProperties: true
-        provenance:
-          type: array
-          description: Source records in which this entity was observed.
-          items:
-            $ref: '#/components/schemas/Provenance'
-    Relation:
-      type: object
-      description: Normalized relationship between two canonical entities.
-      required:
-        - id
-        - type
-        - source_entity_id
-        - target_entity_id
-        - provenance
-      properties:
-        id:
-          type: string
-          format: uuid
-          description: Deterministic identifier of the relationship.
-        type:
-          type: string
-          description: Normalized relationship type, such as connected_to or resolves_to.
-        source_entity_id:
-          type: string
-          format: uuid
-          description: Identifier of the entity from which the relationship starts.
-        target_entity_id:
-          type: string
-          format: uuid
-          description: Identifier of the entity at which the relationship ends.
-        occurred_at:
-          type: string
-          format: date-time
-          description: Optional time when the relationship was observed.
-        provenance:
-          description: Source record supporting the relationship.
-          allOf:
-            - $ref: '#/components/schemas/Provenance'
-    SourceError:
-      type: object
-      description: Failure reported by one source during a multi-source request.
-      required:
-        - source
-        - code
-        - message
-        - retryable
-      properties:
-        source:
-          type: string
-          description: Source code that failed.
-        code:
-          type: string
-          description: Stable machine-readable failure code.
-        message:
-          type: string
-          description: Safe human-readable failure summary.
-        retryable:
-          type: boolean
-          description: Whether repeating the source request may succeed without changing it.
-    SearchEventsResponse:
-      type: object
-      description: Merged event page with the entities and relations needed to interpret it.
-      required:
-        - events
-        - entities
-        - relations
-        - source_errors
-      properties:
-        events:
-          type: array
-          description: Normalized events in the current page.
-          items:
-            $ref: '#/components/schemas/Event'
-        entities:
-          type: array
-          description: Canonical entities referenced by the returned events.
-          items:
-            $ref: '#/components/schemas/Entity'
-        relations:
-          type: array
-          description: Relationships whose endpoints are present in the returned entities.
-          items:
-            $ref: '#/components/schemas/Relation'
-        next_cursor:
-          type: string
-          description: Opaque cursor for the next page; absent when the search is exhausted.
-        source_errors:
-          type: array
-          description: Per-source failures when at least one selected source succeeded.
-          items:
-            $ref: '#/components/schemas/SourceError'
-    LookupEntityRequest:
-      type: object
-      description: Request to enrich one entity from one or more sources.
-      required:
-        - entity
-      properties:
-        sources:
-          type: array
-          uniqueItems: true
-          description: Source codes to query; omit to use every allowed source with entity lookup.
-          items:
-            type: string
-        entity:
-          description: Entity to normalize and enrich.
-          allOf:
-            - $ref: '#/components/schemas/EntityRef'
-    Verdict:
-      type: object
-      description: Normalized security assessment returned by a source.
-      required:
-        - value
-        - confidence
-        - labels
-        - provider
-      properties:
-        value:
-          type: string
-          description: Normalized assessment of the object.
-          enum:
-            - malicious
-            - suspicious
-            - clean
-            - unknown
-        confidence:
-          type: number
-          format: double
-          minimum: 0
-          maximum: 1
-          description: Provider confidence from 0 to 1.
-        labels:
-          type: array
-          description: Provider classifications preserved as short labels.
-          items:
-            type: string
-        provider:
-          type: string
-          description: Source code of the provider that produced the verdict.
-    LookupEntityResponse:
-      type: object
-      description: Entity enrichment merged from the selected sources.
-      required:
-        - entities
-        - relations
-        - verdicts
-        - source_errors
-      properties:
-        entities:
-          type: array
-          description: Matched entity and related canonical entities.
-          items:
-            $ref: '#/components/schemas/Entity'
-        relations:
-          type: array
-          description: Relationships between entities in this response.
-          items:
-            $ref: '#/components/schemas/Relation'
-        verdicts:
-          type: array
-          description: Security assessments returned for the requested entity.
-          items:
-            $ref: '#/components/schemas/Verdict'
-        source_errors:
-          type: array
-          description: Per-source failures when at least one selected source succeeded.
-          items:
-            $ref: '#/components/schemas/SourceError'
     Hashes:
       type: object
       description: Cryptographic checksums available for an artifact.
@@ -642,6 +295,25 @@ components:
               description: Checksums known by the caller.
               allOf:
                 - $ref: '#/components/schemas/Hashes'
+    ErrorEnvelope:
+      type: object
+      description: Error returned when a request cannot be completed.
+      required:
+        - error
+      properties:
+        error:
+          type: object
+          description: Structured error details.
+          required:
+            - code
+            - message
+          properties:
+            code:
+              type: string
+              description: Stable machine-readable error code.
+            message:
+              type: string
+              description: Safe human-readable error summary.
     Artifact:
       type: object
       description: File or payload submitted to or produced by an analysis.
@@ -669,6 +341,59 @@ components:
           description: Checksums known for the artifact.
           allOf:
             - $ref: '#/components/schemas/Hashes'
+    Verdict:
+      type: object
+      description: Normalized security assessment returned by a source.
+      required:
+        - value
+        - confidence
+        - labels
+        - provider
+      properties:
+        value:
+          type: string
+          description: Normalized assessment of the object.
+          enum:
+            - malicious
+            - suspicious
+            - clean
+            - unknown
+        confidence:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 1
+          description: Provider confidence from 0 to 1.
+        labels:
+          type: array
+          description: Provider classifications preserved as short labels.
+          items:
+            type: string
+        provider:
+          type: string
+          description: Source code of the provider that produced the verdict.
+    Provenance:
+      type: object
+      description: Origin of a normalized record.
+      required:
+        - source
+        - external_id
+        - fetched_at
+      properties:
+        source:
+          type: string
+          description: Source code that supplied the record.
+        external_id:
+          type: string
+          description: Identifier of the record in the source system.
+        source_url:
+          type: string
+          format: uri
+          description: Optional link to the record in the source system.
+        fetched_at:
+          type: string
+          format: date-time
+          description: Time when the Gateway obtained the source data.
     Analysis:
       type: object
       description: Normalized result of an artifact analysis.
@@ -747,7 +472,9 @@ components:
         id:
           type: string
           format: uuid
-          description: Deterministic identifier derived from the source and external endpoint ID.
+          description: >-
+            Deterministic identifier derived from the source and external
+            endpoint ID.
         external_id:
           type: string
           description: Endpoint or agent identifier in the source system.
@@ -774,6 +501,29 @@ components:
           description: Source record from which the endpoint was normalized.
           allOf:
             - $ref: '#/components/schemas/Provenance'
+    SourceError:
+      type: object
+      description: Failure reported by one source during a multi-source request.
+      required:
+        - source
+        - code
+        - message
+        - retryable
+      properties:
+        source:
+          type: string
+          description: Source code that failed.
+        code:
+          type: string
+          description: Stable machine-readable failure code.
+        message:
+          type: string
+          description: Safe human-readable failure summary.
+        retryable:
+          type: boolean
+          description: >-
+            Whether repeating the source request may succeed without changing
+            it.
     SearchEndpointsResponse:
       type: object
       description: Merged endpoint inventory page.
@@ -788,7 +538,9 @@ components:
             $ref: '#/components/schemas/Endpoint'
         next_cursor:
           type: string
-          description: Opaque cursor for the next page; absent when the search is exhausted.
+          description: >-
+            Opaque cursor for the next page; absent when the search is
+            exhausted.
         source_errors:
           type: array
           description: Per-source failures when at least one selected source succeeded.
@@ -796,7 +548,9 @@ components:
             $ref: '#/components/schemas/SourceError'
     ResponseAction:
       type: object
-      description: Response operation advertised for an endpoint; the Gateway does not execute it.
+      description: >-
+        Response operation advertised for an endpoint; the Gateway does not
+        execute it.
       required:
         - code
         - title
@@ -815,25 +569,344 @@ components:
         enabled:
           type: boolean
           description: Whether the source currently allows the action for the endpoint.
+    EntityRef:
+      type: object
+      description: Entity value used as a search or lookup condition.
+      required:
+        - type
+        - value
+      properties:
+        type:
+          type: string
+          description: Canonical entity kind, such as ip, domain, hostname, email, or hash.
+        value:
+          type: string
+          description: Entity value to normalize and look up.
+    LookupEntityRequest:
+      type: object
+      description: Request to enrich one entity from one or more sources.
+      required:
+        - entity
+      properties:
+        sources:
+          type: array
+          uniqueItems: true
+          description: >-
+            Source codes to query; omit to use every allowed source with entity
+            lookup.
+          items:
+            type: string
+        entity:
+          description: Entity to normalize and enrich.
+          allOf:
+            - $ref: '#/components/schemas/EntityRef'
+    Entity:
+      type: object
+      description: Canonical representation of an observable or asset.
+      required:
+        - id
+        - type
+        - value
+        - attributes
+        - provenance
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: >-
+            Deterministic identifier derived from the entity type and canonical
+            value.
+        type:
+          type: string
+          description: Canonical entity kind.
+        value:
+          type: string
+          description: Normalized entity value used for deduplication.
+        attributes:
+          type: object
+          description: Selected source-specific fields; never the complete vendor response.
+          additionalProperties: true
+        provenance:
+          type: array
+          description: Source records in which this entity was observed.
+          items:
+            $ref: '#/components/schemas/Provenance'
+    Relation:
+      type: object
+      description: Normalized relationship between two canonical entities.
+      required:
+        - id
+        - type
+        - source_entity_id
+        - target_entity_id
+        - provenance
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Deterministic identifier of the relationship.
+        type:
+          type: string
+          description: Normalized relationship type, such as connected_to or resolves_to.
+        source_entity_id:
+          type: string
+          format: uuid
+          description: Identifier of the entity from which the relationship starts.
+        target_entity_id:
+          type: string
+          format: uuid
+          description: Identifier of the entity at which the relationship ends.
+        occurred_at:
+          type: string
+          format: date-time
+          description: Optional time when the relationship was observed.
+        provenance:
+          description: Source record supporting the relationship.
+          allOf:
+            - $ref: '#/components/schemas/Provenance'
+    LookupEntityResponse:
+      type: object
+      description: Entity enrichment merged from the selected sources.
+      required:
+        - entities
+        - relations
+        - verdicts
+        - source_errors
+      properties:
+        entities:
+          type: array
+          description: Matched entity and related canonical entities.
+          items:
+            $ref: '#/components/schemas/Entity'
+        relations:
+          type: array
+          description: Relationships between entities in this response.
+          items:
+            $ref: '#/components/schemas/Relation'
+        verdicts:
+          type: array
+          description: Security assessments returned for the requested entity.
+          items:
+            $ref: '#/components/schemas/Verdict'
+        source_errors:
+          type: array
+          description: Per-source failures when at least one selected source succeeded.
+          items:
+            $ref: '#/components/schemas/SourceError'
+    TimeRange:
+      type: object
+      description: Inclusive event occurrence-time interval.
+      required:
+        - from
+        - to
+      properties:
+        from:
+          type: string
+          format: date-time
+          description: Inclusive lower boundary of event occurrence time.
+        to:
+          type: string
+          format: date-time
+          description: Inclusive upper boundary of event occurrence time.
+    SearchEventsRequest:
+      type: object
+      description: Filters for a normalized multi-source event search.
+      properties:
+        sources:
+          type: array
+          uniqueItems: true
+          description: >-
+            Source codes to query; omit to use every allowed source with event
+            search.
+          items:
+            type: string
+        time_range:
+          description: Optional occurrence-time interval.
+          allOf:
+            - $ref: '#/components/schemas/TimeRange'
+        query:
+          type: string
+          maxLength: 1000
+          description: Free-text query interpreted by each selected source.
+        entities:
+          type: array
+          maxItems: 100
+          description: >-
+            Entity conditions; an event matches when it contains at least one
+            listed entity.
+          items:
+            $ref: '#/components/schemas/EntityRef'
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 50
+          description: Maximum number of events returned after merging all sources.
+        cursor:
+          type: string
+          description: Opaque next_cursor from the previous response with the same filters.
+    Event:
+      type: object
+      description: Security event normalized from one source record.
+      required:
+        - id
+        - type
+        - title
+        - severity
+        - occurred_at
+        - entity_ids
+        - attributes
+        - provenance
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: >-
+            Deterministic identifier derived from the source and external event
+            ID.
+        type:
+          type: string
+          description: Normalized event class.
+        title:
+          type: string
+          description: Short human-readable event summary.
+        severity:
+          type: string
+          description: Severity mapped to the Gateway scale.
+          enum:
+            - info
+            - low
+            - medium
+            - high
+            - critical
+            - unknown
+        occurred_at:
+          type: string
+          format: date-time
+          description: Time when the event occurred in the source system.
+        entity_ids:
+          type: array
+          description: Canonical entities mentioned by the event.
+          items:
+            type: string
+            format: uuid
+        attributes:
+          type: object
+          description: Selected event fields that have no canonical top-level property.
+          additionalProperties: true
+        provenance:
+          description: Source record from which the event was normalized.
+          allOf:
+            - $ref: '#/components/schemas/Provenance'
+    SearchEventsResponse:
+      type: object
+      description: >-
+        Merged event page with the entities and relations needed to interpret
+        it.
+      required:
+        - events
+        - entities
+        - relations
+        - source_errors
+      properties:
+        events:
+          type: array
+          description: Normalized events in the current page.
+          items:
+            $ref: '#/components/schemas/Event'
+        entities:
+          type: array
+          description: Canonical entities referenced by the returned events.
+          items:
+            $ref: '#/components/schemas/Entity'
+        relations:
+          type: array
+          description: Relationships whose endpoints are present in the returned entities.
+          items:
+            $ref: '#/components/schemas/Relation'
+        next_cursor:
+          type: string
+          description: >-
+            Opaque cursor for the next page; absent when the search is
+            exhausted.
+        source_errors:
+          type: array
+          description: Per-source failures when at least one selected source succeeded.
+          items:
+            $ref: '#/components/schemas/SourceError'
+    Health:
+      type: object
+      description: Service health response.
+      required:
+        - status
+      properties:
+        status:
+          type: string
+          description: Current health state of the checked component.
+          enum:
+            - ok
+    Capability:
+      type: string
+      description: Operation that a source can perform through the Gateway.
+      enum:
+        - events
+        - entity_lookup
+        - artifact_analysis
+        - endpoints
+        - response_catalog
+    Source:
+      type: object
+      description: External security product registered in the Gateway.
+      required:
+        - code
+        - name
+        - kind
+        - mode
+        - status
+        - capabilities
+      properties:
+        code:
+          type: string
+          description: Stable source identifier used in requests and provenance.
+        name:
+          type: string
+          description: Human-readable product name.
+        kind:
+          type: string
+          description: Functional class of the security product.
+          enum:
+            - siem
+            - ndr
+            - edr
+            - sandbox
+            - threat_intelligence
+        mode:
+          type: string
+          description: Adapter mode currently backing the source.
+          enum:
+            - mock
+            - proxy
+        status:
+          type: string
+          description: Whether the source is available for requests.
+          enum:
+            - available
+            - unavailable
+        capabilities:
+          type: array
+          description: Operations implemented by this source.
+          items:
+            $ref: '#/components/schemas/Capability'
   responses:
-    HealthResponse:
-      description: Service health.
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/Health'
     ErrorResponse:
       description: Error response.
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorEnvelope'
-  parameters:
-    ProjectId:
-      name: X-Project-ID
-      in: header
-      required: true
-      description: Sb0rka project whose integration allowlist is used.
-      schema:
-        type: string
-        pattern: ^[a-f0-9]{10,12}$
+    HealthResponse:
+      description: Service health.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Health'

@@ -1,43 +1,56 @@
-create:
-  post:
-    summary: Analyze an artifact
-    operationId: createArtifactAnalysis
-    parameters:
-      - $ref: '../shared/parameters.yaml#/ProjectId'
-    requestBody:
-      required: true
-      content:
-        application/json:
-          schema:
-            $ref: '../shared/schemas.yaml#/CreateArtifactAnalysisRequest'
-    responses:
-      '202':
-        description: Completed mock analysis.
-        content:
-          application/json:
-            schema:
-              $ref: '../shared/schemas.yaml#/Analysis'
-      default:
-        $ref: '../shared/responses.yaml#/ErrorResponse'
-get:
-  get:
-    summary: Get an artifact analysis
-    operationId: getArtifactAnalysis
-    parameters:
-      - $ref: '../shared/parameters.yaml#/ProjectId'
-      - name: analysis_id
-        in: path
+openapi: 3.0.3
+info:
+  title: Sb0rka Gateway - artifacts
+  version: 0.0.1
+servers:
+  - url: http://localhost:8091
+security:
+  - bearerAuth: []
+
+paths:
+  /api/v1/artifact-analyses:
+    post:
+      tags: [artifacts]
+      summary: Analyze an artifact
+      operationId: createArtifactAnalysis
+      parameters:
+        - $ref: '../shared/parameters.yaml#/ProjectId'
+      requestBody:
         required: true
-        description: Gateway identifier of the artifact analysis.
-        schema:
-          type: string
-          format: uuid
-    responses:
-      '200':
-        description: Artifact analysis.
         content:
           application/json:
             schema:
-              $ref: '../shared/schemas.yaml#/Analysis'
-      default:
-        $ref: '../shared/responses.yaml#/ErrorResponse'
+              $ref: '../shared/schemas.yaml#/CreateArtifactAnalysisRequest'
+      responses:
+        '202':
+          description: Completed mock analysis.
+          content:
+            application/json:
+              schema:
+                $ref: '../shared/schemas.yaml#/Analysis'
+        default:
+          $ref: '../shared/responses.yaml#/ErrorResponse'
+
+  /api/v1/artifact-analyses/{analysis_id}:
+    get:
+      tags: [artifacts]
+      summary: Get an artifact analysis
+      operationId: getArtifactAnalysis
+      parameters:
+        - $ref: '../shared/parameters.yaml#/ProjectId'
+        - name: analysis_id
+          in: path
+          required: true
+          description: Gateway identifier of the artifact analysis.
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Artifact analysis.
+          content:
+            application/json:
+              schema:
+                $ref: '../shared/schemas.yaml#/Analysis'
+        default:
+          $ref: '../shared/responses.yaml#/ErrorResponse'

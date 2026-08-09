@@ -1198,15 +1198,15 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 		ErrorHandlerFunc:   options.ErrorHandlerFunc,
 	}
 
-	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/healthz", wrapper.Healthz)
-	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/readyz", wrapper.Readyz)
-	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/sources", wrapper.ListSources)
-	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/events/search", wrapper.SearchEvents)
-	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/entities/lookup", wrapper.LookupEntity)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/artifact-analyses", wrapper.CreateArtifactAnalysis)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/artifact-analyses/{analysis_id}", wrapper.GetArtifactAnalysis)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/endpoints/search", wrapper.SearchEndpoints)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/sources/{source}/endpoints/{external_id}/response-actions", wrapper.ListResponseActions)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/entities/lookup", wrapper.LookupEntity)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/events/search", wrapper.SearchEvents)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/healthz", wrapper.Healthz)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/readyz", wrapper.Readyz)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/sources", wrapper.ListSources)
 
 	return m
 }

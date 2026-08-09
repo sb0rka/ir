@@ -7,37 +7,19 @@ servers:
   - url: http://localhost:8091
 security:
   - bearerAuth: []
-paths:
-  /healthz:
-    get:
-      summary: Check process health
-      operationId: healthz
-      security: []
-      responses:
-        '200':
-          $ref: './shared/responses.yaml#/HealthResponse'
-  /readyz:
-    get:
-      summary: Check service readiness
-      operationId: readyz
-      security: []
-      responses:
-        '200':
-          $ref: './shared/responses.yaml#/HealthResponse'
-  /api/v1/sources:
-    $ref: './paths/sources.yaml'
-  /api/v1/events/search:
-    $ref: './paths/events.yaml'
-  /api/v1/entities/lookup:
-    $ref: './paths/entities.yaml'
-  /api/v1/artifact-analyses:
-    $ref: './paths/artifacts.yaml#/create'
-  /api/v1/artifact-analyses/{analysis_id}:
-    $ref: './paths/artifacts.yaml#/get'
-  /api/v1/endpoints/search:
-    $ref: './paths/endpoints.yaml#/search'
-  /api/v1/sources/{source}/endpoints/{external_id}/response-actions:
-    $ref: './paths/endpoints.yaml#/responseActions'
+tags:
+  - name: health
+    description: Gateway process health and readiness.
+  - name: sources
+    description: Registered external security products.
+  - name: events
+    description: Normalized event search.
+  - name: entities
+    description: Entity lookup across security products.
+  - name: artifacts
+    description: Artifact analysis operations.
+  - name: endpoints
+    description: Endpoint search and response capabilities.
 components:
   securitySchemes:
     bearerAuth:

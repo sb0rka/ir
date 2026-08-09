@@ -1,20 +1,32 @@
-post:
-  summary: Search normalized events
-  operationId: searchEvents
-  parameters:
-    - $ref: '../shared/parameters.yaml#/ProjectId'
-  requestBody:
-    required: true
-    content:
-      application/json:
-        schema:
-          $ref: '../shared/schemas.yaml#/SearchEventsRequest'
-  responses:
-    '200':
-      description: Normalized events and their context.
-      content:
-        application/json:
-          schema:
-            $ref: '../shared/schemas.yaml#/SearchEventsResponse'
-    default:
-      $ref: '../shared/responses.yaml#/ErrorResponse'
+openapi: 3.0.3
+info:
+  title: Sb0rka Gateway - events
+  version: 0.0.1
+servers:
+  - url: http://localhost:8091
+security:
+  - bearerAuth: []
+
+paths:
+  /api/v1/events/search:
+    post:
+      tags: [events]
+      summary: Search normalized events
+      operationId: searchEvents
+      parameters:
+        - $ref: '../shared/parameters.yaml#/ProjectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '../shared/schemas.yaml#/SearchEventsRequest'
+      responses:
+        '200':
+          description: Normalized events and their context.
+          content:
+            application/json:
+              schema:
+                $ref: '../shared/schemas.yaml#/SearchEventsResponse'
+        default:
+          $ref: '../shared/responses.yaml#/ErrorResponse'

@@ -1,0 +1,29 @@
+openapi: 3.0.3
+info:
+  title: Sb0rka Gateway - health
+  version: 0.0.1
+servers:
+  - url: http://localhost:8091
+security:
+  - bearerAuth: []
+
+paths:
+  /healthz:
+    get:
+      tags: [health]
+      summary: Check process health
+      operationId: healthz
+      security: []
+      responses:
+        '200':
+          $ref: '../shared/responses.yaml#/HealthResponse'
+
+  /readyz:
+    get:
+      tags: [health]
+      summary: Check service readiness
+      operationId: readyz
+      security: []
+      responses:
+        '200':
+          $ref: '../shared/responses.yaml#/HealthResponse'

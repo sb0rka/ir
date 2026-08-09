@@ -33,7 +33,7 @@ tasks:
   gateway-spec:
     desc: Проверить OpenAPI Gateway
     cmds:
-      - '{{.REDOCLY}} bundle apps/gateway/api/openapi.yaml -o apps/gateway/api/bundle.yaml'
+      - '{{.REDOCLY}} join apps/gateway/api/openapi.yaml apps/gateway/api/paths/*.yaml -o apps/gateway/api/bundle.yaml --without-x-tag-groups'
       - '{{.REDOCLY}} lint apps/gateway/api/bundle.yaml'
 
   gateway-gen:

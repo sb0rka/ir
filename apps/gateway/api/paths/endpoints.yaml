@@ -1,55 +1,68 @@
-search:
-  post:
-    summary: Search endpoints
-    operationId: searchEndpoints
-    parameters:
-      - $ref: '../shared/parameters.yaml#/ProjectId'
-    requestBody:
-      required: true
-      content:
-        application/json:
+openapi: 3.0.3
+info:
+  title: Sb0rka Gateway - endpoints
+  version: 0.0.1
+servers:
+  - url: http://localhost:8091
+security:
+  - bearerAuth: []
+
+paths:
+  /api/v1/endpoints/search:
+    post:
+      tags: [endpoints]
+      summary: Search endpoints
+      operationId: searchEndpoints
+      parameters:
+        - $ref: '../shared/parameters.yaml#/ProjectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '../shared/schemas.yaml#/SearchEndpointsRequest'
+      responses:
+        '200':
+          description: EDR endpoints.
+          content:
+            application/json:
+              schema:
+                $ref: '../shared/schemas.yaml#/SearchEndpointsResponse'
+        default:
+          $ref: '../shared/responses.yaml#/ErrorResponse'
+
+  /api/v1/sources/{source}/endpoints/{external_id}/response-actions:
+    get:
+      tags: [endpoints]
+      summary: List endpoint response actions
+      operationId: listResponseActions
+      parameters:
+        - $ref: '../shared/parameters.yaml#/ProjectId'
+        - name: source
+          in: path
+          required: true
+          description: Source code of the endpoint-security product.
           schema:
-            $ref: '../shared/schemas.yaml#/SearchEndpointsRequest'
-    responses:
-      '200':
-        description: EDR endpoints.
-        content:
-          application/json:
-            schema:
-              $ref: '../shared/schemas.yaml#/SearchEndpointsResponse'
-      default:
-        $ref: '../shared/responses.yaml#/ErrorResponse'
-responseActions:
-  get:
-    summary: List endpoint response actions
-    operationId: listResponseActions
-    parameters:
-      - $ref: '../shared/parameters.yaml#/ProjectId'
-      - name: source
-        in: path
-        required: true
-        description: Source code of the endpoint-security product.
-        schema:
-          type: string
-      - name: external_id
-        in: path
-        required: true
-        description: Endpoint identifier in the selected source system.
-        schema:
-          type: string
-    responses:
-      '200':
-        description: Read-only response action catalogue.
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [items]
-              properties:
-                items:
-                  type: array
-                  description: Response operations currently advertised for the endpoint.
+            type: string
+        - name: external_id
+          in: path
+          required: true
+          description: Endpoint identifier in the selected source system.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Read-only response action catalogue.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
                   items:
-                    $ref: '../shared/schemas.yaml#/ResponseAction'
-      default:
-        $ref: '../shared/responses.yaml#/ErrorResponse'
+                    type: array
+                    description: Response operations currently advertised for the endpoint.
+                    items:
+                      $ref: '../shared/schemas.yaml#/ResponseAction'
+        default:
+          $ref: '../shared/responses.yaml#/ErrorResponse'

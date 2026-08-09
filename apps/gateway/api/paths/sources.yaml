@@ -1,21 +1,33 @@
-get:
-  summary: List registered sources
-  operationId: listSources
-  parameters:
-    - $ref: '../shared/parameters.yaml#/ProjectId'
-  responses:
-    '200':
-      description: Registered sources.
-      content:
-        application/json:
-          schema:
-            type: object
-            required: [items]
-            properties:
-              items:
-                type: array
-                description: External security products registered for use through the Gateway.
-                items:
-                  $ref: '../shared/schemas.yaml#/Source'
-    default:
-      $ref: '../shared/responses.yaml#/ErrorResponse'
+openapi: 3.0.3
+info:
+  title: Sb0rka Gateway - sources
+  version: 0.0.1
+servers:
+  - url: http://localhost:8091
+security:
+  - bearerAuth: []
+
+paths:
+  /api/v1/sources:
+    get:
+      tags: [sources]
+      summary: List registered sources
+      operationId: listSources
+      parameters:
+        - $ref: '../shared/parameters.yaml#/ProjectId'
+      responses:
+        '200':
+          description: Registered sources.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    description: External security products registered for use through the Gateway.
+                    items:
+                      $ref: '../shared/schemas.yaml#/Source'
+        default:
+          $ref: '../shared/responses.yaml#/ErrorResponse'

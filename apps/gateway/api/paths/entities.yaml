@@ -1,20 +1,32 @@
-post:
-  summary: Look up an entity
-  operationId: lookupEntity
-  parameters:
-    - $ref: '../shared/parameters.yaml#/ProjectId'
-  requestBody:
-    required: true
-    content:
-      application/json:
-        schema:
-          $ref: '../shared/schemas.yaml#/LookupEntityRequest'
-  responses:
-    '200':
-      description: Context gathered for an entity.
-      content:
-        application/json:
-          schema:
-            $ref: '../shared/schemas.yaml#/LookupEntityResponse'
-    default:
-      $ref: '../shared/responses.yaml#/ErrorResponse'
+openapi: 3.0.3
+info:
+  title: Sb0rka Gateway - entities
+  version: 0.0.1
+servers:
+  - url: http://localhost:8091
+security:
+  - bearerAuth: []
+
+paths:
+  /api/v1/entities/lookup:
+    post:
+      tags: [entities]
+      summary: Look up an entity
+      operationId: lookupEntity
+      parameters:
+        - $ref: '../shared/parameters.yaml#/ProjectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '../shared/schemas.yaml#/LookupEntityRequest'
+      responses:
+        '200':
+          description: Context gathered for an entity.
+          content:
+            application/json:
+              schema:
+                $ref: '../shared/schemas.yaml#/LookupEntityResponse'
+        default:
+          $ref: '../shared/responses.yaml#/ErrorResponse'
