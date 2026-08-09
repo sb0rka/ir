@@ -20,14 +20,14 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '../shared/schemas.yaml#/CreateArtifactAnalysisRequest'
+              $ref: '#/components/schemas/CreateArtifactAnalysisRequest'
       responses:
         '202':
           description: Completed mock analysis.
           content:
             application/json:
               schema:
-                $ref: '../shared/schemas.yaml#/Analysis'
+                $ref: '#/components/schemas/Analysis'
         default:
           $ref: '../shared/responses.yaml#/ErrorResponse'
 
@@ -51,6 +51,106 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '../shared/schemas.yaml#/Analysis'
+                $ref: '#/components/schemas/Analysis'
         default:
           $ref: '../shared/responses.yaml#/ErrorResponse'
+
+components:
+  schemas:
+    Hashes:
+      type: object
+      description: Cryptographic checksums available for an artifact.
+      properties:
+        md5:
+          type: string
+          description: MD5 checksum in hexadecimal form.
+        sha1:
+          type: string
+          description: SHA-1 checksum in hexadecimal form.
+        sha256:
+          type: string
+          description: SHA-256 checksum in hexadecimal form.
+
+    Artifact:
+      type: object
+      description: File or payload submitted to or produced by an analysis.
+      required: [id, name, hashes]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Deterministic Gateway identifier of the artifact.
+        name:
+          type: string
+          description: File name reported by the source or caller.
+        mime:
+          type: string
+          description: Reported or detected MIME type.
+        size:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Artifact size in bytes.
+        hashes:
+          description: Checksums known for the artifact.
+          allOf:
+            - $ref: '#/components/schemas/Hashes'
+
+    Analysis:
+      type: object
+      description: Normalized result of an artifact analysis.
+      required: [id, status, artifact, verdict, artifacts, provenance]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Gateway identifier of the analysis.
+        status:
+          type: string
+          description: Current processing state of the analysis.
+          enum: [completed]
+        artifact:
+          description: Primary artifact that was analyzed.
+          allOf:
+            - $ref: '#/components/schemas/Artifact'
+        verdict:
+          description: Final normalized assessment of the primary artifact.
+          allOf:
+            - $ref: '../shared/schemas.yaml#/Verdict'
+        artifacts:
+          type: array
+          description: Additional artifacts extracted or discovered during analysis.
+          items:
+            $ref: '#/components/schemas/Artifact'
+        attributes:
+          type: object
+          description: Selected engine and behavior details from the analysis provider.
+          additionalProperties: true
+        provenance:
+          description: Source task from which this result was normalized.
+          allOf:
+            - $ref: '../shared/schemas.yaml#/Provenance'
+
+    CreateArtifactAnalysisRequest:
+      type: object
+      description: Request to analyze a known artifact with one source.
+      required: [source, artifact]
+      properties:
+        source:
+          type: string
+          description: Source code of the artifact-analysis provider.
+        artifact:
+          type: object
+          description: Metadata used to identify the artifact for analysis.
+          required: [name]
+          properties:
+            name:
+              type: string
+              description: File name of the artifact.
+            mime:
+              type: string
+              description: MIME type when known by the caller.
+            hashes:
+              description: Checksums known by the caller.
+              allOf:
+                - $ref: '#/components/schemas/Hashes'

@@ -1,35 +1,3 @@
-Capability:
-  type: string
-  description: Operation that a source can perform through the Gateway.
-  enum: [events, entity_lookup, artifact_analysis, endpoints, response_catalog]
-Source:
-  type: object
-  description: External security product registered in the Gateway.
-  required: [code, name, kind, mode, status, capabilities]
-  properties:
-    code:
-      type: string
-      description: Stable source identifier used in requests and provenance.
-    name:
-      type: string
-      description: Human-readable product name.
-    kind:
-      type: string
-      description: Functional class of the security product.
-      enum: [siem, ndr, edr, sandbox, threat_intelligence]
-    mode:
-      type: string
-      description: Adapter mode currently backing the source.
-      enum: [mock, proxy]
-    status:
-      type: string
-      description: Whether the source is available for requests.
-      enum: [available, unavailable]
-    capabilities:
-      type: array
-      description: Operations implemented by this source.
-      items:
-        $ref: '#/Capability'
 Provenance:
   type: object
   description: Origin of a normalized record.
@@ -49,6 +17,7 @@ Provenance:
       type: string
       format: date-time
       description: Time when the Gateway obtained the source data.
+
 EntityRef:
   type: object
   description: Entity value used as a search or lookup condition.
@@ -60,6 +29,7 @@ EntityRef:
     value:
       type: string
       description: Entity value to normalize and look up.
+
 Entity:
   type: object
   description: Canonical representation of an observable or asset.
@@ -84,43 +54,7 @@ Entity:
       description: Source records in which this entity was observed.
       items:
         $ref: '#/Provenance'
-Event:
-  type: object
-  description: Security event normalized from one source record.
-  required: [id, type, title, severity, occurred_at, entity_ids, attributes, provenance]
-  properties:
-    id:
-      type: string
-      format: uuid
-      description: Deterministic identifier derived from the source and external event ID.
-    type:
-      type: string
-      description: Normalized event class.
-    title:
-      type: string
-      description: Short human-readable event summary.
-    severity:
-      type: string
-      description: Severity mapped to the Gateway scale.
-      enum: [info, low, medium, high, critical, unknown]
-    occurred_at:
-      type: string
-      format: date-time
-      description: Time when the event occurred in the source system.
-    entity_ids:
-      type: array
-      description: Canonical entities mentioned by the event.
-      items:
-        type: string
-        format: uuid
-    attributes:
-      type: object
-      description: Selected event fields that have no canonical top-level property.
-      additionalProperties: true
-    provenance:
-      description: Source record from which the event was normalized.
-      allOf:
-        - $ref: '#/Provenance'
+
 Relation:
   type: object
   description: Normalized relationship between two canonical entities.
@@ -149,43 +83,7 @@ Relation:
       description: Source record supporting the relationship.
       allOf:
         - $ref: '#/Provenance'
-Hashes:
-  type: object
-  description: Cryptographic checksums available for an artifact.
-  properties:
-    md5:
-      type: string
-      description: MD5 checksum in hexadecimal form.
-    sha1:
-      type: string
-      description: SHA-1 checksum in hexadecimal form.
-    sha256:
-      type: string
-      description: SHA-256 checksum in hexadecimal form.
-Artifact:
-  type: object
-  description: File or payload submitted to or produced by an analysis.
-  required: [id, name, hashes]
-  properties:
-    id:
-      type: string
-      format: uuid
-      description: Deterministic Gateway identifier of the artifact.
-    name:
-      type: string
-      description: File name reported by the source or caller.
-    mime:
-      type: string
-      description: Reported or detected MIME type.
-    size:
-      type: integer
-      format: int64
-      minimum: 0
-      description: Artifact size in bytes.
-    hashes:
-      description: Checksums known for the artifact.
-      allOf:
-        - $ref: '#/Hashes'
+
 Verdict:
   type: object
   description: Normalized security assessment returned by a source.
@@ -209,196 +107,7 @@ Verdict:
     provider:
       type: string
       description: Source code of the provider that produced the verdict.
-Analysis:
-  type: object
-  description: Normalized result of an artifact analysis.
-  required: [id, status, artifact, verdict, artifacts, provenance]
-  properties:
-    id:
-      type: string
-      format: uuid
-      description: Gateway identifier of the analysis.
-    status:
-      type: string
-      description: Current processing state of the analysis.
-      enum: [completed]
-    artifact:
-      description: Primary artifact that was analyzed.
-      allOf:
-        - $ref: '#/Artifact'
-    verdict:
-      description: Final normalized assessment of the primary artifact.
-      allOf:
-        - $ref: '#/Verdict'
-    artifacts:
-      type: array
-      description: Additional artifacts extracted or discovered during analysis.
-      items:
-        $ref: '#/Artifact'
-    attributes:
-      type: object
-      description: Selected engine and behavior details from the analysis provider.
-      additionalProperties: true
-    provenance:
-      description: Source task from which this result was normalized.
-      allOf:
-        - $ref: '#/Provenance'
-Endpoint:
-  type: object
-  description: Endpoint asset reported by an endpoint-security source.
-  required: [id, external_id, hostname, status, attributes, provenance]
-  properties:
-    id:
-      type: string
-      format: uuid
-      description: Deterministic identifier derived from the source and external endpoint ID.
-    external_id:
-      type: string
-      description: Endpoint or agent identifier in the source system.
-    hostname:
-      type: string
-      description: Host name reported for the endpoint.
-    ip_addresses:
-      type: array
-      description: IP addresses currently associated with the endpoint.
-      items:
-        type: string
-    status:
-      type: string
-      description: Normalized endpoint connectivity state.
-      enum: [online, offline, unknown]
-    attributes:
-      type: object
-      description: Selected inventory and agent fields from the source.
-      additionalProperties: true
-    provenance:
-      description: Source record from which the endpoint was normalized.
-      allOf:
-        - $ref: '#/Provenance'
-ResponseAction:
-  type: object
-  description: Response operation advertised for an endpoint; the Gateway does not execute it.
-  required: [code, title, destructive, enabled]
-  properties:
-    code:
-      type: string
-      description: Stable source action code.
-    title:
-      type: string
-      description: Human-readable action name.
-    destructive:
-      type: boolean
-      description: Whether executing the action may disrupt or alter the endpoint.
-    enabled:
-      type: boolean
-      description: Whether the source currently allows the action for the endpoint.
-TimeRange:
-  type: object
-  description: Inclusive event occurrence-time interval.
-  required: [from, to]
-  properties:
-    from:
-      type: string
-      format: date-time
-      description: Inclusive lower boundary of event occurrence time.
-    to:
-      type: string
-      format: date-time
-      description: Inclusive upper boundary of event occurrence time.
-SearchEventsRequest:
-  type: object
-  description: Filters for a normalized multi-source event search.
-  properties:
-    sources:
-      type: array
-      uniqueItems: true
-      description: Source codes to query; omit to use every allowed source with event search.
-      items:
-        type: string
-    time_range:
-      description: Optional occurrence-time interval.
-      allOf:
-        - $ref: '#/TimeRange'
-    query:
-      type: string
-      maxLength: 1000
-      description: Free-text query interpreted by each selected source.
-    entities:
-      type: array
-      maxItems: 100
-      description: Entity conditions; an event matches when it contains at least one listed entity.
-      items:
-        $ref: '#/EntityRef'
-    limit:
-      type: integer
-      minimum: 1
-      maximum: 100
-      default: 50
-      description: Maximum number of events returned after merging all sources.
-    cursor:
-      type: string
-      description: Opaque next_cursor from the previous response with the same filters.
-LookupEntityRequest:
-  type: object
-  description: Request to enrich one entity from one or more sources.
-  required: [entity]
-  properties:
-    sources:
-      type: array
-      uniqueItems: true
-      description: Source codes to query; omit to use every allowed source with entity lookup.
-      items:
-        type: string
-    entity:
-      description: Entity to normalize and enrich.
-      allOf:
-        - $ref: '#/EntityRef'
-CreateArtifactAnalysisRequest:
-  type: object
-  description: Request to analyze a known artifact with one source.
-  required: [source, artifact]
-  properties:
-    source:
-      type: string
-      description: Source code of the artifact-analysis provider.
-    artifact:
-      type: object
-      description: Metadata used to identify the artifact for analysis.
-      required: [name]
-      properties:
-        name:
-          type: string
-          description: File name of the artifact.
-        mime:
-          type: string
-          description: MIME type when known by the caller.
-        hashes:
-          description: Checksums known by the caller.
-          allOf:
-            - $ref: '#/Hashes'
-SearchEndpointsRequest:
-  type: object
-  description: Filters for endpoint inventory search.
-  properties:
-    sources:
-      type: array
-      uniqueItems: true
-      description: Source codes to query; omit to use every allowed endpoint source.
-      items:
-        type: string
-    query:
-      type: string
-      maxLength: 1000
-      description: Free-text query matched against endpoint inventory fields.
-    limit:
-      type: integer
-      minimum: 1
-      maximum: 100
-      default: 50
-      description: Maximum number of endpoints returned after merging all sources.
-    cursor:
-      type: string
-      description: Opaque next_cursor from the previous response with the same filters.
+
 SourceError:
   type: object
   description: Failure reported by one source during a multi-source request.
@@ -416,77 +125,7 @@ SourceError:
     retryable:
       type: boolean
       description: Whether repeating the source request may succeed without changing it.
-SearchEventsResponse:
-  type: object
-  description: Merged event page with the entities and relations needed to interpret it.
-  required: [events, entities, relations, source_errors]
-  properties:
-    events:
-      type: array
-      description: Normalized events in the current page.
-      items:
-        $ref: '#/Event'
-    entities:
-      type: array
-      description: Canonical entities referenced by the returned events.
-      items:
-        $ref: '#/Entity'
-    relations:
-      type: array
-      description: Relationships whose endpoints are present in the returned entities.
-      items:
-        $ref: '#/Relation'
-    next_cursor:
-      type: string
-      description: Opaque cursor for the next page; absent when the search is exhausted.
-    source_errors:
-      type: array
-      description: Per-source failures when at least one selected source succeeded.
-      items:
-        $ref: '#/SourceError'
-LookupEntityResponse:
-  type: object
-  description: Entity enrichment merged from the selected sources.
-  required: [entities, relations, verdicts, source_errors]
-  properties:
-    entities:
-      type: array
-      description: Matched entity and related canonical entities.
-      items:
-        $ref: '#/Entity'
-    relations:
-      type: array
-      description: Relationships between entities in this response.
-      items:
-        $ref: '#/Relation'
-    verdicts:
-      type: array
-      description: Security assessments returned for the requested entity.
-      items:
-        $ref: '#/Verdict'
-    source_errors:
-      type: array
-      description: Per-source failures when at least one selected source succeeded.
-      items:
-        $ref: '#/SourceError'
-SearchEndpointsResponse:
-  type: object
-  description: Merged endpoint inventory page.
-  required: [items, source_errors]
-  properties:
-    items:
-      type: array
-      description: Normalized endpoints in the current page.
-      items:
-        $ref: '#/Endpoint'
-    next_cursor:
-      type: string
-      description: Opaque cursor for the next page; absent when the search is exhausted.
-    source_errors:
-      type: array
-      description: Per-source failures when at least one selected source succeeded.
-      items:
-        $ref: '#/SourceError'
+
 Health:
   type: object
   description: Service health response.
@@ -496,6 +135,7 @@ Health:
       type: string
       description: Current health state of the checked component.
       enum: [ok]
+
 ErrorEnvelope:
   type: object
   description: Error returned when a request cannot be completed.
