@@ -10,7 +10,7 @@ project scope, health checks, Swagger и миграции. Все 32 домен�
 ## Структура
 
 ```text
-api/                       OpenAPI-фрагменты и общие компоненты
+api/                       OpenAPI-контракты по сервисам
 apps/investigations/       Go-сервис `ir-api` и утилита `irctl`
 db/migrations/             схема `inv` и справочники
 packages/contract/         сгенерированный Go-контракт
@@ -32,7 +32,7 @@ task dev-down
 ```
 
 Сгенерированные файлы коммитятся, но вручную не редактируются. Источник правды
-для API — файлы в `api/`.
+для API — файлы в `api/<service>/`.
 
 ## Локальный запуск
 
@@ -46,5 +46,5 @@ curl http://localhost:8090/readyz
 заголовок `X-Project-ID` и роль в этом проекте в `inv.role_bindings`. Роли
 выдаются через `irctl`; доступа по умолчанию нет.
 
-Состояние покрытия требований и реализации — в [api/COVERAGE.md](api/COVERAGE.md).
+Состояние покрытия требований и реализации — в [api/investigations/COVERAGE.md](api/investigations/COVERAGE.md).
 Правила разработки — в [AGENTS.md](AGENTS.md).

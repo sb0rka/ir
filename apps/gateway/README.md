@@ -29,4 +29,4 @@ For a smaller local dataset:
 MOCK_EVENT_COUNT=1000 MOCK_ENDPOINT_COUNT=100 MOCK_HISTORY_DAYS=30 go run ./apps/gateway/cmd/gateway
 ```
 
-See [architecture](docs/architecture.md), [provider mappings](docs/providers.md), and the [OpenAPI contract](api/openapi.yaml).
+See [architecture](docs/architecture.md), [provider mappings](docs/providers.md), and the [OpenAPI contract](../../api/gateway/openapi.yaml).

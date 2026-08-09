@@ -2,7 +2,7 @@
 
 ## Источник правды
 
-- OpenAPI редактируется в `api/openapi.yaml`, `api/paths/` и `api/shared/`.
+- OpenAPI редактируется в `api/<service>/openapi.yaml`, `paths/` и `shared/`.
 - `packages/contract/**/*.gen.go` и `packages/contract-ts/**/*.d.ts` создаёт
   `task gen`; вручную их не менять.
 - После изменения контракта запускать `task gen` и коммитить результат вместе

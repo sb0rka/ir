@@ -1,8 +1,8 @@
 # Build and generated files
 /bin/
-/api/build/
-/api/bundle.yaml
-/api/docs.html
+/api/investigations/build/
+/api/investigations/bundle.yaml
+/api/investigations/docs.html
 *.tmp.yaml
 *.exe
 coverage.out
