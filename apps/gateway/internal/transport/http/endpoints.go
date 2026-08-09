@@ -4,7 +4,7 @@ import (
 	"net/http"
 
 	"github.com/sb0rka/ir/apps/gateway/api"
-	"github.com/sb0rka/ir/apps/gateway/internal/application"
+	"github.com/sb0rka/ir/apps/gateway/internal/service"
 )
 
 func (server *Server) SearchEndpoints(w http.ResponseWriter, r *http.Request, _ api.SearchEndpointsParams) {
@@ -22,7 +22,7 @@ func (server *Server) SearchEndpoints(w http.ResponseWriter, r *http.Request, _ 
 		server.writeServiceError(w, err)
 		return
 	}
-	result, err := server.service.SearchEndpoints(r.Context(), application.SearchEndpointsRequest{
+	result, err := server.service.SearchEndpoints(r.Context(), service.SearchEndpointsRequest{
 		Sources: sources, Query: stringValue(body.Query), Limit: intValue(body.Limit), Cursor: stringValue(body.Cursor),
 	})
 	if err != nil {

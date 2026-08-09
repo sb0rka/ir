@@ -6,8 +6,8 @@ import (
 	"strings"
 
 	"github.com/sb0rka/ir/apps/gateway/api"
-	"github.com/sb0rka/ir/apps/gateway/internal/application"
 	"github.com/sb0rka/ir/apps/gateway/internal/domain"
+	"github.com/sb0rka/ir/apps/gateway/internal/service"
 )
 
 func (server *Server) SearchEvents(w http.ResponseWriter, r *http.Request, _ api.SearchEventsParams) {
@@ -43,16 +43,16 @@ func (server *Server) SearchEvents(w http.ResponseWriter, r *http.Request, _ api
 	respondJSON(w, http.StatusOK, response)
 }
 
-func searchEventsRequest(body api.SearchEventsRequest) (application.SearchEventsRequest, error) {
+func searchEventsRequest(body api.SearchEventsRequest) (service.SearchEventsRequest, error) {
 	if err := validateLimit(body.Limit); err != nil {
-		return application.SearchEventsRequest{}, err
+		return service.SearchEventsRequest{}, err
 	}
-	request := application.SearchEventsRequest{
+	request := service.SearchEventsRequest{
 		Sources: valueOrEmpty(body.Sources), Query: stringValue(body.Query), Limit: intValue(body.Limit), Cursor: stringValue(body.Cursor),
 	}
 	if body.TimeRange != nil {
 		if body.TimeRange.To.Before(body.TimeRange.From) {
-			return application.SearchEventsRequest{}, fmt.Errorf("time_range.to must not precede time_range.from")
+			return service.SearchEventsRequest{}, fmt.Errorf("time_range.to must not precede time_range.from")
 		}
 		request.TimeFrom, request.TimeTo = body.TimeRange.From, body.TimeRange.To
 	}
@@ -60,7 +60,7 @@ func searchEventsRequest(body api.SearchEventsRequest) (application.SearchEvents
 		request.Entities = make([]domain.EntityRef, 0, len(*body.Entities))
 		for _, entity := range *body.Entities {
 			if strings.TrimSpace(entity.Type) == "" || strings.TrimSpace(entity.Value) == "" {
-				return application.SearchEventsRequest{}, fmt.Errorf("entity type and value are required")
+				return service.SearchEventsRequest{}, fmt.Errorf("entity type and value are required")
 			}
 			request.Entities = append(request.Entities, domain.EntityRef{Type: entity.Type, Value: entity.Value})
 		}

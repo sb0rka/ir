@@ -15,8 +15,8 @@ import (
 	corelog "github.com/sb0rka/sb0rka/packages/core/log"
 
 	adaptermock "github.com/sb0rka/ir/apps/gateway/internal/adapters/mock"
-	"github.com/sb0rka/ir/apps/gateway/internal/application"
 	"github.com/sb0rka/ir/apps/gateway/internal/config"
+	"github.com/sb0rka/ir/apps/gateway/internal/service"
 	httptransport "github.com/sb0rka/ir/apps/gateway/internal/transport/http"
 )
 
@@ -44,8 +44,8 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("build mock provider registry: %w", err)
 	}
-	service := application.New(providerRegistry, cfg.Server.RequestTimeout, cfg.Server.SourceTimeout)
-	handler := httptransport.NewHandler(cfg, log, service)
+	gatewayService := service.New(providerRegistry, cfg.Server.RequestTimeout, cfg.Server.SourceTimeout)
+	handler := httptransport.NewHandler(cfg, log, gatewayService)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()

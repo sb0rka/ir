@@ -5,8 +5,8 @@ import (
 	"strings"
 
 	"github.com/sb0rka/ir/apps/gateway/api"
-	"github.com/sb0rka/ir/apps/gateway/internal/application"
 	"github.com/sb0rka/ir/apps/gateway/internal/domain"
+	"github.com/sb0rka/ir/apps/gateway/internal/service"
 )
 
 func (server *Server) LookupEntity(w http.ResponseWriter, r *http.Request, _ api.LookupEntityParams) {
@@ -24,7 +24,7 @@ func (server *Server) LookupEntity(w http.ResponseWriter, r *http.Request, _ api
 		server.writeServiceError(w, err)
 		return
 	}
-	result, err := server.service.LookupEntity(r.Context(), application.LookupEntityRequest{
+	result, err := server.service.LookupEntity(r.Context(), service.LookupEntityRequest{
 		Sources: sources,
 		Entity:  domain.EntityRef{Type: body.Entity.Type, Value: body.Entity.Value},
 	})

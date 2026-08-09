@@ -15,9 +15,9 @@ import (
 	coretransport "github.com/sb0rka/sb0rka/packages/core/transport"
 
 	"github.com/sb0rka/ir/apps/gateway/api"
-	"github.com/sb0rka/ir/apps/gateway/internal/application"
 	"github.com/sb0rka/ir/apps/gateway/internal/config"
 	"github.com/sb0rka/ir/apps/gateway/internal/domain"
+	"github.com/sb0rka/ir/apps/gateway/internal/service"
 )
 
 const (
@@ -28,12 +28,12 @@ const (
 type projectIDKey struct{}
 
 type Server struct {
-	service        *application.Service
+	service        *service.Service
 	log            *slog.Logger
 	projectSources map[string]map[string]bool
 }
 
-func NewHandler(cfg config.Config, log *slog.Logger, service *application.Service) http.Handler {
+func NewHandler(cfg config.Config, log *slog.Logger, service *service.Service) http.Handler {
 	server := &Server{service: service, log: log, projectSources: cfg.ProjectSources}
 	generated := http.NewServeMux()
 	api.HandlerWithOptions(server, api.StdHTTPServerOptions{

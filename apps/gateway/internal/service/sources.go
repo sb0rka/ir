@@ -1,4 +1,4 @@
-package application
+package service
 
 import "github.com/sb0rka/ir/apps/gateway/internal/domain"
 
