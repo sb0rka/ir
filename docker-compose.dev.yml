@@ -83,12 +83,19 @@ services:
     build:
       context: .
       dockerfile: apps/gateway/Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     restart: unless-stopped
     environment:
       SERVER_ADDR: "0.0.0.0"
       SERVER_PORT: "8091"
       SERVER_CORS_WHITELIST: "${SERVER_CORS_WHITELIST:-http://localhost:5173,http://localhost:3000}"
       AUTH_DISABLED: "true"
+      DATABASE_URI: "postgres://postgres:${POSTGRES_PASSWORD:-irdev}@postgres:5432/investigations?search_path=inv"
+      PROJECT_SOURCE_ALLOWLISTS: '{"abcdef1234":["maxpatrol-siem","pt-sandbox"]}'
       LOG_FORMAT: "json"
       MOCK_EVENT_COUNT: "${GATEWAY_MOCK_EVENT_COUNT:-50000}"
       MOCK_ENDPOINT_COUNT: "${GATEWAY_MOCK_ENDPOINT_COUNT:-5000}"

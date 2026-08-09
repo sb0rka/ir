@@ -13,6 +13,7 @@ import (
 	"time"
 
 	coretransport "github.com/sb0rka/sb0rka/packages/core/transport"
+	coreauthctx "github.com/sb0rka/sb0rka/packages/core/transport/authctx"
 
 	"github.com/sb0rka/ir/apps/gateway/api"
 	"github.com/sb0rka/ir/apps/gateway/internal/config"
@@ -33,7 +34,11 @@ type Server struct {
 	projectSources map[string]map[string]bool
 }
 
-func NewHandler(cfg config.Config, log *slog.Logger, service *service.Service) http.Handler {
+type RoleResolver interface {
+	HasRoleBinding(ctx context.Context, subjectID, projectID string) (bool, error)
+}
+
+func NewHandler(cfg config.Config, log *slog.Logger, service *service.Service, roles RoleResolver) http.Handler {
 	server := &Server{service: service, log: log, projectSources: cfg.ProjectSources}
 	generated := http.NewServeMux()
 	api.HandlerWithOptions(server, api.StdHTTPServerOptions{
@@ -43,7 +48,7 @@ func NewHandler(cfg config.Config, log *slog.Logger, service *service.Service) h
 		},
 	})
 
-	protected := coretransport.Chain(http.Handler(generated), projectScope())
+	protected := coretransport.Chain(http.Handler(generated), projectScope(server, roles, cfg.Auth.Disabled))
 	if !cfg.Auth.Disabled {
 		protected = coretransport.Auth(coretransport.AuthConfig{
 			PublicKey: cfg.Auth.PublicKey,
@@ -112,7 +117,7 @@ func (server *Server) writeServiceError(w http.ResponseWriter, err error) {
 func (server *Server) constrainSources(ctx context.Context, requested []string) ([]string, error) {
 	allowed, restricted := server.projectSources[projectIDFromContext(ctx)]
 	if !restricted {
-		return requested, nil
+		return nil, &domain.RequestError{Code: "source_forbidden", Message: "no sources are configured for this project"}
 	}
 	if len(requested) == 0 {
 		result := make([]string, 0, len(allowed))
@@ -132,7 +137,7 @@ func (server *Server) constrainSources(ctx context.Context, requested []string) 
 
 func (server *Server) sourceAllowed(ctx context.Context, source string) bool {
 	allowed, restricted := server.projectSources[projectIDFromContext(ctx)]
-	return !restricted || allowed[source]
+	return restricted && allowed[source]
 }
 
 func sourceForbidden(source string) error {
@@ -144,12 +149,38 @@ func projectIDFromContext(ctx context.Context) string {
 	return value
 }
 
-func projectScope() coretransport.Middleware {
+func projectScope(server *Server, roles RoleResolver, authDisabled bool) coretransport.Middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			projectID := strings.TrimSpace(r.Header.Get(projectIDHeader))
 			if !validProjectID(projectID) {
 				respondError(w, http.StatusBadRequest, "invalid_project_id", "X-Project-ID must be 10-12 lowercase hexadecimal characters")
+				return
+			}
+			if !authDisabled {
+				subjectID, ok := coreauthctx.SubjectIDFromContext(r.Context())
+				if !ok {
+					respondError(w, http.StatusUnauthorized, "unauthorized", "valid bearer token is required")
+					return
+				}
+				if roles == nil {
+					server.log.Error("role_resolver_missing")
+					respondError(w, http.StatusInternalServerError, "internal", "internal server error")
+					return
+				}
+				allowed, err := roles.HasRoleBinding(r.Context(), subjectID, projectID)
+				if err != nil {
+					server.log.Error("resolve_project_role", "error", err)
+					respondError(w, http.StatusInternalServerError, "internal", "internal server error")
+					return
+				}
+				if !allowed {
+					respondError(w, http.StatusForbidden, "forbidden", "access to project is forbidden")
+					return
+				}
+			}
+			if _, configured := server.projectSources[projectID]; !configured {
+				respondError(w, http.StatusForbidden, "forbidden", "access to project is forbidden")
 				return
 			}
 			ctx := context.WithValue(r.Context(), projectIDKey{}, projectID)

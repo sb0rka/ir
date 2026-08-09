@@ -17,6 +17,7 @@ import (
 	adaptermock "github.com/sb0rka/ir/apps/gateway/internal/adapters/mock"
 	"github.com/sb0rka/ir/apps/gateway/internal/config"
 	"github.com/sb0rka/ir/apps/gateway/internal/service"
+	"github.com/sb0rka/ir/apps/gateway/internal/store/psql"
 	httptransport "github.com/sb0rka/ir/apps/gateway/internal/transport/http"
 )
 
@@ -36,6 +37,21 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("create logger: %w", err)
 	}
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	var roles httptransport.RoleResolver
+	if !cfg.Auth.Disabled {
+		db, dbErr := psql.New(cfg.Database.URI, cfg.Database.MaxConns, cfg.Database.ConnMaxLifetime)
+		if dbErr != nil {
+			return fmt.Errorf("connect role store: %w", dbErr)
+		}
+		defer db.Close()
+		if dbErr = db.Ping(ctx); dbErr != nil {
+			return fmt.Errorf("ping role store: %w", dbErr)
+		}
+		roles = db
+	}
 	providerRegistry, mockStats, err := adaptermock.NewRegistry(adaptermock.Options{
 		EventCount:    cfg.Mock.EventCount,
 		EndpointCount: cfg.Mock.EndpointCount,
@@ -45,10 +61,7 @@ func run() error {
 		return fmt.Errorf("build mock provider registry: %w", err)
 	}
 	gatewayService := service.New(providerRegistry, cfg.Server.RequestTimeout, cfg.Server.SourceTimeout)
-	handler := httptransport.NewHandler(cfg, log, gatewayService)
-
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
+	handler := httptransport.NewHandler(cfg, log, gatewayService, roles)
 	server := &http.Server{
 		Addr:              net.JoinHostPort(cfg.Server.Addr, cfg.Server.Port),
 		Handler:           handler,

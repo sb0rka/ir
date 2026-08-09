@@ -124,9 +124,6 @@ type SourceError struct {
 var idNamespace = uuid.MustParse("371be91f-7baf-5bb1-b576-9cd358848148")
 
 func StableID(parts ...string) uuid.UUID {
-	for i := range parts {
-		parts[i] = strings.ToLower(strings.TrimSpace(parts[i]))
-	}
 	return uuid.NewSHA1(idNamespace, []byte(strings.Join(parts, "\x00")))
 }
 
@@ -141,6 +138,7 @@ func CanonicalValue(kind, value string) string {
 }
 
 func NewEntity(kind, value string, provenance Provenance) Entity {
+	kind = strings.ToLower(strings.TrimSpace(kind))
 	value = CanonicalValue(kind, value)
 	return Entity{
 		ID:         StableID("entity", kind, value),

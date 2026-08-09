@@ -50,10 +50,16 @@ func (adapter *mock) SearchEvents(ctx context.Context, request capability.Search
 		limit = 50
 	}
 	vendorRequest := toEventsRequest(request)
+	wantedEntities := entitySet(request.Entities)
 
 	matched := make([]scenario.Event, 0)
-	for _, event := range adapter.scenario.EventsForSource("MaxPatrol") {
-		if matchesEvent(adapter.scenario, event, vendorRequest, request.Query, request.Entities) {
+	for index, event := range adapter.scenario.EventsForSource("MaxPatrol") {
+		if index%256 == 0 {
+			if err := ctx.Err(); err != nil {
+				return capability.EventPage{}, err
+			}
+		}
+		if matchesEvent(adapter.scenario, event, vendorRequest, request.Query, wantedEntities) {
 			matched = append(matched, event)
 		}
 	}
@@ -141,7 +147,7 @@ func (adapter *mock) vendorEvent(event scenario.Event) maxpatrolapi.EventRecord 
 	return record
 }
 
-func matchesEvent(value scenario.Scenario, event scenario.Event, request maxpatrolapi.EventsRequest, query string, entities []domain.EntityRef) bool {
+func matchesEvent(value scenario.Scenario, event scenario.Event, request maxpatrolapi.EventsRequest, query string, entities map[string]struct{}) bool {
 	timestamp := scenario.ParseTime(event.EventTS)
 	if request.TimeFrom != 0 && timestamp.Unix() < request.TimeFrom ||
 		request.TimeTo != 0 && timestamp.Unix() > request.TimeTo {
@@ -163,13 +169,20 @@ func matchesEvent(value scenario.Scenario, event scenario.Event, request maxpatr
 		if !ok {
 			continue
 		}
-		for _, wanted := range entities {
-			if strings.EqualFold(entity.Type, wanted.Type) && entity.Value == domain.CanonicalValue(wanted.Type, wanted.Value) {
-				return true
-			}
+		if _, wanted := entities[entity.Type+"\x00"+entity.Value]; wanted {
+			return true
 		}
 	}
 	return false
+}
+
+func entitySet(entities []domain.EntityRef) map[string]struct{} {
+	result := make(map[string]struct{}, len(entities))
+	for _, entity := range entities {
+		kind := strings.ToLower(strings.TrimSpace(entity.Type))
+		result[kind+"\x00"+domain.CanonicalValue(kind, entity.Value)] = struct{}{}
+	}
+	return result
 }
 
 func parseCursor(raw string) (string, int, error) {

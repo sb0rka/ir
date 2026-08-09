@@ -3,7 +3,7 @@ info:
   title: Sb0rka Gateway - sources
   version: 0.0.1
 servers:
-  - url: http://localhost:8091
+  - url: .
 security:
   - bearerAuth: []
 
@@ -29,6 +29,9 @@ paths:
                     description: External security products registered for use through the Gateway.
                     items:
                       $ref: '#/components/schemas/Source'
+        '401': { $ref: '../shared/responses.yaml#/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/Forbidden' }
+        '500': { $ref: '../shared/responses.yaml#/InternalError' }
         default:
           $ref: '../shared/responses.yaml#/ErrorResponse'
 

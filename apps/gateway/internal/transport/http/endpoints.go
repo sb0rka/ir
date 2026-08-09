@@ -2,6 +2,7 @@ package httptransport
 
 import (
 	"net/http"
+	"unicode/utf8"
 
 	"github.com/sb0rka/ir/apps/gateway/api"
 	"github.com/sb0rka/ir/apps/gateway/internal/service"
@@ -15,6 +16,10 @@ func (server *Server) SearchEndpoints(w http.ResponseWriter, r *http.Request, _ 
 	}
 	if err := validateLimit(body.Limit); err != nil {
 		respondError(w, http.StatusBadRequest, "bad_request", err.Error())
+		return
+	}
+	if body.Query != nil && utf8.RuneCountInString(*body.Query) > 1000 {
+		respondError(w, http.StatusBadRequest, "bad_request", "query must not exceed 1000 characters")
 		return
 	}
 	sources, err := server.constrainSources(r.Context(), valueOrEmpty(body.Sources))

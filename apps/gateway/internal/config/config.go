@@ -30,6 +30,7 @@ var SourceCodes = []string{"maxpatrol-siem", "pt-sandbox"}
 type Config struct {
 	Server         ServerConfig
 	Auth           AuthConfig
+	Database       coreconfig.DatabaseConfig
 	Log            coreconfig.LoggerConfig
 	Mock           MockConfig
 	Sources        map[string]SourceConfig
@@ -83,6 +84,12 @@ func Load() (Config, error) {
 			Kid:      coreconfig.GetStringEnv("ACCESS_TOKEN_KID", ""),
 			Typ:      coreconfig.GetStringEnv("ACCESS_TOKEN_TYP", "access+jwt"),
 		},
+		Database: coreconfig.DatabaseConfig{
+			URI:      coreconfig.GetStringEnv("DATABASE_URI", ""),
+			MaxConns: coreconfig.GetIntEnv("DATABASE_MAX_CONNS", coreconfig.DefaultDatabaseMaxConns),
+			ConnMaxLifetime: coreconfig.GetDurationEnv(
+				"DATABASE_CONN_MAX_LIFETIME_SEC", coreconfig.DefaultDatabaseConnMaxLifetime, time.Second),
+		},
 		Log: coreconfig.LoggerConfig{
 			Level:  coreconfig.GetStringEnv("LOG_LEVEL", "info"),
 			Format: coreconfig.GetStringEnv("LOG_FORMAT", "json"),
@@ -123,6 +130,9 @@ func Load() (Config, error) {
 	cfg.Auth.PublicKey = key
 	if !cfg.Auth.Disabled && len(key) == 0 {
 		return Config{}, fmt.Errorf("access token public key is required when auth is enabled")
+	}
+	if !cfg.Auth.Disabled && strings.TrimSpace(cfg.Database.URI) == "" {
+		return Config{}, fmt.Errorf("DATABASE_URI is required when auth is enabled")
 	}
 
 	for _, code := range SourceCodes {

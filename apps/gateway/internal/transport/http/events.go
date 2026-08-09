@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/sb0rka/ir/apps/gateway/api"
 	"github.com/sb0rka/ir/apps/gateway/internal/domain"
@@ -46,6 +47,12 @@ func (server *Server) SearchEvents(w http.ResponseWriter, r *http.Request, _ api
 func searchEventsRequest(body api.SearchEventsRequest) (service.SearchEventsRequest, error) {
 	if err := validateLimit(body.Limit); err != nil {
 		return service.SearchEventsRequest{}, err
+	}
+	if body.Query != nil && utf8.RuneCountInString(*body.Query) > 1000 {
+		return service.SearchEventsRequest{}, fmt.Errorf("query must not exceed 1000 characters")
+	}
+	if body.Entities != nil && len(*body.Entities) > 100 {
+		return service.SearchEventsRequest{}, fmt.Errorf("entities must not contain more than 100 items")
 	}
 	request := service.SearchEventsRequest{
 		Sources: valueOrEmpty(body.Sources), Query: stringValue(body.Query), Limit: intValue(body.Limit), Cursor: stringValue(body.Cursor),

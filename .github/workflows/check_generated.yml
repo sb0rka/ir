@@ -7,6 +7,7 @@ on:
       - 'packages/contract/**'
       - 'packages/contract-ts/**'
       - 'apps/investigations/internal/server/**'
+      - 'apps/gateway/**'
       - 'Taskfile.yml'
       - '.github/workflows/check_generated.yml'
   push:
@@ -16,6 +17,7 @@ on:
       - 'packages/contract/**'
       - 'packages/contract-ts/**'
       - 'apps/investigations/internal/server/**'
+      - 'apps/gateway/**'
       - 'Taskfile.yml'
       - '.github/workflows/check_generated.yml'
 
@@ -42,6 +44,7 @@ jobs:
           go-version-file: go.work
           cache-dependency-path: |
             apps/investigations/go.sum
+            apps/gateway/go.sum
             packages/contract/go.sum
 
       - name: Set up Node.js

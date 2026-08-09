@@ -608,11 +608,35 @@ type VerdictValue string
 // ProjectId defines model for ProjectId.
 type ProjectId = string
 
+// BadGateway Error returned when a request cannot be completed.
+type BadGateway = ErrorEnvelope
+
+// BadRequest Error returned when a request cannot be completed.
+type BadRequest = ErrorEnvelope
+
 // ErrorResponse Error returned when a request cannot be completed.
 type ErrorResponse = ErrorEnvelope
 
+// Forbidden Error returned when a request cannot be completed.
+type Forbidden = ErrorEnvelope
+
+// GatewayTimeout Error returned when a request cannot be completed.
+type GatewayTimeout = ErrorEnvelope
+
 // HealthResponse Service health response.
 type HealthResponse = Health
+
+// InternalError Error returned when a request cannot be completed.
+type InternalError = ErrorEnvelope
+
+// NotFound Error returned when a request cannot be completed.
+type NotFound = ErrorEnvelope
+
+// Unauthorized Error returned when a request cannot be completed.
+type Unauthorized = ErrorEnvelope
+
+// ValidationError Error returned when a request cannot be completed.
+type ValidationError = ErrorEnvelope
 
 // CreateArtifactAnalysisParams defines parameters for CreateArtifactAnalysis.
 type CreateArtifactAnalysisParams struct {

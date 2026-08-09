@@ -2,9 +2,12 @@ openapi: 3.0.3
 info:
   title: Sb0rka external tools gateway
   version: 0.0.1
+  license:
+    name: Apache-2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0
   description: Normalized access to external security tools.
 servers:
-  - url: http://localhost:8091
+  - url: .
 tags:
   - name: health
     description: Gateway process health and readiness.
@@ -46,6 +49,20 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Analysis'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '504':
+          $ref: '#/components/responses/GatewayTimeout'
         default:
           $ref: '#/components/responses/ErrorResponse'
       security:
@@ -72,6 +89,20 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Analysis'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '504':
+          $ref: '#/components/responses/GatewayTimeout'
         default:
           $ref: '#/components/responses/ErrorResponse'
       security:
@@ -97,6 +128,22 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SearchEndpointsResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '502':
+          $ref: '#/components/responses/BadGateway'
+        '504':
+          $ref: '#/components/responses/GatewayTimeout'
         default:
           $ref: '#/components/responses/ErrorResponse'
       security:
@@ -136,6 +183,18 @@ paths:
                     description: Response operations currently advertised for the endpoint.
                     items:
                       $ref: '#/components/schemas/ResponseAction'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '504':
+          $ref: '#/components/responses/GatewayTimeout'
         default:
           $ref: '#/components/responses/ErrorResponse'
       security:
@@ -161,6 +220,22 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/LookupEntityResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '502':
+          $ref: '#/components/responses/BadGateway'
+        '504':
+          $ref: '#/components/responses/GatewayTimeout'
         default:
           $ref: '#/components/responses/ErrorResponse'
       security:
@@ -186,6 +261,22 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SearchEventsResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '502':
+          $ref: '#/components/responses/BadGateway'
+        '504':
+          $ref: '#/components/responses/GatewayTimeout'
         default:
           $ref: '#/components/responses/ErrorResponse'
       security:
@@ -235,6 +326,12 @@ paths:
                       Gateway.
                     items:
                       $ref: '#/components/schemas/Source'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
         default:
           $ref: '#/components/responses/ErrorResponse'
       security:
@@ -900,6 +997,56 @@ components:
   responses:
     ErrorResponse:
       description: Error response.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    BadRequest:
+      description: The request is malformed or violates an input constraint.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    Unauthorized:
+      description: A valid bearer access token is required.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    Forbidden:
+      description: >-
+        The caller has no role in the project or the source is not allowed
+        there.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    NotFound:
+      description: The selected source or requested record does not exist.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    ValidationError:
+      description: The selected source cannot perform the requested operation.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    InternalError:
+      description: An unexpected internal failure occurred.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    GatewayTimeout:
+      description: The Gateway or selected source exceeded its deadline.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    BadGateway:
+      description: Every selected external source failed.
       content:
         application/json:
           schema:

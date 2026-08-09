@@ -3,7 +3,7 @@ info:
   title: Sb0rka Gateway - endpoints
   version: 0.0.1
 servers:
-  - url: http://localhost:8091
+  - url: .
 security:
   - bearerAuth: []
 
@@ -28,6 +28,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SearchEndpointsResponse'
+        '400': { $ref: '../shared/responses.yaml#/BadRequest' }
+        '401': { $ref: '../shared/responses.yaml#/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/NotFound' }
+        '422': { $ref: '../shared/responses.yaml#/ValidationError' }
+        '502': { $ref: '../shared/responses.yaml#/BadGateway' }
+        '504': { $ref: '../shared/responses.yaml#/GatewayTimeout' }
+        '500': { $ref: '../shared/responses.yaml#/InternalError' }
         default:
           $ref: '../shared/responses.yaml#/ErrorResponse'
 
@@ -64,6 +72,12 @@ paths:
                     description: Response operations currently advertised for the endpoint.
                     items:
                       $ref: '#/components/schemas/ResponseAction'
+        '401': { $ref: '../shared/responses.yaml#/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/NotFound' }
+        '422': { $ref: '../shared/responses.yaml#/ValidationError' }
+        '504': { $ref: '../shared/responses.yaml#/GatewayTimeout' }
+        '500': { $ref: '../shared/responses.yaml#/InternalError' }
         default:
           $ref: '../shared/responses.yaml#/ErrorResponse'
 

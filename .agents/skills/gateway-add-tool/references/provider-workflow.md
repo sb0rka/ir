@@ -12,13 +12,13 @@
 
 ## New capability
 
-Add a focused interface, domain request/result types, application scenario, OpenAPI operation, and HTTP mapping. The application method must not accept HTTP-generated types. A future MCP transport must be able to call it directly.
+Add a focused interface, domain request/result types, service method, OpenAPI operation, and HTTP mapping. The service method must not accept HTTP-generated types. A future MCP transport must be able to call it directly.
 
 ## Mock
 
 Mock records must form a coherent scenario across providers, use fixed timestamps and deterministic IDs, and exercise the real normalizer. Do not serve fixture JSON directly. Ignore presentation fields such as graph positions, styles, and animation.
 
-Keep every temporary provider, fixture, scenario generator, and mock-only helper under `internal/adapters/mock`. Register it in `internal/adapters/mock/registry.go`. Nothing in domain, application, normalization, registry, or transport may import that package.
+Keep every temporary provider, fixture, scenario generator, and mock-only helper under `internal/adapters/mock`. Register it in `internal/adapters/mock/registry.go`. Nothing in domain, service, normalization, registry, or transport may import that package.
 
 ## Real client
 
@@ -32,4 +32,4 @@ cd apps/gateway && go vet ./...
 docker compose -f docker-compose.dev.yml up -d --build gateway
 ```
 
-Smoke `readyz`, all five source descriptors, multi-source events, Fusion lookup, Sandbox analysis, EDR endpoints, and the response-action catalogue.
+Smoke `readyz`, the registered source descriptors, MaxPatrol SIEM events, and PT Sandbox analysis. Test another capability only after its provider contract is reviewed and registered.

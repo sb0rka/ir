@@ -7,25 +7,25 @@ Gateway is a stateless adapter service for external security products. It owns n
 ```text
 HTTP client
   -> transport/http (auth, ProjectID, CORS, OpenAPI)
-  -> application (fan-out, timeouts, pagination)
+  -> service (fan-out, timeouts, pagination)
   -> registry (provider selection by capability)
   -> adapter (mock or vendor implementation)
   -> normalization (canonical values, merge, sort)
 ```
 
-The domain and application packages do not depend on HTTP. A future `transport/mcp` must call the same application service.
+The domain and service packages do not depend on HTTP. A future `transport/mcp` must call the same service.
 
 ## Provider contract
 
 Providers register a descriptor and only the capability interfaces they implement. Adding another provider for an existing capability changes the provider package and registry construction, not the router or OpenAPI.
 
-Capability interfaces in `internal/capability` are the boundary between the Gateway and provider implementations. All temporary data, scenario generation, fixtures, and mock providers live under `internal/adapters/mock`. The composition root imports only `mock.NewRegistry`; domain, application, registry, normalization, and HTTP transport do not import the mock package.
+Capability interfaces in `internal/capability` are the boundary between the Gateway and provider implementations. All temporary data, scenario generation, fixtures, and mock providers live under `internal/adapters/mock`. The composition root imports only `mock.NewRegistry`; domain, service, registry, normalization, and HTTP transport do not import the mock package.
 
-A real client belongs under `internal/adapters/proxy/<provider>` and implements the same capability interfaces. Replacing the temporary implementation requires changing the composition root and deleting `internal/adapters/mock`; it does not change the application or public API.
+A real client belongs under `internal/adapters/proxy/<provider>` and implements the same capability interfaces. Replacing the temporary implementation requires changing the composition root and deleting `internal/adapters/mock`; it does not change the service or public API.
 
 Requests without `sources` fan out to all registered providers with the requested capability. Calls run concurrently with a 10-second source timeout inside a 15-second request timeout. Successful data is returned with `source_errors` when only part of the fan-out fails; failure of every selected source returns `502`.
 
-`X-Project-ID` is validated before dispatch, included in request logs, and selects the process-owned source allowlist. An omitted `sources` field expands only to sources allowed for that project; explicitly requesting a denied source returns `403`.
+`X-Project-ID` is validated before dispatch, checked against the authenticated subject's `role_bindings`, included in request logs, and selects the process-owned source allowlist. Unknown projects and explicitly denied sources return `403`; an omitted `sources` field expands only to configured sources.
 
 Event cursors are base64url-encoded, stateless state. They contain a request fingerprint and one opaque continuation per source. A cursor cannot be reused with different filters.
 
