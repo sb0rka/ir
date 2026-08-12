@@ -1,0 +1,195 @@
+export type Severity = 'critical' | 'high' | 'medium' | 'low' | 'info'
+
+export type AlertStatus = 'new' | 'investigating' | 'closed'
+
+export type Source = 'EDR' | 'NDR' | 'SIEM' | 'Email' | 'ThreatIntel'
+
+export type EntityKind =
+  | 'host'
+  | 'user'
+  | 'process'
+  | 'file'
+  | 'ip'
+  | 'domain'
+  | 'email'
+
+export type EventOrigin = 'seed' | 'agent' | 'analyst'
+
+export type ReviewState = 'confirmed' | 'proposed' | 'rejected'
+
+export type InvestigationStatus = 'open' | 'in_progress' | 'closed'
+
+export type IssueStatus = 'running' | 'completed' | 'error' | 'cancelled'
+
+export type FilterField =
+  | 'host'
+  | 'user'
+  | 'process'
+  | 'hash'
+  | 'ip'
+  | 'domain'
+  | 'severity'
+  | 'source'
+  | 'status'
+
+export interface Entity {
+  id: string
+  kind: EntityKind
+  label: string
+  attributes: Record<string, string>
+}
+
+export interface AlertEvent {
+  id: string
+  time: string
+  severity: Severity
+  title: string
+  rule: string
+  source: Source
+  status: AlertStatus
+  entityIds: string[]
+  description: string
+  raw?: Record<string, string>
+}
+
+export interface CorrelationGroup {
+  id: string
+  title: string
+  reason: string
+  severity: Severity
+  time: string
+  status: AlertStatus
+  sourceCounts: Partial<Record<Source, number>>
+  eventIds: string[]
+  entityIds: string[]
+}
+
+export interface QueueItem {
+  kind: 'alert' | 'correlation'
+  id: string
+}
+
+export interface ContextEvent {
+  id: string
+  time: string
+  severity: Severity
+  title: string
+  type: string
+  source: Source
+  entityIds: string[]
+  origin: EventOrigin
+  review: ReviewState
+  description: string
+}
+
+export interface GraphNode {
+  id: string
+  kind: EntityKind | 'event'
+  refId: string
+  label: string
+  review: ReviewState
+  x: number
+  y: number
+}
+
+export interface GraphEdge {
+  id: string
+  source: string
+  target: string
+  relation: string
+  review: ReviewState
+  rationale?: string
+}
+
+export interface Finding {
+  id: string
+  title: string
+  severity: Severity
+  entityIds: string[]
+  description: string
+  review: ReviewState
+  origin: EventOrigin
+}
+
+export interface IssueComment {
+  id: string
+  author: string
+  time: string
+  text: string
+}
+
+export interface Issue {
+  id: string
+  investigationId: string
+  parentId?: string
+  template: string
+  title: string
+  description: string
+  entityIds: string[]
+  status: IssueStatus
+  eventsFound: number
+  edgesFound: number
+  findingsFound: number
+  resultSummary?: string
+  comments: IssueComment[]
+  createdAt: string
+}
+
+export interface Investigation {
+  id: string
+  title: string
+  severity: Severity
+  status: InvestigationStatus
+  parentId?: string
+  assignee: string
+  seedEventIds: string[]
+  eventIds: string[]
+  entityIds: string[]
+  nodeIds: string[]
+  edgeIds: string[]
+  findingIds: string[]
+  issueIds: string[]
+  createdAt: string
+  view: 'table' | 'graph' | 'queue'
+  selectedNodeId?: string
+  selectedEventId?: string
+  selectedEntityIds: string[]
+  timelineRange?: [number, number]
+}
+
+export interface FilterChip {
+  id: string
+  field: FilterField
+  values: string[]
+}
+
+export interface ContextFilterHistoryEntry {
+  field: FilterField
+  value: string
+}
+
+/** Per-investigation state of the context event queue (search + filters). */
+export interface ContextQueueState {
+  chips: FilterChip[]
+  timePreset: string
+  history: ContextFilterHistoryEntry[]
+  selectedIds: string[]
+  hideAdded: boolean
+  originFilter: EventOrigin | 'all'
+  reviewFilter: ReviewState | 'all'
+}
+
+export interface SavedView {
+  id: string
+  name: string
+  chips: FilterChip[]
+  timePreset: string
+}
+
+export interface ActionResult {
+  id: string
+  action: string
+  title: string
+  body: string
+  time: string
+}
