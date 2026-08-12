@@ -1,14 +1,16 @@
 import type { ReactNode } from 'react'
-import { Focus, RotateCcw } from 'lucide-react'
+import { RotateCcw } from 'lucide-react'
 import { useWorkspaceStore } from '../../state/useWorkspaceStore'
 import {
   ALL_ENTITY_TYPES,
   ALL_SEVERITIES,
   SEVERITY_COLOR,
 } from './constants'
+import { toMs } from './time'
 import type { EdgeOrigin, EntityTypeCode, Severity } from './types'
 
-export function GraphToolbar({ onFit }: { onFit: () => void }) {
+/** Compact filter strip above the graph. Investigation identity lives in the page header. */
+export function GraphToolbar() {
   const {
     activeInvestigation,
     toggleEntityType,
@@ -24,29 +26,19 @@ export function GraphToolbar({ onFit }: { onFit: () => void }) {
   const severities = new Set(filters.severities)
   const edgeOrigins = new Set(filters.edgeOrigins)
 
-  return (
-    <header className="flex flex-wrap items-center gap-3 border-b border-[var(--border)] bg-[var(--bg-panel)] px-4 py-2.5">
-      <div className="mr-2 min-w-0 flex-1">
-        <div className="truncate text-sm font-semibold text-[var(--text)]">
-          {activeInvestigation.title}
-        </div>
-        <div className="flex items-center gap-2 text-[10px] text-[var(--text-dim)]">
-          <span
-            className="rounded px-1.5 py-0.5 font-semibold uppercase tracking-wide"
-            style={{
-              color: SEVERITY_COLOR[activeInvestigation.severity],
-              background: `color-mix(in srgb, ${SEVERITY_COLOR[activeInvestigation.severity]} 18%, transparent)`,
-            }}
-          >
-            {activeInvestigation.severity}
-          </span>
-          <span>{activeInvestigation.agentStatus}</span>
-          <span>·</span>
-          <span>{activeInvestigation.id}</span>
-        </div>
-      </div>
+  const fullTimeRange =
+    !filters.timeRange ||
+    (filters.timeRange.start <= toMs(activeInvestigation.windowStart) &&
+      filters.timeRange.end >= toMs(activeInvestigation.windowEnd))
+  const filtered =
+    entityTypes.size !== ALL_ENTITY_TYPES.length ||
+    severities.size !== ALL_SEVERITIES.length ||
+    edgeOrigins.size !== 2 ||
+    !fullTimeRange
 
-      <FilterGroup label="Entity">
+  return (
+    <header className="flex flex-wrap items-center gap-x-4 gap-y-1.5 border-b border-[var(--border)] bg-[var(--bg-panel)] px-4 py-2">
+      <FilterGroup label="Сущности">
         {ALL_ENTITY_TYPES.map((type) => (
           <Chip
             key={type}
@@ -58,7 +50,7 @@ export function GraphToolbar({ onFit }: { onFit: () => void }) {
         ))}
       </FilterGroup>
 
-      <FilterGroup label="Severity">
+      <FilterGroup label="Критичность">
         {ALL_SEVERITIES.map((sev) => (
           <Chip
             key={sev}
@@ -71,34 +63,26 @@ export function GraphToolbar({ onFit }: { onFit: () => void }) {
         ))}
       </FilterGroup>
 
-      <FilterGroup label="Edges">
+      <FilterGroup label="Связи">
         {(['seed', 'expanded'] as EdgeOrigin[]).map((origin) => (
           <Chip
             key={origin}
             active={edgeOrigins.has(origin)}
             onClick={() => toggleEdgeOrigin(origin)}
           >
-            {origin}
+            {origin === 'seed' ? 'исходные' : 'добавленные'}
           </Chip>
         ))}
       </FilterGroup>
 
-      <div className="flex items-center gap-1.5">
-        <button
-          type="button"
-          onClick={onFit}
-          className="inline-flex items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--bg-node)] px-2 py-1 text-[11px] text-[var(--text-muted)] hover:border-[var(--border-strong)] hover:text-[var(--text)]"
-        >
-          <Focus size={12} /> Fit
-        </button>
-        <button
-          type="button"
-          onClick={resetGraphFilters}
-          className="inline-flex items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--bg-node)] px-2 py-1 text-[11px] text-[var(--text-muted)] hover:border-[var(--border-strong)] hover:text-[var(--text)]"
-        >
-          <RotateCcw size={12} /> Reset
-        </button>
-      </div>
+      <button
+        type="button"
+        onClick={resetGraphFilters}
+        disabled={!filtered}
+        className="ml-auto inline-flex items-center gap-1 rounded-md border border-[var(--border)] bg-transparent px-2 py-1 text-[11px] text-[var(--text-muted)] transition-colors hover:border-[var(--border-strong)] hover:text-[var(--text)] disabled:opacity-35"
+      >
+        <RotateCcw size={12} /> Сбросить фильтры
+      </button>
     </header>
   )
 }
@@ -111,8 +95,8 @@ function FilterGroup({
   children: ReactNode
 }) {
   return (
-    <div className="flex max-w-full flex-wrap items-center gap-1">
-      <span className="mr-0.5 text-[10px] uppercase tracking-wide text-[var(--text-dim)]">
+    <div className="flex items-center gap-1">
+      <span className="mr-1 text-[10px] uppercase tracking-wide text-[var(--text-dim)]">
         {label}
       </span>
       {children}
@@ -135,7 +119,7 @@ function Chip({
     <button
       type="button"
       onClick={onClick}
-      className="rounded-md border px-1.5 py-0.5 text-[10px] capitalize transition-colors"
+      className="rounded-md border px-1.5 py-0.5 text-[10px] transition-colors"
       style={{
         borderColor: active
           ? (accent ?? 'var(--border-strong)')

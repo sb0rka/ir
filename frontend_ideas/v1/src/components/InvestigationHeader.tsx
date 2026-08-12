@@ -14,6 +14,7 @@ import {
   GitBranch,
   Inbox,
   Network,
+  PanelRight,
   Table2,
   X,
 } from 'lucide-react'
@@ -29,6 +30,8 @@ export function InvestigationHeader({ investigationId }: { investigationId: stri
   const createChild = useAppStore((s) => s.createChildInvestigation)
   const setAgentPanelOpen = useAppStore((s) => s.setAgentPanelOpen)
   const agentPanelOpen = useAppStore((s) => s.agentPanelOpen)
+  const setDetailPanelOpen = useAppStore((s) => s.setDetailPanelOpen)
+  const detailPanelOpen = useAppStore((s) => s.detailPanelOpen)
   const setActiveTab = useAppStore((s) => s.setActiveTab)
 
   if (!inv) return null
@@ -117,8 +120,19 @@ export function InvestigationHeader({ investigationId }: { investigationId: stri
 
           <Button
             size="sm"
-            variant="ghost"
+            variant={detailPanelOpen ? 'default' : 'ghost'}
+            onClick={() => setDetailPanelOpen(!detailPanelOpen)}
+            title="Панель деталей выбранной сущности или события"
+          >
+            <PanelRight className="h-3.5 w-3.5" />
+            Детали
+          </Button>
+
+          <Button
+            size="sm"
+            variant={agentPanelOpen ? 'default' : 'ghost'}
             onClick={() => setAgentPanelOpen(!agentPanelOpen)}
+            title="Задачи ИИ-агента по расследованию"
           >
             <Bot className="h-3.5 w-3.5" />
             Задачи

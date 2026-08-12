@@ -187,8 +187,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   ),
   actionResults: {},
   contextQueue: {},
-  agentPanelOpen: true,
-  detailPanelOpen: true,
+  agentPanelOpen: false,
+  detailPanelOpen: false,
 
   setChips: (chips) => set({ chips }),
   addChip: (field, value) => {
@@ -243,7 +243,6 @@ export const useAppStore = create<AppState>((set, get) => ({
       tabs: [...get().tabs, inv.id],
       activeTab: inv.id,
       selectedAlertIds: [],
-      agentPanelOpen: true,
     })
     return inv.id
   },

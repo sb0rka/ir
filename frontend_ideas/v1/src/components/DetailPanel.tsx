@@ -71,8 +71,12 @@ export function DetailPanel({ investigationId }: { investigationId: string }) {
           </button>
         }
       >
-        <div className="p-4 text-sm text-fg-dim">
-          Выберите сущность на графе или событие в таблице / таймлайне
+        <div className="flex flex-col items-center gap-2 px-4 py-10 text-center">
+          <Search className="h-5 w-5 text-fg-dim" />
+          <div className="text-sm text-fg-muted">Здесь появятся детали</div>
+          <div className="text-xs text-fg-dim">
+            Кликните по узлу на графе, маркеру на таймлайне или строке в таблице
+          </div>
         </div>
       </Panel>
     )

@@ -1,30 +1,30 @@
 @import '@xyflow/react/dist/style.css';
 
 /*
-  Graph theme tokens — black/white to match the IR workspace chrome.
-  Severity accents stay chromatic; bg/borders/edges are monochrome.
+  Graph aliases over the app-wide Tailwind theme tokens (see src/index.css).
+  Single source of truth: change palette in @theme, graph follows.
 */
 :root {
-  --bg: #0a0a0a;
-  --bg-elevated: #111111;
-  --bg-panel: #111111;
-  --bg-node: #1a1a1a;
-  --border: #2e2e2e;
-  --border-strong: #3d3d3d;
-  --text: #e8e8e8;
-  --text-muted: #9a9a9a;
-  --text-dim: #6b6b6b;
-  --accent: #e8e8e8;
-  --accent-soft: rgba(232, 232, 232, 0.12);
+  --bg: var(--color-surface-0);
+  --bg-elevated: var(--color-surface-1);
+  --bg-panel: var(--color-surface-1);
+  --bg-node: var(--color-surface-2);
+  --border: var(--color-border);
+  --border-strong: var(--color-border-strong);
+  --text: var(--color-fg);
+  --text-muted: var(--color-fg-muted);
+  --text-dim: var(--color-fg-dim);
+  --accent: var(--color-accent);
+  --accent-soft: color-mix(in srgb, var(--color-accent) 12%, transparent);
   --edge-seed: #555555;
-  --edge-expanded: #9a9a9a;
-  --severity-critical: #ef4444;
-  --severity-high: #f97316;
-  --severity-medium: #eab308;
-  --severity-low: #3b82f6;
-  --timeline-track: #2e2e2e;
-  --timeline-brush: rgba(232, 232, 232, 0.12);
-  --grid-dot: #242424;
+  --edge-expanded: var(--color-fg-muted);
+  --severity-critical: var(--color-critical);
+  --severity-high: var(--color-high);
+  --severity-medium: var(--color-medium);
+  --severity-low: var(--color-low);
+  --timeline-track: var(--color-border);
+  --timeline-brush: color-mix(in srgb, var(--color-accent) 9%, transparent);
+  --grid-dot: var(--color-surface-3);
   color-scheme: dark;
 }
 

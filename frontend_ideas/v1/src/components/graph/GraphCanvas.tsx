@@ -14,6 +14,7 @@ import {
   type OnNodeDrag,
 } from '@xyflow/react'
 import { useWorkspaceStore } from '../../state/useWorkspaceStore'
+import { SEVERITY_COLOR } from './constants'
 import { buildVisibleGraph, type GraphNodeData } from './graph-adapters'
 import { AlertNode } from './nodes/AlertNode'
 import { EntityNode } from './nodes/EntityNode'
@@ -79,9 +80,11 @@ function GraphInner({ fitToken }: { fitToken: number }) {
   }, [derivedEdges, setEdges])
 
   useEffect(() => {
+    // Delay until React Flow has measured node dimensions, otherwise the
+    // viewport fits an empty bounding box and clips the top rows.
     const t = window.setTimeout(() => {
-      fitView({ padding: 0.18, duration: 300 })
-    }, 50)
+      fitView({ padding: 0.15, duration: 300 })
+    }, 180)
     return () => window.clearTimeout(t)
   }, [fitToken, fitView, derivedNodes.length])
 
@@ -123,7 +126,7 @@ function GraphInner({ fitToken }: { fitToken: number }) {
   if (!session) {
     return (
       <div className="flex h-full items-center justify-center text-sm text-[var(--text-dim)]">
-        No investigation
+        Расследование не выбрано
       </div>
     )
   }
@@ -152,19 +155,16 @@ function GraphInner({ fitToken }: { fitToken: number }) {
         size={1}
         color="var(--grid-dot)"
       />
-      <Controls showInteractive={false} />
+      <Controls showInteractive={false} position="bottom-left" />
       <MiniMap
         pannable
         zoomable
+        position="bottom-right"
+        style={{ width: 140, height: 92 }}
         nodeColor={(n) => {
           const d = n.data as GraphNodeData
-          if (d.kind === 'alert' && d.severity) {
-            if (d.severity === 'critical') return '#f43f5e'
-            if (d.severity === 'high') return '#f97316'
-            if (d.severity === 'medium') return '#eab308'
-            return '#22c55e'
-          }
-          return '#3d3d3d'
+          if (d.kind === 'alert' && d.severity) return SEVERITY_COLOR[d.severity]
+          return 'var(--border-strong)'
         }}
         maskColor="rgba(0, 0, 0, 0.7)"
       />
@@ -178,8 +178,9 @@ export function GraphCanvas({ fitToken }: { fitToken: number }) {
       <ReactFlowProvider>
         <GraphInner fitToken={fitToken} />
       </ReactFlowProvider>
-      <div className="pointer-events-none absolute bottom-3 left-3 rounded-md border border-[var(--border)] bg-[var(--bg-panel)]/90 px-2 py-1 text-[10px] text-[var(--text-dim)]">
-        Drag to move · Right-click entity to expand / collapse related
+      <div className="pointer-events-none absolute bottom-3 left-12 rounded-md border border-[var(--border)] bg-[var(--bg-panel)]/90 px-2 py-1 text-[10px] text-[var(--text-dim)]">
+        Узлы можно перетаскивать · правый клик по сущности — развернуть или
+        свернуть связанные
       </div>
     </div>
   )

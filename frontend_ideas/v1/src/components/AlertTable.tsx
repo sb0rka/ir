@@ -62,7 +62,7 @@ function AlertRow({
   return (
     <tr
       className={clsx(
-        'border-b border-border/60 hover:bg-surface-2/60',
+        'group border-b border-border/60 hover:bg-surface-2/60',
         selected && 'bg-surface-2',
         nested && 'bg-surface-0/40',
       )}
@@ -97,11 +97,12 @@ function AlertRow({
       <td className="px-3 py-2">
         <Button
           size="sm"
-          variant="ghost"
           onClick={() => start([alert.id])}
           title="Начать расследование"
+          className="opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100"
         >
           <Play className="h-3 w-3" />
+          Начать
         </Button>
       </td>
     </tr>
@@ -278,8 +279,13 @@ export function AlertTable() {
             )}
             {rows.length === 0 && (
               <tr>
-                <td colSpan={8} className="px-4 py-12 text-center text-fg-dim">
-                  Нет срабатываний по текущим фильтрам
+                <td colSpan={8} className="px-4 py-12 text-center">
+                  <div className="text-sm text-fg-muted">
+                    Нет срабатываний по текущим фильтрам
+                  </div>
+                  <div className="mt-1 text-xs text-fg-dim">
+                    Удалите часть чипов или расширьте окно времени
+                  </div>
                 </td>
               </tr>
             )}

@@ -139,14 +139,32 @@ function TimelineInner({
     })
   }, [span, windowStart])
 
+  const rangeActive =
+    range.start > windowStart + span * 0.001 ||
+    range.end < windowEnd - span * 0.001
+
   return (
-    <div className="flex h-[168px] flex-col border-t border-[var(--border)] bg-[var(--bg-panel)] px-4 py-3">
+    <div className="flex h-[176px] flex-col border-t border-[var(--border)] bg-[var(--bg-panel)] px-4 py-3">
       <div className="mb-2 flex items-center justify-between gap-3">
-        <div className="text-xs font-medium text-[var(--text)]">Timeline</div>
-        <div className="text-[10px] text-[var(--text-dim)]">
-          Drag to filter range · click marker · hover to highlight
+        <div className="flex items-center gap-3">
+          <div className="text-xs font-medium text-[var(--text)]">Таймлайн</div>
+          {rangeActive && (
+            <button
+              type="button"
+              className="rounded border border-[var(--border)] px-1.5 py-0.5 text-[10px] text-[var(--text-muted)] transition-colors hover:border-[var(--border-strong)] hover:text-[var(--text)]"
+              onClick={() =>
+                setTimeRange({ start: windowStart, end: windowEnd })
+              }
+            >
+              Сбросить диапазон
+            </button>
+          )}
         </div>
-        <div className="text-[10px] tabular-nums text-[var(--text-muted)]">
+        <div className="text-[10px] text-[var(--text-dim)]">
+          Потяните по шкале, чтобы отфильтровать граф по времени · клик по
+          маркеру — детали события
+        </div>
+        <div className="text-[11px] tabular-nums text-[var(--text-muted)]">
           {formatShortDate(range.start)} — {formatShortDate(range.end)}
         </div>
       </div>
@@ -159,17 +177,17 @@ function TimelineInner({
         onPointerUp={onPointerUp}
       >
         <div
-          className="pointer-events-none absolute inset-y-0 bg-[var(--timeline-brush)]"
+          className="pointer-events-none absolute inset-y-0 border-x border-[var(--border-strong)] bg-[var(--timeline-brush)]"
           style={{ left: `${brushPct.left}%`, width: `${brushPct.width}%` }}
         />
 
         {ticks.map((tick) => (
           <div
             key={tick.t}
-            className="pointer-events-none absolute bottom-0 top-0 border-l border-[var(--border)]"
+            className="pointer-events-none absolute bottom-0 top-0 border-l border-[var(--border)]/60"
             style={{ left: `${tick.pct}%` }}
           >
-            <span className="absolute bottom-1 left-1 text-[9px] tabular-nums text-[var(--text-dim)]">
+            <span className="absolute bottom-1 left-1.5 text-[10px] tabular-nums text-[var(--text-muted)]">
               {formatClock(tick.t)}
             </span>
           </div>
@@ -183,7 +201,7 @@ function TimelineInner({
             ? SEVERITY_COLOR[ev.severity]
             : 'var(--accent)'
           const selected = selectedEventId === ev.id
-          const lane = (idx % 3) * 18 + 10
+          const lane = (idx % 3) * 19 + 6
 
           return (
             <button
@@ -191,16 +209,16 @@ function TimelineInner({
               type="button"
               data-marker
               title={`${formatClock(ev.event_ts)} — ${ev.title}`}
-              className="absolute z-10 -translate-x-1/2 rounded-sm border px-1 py-0.5 text-left transition-opacity"
+              className="absolute z-10 -translate-x-1/2 rounded-sm border px-1.5 py-0.5 text-left transition-opacity"
               style={{
                 left: `${pct}%`,
                 top: lane,
                 borderColor: selected ? 'var(--accent)' : color,
                 background: selected
                   ? 'var(--accent-soft)'
-                  : 'var(--bg-node)',
-                opacity: inRange ? 1 : 0.2,
-                maxWidth: 120,
+                  : `color-mix(in srgb, ${color} 12%, var(--bg-node))`,
+                opacity: inRange ? 1 : 0.25,
+                maxWidth: 136,
               }}
               onMouseEnter={() =>
                 setHoverTime(toMs(ev.event_ts), ev.entity_ids)
@@ -212,7 +230,7 @@ function TimelineInner({
               }}
             >
               <div
-                className="truncate text-[9px] font-medium leading-tight"
+                className="truncate text-[10px] font-medium leading-tight"
                 style={{ color }}
               >
                 {ev.title}

@@ -99,8 +99,13 @@ export function AgentPanel({ investigationId }: { investigationId: string }) {
         )}
 
         {roots.length === 0 && (
-          <div className="text-sm text-fg-dim">
-            Нет задач. Запустите насыщение или создайте issue по сущности.
+          <div className="rounded border border-dashed border-border px-3 py-6 text-center">
+            <div className="text-sm text-fg-muted">Задач пока нет</div>
+            <div className="mt-1 text-xs text-fg-dim">
+              Запустите насыщение контекста — агент найдёт связанные события и
+              предложит их на ревью. Issue по сущности создаётся из панели
+              «Детали».
+            </div>
           </div>
         )}
 
