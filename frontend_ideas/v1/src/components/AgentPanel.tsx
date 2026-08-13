@@ -51,6 +51,7 @@ export function AgentPanel({ investigationId }: { investigationId: string }) {
   return (
     <Panel
       title="ИИ-агент · задачи"
+      side="left"
       className="w-96 shrink-0"
       actions={
         <div className="flex items-center gap-1">

@@ -31,6 +31,7 @@ export function InvestigationPage({ investigationId }: { investigationId: string
     <div className="flex h-full flex-col">
       <InvestigationHeader investigationId={investigationId} />
       <div className="flex min-h-0 flex-1">
+        {agentPanelOpen && <AgentPanel investigationId={investigationId} />}
         <div className="relative flex min-w-0 flex-1 flex-col">
           {inv.view === 'table' ? (
             <ContextTable investigationId={investigationId} />
@@ -44,7 +45,6 @@ export function InvestigationPage({ investigationId }: { investigationId: string
           )}
         </div>
         {detailPanelOpen && <DetailPanel investigationId={investigationId} />}
-        {agentPanelOpen && <AgentPanel investigationId={investigationId} />}
       </div>
     </div>
   )

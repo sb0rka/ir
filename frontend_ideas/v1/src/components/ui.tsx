@@ -101,14 +101,22 @@ export function Panel({
   children,
   actions,
   className,
+  side = 'right',
 }: {
   title?: React.ReactNode
   children: React.ReactNode
   actions?: React.ReactNode
   className?: string
+  side?: 'left' | 'right'
 }) {
   return (
-    <div className={clsx('flex h-full flex-col border-l border-border bg-surface-1', className)}>
+    <div
+      className={clsx(
+        'flex h-full flex-col border-border bg-surface-1',
+        side === 'left' ? 'border-r' : 'border-l',
+        className,
+      )}
+    >
       {title && (
         <div className="flex items-center justify-between border-b border-border px-3 py-2">
           <div className="text-xs font-semibold uppercase tracking-wider text-fg-muted">
