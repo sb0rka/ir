@@ -25,8 +25,8 @@ services:
 
   migrate-inv-schema:
     build:
-      context: db
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: db/Dockerfile
     restart: no
     env_file:
       - .env
@@ -43,8 +43,8 @@ services:
   
   migrate-inv:
     build:
-      context: db
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: db/Dockerfile
     depends_on:
       migrate-inv-schema:
         condition: service_completed_successfully
@@ -63,68 +63,64 @@ services:
     profiles:
       - migrate
 
-  # ir-api:
-  #   build:
-  #     context: .
-  #     dockerfile: apps/investigations/Dockerfile
-  #     args:
-  #       BINARY: ir-api
-  #   depends_on:
-  #     postgres:
-  #       condition: service_healthy
-  #     migrate-inv:
-  #       condition: service_completed_successfully
-  #   restart: unless-stopped
-  #   environment:
-  #     SERVER_ADDR: "0.0.0.0"
-  #     SERVER_PORT: "8090"
-  #     SERVER_CORS_WHITELIST: "${SERVER_CORS_WHITELIST:-http://localhost:5173,http://localhost:3000}"
-  #     DATABASE_URI: "postgres://postgres:${POSTGRES_PASSWORD:-irdev}@postgres:5432/investigations?search_path=inv"
-  #     LOG_FORMAT: "json"
-  #     # Публичный ключ платформы. Без него сервис поднимется,
-  #     # но любой запрос с токеном получит 401 — конфиг стенда неполон.
-  #     ACCESS_TOKEN_PUBLIC_KEY_FILE_PATH: "${ACCESS_TOKEN_PUBLIC_KEY_FILE_PATH:-}"
-  #     ACCESS_TOKEN_ISSUER: "${ACCESS_TOKEN_ISSUER:-auth.local}"
-  #     ACCESS_TOKEN_AUDIENCE: "${ACCESS_TOKEN_AUDIENCE:-api.local}"
-  #     ACCESS_TOKEN_KID: "${ACCESS_TOKEN_KID:-ed25519-v1}"
-  #   ports:
-  #     - "${API_PORT:-8090}:8090"
-  #   volumes:
-  #     - ./keys:/keys:ro
-  #   healthcheck:
-  #     test: ["CMD-SHELL", "wget -qO- http://localhost:8090/readyz || exit 1"]
-  #     interval: 10s
-  #     timeout: 3s
-  #     retries: 5
+  # Applications
 
-  # gateway:
-  #   build:
-  #     context: .
-  #     dockerfile: apps/gateway/Dockerfile
-  #   depends_on:
-  #     postgres:
-  #       condition: service_healthy
-  #     migrate-inv:
-  #       condition: service_completed_successfully
-  #   restart: unless-stopped
-  #   environment:
-  #     SERVER_ADDR: "0.0.0.0"
-  #     SERVER_PORT: "8091"
-  #     SERVER_CORS_WHITELIST: "${SERVER_CORS_WHITELIST:-http://localhost:5173,http://localhost:3000}"
-  #     AUTH_DISABLED: "true"
-  #     DATABASE_URI: "postgres://postgres:${POSTGRES_PASSWORD:-irdev}@postgres:5432/investigations?search_path=inv"
-  #     PROJECT_SOURCE_ALLOWLISTS: '{"abcdef1234":["maxpatrol-siem","pt-sandbox"]}'
-  #     LOG_FORMAT: "json"
-  #     MOCK_EVENT_COUNT: "${GATEWAY_MOCK_EVENT_COUNT:-50000}"
-  #     MOCK_ENDPOINT_COUNT: "${GATEWAY_MOCK_ENDPOINT_COUNT:-5000}"
-  #     MOCK_HISTORY_DAYS: "${GATEWAY_MOCK_HISTORY_DAYS:-90}"
-  #   ports:
-  #     - "${GATEWAY_PORT:-8091}:8091"
-  #   healthcheck:
-  #     test: ["CMD-SHELL", "wget -qO- http://localhost:8091/readyz || exit 1"]
-  #     interval: 10s
-  #     timeout: 3s
-  #     retries: 5
+  ir-api:
+    build:
+      context: .
+      dockerfile: apps/investigations/Dockerfile
+      args:
+        BINARY: ir-api
+    restart: unless-stopped
+    environment:
+      SERVER_ADDR: "0.0.0.0"
+      SERVER_PORT: "8090"
+      SERVER_CORS_WHITELIST: "${SERVER_CORS_WHITELIST:-http://localhost:5173,http://localhost:3000}"
+      DATABASE_URI: "postgres://postgres:${POSTGRES_PASSWORD:-irdev}@postgres:5432/investigations?search_path=inv"
+      LOG_FORMAT: "${LOG_FORMAT:-text}"
+      # Публичный ключ платформы. Без него сервис поднимется,
+      # но любой запрос с токеном получит 401 — конфиг стенда неполон.
+      ACCESS_TOKEN_PUBLIC_KEY_FILE_PATH: "${ACCESS_TOKEN_PUBLIC_KEY_FILE_PATH:-}"
+      ACCESS_TOKEN_ISSUER: "${ACCESS_TOKEN_ISSUER:-auth.local}"
+      ACCESS_TOKEN_AUDIENCE: "${ACCESS_TOKEN_AUDIENCE:-api.local}"
+      ACCESS_TOKEN_KID: "${ACCESS_TOKEN_KID:-ed25519-v1}"
+    ports:
+      - "${API_PORT:-8090}:8090"
+    volumes:
+      - ./keys:/keys:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8090/readyz || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    profiles:
+      - apps
+
+  gateway:
+    build:
+      context: .
+      dockerfile: apps/gateway/Dockerfile
+    restart: unless-stopped
+    environment:
+      SERVER_ADDR: "0.0.0.0"
+      SERVER_PORT: "8091"
+      SERVER_CORS_WHITELIST: "${SERVER_CORS_WHITELIST:-http://localhost:5173,http://localhost:3000}"
+      AUTH_DISABLED: "true"
+      DATABASE_URI: "postgres://postgres:${POSTGRES_PASSWORD:-irdev}@postgres:5432/investigations?search_path=inv"
+      PROJECT_SOURCE_ALLOWLISTS: '{"abcdef1234":["maxpatrol-siem","pt-sandbox"]}'
+      LOG_FORMAT: "${LOG_FORMAT:-text}"
+      MOCK_EVENT_COUNT: "${GATEWAY_MOCK_EVENT_COUNT:-50000}"
+      MOCK_ENDPOINT_COUNT: "${GATEWAY_MOCK_ENDPOINT_COUNT:-5000}"
+      MOCK_HISTORY_DAYS: "${GATEWAY_MOCK_HISTORY_DAYS:-90}"
+    ports:
+      - "${GATEWAY_PORT:-8091}:8091"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8091/readyz || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    profiles:
+      - apps
 
 volumes:
   pgdata:

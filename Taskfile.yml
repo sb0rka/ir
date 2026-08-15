@@ -221,20 +221,15 @@ tasks:
       - task: test
       - task: typecheck
 
-  dev:
-    desc: Поднять локальный стенд (Postgres + ir-api)
+  dev:up:
+    desc: Start local stack (Postgres + migrations + apps)
     cmds:
-      - docker compose up -d --build
+      - docker compose --profile container-db --profile migrate --profile apps up -d
 
-  dev-down:
-    desc: Остановить стенд
+  dev:down:
+    desc: Stop local stack
     cmds:
-      - docker compose down
-
-  dev-logs:
-    desc: Логи стенда
-    cmds:
-      - docker compose logs -f ir-api gateway
+      - docker compose --profile container-db --profile migrate --profile apps down
 
   db:up:
     desc: Start local Postgres (container-db profile)
@@ -255,3 +250,9 @@ tasks:
     desc: Stop local Postgres and delete its volume
     cmds:
       - docker compose --profile container-db --profile migrate down -v
+
+  exec:gateway:
+    desc: Execute gateway
+    dir: bin
+    cmds:
+      - ./gateway {{.CLI_ARGS}}
