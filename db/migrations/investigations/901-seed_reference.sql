@@ -1,11 +1,9 @@
--- Migration: 003 справочники и демо-конфигурация
---
 -- Ядро типов сущностей и базовые типы связей — без них не построить граф.
 -- Источники засеяны четырьмя классами: SIEM, EDR, NDR, инфраструктурные логи.
 
 BEGIN;
 
-SET LOCAL search_path = inv, public, pg_temp;
+SET LOCAL search_path = :"DB_INV_SCHEMA_NAME", pg_temp;
 
 INSERT INTO entity_types (code, title, category) VALUES
     ('host',      'Узел',           'asset'),
@@ -47,7 +45,7 @@ INSERT INTO sources (code, kind, title) VALUES
     ('siem',  'siem',  'SIEM (демо-датасет)'),
     ('edr',   'edr',   'EDR (демо-датасет)'),
     ('ndr',   'ndr',   'NDR (демо-датасет)'),
-    ('infra', 'infra', 'Инфраструктурные логи (демо-датасет)')
+    ('infra_logs', 'infra_logs', 'Инфраструктурные логи (демо-датасет)')
 ON CONFLICT (code) DO NOTHING;
 
 COMMIT;

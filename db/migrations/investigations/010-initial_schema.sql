@@ -1,21 +1,14 @@
--- Migration: 002 таблицы расследований
---
--- Локальной таблицы пользователей нет: субъекты приходят из auth платформы,
--- ссылки — *_subject_id (UUID). Расследования и под-расследования — одна
--- таблица с parent_id; отдельной сущности «находка» нет, гипотеза это
--- под-расследование со своим вердиктом.
---
--- Ссылки на SOM (issues, workspaces) внешними ключами не закрыты: другая база.
--- Целостность этих ссылок держит сервис.
+-- Migration: 90ed76030198
 
 BEGIN;
 
-SET LOCAL search_path = inv, public, pg_temp;
+SET LOCAL search_path = :"DB_INV_SCHEMA_NAME", pg_temp;
+
+-- FUNCTIONS
 
 CREATE OR REPLACE FUNCTION set_updated_at()
 RETURNS trigger
 LANGUAGE plpgsql
-SET search_path = inv, pg_temp
 AS $$
 BEGIN
     NEW.updated_at = now();
@@ -23,20 +16,21 @@ BEGIN
 END;
 $$;
 
--- СПРАВОЧНИКИ И КОНФИГУРАЦИЯ
+-- REFERENCE DATA
 
 CREATE TABLE IF NOT EXISTS sources (
     code VARCHAR(32) NOT NULL,
 
     kind VARCHAR(16) NOT NULL
-        CHECK (kind IN ('siem', 'edr', 'ndr', 'infra', 'sandbox', 'other')),
+        CHECK (kind IN ('siem', 'edr', 'ndr', 'sandbox', 'infra_logs')),
     title VARCHAR NOT NULL,
     is_enabled BOOLEAN DEFAULT true NOT NULL,
 
     created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
 
-    CONSTRAINT pk_sources PRIMARY KEY (code)
+    CONSTRAINT pk_sources PRIMARY KEY (code),
+    CONSTRAINT uq_sources_title UNIQUE (title)
 );
 
 DROP TRIGGER IF EXISTS trg_sources_set_updated_at ON sources;
@@ -45,20 +39,25 @@ BEFORE UPDATE ON sources
 FOR EACH ROW
 EXECUTE FUNCTION set_updated_at();
 
--- Ядро (host, user, account, email, process, ip, domain, url, file_hash)
--- засевается миграцией; периферия вроде ja3 или registry_key добавляется
--- строкой справочника, без выкладки.
 CREATE TABLE IF NOT EXISTS entity_types (
     code VARCHAR(64) NOT NULL,
 
     title VARCHAR NOT NULL,
     category VARCHAR(32) NOT NULL
-        CHECK (category IN ('identity', 'network', 'execution', 'persistence', 'asset', 'other')),
+        CHECK (category IN ('identity', 'network', 'execution', 'persistence', 'asset')),
 
     created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
 
-    CONSTRAINT pk_entity_types PRIMARY KEY (code)
+    CONSTRAINT pk_entity_types PRIMARY KEY (code),
+    CONSTRAINT uq_entity_types_title UNIQUE (title)
 );
+
+DROP TRIGGER IF EXISTS trg_entity_types_set_updated_at ON entity_types;
+CREATE TRIGGER trg_entity_types_set_updated_at
+BEFORE UPDATE ON entity_types
+FOR EACH ROW
+EXECUTE FUNCTION set_updated_at();
 
 CREATE TABLE IF NOT EXISTS relation_types (
     code VARCHAR(64) NOT NULL,
@@ -69,16 +68,26 @@ CREATE TABLE IF NOT EXISTS relation_types (
     directed BOOLEAN DEFAULT true NOT NULL,
 
     created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
 
-    CONSTRAINT pk_relation_types PRIMARY KEY (code)
+    CONSTRAINT pk_relation_types PRIMARY KEY (code),
+    CONSTRAINT uq_relation_types_title UNIQUE (title)
 );
 
--- ДЕРЕВО РАССЛЕДОВАНИЙ
+DROP TRIGGER IF EXISTS trg_relation_types_set_updated_at ON relation_types;
+CREATE TRIGGER trg_relation_types_set_updated_at
+BEFORE UPDATE ON relation_types
+FOR EACH ROW
+EXECUTE FUNCTION set_updated_at();
+
+-- INVESTIGATIONS TREE
 
 CREATE TABLE IF NOT EXISTS investigations (
     id UUID DEFAULT gen_random_uuid() NOT NULL,
-    project_id VARCHAR(12) NOT NULL,
     parent_id UUID,
+
+    project_id VARCHAR(12),
+    workspace_id UUID,
 
     title VARCHAR NOT NULL,
     description VARCHAR,
@@ -86,16 +95,11 @@ CREATE TABLE IF NOT EXISTS investigations (
         CHECK (status IN ('open', 'closed')),
     severity VARCHAR(8)
         CHECK (severity IN ('low', 'medium', 'high', 'critical')),
-    -- Корень: incident | false_positive | not_affected | inconclusive.
-    -- Под-расследование: confirmed | rejected | inconclusive.
-    -- Подмножество по позиции в дереве проверяет сервис.
     verdict VARCHAR(16)
         CHECK (verdict IN ('incident', 'false_positive', 'not_affected',
                            'inconclusive', 'confirmed', 'rejected')),
     verdict_reason VARCHAR,
     confidence REAL CHECK (confidence >= 0 AND confidence <= 1),
-    -- Кто создал: аналитик, детерминированное правило или агент.
-    -- origin_ref уточняет — subject_id, код правила или идентификатор запуска.
     origin VARCHAR(8) DEFAULT 'analyst' NOT NULL
         CHECK (origin IN ('analyst', 'rule', 'agent')),
     origin_ref VARCHAR,
@@ -106,7 +110,7 @@ CREATE TABLE IF NOT EXISTS investigations (
     closed_at TIMESTAMP WITH TIME ZONE,
 
     CONSTRAINT pk_investigations PRIMARY KEY (id),
-    CONSTRAINT uq_investigations_id_project UNIQUE (id, project_id),
+    CONSTRAINT uq_investigations_id_project_workspace UNIQUE (id, project_id, workspace_id),
     CONSTRAINT fk_investigations_parent_id_investigations FOREIGN KEY (parent_id, project_id)
         REFERENCES investigations (id, project_id) ON DELETE CASCADE,
     CONSTRAINT ck_investigations_closed_verdict
@@ -130,30 +134,11 @@ CREATE INDEX IF NOT EXISTS ix_investigations_parent
 CREATE INDEX IF NOT EXISTS ix_investigations_status
     ON investigations (project_id, status, created_at DESC);
 
--- Логическая связь с SOM. Внешний UUID хранится без FK, потому что SOM живёт в другой БД.
-CREATE TABLE IF NOT EXISTS investigation_som_workspaces (
-    investigation_id UUID NOT NULL,
-    som_workspace_id UUID NOT NULL,
+CREATE INDEX IF NOT EXISTS ix_investigations_workspace
+    ON investigations (workspace_id)
+    WHERE workspace_id IS NOT NULL;
 
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
-
-    CONSTRAINT pk_investigation_som_workspaces PRIMARY KEY (investigation_id, som_workspace_id),
-    CONSTRAINT fk_investigation_som_workspaces_investigation FOREIGN KEY (investigation_id)
-        REFERENCES investigations (id) ON DELETE CASCADE
-);
-
-CREATE INDEX IF NOT EXISTS ix_investigation_som_workspaces_workspace
-    ON investigation_som_workspaces (som_workspace_id);
-
--- УЛИКИ
---
--- События и сущности принадлежат проекту, а не расследованию: один и тот же
--- хост или одна и та же сработка штатно фигурируют в нескольких кейсах, и
--- копировать их на каждый — значит потерять ответ на вопрос «где ещё это
--- встречалось», ради которого карточка сущности и существует.
---
--- Принадлежность расследованию вынесена в investigation_events и
--- investigation_entities. Там же живёт провенанс: кто затянул и зачем.
+-- EVIDENCE
 
 CREATE TABLE IF NOT EXISTS events (
     id UUID DEFAULT gen_random_uuid() NOT NULL,
@@ -169,15 +154,22 @@ CREATE TABLE IF NOT EXISTS events (
     raw_data JSONB,
     dedup_key VARCHAR NOT NULL,
 
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
+
     CONSTRAINT pk_events PRIMARY KEY (id),
     CONSTRAINT uq_events_id_project UNIQUE (id, project_id),
-    -- Одна запись источника — одна строка на проект. Затяжка в третий кейс
-    -- ничего не копирует, только добавляет связь.
     CONSTRAINT uq_events_dedup UNIQUE (project_id, dedup_key),
     CONSTRAINT uq_events_source UNIQUE (project_id, source_code, source_event_id),
     CONSTRAINT fk_events_source_code_sources FOREIGN KEY (source_code)
         REFERENCES sources (code)
 );
+
+DROP TRIGGER IF EXISTS trg_events_set_updated_at ON events;
+CREATE TRIGGER trg_events_set_updated_at
+BEFORE UPDATE ON events
+FOR EACH ROW
+EXECUTE FUNCTION set_updated_at();
 
 CREATE INDEX IF NOT EXISTS ix_events_timeline
     ON events (project_id, occurred_at, id);
@@ -185,7 +177,6 @@ CREATE INDEX IF NOT EXISTS ix_events_timeline
 CREATE INDEX IF NOT EXISTS ix_events_normalized
     ON events USING gin (normalized_data jsonb_path_ops);
 
--- Подстрочный поиск по командным строкам и значениям
 CREATE INDEX IF NOT EXISTS ix_events_normalized_trgm
     ON events USING gin ((normalized_data::text) gin_trgm_ops);
 
@@ -205,8 +196,6 @@ CREATE TABLE IF NOT EXISTS entities (
 
     CONSTRAINT pk_entities PRIMARY KEY (id),
     CONSTRAINT uq_entities_id_project UNIQUE (id, project_id),
-    -- Тип и ключ опознают вещь в пределах проекта. Между проектами записи не
-    -- склеиваются: dc-01 заказчика A и заказчика B — разные хосты.
     CONSTRAINT uq_entities_scope_type_key UNIQUE (project_id, type_code, canonical_key),
     CONSTRAINT fk_entities_type_code_entity_types FOREIGN KEY (type_code)
         REFERENCES entity_types (code)
@@ -218,8 +207,6 @@ BEFORE UPDATE ON entities
 FOR EACH ROW
 EXECUTE FUNCTION set_updated_at();
 
--- Участие сущности в событии — факт источника, а не мнение расследования,
--- поэтому кейса здесь нет.
 CREATE TABLE IF NOT EXISTS event_entity_relations (
     id UUID DEFAULT gen_random_uuid() NOT NULL,
     project_id VARCHAR(12) NOT NULL,
@@ -228,10 +215,11 @@ CREATE TABLE IF NOT EXISTS event_entity_relations (
 
     relation_code VARCHAR(64) NOT NULL,
 
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
+
     CONSTRAINT pk_event_entity_relations PRIMARY KEY (id),
     CONSTRAINT uq_event_entity_relations UNIQUE (event_id, entity_id, relation_code),
-    -- project_id в ключе с обеих сторон: без него событие одного проекта
-    -- связывалось бы с сущностью другого, и база бы это пропустила.
     CONSTRAINT fk_eer_event_id_events FOREIGN KEY (event_id, project_id)
         REFERENCES events (id, project_id) ON DELETE CASCADE,
     CONSTRAINT fk_eer_entity_id_entities FOREIGN KEY (entity_id, project_id)
@@ -240,10 +228,16 @@ CREATE TABLE IF NOT EXISTS event_entity_relations (
         REFERENCES relation_types (code)
 );
 
+DROP TRIGGER IF EXISTS trg_event_entity_relations_set_updated_at ON event_entity_relations;
+CREATE TRIGGER trg_event_entity_relations_set_updated_at
+BEFORE UPDATE ON event_entity_relations
+FOR EACH ROW
+EXECUTE FUNCTION set_updated_at();
+
 CREATE INDEX IF NOT EXISTS ix_eer_entity ON event_entity_relations (entity_id);
 CREATE INDEX IF NOT EXISTS ix_eer_event ON event_entity_relations (event_id);
 
--- СОСТАВ РАССЛЕДОВАНИЯ
+-- INVESTIGATION COMPONENTS
 
 CREATE TABLE IF NOT EXISTS investigation_events (
     investigation_id UUID NOT NULL,
@@ -253,8 +247,9 @@ CREATE TABLE IF NOT EXISTS investigation_events (
     attached_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
     attached_by VARCHAR(16) DEFAULT 'analyst' NOT NULL
         CHECK (attached_by IN ('analyst', 'agent', 'system')),
-    -- Зачем затянули: нарратив расследования, а не служебное поле.
     reason VARCHAR,
+
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
 
     CONSTRAINT pk_investigation_events PRIMARY KEY (investigation_id, event_id),
     CONSTRAINT uq_inv_events_project UNIQUE (investigation_id, event_id, project_id),
@@ -264,6 +259,12 @@ CREATE TABLE IF NOT EXISTS investigation_events (
         REFERENCES events (id, project_id) ON DELETE CASCADE
 );
 
+DROP TRIGGER IF EXISTS trg_investigation_events_set_updated_at ON investigation_events;
+CREATE TRIGGER trg_investigation_events_set_updated_at
+BEFORE UPDATE ON investigation_events
+FOR EACH ROW
+EXECUTE FUNCTION set_updated_at();
+
 CREATE INDEX IF NOT EXISTS ix_inv_events_event ON investigation_events (event_id);
 
 CREATE TABLE IF NOT EXISTS investigation_entities (
@@ -271,11 +272,11 @@ CREATE TABLE IF NOT EXISTS investigation_entities (
     entity_id UUID NOT NULL,
     project_id VARCHAR(12) NOT NULL,
 
-    -- Как попала в кейс: извлечена из события, введена аналитиком как
-    -- индикатор или предложена агентом.
     added_via VARCHAR(16) DEFAULT 'event' NOT NULL
         CHECK (added_via IN ('event', 'ioc', 'agent', 'analyst')),
     added_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
+
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
 
     CONSTRAINT pk_investigation_entities PRIMARY KEY (investigation_id, entity_id),
     CONSTRAINT uq_inv_entities_project UNIQUE (investigation_id, entity_id, project_id),
@@ -285,10 +286,15 @@ CREATE TABLE IF NOT EXISTS investigation_entities (
         REFERENCES entities (id, project_id) ON DELETE CASCADE
 );
 
+DROP TRIGGER IF EXISTS trg_investigation_entities_set_updated_at ON investigation_entities;
+CREATE TRIGGER trg_investigation_entities_set_updated_at
+BEFORE UPDATE ON investigation_entities
+FOR EACH ROW
+EXECUTE FUNCTION set_updated_at();
+
 CREATE INDEX IF NOT EXISTS ix_inv_entities_entity ON investigation_entities (entity_id);
 
--- ГРАФ
--- Проект графа однозначно задаёт investigation_id; project_id здесь не дублируется.
+-- GRAPH
 
 CREATE TABLE IF NOT EXISTS graph_nodes (
     id UUID DEFAULT gen_random_uuid() NOT NULL,
@@ -300,43 +306,50 @@ CREATE TABLE IF NOT EXISTS graph_nodes (
     origin VARCHAR(8) NOT NULL CHECK (origin IN ('analyst', 'rule', 'agent')),
 
     created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
 
     CONSTRAINT pk_graph_nodes PRIMARY KEY (id),
     CONSTRAINT uq_graph_nodes_id_investigation UNIQUE (id, investigation_id),
-    -- Ровно одна ссылка, и она соответствует объявленному типу узла
     CONSTRAINT ck_graph_nodes_target CHECK (
         (node_type = 'entity' AND entity_id IS NOT NULL AND event_id IS NULL) OR
         (node_type = 'event'  AND event_id  IS NOT NULL AND entity_id IS NULL)
     ),
     CONSTRAINT fk_graph_nodes_investigation_id_investigations FOREIGN KEY (investigation_id)
         REFERENCES investigations (id) ON DELETE CASCADE,
-    -- Ссылка не на общую строку, а на её принадлежность этому расследованию:
-    -- на граф кейса не попадёт то, что в кейс не затянуто, а отвязка события
-    -- унесёт узел и висящие на нём рёбра.
     CONSTRAINT fk_graph_nodes_entity FOREIGN KEY (investigation_id, entity_id)
         REFERENCES investigation_entities (investigation_id, entity_id) ON DELETE CASCADE,
     CONSTRAINT fk_graph_nodes_event FOREIGN KEY (investigation_id, event_id)
         REFERENCES investigation_events (investigation_id, event_id) ON DELETE CASCADE
 );
 
--- Одна сущность (событие) — один узел в расследовании, иначе рёбра расщепятся
+DROP TRIGGER IF EXISTS trg_graph_nodes_set_updated_at ON graph_nodes;
+CREATE TRIGGER trg_graph_nodes_set_updated_at
+BEFORE UPDATE ON graph_nodes
+FOR EACH ROW
+EXECUTE FUNCTION set_updated_at();
+
 CREATE UNIQUE INDEX IF NOT EXISTS uq_graph_nodes_entity
     ON graph_nodes (investigation_id, entity_id) WHERE entity_id IS NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS uq_graph_nodes_event
     ON graph_nodes (investigation_id, event_id) WHERE event_id IS NOT NULL;
 
--- Узел может быть связан с одной или несколькими задачами SOM.
--- Целостность som_issue_id проверяет интеграционный слой: межбазового FK здесь быть не может.
 CREATE TABLE IF NOT EXISTS graph_node_som_issues (
     graph_node_id UUID NOT NULL,
     som_issue_id UUID NOT NULL,
 
     created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
 
     CONSTRAINT pk_graph_node_som_issues PRIMARY KEY (graph_node_id, som_issue_id),
     CONSTRAINT fk_graph_node_som_issues_node FOREIGN KEY (graph_node_id)
         REFERENCES graph_nodes (id) ON DELETE CASCADE
 );
+
+DROP TRIGGER IF EXISTS trg_graph_node_som_issues_set_updated_at ON graph_node_som_issues;
+CREATE TRIGGER trg_graph_node_som_issues_set_updated_at
+BEFORE UPDATE ON graph_node_som_issues
+FOR EACH ROW
+EXECUTE FUNCTION set_updated_at();
 
 CREATE INDEX IF NOT EXISTS ix_graph_node_som_issues_issue
     ON graph_node_som_issues (som_issue_id);
@@ -352,10 +365,8 @@ CREATE TABLE IF NOT EXISTS edges (
         CHECK (status IN ('proposed', 'confirmed', 'rejected')),
     reject_reason VARCHAR,
     confidence REAL CHECK (confidence >= 0 AND confidence <= 1),
-    -- Обоснование связи. Для origin=agent обязательно — проверяет сервис.
     why VARCHAR,
     origin VARCHAR(8) NOT NULL CHECK (origin IN ('analyst', 'rule', 'agent')),
-    -- Кто именно: subject_id аналитика, код правила или идентификатор запуска
     origin_ref VARCHAR,
     metadata JSONB DEFAULT '{}'::jsonb NOT NULL,
     version INTEGER DEFAULT 1 NOT NULL,
@@ -365,15 +376,11 @@ CREATE TABLE IF NOT EXISTS edges (
 
     CONSTRAINT pk_edges PRIMARY KEY (id),
     CONSTRAINT uq_edges_id_investigation UNIQUE (id, investigation_id),
-    -- Идемпотентность: повторный прогон правил и агента не плодит дубли
     CONSTRAINT uq_edges_triple UNIQUE (investigation_id, source_node_id, target_node_id, relation_code),
     CONSTRAINT ck_edges_rejected_reason
         CHECK (status <> 'rejected' OR reject_reason IS NOT NULL),
     CONSTRAINT fk_edges_investigation_id_investigations FOREIGN KEY (investigation_id)
         REFERENCES investigations (id) ON DELETE CASCADE,
-    -- Составными, а не по одному id: иначе ребро одного расследования могло бы
-    -- связать узлы другого — обе строки валидны по отдельности, и заметить это
-    -- было бы нечем. Ключ uq_graph_nodes_id_investigation заведён ровно под это.
     CONSTRAINT fk_edges_source_node_id_graph_nodes FOREIGN KEY (source_node_id, investigation_id)
         REFERENCES graph_nodes (id, investigation_id) ON DELETE CASCADE,
     CONSTRAINT fk_edges_target_node_id_graph_nodes FOREIGN KEY (target_node_id, investigation_id)
@@ -393,16 +400,13 @@ CREATE INDEX IF NOT EXISTS ix_edges_investigation_status
 CREATE INDEX IF NOT EXISTS ix_edges_source ON edges (source_node_id);
 CREATE INDEX IF NOT EXISTS ix_edges_target ON edges (target_node_id);
 
--- Основания связи. Инвариант тот же — цитируемое событие принадлежит тому же
--- расследованию, что и ребро, — но держится теперь через состав кейса:
--- события общие для проекта, «своим» его делает запись в investigation_events.
--- Отвязали событие от кейса — основания в нём отвалились вместе с ним.
 CREATE TABLE IF NOT EXISTS edge_evidence (
     edge_id UUID NOT NULL,
     event_id UUID NOT NULL,
     investigation_id UUID NOT NULL,
 
     created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
 
     CONSTRAINT pk_edge_evidence PRIMARY KEY (edge_id, event_id),
     CONSTRAINT fk_edge_evidence_edge FOREIGN KEY (edge_id, investigation_id)
@@ -411,9 +415,15 @@ CREATE TABLE IF NOT EXISTS edge_evidence (
         REFERENCES investigation_events (investigation_id, event_id) ON DELETE CASCADE
 );
 
+DROP TRIGGER IF EXISTS trg_edge_evidence_set_updated_at ON edge_evidence;
+CREATE TRIGGER trg_edge_evidence_set_updated_at
+BEFORE UPDATE ON edge_evidence
+FOR EACH ROW
+EXECUTE FUNCTION set_updated_at();
+
 CREATE INDEX IF NOT EXISTS ix_edge_evidence_event ON edge_evidence (event_id);
 
--- ДОСТУП
+-- ACCESS CONTROL
 
 CREATE TABLE IF NOT EXISTS role_bindings (
     project_id VARCHAR(12) NOT NULL,
@@ -429,11 +439,11 @@ CREATE TABLE IF NOT EXISTS role_bindings (
 CREATE INDEX IF NOT EXISTS ix_role_bindings_subject ON role_bindings (subject_id);
 
 WITH updated AS (
-    UPDATE version_investigations
+    UPDATE version_platform
     SET version_num = '90ed76030198'
-    RETURNING version_num
+    RETURNING version_platform.version_num
 )
-INSERT INTO version_investigations (version_num)
+INSERT INTO version_platform (version_num)
 SELECT '90ed76030198'
 WHERE NOT EXISTS (SELECT 1 FROM updated)
 RETURNING version_num;
