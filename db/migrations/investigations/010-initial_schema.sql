@@ -2,7 +2,7 @@
 
 BEGIN;
 
-SET LOCAL search_path = :"DB_INV_SCHEMA_NAME", pg_temp;
+SET LOCAL search_path = :"DB_INV_SCHEMA_NAME", public, pg_temp;
 
 -- FUNCTIONS
 
@@ -110,7 +110,7 @@ CREATE TABLE IF NOT EXISTS investigations (
     closed_at TIMESTAMP WITH TIME ZONE,
 
     CONSTRAINT pk_investigations PRIMARY KEY (id),
-    CONSTRAINT uq_investigations_id_project_workspace UNIQUE (id, project_id, workspace_id),
+    CONSTRAINT uq_investigations_id_project UNIQUE (id, project_id),
     CONSTRAINT fk_investigations_parent_id_investigations FOREIGN KEY (parent_id, project_id)
         REFERENCES investigations (id, project_id) ON DELETE CASCADE,
     CONSTRAINT ck_investigations_closed_verdict
@@ -439,11 +439,11 @@ CREATE TABLE IF NOT EXISTS role_bindings (
 CREATE INDEX IF NOT EXISTS ix_role_bindings_subject ON role_bindings (subject_id);
 
 WITH updated AS (
-    UPDATE version_platform
+    UPDATE version_investigations
     SET version_num = '90ed76030198'
-    RETURNING version_platform.version_num
+    RETURNING version_investigations.version_num
 )
-INSERT INTO version_platform (version_num)
+INSERT INTO version_investigations (version_num)
 SELECT '90ed76030198'
 WHERE NOT EXISTS (SELECT 1 FROM updated)
 RETURNING version_num;

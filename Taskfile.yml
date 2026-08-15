@@ -224,19 +224,34 @@ tasks:
   dev:
     desc: Поднять локальный стенд (Postgres + ir-api)
     cmds:
-      - docker compose -f docker-compose.dev.yml up -d --build
+      - docker compose up -d --build
 
   dev-down:
     desc: Остановить стенд
     cmds:
-      - docker compose -f docker-compose.dev.yml down
+      - docker compose down
 
   dev-logs:
     desc: Логи стенда
     cmds:
-      - docker compose -f docker-compose.dev.yml logs -f ir-api gateway
+      - docker compose logs -f ir-api gateway
 
-  migrate:
-    desc: Применить миграции к локальной базе
+  db:up:
+    desc: Start local Postgres (container-db profile)
     cmds:
-      - docker compose -f docker-compose.dev.yml up migrate --exit-code-from migrate
+      - docker compose --profile container-db up -d postgres
+
+  db:migrate:
+    desc: Apply investigations database migrations
+    cmds:
+      - docker compose --profile migrate run --rm migrate-inv
+
+  db:down:
+    desc: Stop local Postgres
+    cmds:
+      - docker compose --profile container-db down
+
+  db:wipe:
+    desc: Stop local Postgres and delete its volume
+    cmds:
+      - docker compose --profile container-db --profile migrate down -v
