@@ -221,30 +221,15 @@ tasks:
       - task: test
       - task: typecheck
 
-  dev:up:
-    desc: Start local stack (Postgres + migrations + apps)
-    cmds:
-      - docker compose --profile container-db --profile migrate --profile apps up -d
-
-  dev:logs:
-    desc: Follow the logs of the local stack
-    cmds:
-      - docker compose --profile container-db --profile migrate --profile apps logs -f
-
-  dev:down:
-    desc: Stop local stack
-    cmds:
-      - docker compose --profile container-db --profile migrate --profile apps down
-
   db:up:
-    desc: Start local Postgres (container-db profile)
+    desc: Start local Postgres
     cmds:
-      - docker compose --profile container-db up -d postgres
+      - docker compose --profile container-db up -d
 
   db:migrate:
     desc: Apply investigations database migrations
     cmds:
-      - docker compose --profile migrate run --rm migrate-inv
+      - docker compose --profile migrate run --rm --build migrate-inv
 
   db:down:
     desc: Stop local Postgres
@@ -255,6 +240,21 @@ tasks:
     desc: Stop local Postgres and delete its volume
     cmds:
       - docker compose --profile container-db --profile migrate down -v
+
+  apps:up:
+    desc: Start local apps (ir-api, gateway)
+    cmds:
+      - docker compose --profile apps up -d --build
+
+  apps:logs:
+    desc: Follow logs of local apps
+    cmds:
+      - docker compose --profile apps logs -f
+
+  apps:down:
+    desc: Stop local apps
+    cmds:
+      - docker compose --profile apps down
 
   exec:gateway:
     desc: Execute gateway
