@@ -32,4 +32,4 @@ cd apps/gateway && go vet ./...
 docker compose -f docker-compose.dev.yml up -d --build gateway
 ```
 
-Smoke `readyz`, the registered source descriptors, MaxPatrol SIEM events, and PT Sandbox analysis. Test another capability only after its provider contract is reviewed and registered.
+Smoke `ping`, the registered source descriptors, MaxPatrol SIEM events, and PT Sandbox analysis. Test another capability only after its provider contract is reviewed and registered.

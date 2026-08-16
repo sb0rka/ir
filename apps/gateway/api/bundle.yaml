@@ -291,16 +291,22 @@ paths:
       responses:
         '200':
           $ref: '#/components/responses/HealthResponse'
-  /readyz:
+  /ping:
     get:
       tags:
         - health
-      summary: Check service readiness
-      operationId: readyz
+      summary: Ping
+      operationId: ping
       security: []
       responses:
         '200':
-          $ref: '#/components/responses/HealthResponse'
+          description: pong
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: pong
+              example: pong
   /api/v1/sources:
     get:
       tags:

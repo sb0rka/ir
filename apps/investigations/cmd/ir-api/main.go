@@ -57,7 +57,6 @@ func run() error {
 		Log:    log,
 		Server: api,
 		Roles:  api,
-		DB:     db,
 	})
 
 	srv := &http.Server{

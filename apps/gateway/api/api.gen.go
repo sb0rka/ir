@@ -718,9 +718,9 @@ type ServerInterface interface {
 	// Healthz Check process health
 	// (GET /healthz)
 	Healthz(w http.ResponseWriter, r *http.Request)
-	// Readyz Check service readiness
-	// (GET /readyz)
-	Readyz(w http.ResponseWriter, r *http.Request)
+	// Ping Ping
+	// (GET /ping)
+	Ping(w http.ResponseWriter, r *http.Request)
 }
 
 // ServerInterfaceWrapper converts contexts to parameters.
@@ -1088,11 +1088,11 @@ func (siw *ServerInterfaceWrapper) Healthz(w http.ResponseWriter, r *http.Reques
 	handler.ServeHTTP(w, r)
 }
 
-// Readyz operation middleware
-func (siw *ServerInterfaceWrapper) Readyz(w http.ResponseWriter, r *http.Request) {
+// Ping operation middleware
+func (siw *ServerInterfaceWrapper) Ping(w http.ResponseWriter, r *http.Request) {
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.Readyz(w, r)
+		siw.Handler.Ping(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1229,7 +1229,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/entities/lookup", wrapper.LookupEntity)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/events/search", wrapper.SearchEvents)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/healthz", wrapper.Healthz)
-	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/readyz", wrapper.Readyz)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/ping", wrapper.Ping)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/sources", wrapper.ListSources)
 
 	return m

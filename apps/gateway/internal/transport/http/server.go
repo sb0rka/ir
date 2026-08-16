@@ -63,7 +63,7 @@ func NewHandler(cfg config.Config, log *slog.Logger, service *service.Service, r
 
 	root := http.NewServeMux()
 	root.HandleFunc("GET /healthz", server.Healthz)
-	root.HandleFunc("GET /readyz", server.Readyz)
+	root.HandleFunc("GET /ping", server.Ping)
 	root.HandleFunc("GET /openapi.yaml", serveOpenAPI)
 	root.HandleFunc("GET /swagger", serveSwagger)
 	root.Handle("/api/", protected)
@@ -81,8 +81,9 @@ func (server *Server) Healthz(w http.ResponseWriter, _ *http.Request) {
 	respondJSON(w, http.StatusOK, api.Health{Status: api.Ok})
 }
 
-func (server *Server) Readyz(w http.ResponseWriter, _ *http.Request) {
-	respondJSON(w, http.StatusOK, api.Health{Status: api.Ok})
+func (server *Server) Ping(w http.ResponseWriter, _ *http.Request) {
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte("pong"))
 }
 
 func (server *Server) writeServiceError(w http.ResponseWriter, err error) {

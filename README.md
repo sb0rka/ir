@@ -39,7 +39,7 @@ task dev-down
 docker compose -f docker-compose.dev.yml up -d --build
 
 curl http://localhost:8090/healthz
-curl http://localhost:8090/readyz
+curl http://localhost:8090/ping
 ```
 
 Для защищённых ручек нужен access-токен платформы с audience `api.local`,

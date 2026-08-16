@@ -226,6 +226,11 @@ tasks:
     cmds:
       - docker compose --profile container-db --profile migrate --profile apps up -d
 
+  dev:logs:
+    desc: Follow the logs of the local stack
+    cmds:
+      - docker compose --profile container-db --profile migrate --profile apps logs -f
+
   dev:down:
     desc: Stop local stack
     cmds:
@@ -256,3 +261,9 @@ tasks:
     dir: bin
     cmds:
       - ./gateway {{.CLI_ARGS}}
+
+  exec:ir-api:
+    desc: Execute ir-api
+    dir: bin
+    cmds:
+      - ./ir-api {{.CLI_ARGS}}
