@@ -23,25 +23,6 @@ export interface paths {
          */
         get: operations["listEntities"];
         put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/entities": {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored. */
-                "X-Project-ID": components["parameters"]["ProjectId"];
-            };
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
         /**
          * Add an entity by hand
          * @description Creates a project entity or reuses one with the same type and canonical key, then links it to the investigation.
@@ -87,7 +68,7 @@ export interface paths {
         patch: operations["updateEntity"];
         trace?: never;
     };
-    "/entities/{entity_id}/investigations/{investigation_id}": {
+    "/investigations/{investigation_id}/entities/{entity_id}": {
         parameters: {
             query?: never;
             header: {
@@ -138,6 +119,8 @@ export interface components {
             metadata?: {
                 [key: string]: unknown;
             };
+            /** @description References that open this entity in the tools where it was found. */
+            sources: components["schemas"]["EntitySource"][];
             /**
              * Format: date-time
              * @description Earliest project event that mentions the entity.
@@ -149,6 +132,19 @@ export interface components {
              */
             last_seen?: string | null;
         };
+        EntitySource: {
+            /** @description Code of the tool that supplied this entity. */
+            source_code: string;
+            /** @description Identifier or stable query key used for this entity in that tool. */
+            source_entity_id: string;
+            /** @description Link or query that opens the entity in the source tool. */
+            source_ref?: string | null;
+            /**
+             * Format: date-time
+             * @description When Gateway read this reference from the source.
+             */
+            fetched_at: string;
+        };
         /**
          * @description How an entity came to be part of an investigation.
          * @enum {string}
@@ -156,11 +152,6 @@ export interface components {
         EntityOrigin: "event" | "ioc" | "agent" | "analyst";
         /** @description An entity entered by hand, before any event mentions it. */
         EntityCreate: {
-            /**
-             * Format: uuid
-             * @description Investigation to link the entity to.
-             */
-            investigation_id: string;
             /** @description Entity type code from the reference dictionary. */
             type_code: string;
             /** @description Normalized identity unique within the entity type. */
@@ -181,10 +172,10 @@ export interface components {
                 [key: string]: unknown;
             };
         };
-        /** @description One page of entities. */
+        /** @description One page of entities and the cursor for continuing it. */
         EntityPage: {
             /** @description The entities on this page. */
-            items: components["schemas"]["Entity"][];
+            entities: components["schemas"]["Entity"][];
             /** @description Pass as `cursor` to get the next page. Absent on the last page. */
             next_cursor?: string | null;
         };
@@ -368,7 +359,10 @@ export interface operations {
                 /** @description Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored. */
                 "X-Project-ID": components["parameters"]["ProjectId"];
             };
-            path?: never;
+            path: {
+                /** @description Identifier of an investigation in the selected project. */
+                investigation_id: components["parameters"]["InvestigationId"];
+            };
             cookie?: never;
         };
         requestBody: {

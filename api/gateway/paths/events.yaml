@@ -39,17 +39,54 @@ paths:
         default:
           $ref: '../shared/responses.yaml#/ErrorResponse'
 
+  /api/v1/context/resolve:
+    post:
+      tags: [events, entities]
+      summary: Resolve selected source records
+      operationId: resolveContext
+      parameters:
+        - $ref: '../shared/parameters.yaml#/ProjectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResolveContextRequest'
+      responses:
+        '200':
+          description: Current normalized data for every selected source record.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResolveContextResponse'
+        '400': { $ref: '../shared/responses.yaml#/BadRequest' }
+        '401': { $ref: '../shared/responses.yaml#/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/NotFound' }
+        '422': { $ref: '../shared/responses.yaml#/ValidationError' }
+        '502': { $ref: '../shared/responses.yaml#/BadGateway' }
+        '504': { $ref: '../shared/responses.yaml#/GatewayTimeout' }
+        '500': { $ref: '../shared/responses.yaml#/InternalError' }
+        default:
+          $ref: '../shared/responses.yaml#/ErrorResponse'
+
 components:
   schemas:
     Event:
       type: object
       description: Security event normalized from one source record.
-      required: [id, type, title, severity, occurred_at, entity_ids, attributes, provenance]
+      required: [source_code, source_event_id, type, title, severity, occurred_at, entities, attributes, fetched_at]
       properties:
-        id:
+        source_code:
           type: string
-          format: uuid
-          description: Deterministic identifier derived from the source and external event ID.
+          description: Code of the source that owns the event.
+        source_event_id:
+          type: string
+          description: Original event identifier assigned by that source.
+        source_ref:
+          type: string
+          format: uri
+          description: Optional link to the event in its source system.
         type:
           type: string
           description: Normalized event class.
@@ -64,20 +101,59 @@ components:
           type: string
           format: date-time
           description: Time when the event occurred in the source system.
-        entity_ids:
+        entities:
           type: array
           description: Canonical entities mentioned by the event.
           items:
-            type: string
-            format: uuid
+            $ref: '../shared/schemas.yaml#/EntityRef'
         attributes:
           type: object
           description: Selected event fields that have no canonical top-level property.
           additionalProperties: true
-        provenance:
-          description: Source record from which the event was normalized.
-          allOf:
-            - $ref: '../shared/schemas.yaml#/Provenance'
+        fetched_at:
+          type: string
+          format: date-time
+          description: Time when the Gateway obtained the source data.
+
+    ResolveContextRequest:
+      type: object
+      description: Source records selected by a client for persistence in an investigation.
+      required: [events, entities]
+      properties:
+        events:
+          type: array
+          maxItems: 500
+          uniqueItems: true
+          items:
+            $ref: '../shared/schemas.yaml#/EventSourceRef'
+        entities:
+          type: array
+          maxItems: 2000
+          uniqueItems: true
+          items:
+            $ref: '../shared/schemas.yaml#/EntitySourceRef'
+
+    ResolveContextResponse:
+      type: object
+      description: Normalized records and relationships resolved from source-owned identifiers.
+      required: [events, entities, relations, source_errors]
+      properties:
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/Event'
+        entities:
+          type: array
+          items:
+            $ref: '../shared/schemas.yaml#/Entity'
+        relations:
+          type: array
+          items:
+            $ref: '../shared/schemas.yaml#/Relation'
+        source_errors:
+          type: array
+          items:
+            $ref: '../shared/schemas.yaml#/SourceError'
 
     TimeRange:
       type: object

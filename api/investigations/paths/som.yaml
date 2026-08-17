@@ -7,10 +7,7 @@ servers:
 security:
   - bearerAuth: []
 
-# Demo-домен: тонкий фасад над SOM kanban API. Bearer-токен вызова — это
-# SOM access JWT, IR не проверяет его сам, а пробрасывает в SOM как есть
-# (pass-through). Пути не требуют X-Project-ID: они адресуют сущности SOM,
-# а не проекта Sb0rka.
+# Thin facade over SOM API
 
 paths:
   /som/workspaces:
@@ -26,7 +23,9 @@ paths:
           description: Workspaces visible to the caller
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/SomWorkspaceList' }
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/SomWorkspace' }
         '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
         '501': { $ref: '../shared/responses.yaml#/components/responses/NotImplemented' }
         '500': { $ref: '../shared/responses.yaml#/components/responses/InternalError' }
@@ -49,7 +48,9 @@ paths:
           description: Boards of the workspace
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/SomBoardList' }
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/SomBoard' }
         '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
         '501': { $ref: '../shared/responses.yaml#/components/responses/NotImplemented' }
         '500': { $ref: '../shared/responses.yaml#/components/responses/InternalError' }
@@ -144,15 +145,6 @@ components:
           type: string
           description: Caller's role in the workspace — ADMIN or MEMBER.
 
-    SomWorkspaceList:
-      type: object
-      description: Workspaces visible to the caller.
-      required: [workspaces]
-      properties:
-        workspaces:
-          type: array
-          items: { $ref: '#/components/schemas/SomWorkspace' }
-
     SomBoard:
       type: object
       description: A kanban board inside a SOM workspace.
@@ -169,15 +161,6 @@ components:
         name:
           type: string
           description: Display name.
-
-    SomBoardList:
-      type: object
-      description: Boards of one workspace.
-      required: [boards]
-      properties:
-        boards:
-          type: array
-          items: { $ref: '#/components/schemas/SomBoard' }
 
     SomIssue:
       type: object
@@ -220,7 +203,7 @@ components:
 
     SomIssueList:
       type: object
-      description: Issues of one board.
+      description: Issues of one board with the count reported by SOM.
       required: [issues, total_count]
       properties:
         issues:

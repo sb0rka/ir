@@ -19,6 +19,7 @@ ON CONFLICT (code) DO NOTHING;
 
 -- Роли сущности в событии
 INSERT INTO relation_types (code, title, source_kind, target_kind, directed) VALUES
+    ('mentions', 'Упоминает',       'event',  'entity', true),
     ('actor',   'Инициатор',      'entity', 'event',  true),
     ('object',  'Объект',         'entity', 'event',  true),
     ('src',     'Источник',       'entity', 'event',  true),
@@ -45,7 +46,7 @@ INSERT INTO sources (code, kind, title) VALUES
     ('siem',  'siem',  'SIEM (демо-датасет)'),
     ('edr',   'edr',   'EDR (демо-датасет)'),
     ('ndr',   'ndr',   'NDR (демо-датасет)'),
-    ('infra_logs', 'infra_logs', 'Инфраструктурные логи (демо-датасет)')
+    ('infra_logs', 'infra', 'Инфраструктурные логи (демо-датасет)')
 ON CONFLICT (code) DO NOTHING;
 
 -- Источники, которые отдаёт Gateway: ingest событий (attachEvents) пишет их

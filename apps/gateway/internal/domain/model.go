@@ -38,8 +38,17 @@ type EntityRef struct {
 	Value string
 }
 
+type EventSourceRef struct {
+	SourceCode    string
+	SourceEventID string
+}
+
+type EntitySourceRef struct {
+	SourceCode     string
+	SourceEntityID string
+}
+
 type Entity struct {
-	ID         uuid.UUID
 	Type       string
 	Value      string
 	Attributes map[string]any
@@ -47,23 +56,21 @@ type Entity struct {
 }
 
 type Event struct {
-	ID         uuid.UUID
 	Type       string
 	Title      string
 	Severity   string
 	OccurredAt time.Time
-	EntityIDs  []uuid.UUID
+	Entities   []EntityRef
 	Attributes map[string]any
 	Provenance Provenance
 }
 
 type Relation struct {
-	ID             uuid.UUID
-	Type           string
-	SourceEntityID uuid.UUID
-	TargetEntityID uuid.UUID
-	OccurredAt     *time.Time
-	Provenance     Provenance
+	Type         string
+	SourceEntity EntityRef
+	TargetEntity EntityRef
+	OccurredAt   *time.Time
+	Provenance   Provenance
 }
 
 type Hashes struct {
@@ -141,7 +148,6 @@ func NewEntity(kind, value string, provenance Provenance) Entity {
 	kind = strings.ToLower(strings.TrimSpace(kind))
 	value = CanonicalValue(kind, value)
 	return Entity{
-		ID:         StableID("entity", kind, value),
 		Type:       strings.ToLower(strings.TrimSpace(kind)),
 		Value:      value,
 		Attributes: map[string]any{},

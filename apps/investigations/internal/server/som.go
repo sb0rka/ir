@@ -28,13 +28,13 @@ func (s *Server) ListSomWorkspaces(ctx context.Context, request som.ListSomWorks
 		return nil, somError(err)
 	}
 
-	out := som.SomWorkspaceList{Workspaces: make([]som.SomWorkspace, 0, len(workspaces))}
+	out := make([]som.SomWorkspace, 0, len(workspaces))
 	for _, workspace := range workspaces {
 		id, err := parseSomUUID("workspace id", workspace.ID)
 		if err != nil {
 			return nil, err
 		}
-		out.Workspaces = append(out.Workspaces, som.SomWorkspace{
+		out = append(out, som.SomWorkspace{
 			Id:          id,
 			Name:        workspace.Name,
 			Slug:        workspace.Slug,
@@ -59,7 +59,7 @@ func (s *Server) ListSomBoards(ctx context.Context, request som.ListSomBoardsReq
 		return nil, somError(err)
 	}
 
-	out := som.SomBoardList{Boards: make([]som.SomBoard, 0, len(boards))}
+	out := make([]som.SomBoard, 0, len(boards))
 	for _, board := range boards {
 		id, err := parseSomUUID("board id", board.ID)
 		if err != nil {
@@ -69,7 +69,7 @@ func (s *Server) ListSomBoards(ctx context.Context, request som.ListSomBoardsReq
 		if err != nil {
 			return nil, err
 		}
-		out.Boards = append(out.Boards, som.SomBoard{
+		out = append(out, som.SomBoard{
 			Id:          id,
 			WorkspaceId: workspaceID,
 			Name:        board.Name,
@@ -200,18 +200,13 @@ func (s *Server) buildRunPrompt(ctx context.Context, issue somclient.Issue, inve
 	writeLine("som_issue_id", issue.ID)
 
 	b.WriteString("\nHow to search sources and report findings back to IR:\n" +
-		"1. Search source events and attach the result to the investigation in one call: " +
-		"POST {ir_api_base_url}/api/v1/events with the X-Project-ID header and body " +
-		"{\"investigation_id\": \"...\", \"query\": {\"source_code\": \"...\", \"entity_key\": \"...\", \"substring\": \"...\", \"from\": \"...\", \"to\": \"...\", \"limit\": 100}}. " +
-		"Use entity_key for an exact entity match (hostname/ip/process/file) or substring for free-text; " +
-		"set exactly the fields you need. The call is idempotent.\n" +
-		"2. Read back the attached events, their ids and normalized_data (title, attributes): " +
-		"GET {ir_api_base_url}/api/v1/investigations/{investigation_id}/events with the X-Project-ID header.\n" +
-		"3. Promote an attached event onto the graph: POST {ir_api_base_url}/api/v1/investigations/{investigation_id}/nodes " +
-		"with body {\"node_type\": \"event\", \"event_id\": \"...\", \"som_issue_ids\": [\"" + issue.ID + "\"]}.\n")
+		"1. Search Gateway directly: POST {gateway_base_url}/api/v1/events/search with X-Project-ID. Keep source_code plus source_event_id/source_entity_id for every record you select.\n" +
+		"2. Decide explicitly which findings belong on the graph. Give each selected event/entity a batch-local ref, then point nodes to it with event_ref or entity_ref. Edges address node source_ref/target_ref and cite event-node refs in evidence_event_refs. Every edge needs a non-empty why.\n" +
+		"3. Submit exactly one batch: POST {ir_api_base_url}/api/v1/investigations/{investigation_id}/agent-results with X-Project-ID and body " +
+		"{\"som_issue_ids\":[\"" + issue.ID + "\"],\"events\":[{\"ref\":\"selected-event-1\",\"source_code\":\"...\",\"source_event_id\":\"...\"}],\"entities\":[{\"ref\":\"selected-host-1\",\"source_code\":\"...\",\"source_entity_id\":\"...\"}],\"nodes\":[{\"ref\":\"event-1\",\"event_ref\":\"selected-event-1\"},{\"ref\":\"host-1\",\"entity_ref\":\"selected-host-1\"}],\"edges\":[{\"source_ref\":\"event-1\",\"target_ref\":\"host-1\",\"relation_code\":\"mentions\",\"why\":\"...\",\"confidence\":0.8,\"evidence_event_refs\":[\"event-1\"]}]}. IR resolves current normalized data from Gateway and draws only the listed nodes and edges; the endpoint assigns agent origin and proposed edge status. The batch is idempotent.\n" +
+		"4. Verify the result with GET {ir_api_base_url}/api/v1/investigations/{investigation_id}/graph and /events.\n")
 	if s.prompt.GatewayBaseURL != "" {
-		b.WriteString("Optionally, raw source search without attaching: POST {gateway_base_url}/api/v1/events/search " +
-			"with the X-Project-ID header.\n")
+		b.WriteString("Gateway searches do not write to ir-api; only agent-results persists selected context.\n")
 	}
 	return b.String()
 }

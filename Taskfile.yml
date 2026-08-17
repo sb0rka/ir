@@ -39,14 +39,20 @@ tasks:
       - '{{.REDOCLY}} lint apps/gateway/api/bundle.yaml'
 
   gateway-gen:
-    desc: Сгенерировать Go-контракт Gateway
+    desc: Сгенерировать серверный и клиентский Go-контракты Gateway
     deps: [gateway-spec]
     cmds:
       - >-
         cd apps/gateway &&
         {{.CODEGEN}} -package api -generate models,std-http-server
         -o api/api.gen.go api/bundle.yaml
-      - gofmt -w apps/gateway/api/api.gen.go
+      - mkdir -p packages/contract/gateway
+      - >-
+        cd packages/contract &&
+        {{.CODEGEN}} -package gateway -generate models,client
+        -response-type-suffix ClientResponse
+        -o gateway/gateway.gen.go ../../apps/gateway/api/bundle.yaml
+      - gofmt -w apps/gateway/api/api.gen.go packages/contract/gateway/gateway.gen.go
 
   gen-prune:
     desc: Убрать сгенерированное для доменов, которых больше нет в Investigations API
@@ -58,7 +64,7 @@ tasks:
         node -e "const fs=require('fs');
         const exists=n=>fs.existsSync('{{.INVESTIGATIONS_API}}/paths/'+n+'.yaml');
         for(const e of fs.readdirSync('packages/contract',{withFileTypes:true}))
-        if(e.isDirectory()&&e.name!=='spec'&&!exists(e.name))
+        if(e.isDirectory()&&e.name!=='spec'&&e.name!=='gateway'&&!exists(e.name))
         fs.rmSync('packages/contract/'+e.name,{recursive:true,force:true});
         for(const f of fs.readdirSync('packages/contract-ts/domains'))
         if(f.endsWith('.d.ts')&&!exists(f.slice(0,-5)))

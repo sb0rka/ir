@@ -92,7 +92,7 @@ func (server *Server) writeServiceError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.As(err, &requestErr):
 		status, code, message = http.StatusBadRequest, requestErr.Code, requestErr.Message
-		if requestErr.Code == "source_not_found" {
+		if requestErr.Code == "source_not_found" || requestErr.Code == "source_record_not_found" {
 			status = http.StatusNotFound
 		}
 		if requestErr.Code == "source_forbidden" {

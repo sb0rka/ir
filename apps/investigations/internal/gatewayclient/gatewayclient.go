@@ -1,118 +1,118 @@
-// Package gatewayclient — вызов IR Gateway из ir-api: attachEvents с query
-// резолвит выборку через POST /api/v1/events/search. На демо-стенде gateway
-// работает с AUTH_DISABLED, поэтому клиент несёт только X-Project-ID.
+// Package gatewayclient resolves source-owned record identifiers through the
+// normalized Gateway API. It deliberately does not expose Gateway search: UI
+// and SOM agents search independently and send only their selected references.
 package gatewayclient
 
 import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"strings"
 	"time"
+
+	gatewaycontract "github.com/sb0rka/ir/packages/contract/gateway"
 )
 
+const maxResponseBody = 16 << 20
+
+var ErrUnavailable = errors.New("gateway is not configured")
+
+type Config struct {
+	BaseURL    string
+	HTTPClient *http.Client
+}
+
 type Client struct {
-	baseURL string
-	http    *http.Client
+	api     *gatewaycontract.ClientWithResponses
+	initErr error
 }
 
-func New(baseURL string) *Client {
-	return &Client{
-		baseURL: strings.TrimRight(strings.TrimSpace(baseURL), "/"),
-		http:    &http.Client{Timeout: 30 * time.Second},
+type HTTPError struct {
+	Status  int
+	Code    string
+	Message string
+}
+
+type EventSourceRef = gatewaycontract.EventSourceRef
+type EntitySourceRef = gatewaycontract.EntitySourceRef
+type ResolveContextRequest = gatewaycontract.ResolveContextRequest
+type ResolveContextResponse = gatewaycontract.ResolveContextResponse
+
+func (err *HTTPError) Error() string {
+	return fmt.Sprintf("gateway request failed with status %d: %s", err.Status, err.Code)
+}
+
+func New(cfg Config) *Client {
+	baseURL := strings.TrimRight(cfg.BaseURL, "/")
+	if baseURL == "" {
+		return &Client{}
 	}
+	httpClient := cfg.HTTPClient
+	if httpClient == nil {
+		httpClient = &http.Client{Timeout: 30 * time.Second}
+	}
+	generated, err := gatewaycontract.NewClientWithResponses(
+		baseURL,
+		gatewaycontract.WithHTTPClient(responseLimitDoer{next: httpClient}),
+	)
+	return &Client{api: generated, initErr: err}
 }
 
-func (c *Client) Configured() bool { return c.baseURL != "" }
-
-// UpstreamError — не-2xx ответ gateway с сохранённым телом.
-type UpstreamError struct {
-	Status int
-	Body   string
-}
-
-func (e *UpstreamError) Error() string {
-	return fmt.Sprintf("gateway search: upstream status %d: %s", e.Status, e.Body)
-}
-
-type TimeRange struct {
-	From time.Time `json:"from"`
-	To   time.Time `json:"to"`
-}
-
-// EntityRef — условие поиска по сущности; событие матчится, если содержит
-// хотя бы одну из перечисленных сущностей (точное совпадение type+value).
-type EntityRef struct {
-	Type  string `json:"type"`
-	Value string `json:"value"`
-}
-
-type SearchRequest struct {
-	Sources   []string    `json:"sources,omitempty"`
-	TimeRange *TimeRange  `json:"time_range,omitempty"`
-	Query     string      `json:"query,omitempty"`
-	Entities  []EntityRef `json:"entities,omitempty"`
-	Limit     int         `json:"limit,omitempty"`
-	Cursor    string      `json:"cursor,omitempty"`
-}
-
-type Provenance struct {
-	Source     string  `json:"source"`
-	ExternalID string  `json:"external_id"`
-	SourceURL  *string `json:"source_url"`
-}
-
-type Event struct {
-	ID         string         `json:"id"`
-	Type       string         `json:"type"`
-	Title      string         `json:"title"`
-	Severity   string         `json:"severity"`
-	OccurredAt time.Time      `json:"occurred_at"`
-	EntityIDs  []string       `json:"entity_ids"`
-	Attributes map[string]any `json:"attributes"`
-	Provenance Provenance     `json:"provenance"`
-}
-
-type SearchResponse struct {
-	Events     []Event `json:"events"`
-	NextCursor *string `json:"next_cursor"`
-}
-
-func (c *Client) SearchEvents(ctx context.Context, projectID string, request SearchRequest) (SearchResponse, error) {
-	encoded, err := json.Marshal(request)
+func (client *Client) ResolveContext(ctx context.Context, projectID, bearer string, body ResolveContextRequest) (ResolveContextResponse, error) {
+	if client == nil || client.api == nil {
+		if client != nil && client.initErr != nil {
+			return ResolveContextResponse{}, fmt.Errorf("initialize Gateway client: %w", client.initErr)
+		}
+		return ResolveContextResponse{}, ErrUnavailable
+	}
+	params := &gatewaycontract.ResolveContextParams{XProjectID: projectID}
+	var editors []gatewaycontract.RequestEditorFn
+	if bearer = strings.TrimSpace(bearer); bearer != "" {
+		editors = append(editors, func(_ context.Context, request *http.Request) error {
+			request.Header.Set("Authorization", "Bearer "+bearer)
+			return nil
+		})
+	}
+	response, err := client.api.ResolveContextWithResponse(ctx, params, body, editors...)
 	if err != nil {
-		return SearchResponse{}, fmt.Errorf("encode search request: %w", err)
+		return ResolveContextResponse{}, fmt.Errorf("call Gateway context resolver: %w", err)
 	}
+	status := response.StatusCode()
+	if status != http.StatusOK {
+		var envelope gatewaycontract.ErrorEnvelope
+		if json.Unmarshal(response.Body, &envelope) != nil {
+			return ResolveContextResponse{}, &HTTPError{Status: status, Code: "gateway_error", Message: "Gateway rejected the request"}
+		}
+		return ResolveContextResponse{}, &HTTPError{Status: status, Code: envelope.Error.Code, Message: envelope.Error.Message}
+	}
+	if response.JSON200 == nil {
+		return ResolveContextResponse{}, fmt.Errorf("decode Gateway context response: expected application/json")
+	}
+	return *response.JSON200, nil
+}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
-		c.baseURL+"/api/v1/events/search", bytes.NewReader(encoded))
+type responseLimitDoer struct {
+	next gatewaycontract.HttpRequestDoer
+}
+
+func (doer responseLimitDoer) Do(request *http.Request) (*http.Response, error) {
+	response, err := doer.next.Do(request)
 	if err != nil {
-		return SearchResponse{}, fmt.Errorf("build search request: %w", err)
+		return nil, err
 	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "application/json")
-	req.Header.Set("X-Project-ID", projectID)
-
-	resp, err := c.http.Do(req)
-	if err != nil {
-		return SearchResponse{}, &UpstreamError{Status: 0, Body: err.Error()}
+	raw, readErr := io.ReadAll(io.LimitReader(response.Body, maxResponseBody+1))
+	_ = response.Body.Close()
+	if readErr != nil {
+		return nil, fmt.Errorf("read Gateway response: %w", readErr)
 	}
-	defer func() { _ = resp.Body.Close() }()
-
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
-	if err != nil {
-		return SearchResponse{}, &UpstreamError{Status: resp.StatusCode, Body: "read body: " + err.Error()}
+	if len(raw) > maxResponseBody {
+		return nil, fmt.Errorf("Gateway response is too large")
 	}
-	if resp.StatusCode < 200 || resp.StatusCode > 299 {
-		return SearchResponse{}, &UpstreamError{Status: resp.StatusCode, Body: strings.TrimSpace(string(body))}
-	}
-
-	var out SearchResponse
-	if err := json.Unmarshal(body, &out); err != nil {
-		return SearchResponse{}, &UpstreamError{Status: resp.StatusCode, Body: "decode response: " + err.Error()}
-	}
-	return out, nil
+	response.Body = io.NopCloser(bytes.NewReader(raw))
+	response.ContentLength = int64(len(raw))
+	return response, nil
 }

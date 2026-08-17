@@ -31,6 +31,58 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/investigations/{investigation_id}/context": {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
+            path: {
+                /** @description Identifier of an investigation in the selected project. */
+                investigation_id: components["parameters"]["InvestigationId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add analyst-selected Gateway context
+         * @description Resolves the selected source records through Gateway, stores their normalized form and atomically adds the resulting events and entities to the investigation graph. Event mentions and source relationships become confirmed analyst edges.
+         */
+        post: operations["addInvestigationContext"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/investigations/{investigation_id}/agent-results": {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
+            path: {
+                /** @description Identifier of an investigation in the selected project. */
+                investigation_id: components["parameters"]["InvestigationId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Save one explicit SOM agent result batch
+         * @description Resolves source records through Gateway but adds only explicitly listed nodes and edges to the graph. Nodes are attributed to the agent and edges are proposed for review. Local refs address selected records and nodes created in the same batch.
+         */
+        post: operations["addAgentResults"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/investigations/{investigation_id}": {
         parameters: {
             query?: never;
@@ -158,6 +210,66 @@ export interface components {
              */
             closed_at?: string | null;
         };
+        EventSourceRef: {
+            /** @description Gateway source code, for example maxpatrol-siem. */
+            source_code: string;
+            /** @description Original event identifier assigned by the source. */
+            source_event_id: string;
+        };
+        EntitySourceRef: {
+            /** @description Gateway source code, for example maxpatrol-siem. */
+            source_code: string;
+            /** @description Original entity record identifier assigned by the source. */
+            source_entity_id: string;
+        };
+        /** @description Source-owned identifiers selected in the Gateway event list. */
+        ContextSelection: {
+            events: components["schemas"]["EventSourceRef"][];
+            entities: components["schemas"]["EntitySourceRef"][];
+        };
+        AgentResultBatch: {
+            som_issue_ids: string[];
+            events: components["schemas"]["AgentEventSelection"][];
+            entities: components["schemas"]["AgentEntitySelection"][];
+            nodes: components["schemas"]["AgentNode"][];
+            edges: components["schemas"]["AgentEdge"][];
+        };
+        /** @description An event selected by the agent and its batch-local reference. */
+        AgentEventSelection: {
+            ref: string;
+            source_code: string;
+            source_event_id: string;
+        };
+        /** @description An entity source record selected by the agent and its batch-local reference. */
+        AgentEntitySelection: {
+            ref: string;
+            source_code: string;
+            source_entity_id: string;
+        };
+        /** @description A unique local ref and exactly one target: an event/entity selection from this batch, or an existing node in this investigation. */
+        AgentNode: {
+            ref: string;
+            /** @description Local ref of an event selection from this batch. */
+            event_ref?: string;
+            /** @description Local ref of an entity selection from this batch. */
+            entity_ref?: string;
+            /** Format: uuid */
+            node_id?: string;
+        };
+        AgentEdge: {
+            source_ref: string;
+            target_ref: string;
+            relation_code: string;
+            why: string;
+            confidence?: number;
+            evidence_event_refs: string[];
+        };
+        ContextImportResult: {
+            events: number;
+            entities: number;
+            nodes: number;
+            edges: number;
+        };
         /** @description A new case, or a new hypothesis inside an existing one. */
         InvestigationCreate: {
             /** @description What is being investigated, or the claim being tested. */
@@ -172,7 +284,7 @@ export interface components {
             /** @description Initial assessment. Can be revised later. */
             severity?: components["schemas"]["Severity"];
             /** @description SOM workspaces to link to the new investigation. */
-            som_workspace_ids?: string[];
+            som_workspace_ids: string[];
         };
         /** @description Fields to change. Anything omitted stays as it is; `version` is always required so concurrent edits cannot overwrite each other silently. */
         InvestigationPatch: {
@@ -205,25 +317,12 @@ export interface components {
          * @enum {string}
          */
         Verdict: "incident" | "false_positive" | "not_affected" | "inconclusive" | "confirmed" | "rejected";
-        /** @description One page of investigations. */
+        /** @description One page of investigations and the cursor for continuing it. */
         InvestigationPage: {
             /** @description The investigations on this page. */
-            items: components["schemas"]["Investigation"][];
+            investigations: components["schemas"]["Investigation"][];
             /** @description Pass as `cursor` to get the next page. Absent on the last page. */
             next_cursor?: string | null;
-        };
-        /** @description A subtree flattened for one-pass rendering. */
-        InvestigationTree: {
-            /**
-             * Format: uuid
-             * @description The investigation the subtree was requested for.
-             */
-            root_id: string;
-            /** @description Every investigation in the subtree in pre-order, starting with the root itself. Each carries its depth, so the client can indent without walking parent links. */
-            items: (components["schemas"]["Investigation"] & {
-                /** @description Distance from the root. Zero for the root itself. */
-                depth: number;
-            })[];
         };
         /**
          * @description How much damage the case could cause. Set on triage and adjusted as evidence accumulates.
@@ -416,6 +515,76 @@ export interface operations {
             501: components["responses"]["NotImplemented"];
         };
     };
+    addInvestigationContext: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
+            path: {
+                /** @description Identifier of an investigation in the selected project. */
+                investigation_id: components["parameters"]["InvestigationId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ContextSelection"];
+            };
+        };
+        responses: {
+            /** @description Import counters */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContextImportResult"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["ValidationError"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    addAgentResults: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
+            path: {
+                /** @description Identifier of an investigation in the selected project. */
+                investigation_id: components["parameters"]["InvestigationId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentResultBatch"];
+            };
+        };
+        responses: {
+            /** @description Import counters */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContextImportResult"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["ValidationError"];
+            500: components["responses"]["InternalError"];
+        };
+    };
     getInvestigation: {
         parameters: {
             query?: never;
@@ -534,7 +703,10 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["InvestigationTree"];
+                    "application/json": (components["schemas"]["Investigation"] & {
+                        /** @description Distance from the root. Zero for the root itself. */
+                        depth: number;
+                    })[];
                 };
             };
             401: components["responses"]["Unauthorized"];

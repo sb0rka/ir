@@ -61,13 +61,19 @@ func Entities(items []domain.Entity) []domain.Entity {
 func Relations(items []domain.Relation) []domain.Relation {
 	seen := make(map[string]domain.Relation, len(items))
 	for _, item := range items {
-		seen[item.ID.String()] = item
+		key := item.Provenance.Source + "\x00" + item.Provenance.ExternalID
+		seen[key] = item
 	}
 	result := make([]domain.Relation, 0, len(seen))
 	for _, item := range seen {
 		result = append(result, item)
 	}
-	sort.Slice(result, func(i, j int) bool { return result[i].ID.String() < result[j].ID.String() })
+	sort.Slice(result, func(i, j int) bool {
+		if result[i].Provenance.Source != result[j].Provenance.Source {
+			return result[i].Provenance.Source < result[j].Provenance.Source
+		}
+		return result[i].Provenance.ExternalID < result[j].Provenance.ExternalID
+	})
 	return result
 }
 

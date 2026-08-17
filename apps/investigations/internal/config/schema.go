@@ -16,6 +16,12 @@ type Config struct {
 	Prompt   PromptConfig
 }
 
+// GatewayConfig — внутренний адрес для получения выбранных записей по их
+// исходным идентификаторам.
+type GatewayConfig struct {
+	BaseURL string
+}
+
 // SOMConfig — демо-интеграция с SOM: kanban API, relay и daemon-хост.
 // Пустой APIBaseURL выключает som-домен, сервис при этом стартует.
 type SOMConfig struct {
@@ -30,11 +36,6 @@ type SOMConfig struct {
 	RepoFolderName string
 	TargetBranch   string
 	Executor       string
-}
-
-// GatewayConfig — куда ir-api сам ходит за событиями (attachEvents.query).
-type GatewayConfig struct {
-	BaseURL string
 }
 
 // PromptConfig — адреса, которые подставляются агенту в prompt при запуске

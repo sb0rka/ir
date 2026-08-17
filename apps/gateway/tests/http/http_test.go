@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
+	"encoding/json"
 	"io"
 	"log/slog"
 	"net/http"
@@ -73,6 +74,81 @@ func TestEventSearchEnforcesOpenAPIInputLimits(t *testing.T) {
 			t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
 		}
 	}
+}
+
+func TestEventsExposeSourceOwnedIdentityAndResolveContext(t *testing.T) {
+	handler := newHandler(t, testConfig(true), nil)
+
+	search := gatewayJSON(t, handler, "/api/v1/events/search", `{"sources":["maxpatrol-siem"]}`)
+	events := search["events"].([]any)
+	if len(events) == 0 {
+		t.Fatal("event search returned no events")
+	}
+	event := events[0].(map[string]any)
+	if event["source_code"] != "maxpatrol-siem" || event["source_event_id"] == "" {
+		t.Fatalf("event has no source-owned identity: %v", event)
+	}
+	if _, exists := event["id"]; exists {
+		t.Fatalf("event still exposes a computed id: %v", event)
+	}
+
+	body, _ := json.Marshal(map[string]any{
+		"events":   []any{map[string]any{"source_code": event["source_code"], "source_event_id": event["source_event_id"]}},
+		"entities": []any{},
+	})
+	resolved := gatewayJSON(t, handler, "/api/v1/context/resolve", string(body))
+	resolvedEvents := resolved["events"].([]any)
+	if len(resolvedEvents) != 1 || resolvedEvents[0].(map[string]any)["source_event_id"] != event["source_event_id"] {
+		t.Fatalf("unexpected resolved context: %v", resolved)
+	}
+	for _, entityValue := range resolved["entities"].([]any) {
+		entity := entityValue.(map[string]any)
+		if _, exists := entity["id"]; exists {
+			t.Fatalf("entity still exposes a computed id: %v", entity)
+		}
+		if len(entity["sources"].([]any)) == 0 {
+			t.Fatalf("entity has no source reference: %v", entity)
+		}
+	}
+	searchEntities := search["entities"].([]any)
+	if len(searchEntities) == 0 {
+		t.Fatal("event search returned no entity context")
+	}
+	source := searchEntities[0].(map[string]any)["sources"].([]any)[0].(map[string]any)
+	body, _ = json.Marshal(map[string]any{
+		"events":   []any{},
+		"entities": []any{map[string]any{"source_code": source["source_code"], "source_entity_id": source["source_entity_id"]}},
+	})
+	entityOnly := gatewayJSON(t, handler, "/api/v1/context/resolve", string(body))
+	if len(entityOnly["events"].([]any)) != 0 || len(entityOnly["entities"].([]any)) != 1 {
+		t.Fatalf("unexpected entity-only context: %v", entityOnly)
+	}
+
+	missing := httptest.NewRequest(http.MethodPost, "/api/v1/context/resolve", bytes.NewBufferString(`{"events":[{"source_code":"maxpatrol-siem","source_event_id":"missing"}],"entities":[]}`))
+	missing.Header.Set("Content-Type", "application/json")
+	missing.Header.Set("X-Project-ID", projectID)
+	missingResponse := httptest.NewRecorder()
+	handler.ServeHTTP(missingResponse, missing)
+	if missingResponse.Code != http.StatusNotFound {
+		t.Fatalf("missing source record status=%d body=%s", missingResponse.Code, missingResponse.Body.String())
+	}
+}
+
+func gatewayJSON(t *testing.T, handler http.Handler, path, body string) map[string]any {
+	t.Helper()
+	request := httptest.NewRequest(http.MethodPost, path, bytes.NewBufferString(body))
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("X-Project-ID", projectID)
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("POST %s status=%d body=%s", path, response.Code, response.Body.String())
+	}
+	var result map[string]any
+	if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil {
+		t.Fatal(err)
+	}
+	return result
 }
 
 type staticRoles struct{ allowed bool }

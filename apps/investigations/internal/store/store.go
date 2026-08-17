@@ -1,5 +1,4 @@
-// Package store — единственная дверь к базе. Новый запрос = метод интерфейса
-// Database плюс реализация в psql.go; SQL пишется инлайном в методе.
+// Package store defines the project-scoped persistence boundary.
 package store
 
 import (
@@ -9,13 +8,13 @@ import (
 	"github.com/sb0rka/ir/apps/investigations/internal/domain/model"
 )
 
-// Сентинелы для нарушений ссылочной целостности: транспорт превращает их
-// в 404/422 не зная кодов Postgres.
 var (
 	ErrInvestigationNotFound = errors.New("investigation not found in this project")
 	ErrParentNotFound        = errors.New("parent investigation not found in this project")
-	ErrUnknownSource         = errors.New("source_code is not present in the sources dictionary")
-	ErrTargetNotAttached     = errors.New("referenced entity or event is not attached to this investigation")
+	ErrRecordNotFound        = errors.New("record not found in this project")
+	ErrTargetNotAttached     = errors.New("referenced target is not attached to this investigation")
+	ErrUnknownReference      = errors.New("unknown local or gateway reference")
+	ErrConflict              = errors.New("operation conflicts with confirmed graph evidence")
 	ErrInvalidValue          = errors.New("value violates a domain constraint")
 )
 
@@ -27,30 +26,23 @@ type Database interface {
 
 	CreateInvestigation(ctx context.Context, inv model.InvestigationNew) (model.Investigation, error)
 	ListInvestigations(ctx context.Context, projectID string, filter model.InvestigationFilter) ([]model.Investigation, error)
+	GetInvestigation(ctx context.Context, projectID, investigationID string) (model.Investigation, error)
 	InvestigationExists(ctx context.Context, projectID, investigationID string) (bool, error)
+	ImportContext(ctx context.Context, request model.ImportRequest) (model.ImportStats, error)
 
-	// AttachEvents делает upsert событий и привязку к расследованию одной
-	// транзакцией: частично засосанный pull хуже, чем несостоявшийся.
-	AttachEvents(ctx context.Context, projectID, investigationID string,
-		events []model.EventIngest, attachedBy string, reason *string) (model.AttachStats, error)
+	InvestigationEvents(ctx context.Context, projectID, investigationID string, filter model.EventFilter) ([]model.EventSummary, error)
+	GetEvent(ctx context.Context, projectID, eventID string) (model.Event, error)
+	DetachEvent(ctx context.Context, projectID, investigationID, eventID string) error
 
-	// FindEventIDs резолвит refs в id существующих событий проекта.
-	// Отсутствующие refs в карту не попадают — решает вызывающий.
-	FindEventIDs(ctx context.Context, projectID string, refs []model.EventRef) (map[model.EventRef]string, error)
+	InvestigationEntities(ctx context.Context, projectID, investigationID string, filter model.EntityFilter) ([]model.Entity, error)
+	GetEntityCard(ctx context.Context, projectID, entityID string) (model.EntityCard, error)
+	CreateEntity(ctx context.Context, entity model.EntityNew) (model.Entity, error)
+	DetachEntity(ctx context.Context, projectID, investigationID, entityID string) error
 
-	// InvestigationEvents — таймлайн расследования. Курсорная пагинация не
-	// реализована: отдаются первые Limit событий по occurred_at.
-	InvestigationEvents(ctx context.Context, projectID, investigationID string,
-		filter model.EventFilter) ([]model.EventSummary, error)
-
-	// LinkEvents привязывает уже существующие события к расследованию.
-	LinkEvents(ctx context.Context, projectID, investigationID string,
-		eventIDs []string, attachedBy string, reason *string) (linked, duplicates int, err error)
-
-	// CreateNode идемпотентен: повторная постановка той же сущности или
-	// события на граф возвращает существующую ноду, дописывая som_issue связи.
-	CreateNode(ctx context.Context, projectID, investigationID, nodeType string,
-		entityID, eventID *string, origin string, somIssueIDs []string) (model.GraphNode, error)
-
+	CreateNode(ctx context.Context, projectID, investigationID, nodeType string, entityID, eventID *string, origin string, somIssueIDs []string) (model.GraphNode, error)
 	GraphNodes(ctx context.Context, projectID, investigationID string, filter model.NodeFilter) ([]model.GraphNode, error)
+	GetNode(ctx context.Context, projectID, investigationID, nodeID string) (model.GraphNode, error)
+	GraphEdges(ctx context.Context, projectID, investigationID string, filter model.EdgeFilter) ([]model.GraphEdge, error)
+
+	Reference(ctx context.Context) (model.Reference, error)
 }

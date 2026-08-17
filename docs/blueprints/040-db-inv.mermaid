@@ -16,7 +16,7 @@ erDiagram
 		timestamptz created_at
 		timestamptz updated_at
 	}
-	%% sources.kind CHECK: siem, edr, ndr, sandbox, infra_logs
+	%% sources.kind CHECK: siem, edr, ndr, sandbox, infra, other
 	%% sources UNIQUE (title)
 
 	entity_types {
@@ -26,7 +26,7 @@ erDiagram
 		timestamptz created_at
 		timestamptz updated_at
 	}
-	%% entity_types.category CHECK: identity, network, execution, persistence, asset
+	%% entity_types.category CHECK: identity, network, execution, persistence, asset, other
 	%% entity_types UNIQUE (title)
 
 	relation_types {
@@ -47,7 +47,6 @@ erDiagram
 		uuid id PK
 		uuid parent_id FK
 		varchar project_id
-		uuid workspace_id
 		varchar title
 		varchar description
 		varchar status
@@ -61,6 +60,13 @@ erDiagram
 		timestamptz created_at
 		timestamptz updated_at
 		timestamptz closed_at
+	}
+
+	investigation_som_workspaces {
+		uuid investigation_id PK,FK
+		varchar project_id FK
+		uuid workspace_id PK
+		timestamptz created_at
 	}
 	%% investigations.status CHECK: open, closed
 	%% investigations.severity CHECK: low, medium, high, critical
@@ -78,17 +84,16 @@ erDiagram
 		varchar source_code FK
 		varchar source_event_id UK
 		varchar source_ref
+		varchar title
 		varchar event_type
 		timestamptz occurred_at
 		timestamptz ingested_at
 		jsonb normalized_data
-		jsonb raw_data
-		varchar dedup_key UK
+		jsonb provenance
 		timestamptz created_at
 		timestamptz updated_at
 	}
 	%% events UNIQUE (id, project_id)
-	%% events UNIQUE (project_id, dedup_key)
 	%% events UNIQUE (project_id, source_code, source_event_id)
 
 	entities {
@@ -106,6 +111,19 @@ erDiagram
 	%% entities UNIQUE (id, project_id)
 	%% entities UNIQUE (project_id, type_code, canonical_key)
 
+	entity_sources {
+		uuid entity_id PK,FK
+		varchar project_id UK,FK
+		varchar source_code PK,UK,FK
+		varchar source_entity_id PK,UK
+		varchar source_ref
+		timestamptz fetched_at
+		jsonb provenance
+		timestamptz created_at
+		timestamptz updated_at
+	}
+	%% entity_sources UNIQUE (project_id, source_code, source_entity_id)
+
 	event_entity_relations {
 		uuid id PK
 		varchar project_id FK
@@ -117,6 +135,19 @@ erDiagram
 	}
 	%% event_entity_relations UNIQUE (event_id, entity_id, relation_code)
 	%% FK: (event_id, project_id), (entity_id, project_id)
+
+	entity_relations {
+		uuid id PK
+		varchar project_id UK,FK
+		varchar source_code UK,FK
+		varchar source_relation_id UK
+		varchar source_ref
+		uuid source_entity_id FK
+		uuid target_entity_id FK
+		varchar relation_code FK
+		timestamptz occurred_at
+		jsonb provenance
+	}
 
 	%% INVESTIGATION COMPONENTS
 
@@ -219,11 +250,18 @@ erDiagram
 	investigations |o--o{ investigations : has
 	investigations ||--o{ investigation_events : has
 	investigations ||--o{ investigation_entities : has
+	investigations ||--o{ investigation_som_workspaces : links
 	investigations ||--o{ graph_nodes : has
 	investigations ||--o{ edges : has
 
 	events ||--o{ event_entity_relations : has
 	entities ||--o{ event_entity_relations : has
+	entities ||--o{ entity_sources : has
+	sources ||--o{ entity_sources : has
+	entities ||--o{ entity_relations : source
+	entities ||--o{ entity_relations : target
+	sources ||--o{ entity_relations : has
+	relation_types ||--o{ entity_relations : has
 	events ||--o{ investigation_events : has
 	entities ||--o{ investigation_entities : has
 

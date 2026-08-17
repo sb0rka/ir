@@ -115,10 +115,6 @@ export interface components {
             /** @description Caller's role in the workspace — ADMIN or MEMBER. */
             user_role: string;
         };
-        /** @description Workspaces visible to the caller. */
-        SomWorkspaceList: {
-            workspaces: components["schemas"]["SomWorkspace"][];
-        };
         /** @description A kanban board inside a SOM workspace. */
         SomBoard: {
             /**
@@ -133,10 +129,6 @@ export interface components {
             workspace_id: string;
             /** @description Display name. */
             name: string;
-        };
-        /** @description Boards of one workspace. */
-        SomBoardList: {
-            boards: components["schemas"]["SomBoard"][];
         };
         /** @description A SOM issue — a research task (skill) that an agent can execute. */
         SomIssue: {
@@ -166,7 +158,7 @@ export interface components {
              */
             parent_issue_id?: string | null;
         };
-        /** @description Issues of one board. */
+        /** @description Issues of one board with the count reported by SOM. */
         SomIssueList: {
             issues: components["schemas"]["SomIssue"][];
             /** @description Total issues on the board, regardless of paging. */
@@ -304,7 +296,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SomWorkspaceList"];
+                    "application/json": components["schemas"]["SomWorkspace"][];
                 };
             };
             401: components["responses"]["Unauthorized"];
@@ -331,7 +323,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SomBoardList"];
+                    "application/json": components["schemas"]["SomBoard"][];
                 };
             };
             401: components["responses"]["Unauthorized"];

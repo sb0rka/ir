@@ -101,6 +101,9 @@ type Entity struct {
 	// Metadata Source-specific attributes.
 	Metadata *map[string]interface{} `json:"metadata,omitempty"`
 
+	// Sources References that open this entity in the tools where it was found.
+	Sources []EntitySource `json:"sources"`
+
 	// TypeCode Entity type code from the reference dictionary.
 	TypeCode string `json:"type_code"`
 }
@@ -146,9 +149,6 @@ type EntityCreate struct {
 	// DisplayName Label for the UI. Falls back to the canonical key when absent.
 	DisplayName *string `json:"display_name,omitempty"`
 
-	// InvestigationId Investigation to link the entity to.
-	InvestigationId openapi_types.UUID `json:"investigation_id"`
-
 	// Metadata Anything else worth carrying — where the indicator came from, notes.
 	Metadata *map[string]interface{} `json:"metadata,omitempty"`
 
@@ -159,10 +159,10 @@ type EntityCreate struct {
 // EntityOrigin How an entity came to be part of an investigation.
 type EntityOrigin string
 
-// EntityPage One page of entities.
+// EntityPage One page of entities and the cursor for continuing it.
 type EntityPage struct {
-	// Items The entities on this page.
-	Items []Entity `json:"items"`
+	// Entities The entities on this page.
+	Entities []Entity `json:"entities"`
 
 	// NextCursor Pass as `cursor` to get the next page. Absent on the last page.
 	NextCursor *string `json:"next_cursor,omitempty"`
@@ -175,6 +175,21 @@ type EntityPatch struct {
 
 	// Metadata Replaces the stored attributes wholesale, not merged into them.
 	Metadata *map[string]interface{} `json:"metadata,omitempty"`
+}
+
+// EntitySource defines model for EntitySource.
+type EntitySource struct {
+	// FetchedAt When Gateway read this reference from the source.
+	FetchedAt time.Time `json:"fetched_at"`
+
+	// SourceCode Code of the tool that supplied this entity.
+	SourceCode string `json:"source_code"`
+
+	// SourceEntityId Identifier or stable query key used for this entity in that tool.
+	SourceEntityId string `json:"source_entity_id"`
+
+	// SourceRef Link or query that opens the entity in the source tool.
+	SourceRef *string `json:"source_ref,omitempty"`
 }
 
 // ErrorResponse Body of every non-2xx response. Clients branch on `code`, not on the HTTP status: the status says what happened at the protocol level, the code says what happened in the domain.
@@ -231,12 +246,6 @@ type Unauthorized = ErrorResponse
 // ValidationError Body of every non-2xx response. Clients branch on `code`, not on the HTTP status: the status says what happened at the protocol level, the code says what happened in the domain.
 type ValidationError = ErrorResponse
 
-// CreateEntityParams defines parameters for CreateEntity.
-type CreateEntityParams struct {
-	// XProjectID Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored.
-	XProjectID ProjectId `json:"X-Project-ID"`
-}
-
 // DeleteEntityParams defines parameters for DeleteEntity.
 type DeleteEntityParams struct {
 	// XProjectID Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored.
@@ -251,12 +260,6 @@ type GetEntityCardParams struct {
 
 // UpdateEntityParams defines parameters for UpdateEntity.
 type UpdateEntityParams struct {
-	// XProjectID Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored.
-	XProjectID ProjectId `json:"X-Project-ID"`
-}
-
-// DetachEntityParams defines parameters for DetachEntity.
-type DetachEntityParams struct {
 	// XProjectID Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored.
 	XProjectID ProjectId `json:"X-Project-ID"`
 }
@@ -279,17 +282,26 @@ type ListEntitiesParams struct {
 	XProjectID ProjectId `json:"X-Project-ID"`
 }
 
-// CreateEntityJSONRequestBody defines body for CreateEntity for application/json ContentType.
-type CreateEntityJSONRequestBody = EntityCreate
+// CreateEntityParams defines parameters for CreateEntity.
+type CreateEntityParams struct {
+	// XProjectID Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored.
+	XProjectID ProjectId `json:"X-Project-ID"`
+}
+
+// DetachEntityParams defines parameters for DetachEntity.
+type DetachEntityParams struct {
+	// XProjectID Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored.
+	XProjectID ProjectId `json:"X-Project-ID"`
+}
 
 // UpdateEntityJSONRequestBody defines body for UpdateEntity for application/json ContentType.
 type UpdateEntityJSONRequestBody = EntityPatch
 
+// CreateEntityJSONRequestBody defines body for CreateEntity for application/json ContentType.
+type CreateEntityJSONRequestBody = EntityCreate
+
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
-	// CreateEntity Add an entity by hand
-	// (POST /entities)
-	CreateEntity(w http.ResponseWriter, r *http.Request, params CreateEntityParams)
 	// DeleteEntity Delete an entity from the project
 	// (DELETE /entities/{entity_id})
 	DeleteEntity(w http.ResponseWriter, r *http.Request, entityId EntityId, params DeleteEntityParams)
@@ -299,12 +311,15 @@ type ServerInterface interface {
 	// UpdateEntity Edit an entity
 	// (PATCH /entities/{entity_id})
 	UpdateEntity(w http.ResponseWriter, r *http.Request, entityId EntityId, params UpdateEntityParams)
-	// DetachEntity Drop an entity from the investigation
-	// (DELETE /entities/{entity_id}/investigations/{investigation_id})
-	DetachEntity(w http.ResponseWriter, r *http.Request, entityId EntityId, investigationId InvestigationId, params DetachEntityParams)
 	// ListEntities Entities of the investigation
 	// (GET /investigations/{investigation_id}/entities)
 	ListEntities(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, params ListEntitiesParams)
+	// CreateEntity Add an entity by hand
+	// (POST /investigations/{investigation_id}/entities)
+	CreateEntity(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, params CreateEntityParams)
+	// DetachEntity Drop an entity from the investigation
+	// (DELETE /investigations/{investigation_id}/entities/{entity_id})
+	DetachEntity(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, entityId EntityId, params DetachEntityParams)
 }
 
 // ServerInterfaceWrapper converts contexts to parameters.
@@ -315,51 +330,6 @@ type ServerInterfaceWrapper struct {
 }
 
 type MiddlewareFunc func(http.Handler) http.Handler
-
-// CreateEntity operation middleware
-func (siw *ServerInterfaceWrapper) CreateEntity(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// Parameter object where we will unmarshal all parameters from the context
-	var params CreateEntityParams
-
-	headers := r.Header
-
-	// ------------- Required header parameter "X-Project-ID" -------------
-	if valueList, found := headers[http.CanonicalHeaderKey("X-Project-ID")]; found {
-		var XProjectID ProjectId
-		n := len(valueList)
-		if n != 1 {
-			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Project-ID", Count: n})
-			return
-		}
-
-		err = runtime.BindStyledParameterWithOptions("simple", "X-Project-ID", valueList[0], &XProjectID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
-		if err != nil {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Project-ID", Err: err})
-			return
-		}
-
-		params.XProjectID = XProjectID
-
-	} else {
-		err := fmt.Errorf("Header parameter X-Project-ID is required, but not found")
-		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Project-ID", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.CreateEntity(w, r, params)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
 
 // DeleteEntity operation middleware
 func (siw *ServerInterfaceWrapper) DeleteEntity(w http.ResponseWriter, r *http.Request) {
@@ -523,69 +493,6 @@ func (siw *ServerInterfaceWrapper) UpdateEntity(w http.ResponseWriter, r *http.R
 	handler.ServeHTTP(w, r)
 }
 
-// DetachEntity operation middleware
-func (siw *ServerInterfaceWrapper) DetachEntity(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "entity_id" -------------
-	var entityId EntityId
-
-	err = runtime.BindStyledParameterWithOptions("simple", "entity_id", r.PathValue("entity_id"), &entityId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "entity_id", Err: err})
-		return
-	}
-
-	// ------------- Path parameter "investigation_id" -------------
-	var investigationId InvestigationId
-
-	err = runtime.BindStyledParameterWithOptions("simple", "investigation_id", r.PathValue("investigation_id"), &investigationId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "investigation_id", Err: err})
-		return
-	}
-
-	// Parameter object where we will unmarshal all parameters from the context
-	var params DetachEntityParams
-
-	headers := r.Header
-
-	// ------------- Required header parameter "X-Project-ID" -------------
-	if valueList, found := headers[http.CanonicalHeaderKey("X-Project-ID")]; found {
-		var XProjectID ProjectId
-		n := len(valueList)
-		if n != 1 {
-			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Project-ID", Count: n})
-			return
-		}
-
-		err = runtime.BindStyledParameterWithOptions("simple", "X-Project-ID", valueList[0], &XProjectID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
-		if err != nil {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Project-ID", Err: err})
-			return
-		}
-
-		params.XProjectID = XProjectID
-
-	} else {
-		err := fmt.Errorf("Header parameter X-Project-ID is required, but not found")
-		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Project-ID", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.DetachEntity(w, r, entityId, investigationId, params)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
 // ListEntities operation middleware
 func (siw *ServerInterfaceWrapper) ListEntities(w http.ResponseWriter, r *http.Request) {
 
@@ -683,6 +590,123 @@ func (siw *ServerInterfaceWrapper) ListEntities(w http.ResponseWriter, r *http.R
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ListEntities(w, r, investigationId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateEntity operation middleware
+func (siw *ServerInterfaceWrapper) CreateEntity(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "investigation_id" -------------
+	var investigationId InvestigationId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "investigation_id", r.PathValue("investigation_id"), &investigationId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "investigation_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params CreateEntityParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "X-Project-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Project-ID")]; found {
+		var XProjectID ProjectId
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Project-ID", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Project-ID", valueList[0], &XProjectID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Project-ID", Err: err})
+			return
+		}
+
+		params.XProjectID = XProjectID
+
+	} else {
+		err := fmt.Errorf("Header parameter X-Project-ID is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Project-ID", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateEntity(w, r, investigationId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DetachEntity operation middleware
+func (siw *ServerInterfaceWrapper) DetachEntity(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "investigation_id" -------------
+	var investigationId InvestigationId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "investigation_id", r.PathValue("investigation_id"), &investigationId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "investigation_id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "entity_id" -------------
+	var entityId EntityId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "entity_id", r.PathValue("entity_id"), &entityId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "entity_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params DetachEntityParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "X-Project-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Project-ID")]; found {
+		var XProjectID ProjectId
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Project-ID", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Project-ID", valueList[0], &XProjectID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Project-ID", Err: err})
+			return
+		}
+
+		params.XProjectID = XProjectID
+
+	} else {
+		err := fmt.Errorf("Header parameter X-Project-ID is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Project-ID", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DetachEntity(w, r, investigationId, entityId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -813,11 +837,11 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	}
 
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/investigations/{investigation_id}/entities", wrapper.ListEntities)
-	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/entities", wrapper.CreateEntity)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/investigations/{investigation_id}/entities", wrapper.CreateEntity)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/entities/{entity_id}", wrapper.DeleteEntity)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/entities/{entity_id}", wrapper.GetEntityCard)
 	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/entities/{entity_id}", wrapper.UpdateEntity)
-	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/entities/{entity_id}/investigations/{investigation_id}", wrapper.DetachEntity)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/investigations/{investigation_id}/entities/{entity_id}", wrapper.DetachEntity)
 
 	return m
 }
@@ -835,113 +859,6 @@ type NotImplementedJSONResponse ErrorResponse
 type UnauthorizedJSONResponse ErrorResponse
 
 type ValidationErrorJSONResponse ErrorResponse
-
-type CreateEntityRequestObject struct {
-	Params CreateEntityParams
-	Body   *CreateEntityJSONRequestBody
-}
-
-type CreateEntityResponseObject interface {
-	VisitCreateEntityResponse(w http.ResponseWriter) error
-}
-
-type CreateEntity201JSONResponse Entity
-
-func (response CreateEntity201JSONResponse) VisitCreateEntityResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(201)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type CreateEntity401JSONResponse struct{ UnauthorizedJSONResponse }
-
-func (response CreateEntity401JSONResponse) VisitCreateEntityResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(401)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type CreateEntity403JSONResponse struct{ ForbiddenJSONResponse }
-
-func (response CreateEntity403JSONResponse) VisitCreateEntityResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(403)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type CreateEntity404JSONResponse struct{ NotFoundJSONResponse }
-
-func (response CreateEntity404JSONResponse) VisitCreateEntityResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(404)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type CreateEntity422JSONResponse struct{ ValidationErrorJSONResponse }
-
-func (response CreateEntity422JSONResponse) VisitCreateEntityResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(422)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type CreateEntity500JSONResponse struct{ InternalErrorJSONResponse }
-
-func (response CreateEntity500JSONResponse) VisitCreateEntityResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(500)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type CreateEntity501JSONResponse struct{ NotImplementedJSONResponse }
-
-func (response CreateEntity501JSONResponse) VisitCreateEntityResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(501)
-	_, err := buf.WriteTo(w)
-	return err
-}
 
 type DeleteEntityRequestObject struct {
 	EntityId EntityId `json:"entity_id"`
@@ -1245,108 +1162,6 @@ func (response UpdateEntity501JSONResponse) VisitUpdateEntityResponse(w http.Res
 	return err
 }
 
-type DetachEntityRequestObject struct {
-	EntityId        EntityId        `json:"entity_id"`
-	InvestigationId InvestigationId `json:"investigation_id"`
-	Params          DetachEntityParams
-}
-
-type DetachEntityResponseObject interface {
-	VisitDetachEntityResponse(w http.ResponseWriter) error
-}
-
-type DetachEntity204Response struct {
-}
-
-func (response DetachEntity204Response) VisitDetachEntityResponse(w http.ResponseWriter) error {
-	w.WriteHeader(204)
-	return nil
-}
-
-type DetachEntity401JSONResponse struct{ UnauthorizedJSONResponse }
-
-func (response DetachEntity401JSONResponse) VisitDetachEntityResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(401)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type DetachEntity403JSONResponse struct{ ForbiddenJSONResponse }
-
-func (response DetachEntity403JSONResponse) VisitDetachEntityResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(403)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type DetachEntity404JSONResponse struct{ NotFoundJSONResponse }
-
-func (response DetachEntity404JSONResponse) VisitDetachEntityResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(404)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type DetachEntity409JSONResponse struct{ ConflictJSONResponse }
-
-func (response DetachEntity409JSONResponse) VisitDetachEntityResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(409)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type DetachEntity500JSONResponse struct{ InternalErrorJSONResponse }
-
-func (response DetachEntity500JSONResponse) VisitDetachEntityResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(500)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type DetachEntity501JSONResponse struct{ NotImplementedJSONResponse }
-
-func (response DetachEntity501JSONResponse) VisitDetachEntityResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(501)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
 type ListEntitiesRequestObject struct {
 	InvestigationId InvestigationId `json:"investigation_id"`
 	Params          ListEntitiesParams
@@ -1454,11 +1269,218 @@ func (response ListEntities501JSONResponse) VisitListEntitiesResponse(w http.Res
 	return err
 }
 
+type CreateEntityRequestObject struct {
+	InvestigationId InvestigationId `json:"investigation_id"`
+	Params          CreateEntityParams
+	Body            *CreateEntityJSONRequestBody
+}
+
+type CreateEntityResponseObject interface {
+	VisitCreateEntityResponse(w http.ResponseWriter) error
+}
+
+type CreateEntity201JSONResponse Entity
+
+func (response CreateEntity201JSONResponse) VisitCreateEntityResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateEntity401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response CreateEntity401JSONResponse) VisitCreateEntityResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateEntity403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response CreateEntity403JSONResponse) VisitCreateEntityResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateEntity404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response CreateEntity404JSONResponse) VisitCreateEntityResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateEntity422JSONResponse struct{ ValidationErrorJSONResponse }
+
+func (response CreateEntity422JSONResponse) VisitCreateEntityResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateEntity500JSONResponse struct{ InternalErrorJSONResponse }
+
+func (response CreateEntity500JSONResponse) VisitCreateEntityResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateEntity501JSONResponse struct{ NotImplementedJSONResponse }
+
+func (response CreateEntity501JSONResponse) VisitCreateEntityResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(501)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DetachEntityRequestObject struct {
+	InvestigationId InvestigationId `json:"investigation_id"`
+	EntityId        EntityId        `json:"entity_id"`
+	Params          DetachEntityParams
+}
+
+type DetachEntityResponseObject interface {
+	VisitDetachEntityResponse(w http.ResponseWriter) error
+}
+
+type DetachEntity204Response struct {
+}
+
+func (response DetachEntity204Response) VisitDetachEntityResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DetachEntity401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response DetachEntity401JSONResponse) VisitDetachEntityResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DetachEntity403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response DetachEntity403JSONResponse) VisitDetachEntityResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DetachEntity404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response DetachEntity404JSONResponse) VisitDetachEntityResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DetachEntity409JSONResponse struct{ ConflictJSONResponse }
+
+func (response DetachEntity409JSONResponse) VisitDetachEntityResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DetachEntity500JSONResponse struct{ InternalErrorJSONResponse }
+
+func (response DetachEntity500JSONResponse) VisitDetachEntityResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DetachEntity501JSONResponse struct{ NotImplementedJSONResponse }
+
+func (response DetachEntity501JSONResponse) VisitDetachEntityResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(501)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
-	// CreateEntity Add an entity by hand
-	// (POST /entities)
-	CreateEntity(ctx context.Context, request CreateEntityRequestObject) (CreateEntityResponseObject, error)
 	// DeleteEntity Delete an entity from the project
 	// (DELETE /entities/{entity_id})
 	DeleteEntity(ctx context.Context, request DeleteEntityRequestObject) (DeleteEntityResponseObject, error)
@@ -1468,12 +1490,15 @@ type StrictServerInterface interface {
 	// UpdateEntity Edit an entity
 	// (PATCH /entities/{entity_id})
 	UpdateEntity(ctx context.Context, request UpdateEntityRequestObject) (UpdateEntityResponseObject, error)
-	// DetachEntity Drop an entity from the investigation
-	// (DELETE /entities/{entity_id}/investigations/{investigation_id})
-	DetachEntity(ctx context.Context, request DetachEntityRequestObject) (DetachEntityResponseObject, error)
 	// ListEntities Entities of the investigation
 	// (GET /investigations/{investigation_id}/entities)
 	ListEntities(ctx context.Context, request ListEntitiesRequestObject) (ListEntitiesResponseObject, error)
+	// CreateEntity Add an entity by hand
+	// (POST /investigations/{investigation_id}/entities)
+	CreateEntity(ctx context.Context, request CreateEntityRequestObject) (CreateEntityResponseObject, error)
+	// DetachEntity Drop an entity from the investigation
+	// (DELETE /investigations/{investigation_id}/entities/{entity_id})
+	DetachEntity(ctx context.Context, request DetachEntityRequestObject) (DetachEntityResponseObject, error)
 }
 
 type StrictHandlerFunc func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error)
@@ -1513,39 +1538,6 @@ type strictHandler struct {
 	ssi         StrictServerInterface
 	middlewares []StrictMiddlewareFunc
 	options     StrictHTTPServerOptions
-}
-
-// CreateEntity operation middleware
-func (sh *strictHandler) CreateEntity(w http.ResponseWriter, r *http.Request, params CreateEntityParams) {
-	var request CreateEntityRequestObject
-
-	request.Params = params
-
-	var body CreateEntityJSONRequestBody
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
-		return
-	}
-	request.Body = &body
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.CreateEntity(ctx, request.(CreateEntityRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "CreateEntity")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(CreateEntityResponseObject); ok {
-		if err := validResponse.VisitCreateEntityResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
 }
 
 // DeleteEntity operation middleware
@@ -1636,34 +1628,6 @@ func (sh *strictHandler) UpdateEntity(w http.ResponseWriter, r *http.Request, en
 	}
 }
 
-// DetachEntity operation middleware
-func (sh *strictHandler) DetachEntity(w http.ResponseWriter, r *http.Request, entityId EntityId, investigationId InvestigationId, params DetachEntityParams) {
-	var request DetachEntityRequestObject
-
-	request.EntityId = entityId
-	request.InvestigationId = investigationId
-	request.Params = params
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.DetachEntity(ctx, request.(DetachEntityRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "DetachEntity")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(DetachEntityResponseObject); ok {
-		if err := validResponse.VisitDetachEntityResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
 // ListEntities operation middleware
 func (sh *strictHandler) ListEntities(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, params ListEntitiesParams) {
 	var request ListEntitiesRequestObject
@@ -1684,6 +1648,68 @@ func (sh *strictHandler) ListEntities(w http.ResponseWriter, r *http.Request, in
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(ListEntitiesResponseObject); ok {
 		if err := validResponse.VisitListEntitiesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateEntity operation middleware
+func (sh *strictHandler) CreateEntity(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, params CreateEntityParams) {
+	var request CreateEntityRequestObject
+
+	request.InvestigationId = investigationId
+	request.Params = params
+
+	var body CreateEntityJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateEntity(ctx, request.(CreateEntityRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateEntity")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateEntityResponseObject); ok {
+		if err := validResponse.VisitCreateEntityResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DetachEntity operation middleware
+func (sh *strictHandler) DetachEntity(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, entityId EntityId, params DetachEntityParams) {
+	var request DetachEntityRequestObject
+
+	request.InvestigationId = investigationId
+	request.EntityId = entityId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DetachEntity(ctx, request.(DetachEntityRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DetachEntity")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DetachEntityResponseObject); ok {
+		if err := validResponse.VisitDetachEntityResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

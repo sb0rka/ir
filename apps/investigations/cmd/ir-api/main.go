@@ -64,7 +64,7 @@ func run() error {
 			TargetBranch:   cfg.SOM.TargetBranch,
 			Executor:       cfg.SOM.Executor,
 		}),
-		gatewayclient.New(cfg.Gateway.BaseURL),
+		gatewayclient.New(gatewayclient.Config{BaseURL: cfg.Gateway.BaseURL}),
 		cfg.Prompt,
 	)
 	handler := transport.NewHandler(transport.Dependencies{

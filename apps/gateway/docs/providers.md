@@ -15,7 +15,11 @@ Vendor DTOs live in `internal/adapters/proxy/<provider>/schema.go` and never ent
 
 ## MaxPatrol SIEM (`maxpatrol-siem`)
 
-Registered capability: event search. Raw and correlated records become canonical events through `proxy/maxpatrol.ToEventPage`; correlation metadata and selected dynamic fields stay in bounded attributes. Entity lookup is not registered until its contract blocker is resolved. Reference: [MaxPatrol SIEM event list API](https://help.ptsecurity.com/ru-RU/projects/siem/8.1/help/10836123659).
+Registered capability: event search, including exact resolution of records
+previously returned by that search. Raw and correlated records become canonical
+events through `proxy/maxpatrol.ToEventPage`; correlation metadata and selected
+dynamic fields stay in bounded attributes. Entity lookup is not registered until
+its contract blocker is resolved. Reference: [MaxPatrol SIEM event list API](https://help.ptsecurity.com/ru-RU/projects/siem/8.1/help/10836123659).
 
 The deterministic mock uses a Gateway-only `token:offset` continuation to exercise canonical pagination. It is not claimed as the SIEM continuation protocol; a proxy implementation must confirm the vendor token exchange separately.
 

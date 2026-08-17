@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS sources (
     code VARCHAR(32) NOT NULL,
 
     kind VARCHAR(16) NOT NULL
-        CHECK (kind IN ('siem', 'edr', 'ndr', 'sandbox', 'infra_logs')),
+        CHECK (kind IN ('siem', 'edr', 'ndr', 'sandbox', 'infra', 'other')),
     title VARCHAR NOT NULL,
     is_enabled BOOLEAN DEFAULT true NOT NULL,
 
@@ -44,7 +44,7 @@ CREATE TABLE IF NOT EXISTS entity_types (
 
     title VARCHAR NOT NULL,
     category VARCHAR(32) NOT NULL
-        CHECK (category IN ('identity', 'network', 'execution', 'persistence', 'asset')),
+        CHECK (category IN ('identity', 'network', 'execution', 'persistence', 'asset', 'other')),
 
     created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
@@ -86,8 +86,7 @@ CREATE TABLE IF NOT EXISTS investigations (
     id UUID DEFAULT gen_random_uuid() NOT NULL,
     parent_id UUID,
 
-    project_id VARCHAR(12),
-    workspace_id UUID,
+    project_id VARCHAR(12) NOT NULL,
 
     title VARCHAR NOT NULL,
     description VARCHAR,
@@ -134,9 +133,20 @@ CREATE INDEX IF NOT EXISTS ix_investigations_parent
 CREATE INDEX IF NOT EXISTS ix_investigations_status
     ON investigations (project_id, status, created_at DESC);
 
-CREATE INDEX IF NOT EXISTS ix_investigations_workspace
-    ON investigations (workspace_id)
-    WHERE workspace_id IS NOT NULL;
+CREATE TABLE IF NOT EXISTS investigation_som_workspaces (
+    investigation_id UUID NOT NULL,
+    project_id VARCHAR(12) NOT NULL,
+    workspace_id UUID NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
+
+    CONSTRAINT pk_investigation_som_workspaces PRIMARY KEY (investigation_id, workspace_id),
+    CONSTRAINT fk_investigation_som_workspaces_investigation
+        FOREIGN KEY (investigation_id, project_id)
+        REFERENCES investigations (id, project_id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS ix_investigation_som_workspaces_workspace
+    ON investigation_som_workspaces (workspace_id);
 
 -- EVIDENCE
 
@@ -147,19 +157,18 @@ CREATE TABLE IF NOT EXISTS events (
 
     source_event_id VARCHAR NOT NULL,
     source_ref VARCHAR,
+    title VARCHAR NOT NULL,
     event_type VARCHAR(64) NOT NULL,
     occurred_at TIMESTAMP WITH TIME ZONE NOT NULL,
     ingested_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
     normalized_data JSONB DEFAULT '{}'::jsonb NOT NULL,
-    raw_data JSONB,
-    dedup_key VARCHAR NOT NULL,
+    provenance JSONB DEFAULT '{}'::jsonb NOT NULL,
 
     created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
 
     CONSTRAINT pk_events PRIMARY KEY (id),
     CONSTRAINT uq_events_id_project UNIQUE (id, project_id),
-    CONSTRAINT uq_events_dedup UNIQUE (project_id, dedup_key),
     CONSTRAINT uq_events_source UNIQUE (project_id, source_code, source_event_id),
     CONSTRAINT fk_events_source_code_sources FOREIGN KEY (source_code)
         REFERENCES sources (code)
@@ -207,6 +216,35 @@ BEFORE UPDATE ON entities
 FOR EACH ROW
 EXECUTE FUNCTION set_updated_at();
 
+CREATE TABLE IF NOT EXISTS entity_sources (
+    entity_id UUID NOT NULL,
+    project_id VARCHAR(12) NOT NULL,
+    source_code VARCHAR(32) NOT NULL,
+    source_entity_id VARCHAR NOT NULL,
+    source_ref VARCHAR,
+    fetched_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    provenance JSONB DEFAULT '{}'::jsonb NOT NULL,
+
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
+
+    CONSTRAINT pk_entity_sources PRIMARY KEY (entity_id, source_code, source_entity_id),
+    CONSTRAINT uq_entity_sources_external UNIQUE (project_id, source_code, source_entity_id),
+    CONSTRAINT fk_entity_sources_entity FOREIGN KEY (entity_id, project_id)
+        REFERENCES entities (id, project_id) ON DELETE CASCADE,
+    CONSTRAINT fk_entity_sources_source FOREIGN KEY (source_code)
+        REFERENCES sources (code)
+);
+
+DROP TRIGGER IF EXISTS trg_entity_sources_set_updated_at ON entity_sources;
+CREATE TRIGGER trg_entity_sources_set_updated_at
+BEFORE UPDATE ON entity_sources
+FOR EACH ROW
+EXECUTE FUNCTION set_updated_at();
+
+CREATE INDEX IF NOT EXISTS ix_entity_sources_entity
+    ON entity_sources (entity_id);
+
 CREATE TABLE IF NOT EXISTS event_entity_relations (
     id UUID DEFAULT gen_random_uuid() NOT NULL,
     project_id VARCHAR(12) NOT NULL,
@@ -236,6 +274,37 @@ EXECUTE FUNCTION set_updated_at();
 
 CREATE INDEX IF NOT EXISTS ix_eer_entity ON event_entity_relations (entity_id);
 CREATE INDEX IF NOT EXISTS ix_eer_event ON event_entity_relations (event_id);
+
+CREATE TABLE IF NOT EXISTS entity_relations (
+    id UUID DEFAULT gen_random_uuid() NOT NULL,
+    project_id VARCHAR(12) NOT NULL,
+    source_code VARCHAR(32) NOT NULL,
+    source_relation_id VARCHAR NOT NULL,
+    source_ref VARCHAR,
+    source_entity_id UUID NOT NULL,
+    target_entity_id UUID NOT NULL,
+    relation_code VARCHAR(64) NOT NULL,
+    occurred_at TIMESTAMP WITH TIME ZONE,
+    provenance JSONB DEFAULT '{}'::jsonb NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
+
+    CONSTRAINT pk_entity_relations PRIMARY KEY (id),
+    CONSTRAINT uq_entity_relations_source UNIQUE (project_id, source_code, source_relation_id),
+    CONSTRAINT fk_entity_relations_source_code FOREIGN KEY (source_code)
+        REFERENCES sources (code),
+    CONSTRAINT fk_entity_relations_source FOREIGN KEY (source_entity_id, project_id)
+        REFERENCES entities (id, project_id) ON DELETE CASCADE,
+    CONSTRAINT fk_entity_relations_target FOREIGN KEY (target_entity_id, project_id)
+        REFERENCES entities (id, project_id) ON DELETE CASCADE,
+    CONSTRAINT fk_entity_relations_type FOREIGN KEY (relation_code)
+        REFERENCES relation_types (code)
+);
+
+DROP TRIGGER IF EXISTS trg_entity_relations_set_updated_at ON entity_relations;
+CREATE TRIGGER trg_entity_relations_set_updated_at
+BEFORE UPDATE ON entity_relations
+FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
 -- INVESTIGATION COMPONENTS
 
@@ -440,11 +509,11 @@ CREATE INDEX IF NOT EXISTS ix_role_bindings_subject ON role_bindings (subject_id
 
 WITH updated AS (
     UPDATE version_investigations
-    SET version_num = '90ed76030198'
+    SET version_num = '202608170002'
     RETURNING version_investigations.version_num
 )
 INSERT INTO version_investigations (version_num)
-SELECT '90ed76030198'
+SELECT '202608170002'
 WHERE NOT EXISTS (SELECT 1 FROM updated)
 RETURNING version_num;
 

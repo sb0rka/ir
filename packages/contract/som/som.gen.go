@@ -82,11 +82,6 @@ type SomBoard struct {
 	WorkspaceId openapi_types.UUID `json:"workspace_id"`
 }
 
-// SomBoardList Boards of one workspace.
-type SomBoardList struct {
-	Boards []SomBoard `json:"boards"`
-}
-
 // SomIssue A SOM issue — a research task (skill) that an agent can execute.
 type SomIssue struct {
 	// BoardId Board the issue belongs to.
@@ -114,7 +109,7 @@ type SomIssue struct {
 	Title string `json:"title"`
 }
 
-// SomIssueList Issues of one board.
+// SomIssueList Issues of one board with the count reported by SOM.
 type SomIssueList struct {
 	Issues []SomIssue `json:"issues"`
 
@@ -165,11 +160,6 @@ type SomWorkspace struct {
 
 	// UserRole Caller's role in the workspace — ADMIN or MEMBER.
 	UserRole string `json:"user_role"`
-}
-
-// SomWorkspaceList Workspaces visible to the caller.
-type SomWorkspaceList struct {
-	Workspaces []SomWorkspace `json:"workspaces"`
 }
 
 // InternalError Body of every non-2xx response. Clients branch on `code`, not on the HTTP status: the status says what happened at the protocol level, the code says what happened in the domain.
@@ -656,7 +646,7 @@ type ListSomWorkspacesResponseObject interface {
 	VisitListSomWorkspacesResponse(w http.ResponseWriter) error
 }
 
-type ListSomWorkspaces200JSONResponse SomWorkspaceList
+type ListSomWorkspaces200JSONResponse []SomWorkspace
 
 func (response ListSomWorkspaces200JSONResponse) VisitListSomWorkspacesResponse(w http.ResponseWriter) error {
 
@@ -734,7 +724,7 @@ type ListSomBoardsResponseObject interface {
 	VisitListSomBoardsResponse(w http.ResponseWriter) error
 }
 
-type ListSomBoards200JSONResponse SomBoardList
+type ListSomBoards200JSONResponse []SomBoard
 
 func (response ListSomBoards200JSONResponse) VisitListSomBoardsResponse(w http.ResponseWriter) error {
 

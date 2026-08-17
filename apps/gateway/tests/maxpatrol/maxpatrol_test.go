@@ -49,7 +49,7 @@ func TestMockUsesMappedVendorPage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(next.Events) != 1 || next.Events[0].ID == page.Events[0].ID {
+	if len(next.Events) != 1 || next.Events[0].Provenance.ExternalID == page.Events[0].Provenance.ExternalID {
 		t.Fatalf("cursor did not advance: %#v", next)
 	}
 }
