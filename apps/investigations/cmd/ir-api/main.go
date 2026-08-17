@@ -14,7 +14,9 @@ import (
 	corelog "github.com/sb0rka/sb0rka/packages/core/log"
 
 	"github.com/sb0rka/ir/apps/investigations/internal/config"
+	"github.com/sb0rka/ir/apps/investigations/internal/gatewayclient"
 	"github.com/sb0rka/ir/apps/investigations/internal/server"
+	"github.com/sb0rka/ir/apps/investigations/internal/somclient"
 	"github.com/sb0rka/ir/apps/investigations/internal/store/psql"
 	"github.com/sb0rka/ir/apps/investigations/internal/transport"
 )
@@ -51,7 +53,20 @@ func run() error {
 		return err
 	}
 
-	api := server.New(db, log)
+	api := server.New(db, log,
+		somclient.New(somclient.Config{
+			APIBaseURL:     cfg.SOM.APIBaseURL,
+			RelayBaseURL:   cfg.SOM.RelayBaseURL,
+			HostID:         cfg.SOM.HostID,
+			RepoID:         cfg.SOM.RepoID,
+			RepoParentPath: cfg.SOM.RepoParentPath,
+			RepoFolderName: cfg.SOM.RepoFolderName,
+			TargetBranch:   cfg.SOM.TargetBranch,
+			Executor:       cfg.SOM.Executor,
+		}),
+		gatewayclient.New(cfg.Gateway.BaseURL),
+		cfg.Prompt,
+	)
 	handler := transport.NewHandler(transport.Dependencies{
 		Cfg:    cfg.Server,
 		Log:    log,

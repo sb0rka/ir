@@ -72,12 +72,30 @@ services:
       args:
         BINARY: ir-api
     restart: unless-stopped
+    env_file:
+      - .env
     environment:
       SERVER_ADDR: "0.0.0.0"
       SERVER_PORT: "8090"
       SERVER_CORS_WHITELIST: "${SERVER_CORS_WHITELIST:-http://localhost:5173,http://localhost:3000}"
       DATABASE_URI: "postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:5432/investigations?search_path=${DB_INV_SCHEMA_NAME}"
       LOG_FORMAT: "${LOG_FORMAT:-text}"
+      # Demo: без своей проверки токенов; Authorization пробрасывается в SOM.
+      AUTH_DISABLED: "${IR_AUTH_DISABLED:-true}"
+      # Значения — из ir/.env (см. .env.sample). Пустой SOM_API_BASE_URL выключает som-роуты.
+      SOM_API_BASE_URL: "${SOM_API_BASE_URL:-}"
+      SOM_RELAY_BASE_URL: "${SOM_RELAY_BASE_URL:-}"
+      SOM_HOST_ID: "${SOM_HOST_ID:-}"
+      SOM_REPO_ID: "${SOM_REPO_ID:-}"
+      SOM_REPO_PARENT_PATH: "${SOM_REPO_PARENT_PATH:-/tmp}"
+      SOM_REPO_FOLDER_NAME: "${SOM_REPO_FOLDER_NAME:-ir-demo}"
+      SOM_TARGET_BRANCH: "${SOM_TARGET_BRANCH:-main}"
+      SOM_EXECUTOR: "${SOM_EXECUTOR:-OPENCODE}"
+      # Изнутри compose gateway доступен по имени сервиса, а агенту на daemon
+      # VM нужны адреса, достижимые с той машины, — их задают *_PUBLIC_*.
+      GATEWAY_BASE_URL: "${GATEWAY_BASE_URL:-http://gateway:8091}"
+      IR_PUBLIC_BASE_URL: "${IR_PUBLIC_BASE_URL:-}"
+      GATEWAY_PUBLIC_BASE_URL: "${GATEWAY_PUBLIC_BASE_URL:-}"
       # Публичный ключ платформы. Без него сервис поднимется,
       # но любой запрос с токеном получит 401 — конфиг стенда неполон.
       ACCESS_TOKEN_PUBLIC_KEY_FILE_PATH: "${ACCESS_TOKEN_PUBLIC_KEY_FILE_PATH:-}"
@@ -88,6 +106,10 @@ services:
       - "${API_PORT:-8090}:8090"
     volumes:
       - ./keys:/keys:ro
+    networks:
+      - default
+      # SOM remote-server / relay-server from deploy/docker-compose.yml
+      - deploy_default
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8090/ping || exit 1"]
       interval: 10s
@@ -101,6 +123,8 @@ services:
       context: .
       dockerfile: apps/gateway/Dockerfile
     restart: unless-stopped
+    env_file:
+      - .env
     environment:
       SERVER_ADDR: "0.0.0.0"
       SERVER_PORT: "8091"
@@ -124,3 +148,9 @@ services:
 
 volumes:
   pgdata:
+
+networks:
+  deploy_default:
+    external: true
+    name: deploy_default
+

@@ -574,6 +574,95 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/som/workspaces": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * SOM workspaces of the caller
+         * @description Proxies SOM `GET /v1/workspaces` with the caller's bearer token. The list is exactly what the token's owner sees in SOM.
+         */
+        get: operations["listSomWorkspaces"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/som/workspaces/{workspace_id}/boards": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description SOM workspace whose boards are listed. */
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * Boards of a SOM workspace
+         * @description Proxies SOM `GET /v1/boards?workspace_id=...`.
+         */
+        get: operations["listSomBoards"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/som/boards/{board_id}/issues": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description SOM board whose issues are listed. */
+                board_id: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * Issues of a SOM board
+         * @description Proxies SOM `GET /v1/issues?board_id=...`. Issues are the research tasks (skills) an agent can be started on.
+         */
+        get: operations["listSomIssues"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/som/issues/{issue_id}/run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description SOM issue to run an agent on. */
+                issue_id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run an agent on a SOM issue
+         * @description Orchestrates a run: reads the issue from SOM, opens a relay session to the configured daemon host, starts an environment with the issue text as the prompt, then links the environment back to the issue in SOM. Stateless — nothing is persisted in IR; the ids in the response are the only handle on the run.
+         */
+        post: operations["runSomIssue"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1304,6 +1393,117 @@ export interface components {
          * @enum {string}
          */
         SourceKind: "siem" | "edr" | "ndr" | "infra" | "sandbox" | "other";
+        /** @description A SOM workspace as the caller sees it. */
+        SomWorkspace: {
+            /**
+             * Format: uuid
+             * @description Identifier of the workspace in SOM.
+             */
+            id: string;
+            /** @description Display name. */
+            name: string;
+            /** @description URL slug of the workspace. */
+            slug: string;
+            /** @description Whether this is the caller's personal workspace. */
+            is_personal: boolean;
+            /** @description Prefix used in issue simple ids, e.g. "IR". */
+            issue_prefix: string;
+            /** @description Caller's role in the workspace — ADMIN or MEMBER. */
+            user_role: string;
+        };
+        /** @description Workspaces visible to the caller. */
+        SomWorkspaceList: {
+            workspaces: components["schemas"]["SomWorkspace"][];
+        };
+        /** @description A kanban board inside a SOM workspace. */
+        SomBoard: {
+            /**
+             * Format: uuid
+             * @description Identifier of the board in SOM.
+             */
+            id: string;
+            /**
+             * Format: uuid
+             * @description Workspace the board belongs to.
+             */
+            workspace_id: string;
+            /** @description Display name. */
+            name: string;
+        };
+        /** @description Boards of one workspace. */
+        SomBoardList: {
+            boards: components["schemas"]["SomBoard"][];
+        };
+        /** @description A SOM issue — a research task (skill) that an agent can execute. */
+        SomIssue: {
+            /**
+             * Format: uuid
+             * @description Identifier of the issue in SOM.
+             */
+            id: string;
+            /**
+             * Format: uuid
+             * @description Board the issue belongs to.
+             */
+            board_id: string;
+            /** @description Sequential number within the workspace. */
+            issue_number: number;
+            /** @description Human-readable id, e.g. "IR-42". */
+            simple_id: string;
+            /** @description What the task is. */
+            title: string;
+            /** @description Full task text. For runnable skills this holds the instructions the agent will follow. */
+            description?: string | null;
+            /** @description urgent, high, medium or low. Absent when not set. */
+            priority?: string | null;
+            /**
+             * Format: uuid
+             * @description Parent issue for sub-issues.
+             */
+            parent_issue_id?: string | null;
+        };
+        /** @description Issues of one board. */
+        SomIssueList: {
+            issues: components["schemas"]["SomIssue"][];
+            /** @description Total issues on the board, regardless of paging. */
+            total_count: number;
+        };
+        /** @description Context IR adds to the run. */
+        SomIssueRunRequest: {
+            /**
+             * Format: uuid
+             * @description Investigation the agent should enrich. Passed to the agent inside the prompt so it knows where to attach found events and nodes.
+             */
+            investigation_id?: string;
+        };
+        /** @description Handles of the started run. IR stores nothing about it — poll SOM or the daemon with these ids. */
+        SomIssueRunResult: {
+            /**
+             * Format: uuid
+             * @description The issue the run was started for.
+             */
+            issue_id: string;
+            /**
+             * Format: uuid
+             * @description Board of the issue; the SOM environment is linked under it.
+             */
+            board_id: string;
+            /**
+             * Format: uuid
+             * @description Environment created on the daemon host.
+             */
+            local_environment_id: string;
+            /**
+             * Format: uuid
+             * @description SOM environment record linking the run to the issue.
+             */
+            som_environment_id: string;
+            /**
+             * Format: uuid
+             * @description Daemon repository the environment was started on.
+             */
+            repo_id?: string;
+        };
     };
     responses: {
         /** @description Token is missing, malformed, expired or signed by an unknown key (code=unauthorized). */
@@ -2527,6 +2727,119 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             500: components["responses"]["InternalError"];
             501: components["responses"]["NotImplemented"];
+        };
+    };
+    listSomWorkspaces: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Workspaces visible to the caller */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SomWorkspaceList"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            500: components["responses"]["InternalError"];
+            501: components["responses"]["NotImplemented"];
+            502: components["responses"]["SourceUnavailable"];
+        };
+    };
+    listSomBoards: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description SOM workspace whose boards are listed. */
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Boards of the workspace */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SomBoardList"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+            501: components["responses"]["NotImplemented"];
+            502: components["responses"]["SourceUnavailable"];
+        };
+    };
+    listSomIssues: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description SOM board whose issues are listed. */
+                board_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Issues of the board */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SomIssueList"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+            501: components["responses"]["NotImplemented"];
+            502: components["responses"]["SourceUnavailable"];
+        };
+    };
+    runSomIssue: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description SOM issue to run an agent on. */
+                issue_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SomIssueRunRequest"];
+            };
+        };
+        responses: {
+            /** @description The run was started and linked */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SomIssueRunResult"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["ValidationError"];
+            500: components["responses"]["InternalError"];
+            501: components["responses"]["NotImplemented"];
+            502: components["responses"]["SourceUnavailable"];
         };
     };
 }

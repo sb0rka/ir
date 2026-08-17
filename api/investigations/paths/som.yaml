@@ -1,0 +1,270 @@
+openapi: 3.0.3
+info:
+  title: IR — SOM integration
+  version: 0.0.1
+servers:
+  - url: /api/v1
+security:
+  - bearerAuth: []
+
+# Demo-домен: тонкий фасад над SOM kanban API. Bearer-токен вызова — это
+# SOM access JWT, IR не проверяет его сам, а пробрасывает в SOM как есть
+# (pass-through). Пути не требуют X-Project-ID: они адресуют сущности SOM,
+# а не проекта Sb0rka.
+
+paths:
+  /som/workspaces:
+    get:
+      tags: [som]
+      summary: SOM workspaces of the caller
+      description: >-
+        Proxies SOM `GET /v1/workspaces` with the caller's bearer token. The
+        list is exactly what the token's owner sees in SOM.
+      operationId: listSomWorkspaces
+      responses:
+        '200':
+          description: Workspaces visible to the caller
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SomWorkspaceList' }
+        '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '501': { $ref: '../shared/responses.yaml#/components/responses/NotImplemented' }
+        '500': { $ref: '../shared/responses.yaml#/components/responses/InternalError' }
+        '502': { $ref: '../shared/responses.yaml#/components/responses/SourceUnavailable' }
+
+  /som/workspaces/{workspace_id}/boards:
+    parameters:
+      - name: workspace_id
+        in: path
+        required: true
+        description: SOM workspace whose boards are listed.
+        schema: { type: string, format: uuid }
+    get:
+      tags: [som]
+      summary: Boards of a SOM workspace
+      description: Proxies SOM `GET /v1/boards?workspace_id=...`.
+      operationId: listSomBoards
+      responses:
+        '200':
+          description: Boards of the workspace
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SomBoardList' }
+        '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '501': { $ref: '../shared/responses.yaml#/components/responses/NotImplemented' }
+        '500': { $ref: '../shared/responses.yaml#/components/responses/InternalError' }
+        '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
+        '502': { $ref: '../shared/responses.yaml#/components/responses/SourceUnavailable' }
+
+  /som/boards/{board_id}/issues:
+    parameters:
+      - name: board_id
+        in: path
+        required: true
+        description: SOM board whose issues are listed.
+        schema: { type: string, format: uuid }
+    get:
+      tags: [som]
+      summary: Issues of a SOM board
+      description: >-
+        Proxies SOM `GET /v1/issues?board_id=...`. Issues are the research
+        tasks (skills) an agent can be started on.
+      operationId: listSomIssues
+      responses:
+        '200':
+          description: Issues of the board
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SomIssueList' }
+        '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '501': { $ref: '../shared/responses.yaml#/components/responses/NotImplemented' }
+        '500': { $ref: '../shared/responses.yaml#/components/responses/InternalError' }
+        '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
+        '502': { $ref: '../shared/responses.yaml#/components/responses/SourceUnavailable' }
+
+  /som/issues/{issue_id}/run:
+    parameters:
+      - name: issue_id
+        in: path
+        required: true
+        description: SOM issue to run an agent on.
+        schema: { type: string, format: uuid }
+    post:
+      tags: [som]
+      summary: Run an agent on a SOM issue
+      description: >-
+        Orchestrates a run: reads the issue from SOM, opens a relay session to
+        the configured daemon host, starts an environment with the issue text
+        as the prompt, then links the environment back to the issue in SOM.
+        Stateless — nothing is persisted in IR; the ids in the response are the
+        only handle on the run.
+      operationId: runSomIssue
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SomIssueRunRequest' }
+      responses:
+        '201':
+          description: The run was started and linked
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SomIssueRunResult' }
+        '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '501': { $ref: '../shared/responses.yaml#/components/responses/NotImplemented' }
+        '500': { $ref: '../shared/responses.yaml#/components/responses/InternalError' }
+        '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
+        '422': { $ref: '../shared/responses.yaml#/components/responses/ValidationError' }
+        '502': { $ref: '../shared/responses.yaml#/components/responses/SourceUnavailable' }
+
+components:
+  schemas:
+    SomWorkspace:
+      type: object
+      description: A SOM workspace as the caller sees it.
+      required: [id, name, slug, is_personal, issue_prefix, user_role]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Identifier of the workspace in SOM.
+        name:
+          type: string
+          description: Display name.
+        slug:
+          type: string
+          description: URL slug of the workspace.
+        is_personal:
+          type: boolean
+          description: Whether this is the caller's personal workspace.
+        issue_prefix:
+          type: string
+          description: Prefix used in issue simple ids, e.g. "IR".
+        user_role:
+          type: string
+          description: Caller's role in the workspace — ADMIN or MEMBER.
+
+    SomWorkspaceList:
+      type: object
+      description: Workspaces visible to the caller.
+      required: [workspaces]
+      properties:
+        workspaces:
+          type: array
+          items: { $ref: '#/components/schemas/SomWorkspace' }
+
+    SomBoard:
+      type: object
+      description: A kanban board inside a SOM workspace.
+      required: [id, workspace_id, name]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Identifier of the board in SOM.
+        workspace_id:
+          type: string
+          format: uuid
+          description: Workspace the board belongs to.
+        name:
+          type: string
+          description: Display name.
+
+    SomBoardList:
+      type: object
+      description: Boards of one workspace.
+      required: [boards]
+      properties:
+        boards:
+          type: array
+          items: { $ref: '#/components/schemas/SomBoard' }
+
+    SomIssue:
+      type: object
+      description: >-
+        A SOM issue — a research task (skill) that an agent can execute.
+      required: [id, board_id, issue_number, simple_id, title]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Identifier of the issue in SOM.
+        board_id:
+          type: string
+          format: uuid
+          description: Board the issue belongs to.
+        issue_number:
+          type: integer
+          description: Sequential number within the workspace.
+        simple_id:
+          type: string
+          description: Human-readable id, e.g. "IR-42".
+        title:
+          type: string
+          description: What the task is.
+        description:
+          type: string
+          nullable: true
+          description: >-
+            Full task text. For runnable skills this holds the instructions the
+            agent will follow.
+        priority:
+          type: string
+          nullable: true
+          description: urgent, high, medium or low. Absent when not set.
+        parent_issue_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Parent issue for sub-issues.
+
+    SomIssueList:
+      type: object
+      description: Issues of one board.
+      required: [issues, total_count]
+      properties:
+        issues:
+          type: array
+          items: { $ref: '#/components/schemas/SomIssue' }
+        total_count:
+          type: integer
+          description: Total issues on the board, regardless of paging.
+
+    SomIssueRunRequest:
+      type: object
+      description: Context IR adds to the run.
+      properties:
+        investigation_id:
+          type: string
+          format: uuid
+          description: >-
+            Investigation the agent should enrich. Passed to the agent inside
+            the prompt so it knows where to attach found events and nodes.
+
+    SomIssueRunResult:
+      type: object
+      description: >-
+        Handles of the started run. IR stores nothing about it — poll SOM or
+        the daemon with these ids.
+      required: [issue_id, board_id, local_environment_id, som_environment_id]
+      properties:
+        issue_id:
+          type: string
+          format: uuid
+          description: The issue the run was started for.
+        board_id:
+          type: string
+          format: uuid
+          description: Board of the issue; the SOM environment is linked under it.
+        local_environment_id:
+          type: string
+          format: uuid
+          description: Environment created on the daemon host.
+        som_environment_id:
+          type: string
+          format: uuid
+          description: SOM environment record linking the run to the issue.
+        repo_id:
+          type: string
+          format: uuid
+          description: Daemon repository the environment was started on.

@@ -48,4 +48,11 @@ INSERT INTO sources (code, kind, title) VALUES
     ('infra_logs', 'infra_logs', 'Инфраструктурные логи (демо-датасет)')
 ON CONFLICT (code) DO NOTHING;
 
+-- Источники, которые отдаёт Gateway: ingest событий (attachEvents) пишет их
+-- code в events.source_code, и без записи здесь упадёт FK.
+INSERT INTO sources (code, kind, title) VALUES
+    ('maxpatrol-siem', 'siem',    'MaxPatrol SIEM (Gateway)'),
+    ('pt-sandbox',     'sandbox', 'PT Sandbox (Gateway)')
+ON CONFLICT (code) DO NOTHING;
+
 COMMIT;

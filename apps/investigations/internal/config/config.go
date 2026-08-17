@@ -20,6 +20,7 @@ func Load() (Config, error) {
 			Port:          coreconfig.GetStringEnv("SERVER_PORT", "8090"),
 			CORSWhitelist: coreconfig.ParseCORSWhitelist(coreconfig.GetStringEnv("SERVER_CORS_WHITELIST", "")),
 			Auth: AuthConfig{
+				Disabled:            coreconfig.GetBoolEnv("AUTH_DISABLED", false),
 				AccessTokenIssuer:   coreconfig.GetStringEnv("ACCESS_TOKEN_ISSUER", ""),
 				AccessTokenAudience: coreconfig.GetStringEnv("ACCESS_TOKEN_AUDIENCE", "api.local"),
 				AccessTokenKid:      coreconfig.GetStringEnv("ACCESS_TOKEN_KID", ""),
@@ -36,6 +37,27 @@ func Load() (Config, error) {
 			Level:  coreconfig.GetStringEnv("LOG_LEVEL", "info"),
 			Format: coreconfig.GetStringEnv("LOG_FORMAT", "json"),
 		},
+		SOM: SOMConfig{
+			APIBaseURL:     strings.TrimRight(coreconfig.GetStringEnv("SOM_API_BASE_URL", ""), "/"),
+			RelayBaseURL:   strings.TrimRight(coreconfig.GetStringEnv("SOM_RELAY_BASE_URL", ""), "/"),
+			HostID:         coreconfig.GetStringEnv("SOM_HOST_ID", ""),
+			RepoID:         coreconfig.GetStringEnv("SOM_REPO_ID", ""),
+			RepoParentPath: coreconfig.GetStringEnv("SOM_REPO_PARENT_PATH", "/tmp"),
+			RepoFolderName: coreconfig.GetStringEnv("SOM_REPO_FOLDER_NAME", "ir-demo"),
+			TargetBranch:   coreconfig.GetStringEnv("SOM_TARGET_BRANCH", "main"),
+			Executor:       coreconfig.GetStringEnv("SOM_EXECUTOR", "OPENCODE"),
+		},
+		Gateway: GatewayConfig{
+			BaseURL: strings.TrimRight(coreconfig.GetStringEnv("GATEWAY_BASE_URL", ""), "/"),
+		},
+	}
+	// Публичные адреса по умолчанию совпадают с внутренними: на стенде,
+	// где daemon VM видит те же имена, лишние переменные не нужны.
+	cfg.Prompt = PromptConfig{
+		IRBaseURL: strings.TrimRight(coreconfig.GetStringEnv(
+			"IR_PUBLIC_BASE_URL", "http://localhost:"+cfg.Server.Port), "/"),
+		GatewayBaseURL: strings.TrimRight(coreconfig.GetStringEnv(
+			"GATEWAY_PUBLIC_BASE_URL", cfg.Gateway.BaseURL), "/"),
 	}
 
 	key, err := loadPublicKey()
