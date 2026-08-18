@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -132,6 +133,33 @@ func TestEventsExposeSourceOwnedIdentityAndResolveContext(t *testing.T) {
 	if missingResponse.Code != http.StatusNotFound {
 		t.Fatalf("missing source record status=%d body=%s", missingResponse.Code, missingResponse.Body.String())
 	}
+}
+
+func TestEventSearchPivotsByCanonicalDestinationIP(t *testing.T) {
+	handler := newHandler(t, testConfig(true), nil)
+	search := gatewayJSON(t, handler, "/api/v1/events/search", `{
+		"sources":["maxpatrol-siem"],
+		"entities":[{"type":"ip","value":"192.0.2.62"}],
+		"limit":100
+	}`)
+
+	eventValues := search["events"].([]any)
+	gotEventIDs := make([]string, len(eventValues))
+	for index, eventValue := range eventValues {
+		gotEventIDs[index] = eventValue.(map[string]any)["source_event_id"].(string)
+	}
+	wantEventIDs := []string{"ev-13", "ev-12", "ev-11"}
+	if !reflect.DeepEqual(gotEventIDs, wantEventIDs) {
+		t.Fatalf("event IDs=%v want=%v", gotEventIDs, wantEventIDs)
+	}
+
+	for _, entityValue := range search["entities"].([]any) {
+		entity := entityValue.(map[string]any)
+		if entity["type"] == "host" && entity["value"] == "ws-beta.corp.example" {
+			return
+		}
+	}
+	t.Fatalf("ws-beta host is missing from response entities: %v", search["entities"])
 }
 
 func gatewayJSON(t *testing.T, handler http.Handler, path, body string) map[string]any {

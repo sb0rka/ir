@@ -231,7 +231,19 @@ func matchesEvent(value scenario.Scenario, event scenario.Event, request maxpatr
 		if !ok {
 			continue
 		}
-		if _, wanted := entities[entity.Type+"\x00"+entity.Value]; wanted {
+		if entity.Type != "ip" {
+			if _, wanted := entities[entity.Type+"\x00"+entity.Value]; wanted {
+				return true
+			}
+		}
+	}
+	record := (&mock{scenario: value}).vendorEvent(event)
+	for _, rawIP := range []string{record.EventSourceIP, record.SourceIP, record.DestinationIP} {
+		canonicalIP := domain.CanonicalValue("ip", rawIP)
+		if canonicalIP == "" {
+			continue
+		}
+		if _, wanted := entities["ip\x00"+canonicalIP]; wanted {
 			return true
 		}
 	}

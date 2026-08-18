@@ -170,7 +170,7 @@ export interface components {
              * Format: uuid
              * @description Investigation the agent should enrich. Passed to the agent inside the prompt so it knows where to attach found events and nodes.
              */
-            investigation_id?: string;
+            investigation_id: string;
         };
         /** @description Handles of the started run. IR stores nothing about it — poll SOM or the daemon with these ids. */
         SomIssueRunResult: {

@@ -216,6 +216,7 @@ components:
     SomIssueRunRequest:
       type: object
       description: Context IR adds to the run.
+      required: [investigation_id]
       properties:
         investigation_id:
           type: string

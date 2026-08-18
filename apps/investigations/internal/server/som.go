@@ -105,6 +105,14 @@ func (s *Server) ListSomIssues(ctx context.Context, request som.ListSomIssuesReq
 // RunSomIssue Run an agent on a SOM issue
 // (POST /som/issues/{issue_id}/run)
 func (s *Server) RunSomIssue(ctx context.Context, request som.RunSomIssueRequestObject) (som.RunSomIssueResponseObject, error) {
+	if request.Body == nil {
+		return nil, httperr.BadRequest("request body is required")
+	}
+	if request.Body.InvestigationId == uuid.Nil {
+		return nil, httperr.New(http.StatusUnprocessableEntity, httperr.CodeValidation,
+			"investigation_id must be a non-zero UUID")
+	}
+
 	bearer, err := s.somBearer(ctx)
 	if err != nil {
 		return nil, err
@@ -123,10 +131,7 @@ func (s *Server) RunSomIssue(ctx context.Context, request som.RunSomIssueRequest
 		return nil, err
 	}
 
-	var investigationID string
-	if request.Body != nil && request.Body.InvestigationId != nil {
-		investigationID = request.Body.InvestigationId.String()
-	}
+	investigationID := request.Body.InvestigationId.String()
 	prompt := s.buildRunPrompt(ctx, issue, investigationID)
 	name := runName(issue)
 
@@ -199,12 +204,13 @@ func (s *Server) buildRunPrompt(ctx context.Context, issue somclient.Issue, inve
 	writeLine("investigation_id", investigationID)
 	writeLine("som_issue_id", issue.ID)
 
-	b.WriteString("\nHow to search sources and report findings back to IR:\n" +
-		"1. Search Gateway directly: POST {gateway_base_url}/api/v1/events/search with X-Project-ID. Keep source_code plus source_event_id/source_entity_id for every record you select.\n" +
-		"2. Decide explicitly which findings belong on the graph. Give each selected event/entity a batch-local ref, then point nodes to it with event_ref or entity_ref. Edges address node source_ref/target_ref and cite event-node refs in evidence_event_refs. Every edge needs a non-empty why.\n" +
-		"3. Submit exactly one batch: POST {ir_api_base_url}/api/v1/investigations/{investigation_id}/agent-results with X-Project-ID and body " +
-		"{\"som_issue_ids\":[\"" + issue.ID + "\"],\"events\":[{\"ref\":\"selected-event-1\",\"source_code\":\"...\",\"source_event_id\":\"...\"}],\"entities\":[{\"ref\":\"selected-host-1\",\"source_code\":\"...\",\"source_entity_id\":\"...\"}],\"nodes\":[{\"ref\":\"event-1\",\"event_ref\":\"selected-event-1\"},{\"ref\":\"host-1\",\"entity_ref\":\"selected-host-1\"}],\"edges\":[{\"source_ref\":\"event-1\",\"target_ref\":\"host-1\",\"relation_code\":\"mentions\",\"why\":\"...\",\"confidence\":0.8,\"evidence_event_refs\":[\"event-1\"]}]}. IR resolves current normalized data from Gateway and draws only the listed nodes and edges; the endpoint assigns agent origin and proposed edge status. The batch is idempotent.\n" +
-		"4. Verify the result with GET {ir_api_base_url}/api/v1/investigations/{investigation_id}/graph and /events.\n")
+	b.WriteString("\nHow to investigate sources and report findings back to IR:\n" +
+		"1. Use GET {ir_api_base_url}/openapi.json and GET {gateway_base_url}/openapi.yaml as the request-contract source of truth. Read the investigation's current timeline and graph with GET {ir_api_base_url}/api/v1/investigations/{investigation_id}/events and GET {ir_api_base_url}/api/v1/investigations/{investigation_id}/graph. Follow timeline pagination until the available context is exhausted.\n" +
+		"2. Search Gateway directly with POST {gateway_base_url}/api/v1/events/search. Start from the issue and attached alert, derive a bounded time window from evidence timestamps, and pivot iteratively on normalized host, IP, and other entity keys discovered in results. Keep source_code plus source_event_id/source_entity_id for every record you select.\n" +
+		"3. Persist selected discoveries with POST {ir_api_base_url}/api/v1/investigations/{investigation_id}/agent-results. You may send any number of overlapping batches while investigating. Use som_issue_ids [\"" + issue.ID + "\"] in every batch; events and entities may be submitted with empty nodes and edges to enrich the timeline without drawing them. A discovery batch can look like {\"som_issue_ids\":[\"" + issue.ID + "\"],\"events\":[{\"ref\":\"selected-event\",\"source_code\":\"...\",\"source_event_id\":\"...\"}],\"entities\":[],\"nodes\":[],\"edges\":[]}. Replaying the same source records and graph facts is idempotent.\n" +
+		"4. Before drawing the final graph, read the complete timeline and graph again. Keep useful benign or false-positive context on the timeline, but promote only evidence-backed stages and entities needed for a minimal causal explanation. A new node points to a selected record with event_ref or entity_ref. An existing graph node is reused with node_id; include it in the final batch when it must also be linked to this SOM issue. Every node has a unique batch-local ref.\n" +
+		"5. Edges address those node refs through source_ref and target_ref. evidence_event_refs contains batch-local refs of event nodes from the same batch, including event nodes reused through node_id; it never contains event selection refs, source event IDs, or database event IDs. Every edge needs a non-empty evidence-based why. IR assigns agent origin and proposed edge status.\n" +
+		"6. Submit the final graph batch, then verify both GET endpoints again.\n")
 	if s.prompt.GatewayBaseURL != "" {
 		b.WriteString("Gateway searches do not write to ir-api; only agent-results persists selected context.\n")
 	}
