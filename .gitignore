@@ -23,3 +23,6 @@ api/docs.html
 api/build/
 go.work.sum
 packages/contract-ts/node_modules/
+
+# macOS
+.DS_Store
