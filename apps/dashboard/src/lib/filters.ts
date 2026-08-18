@@ -1,0 +1,76 @@
+import { entities } from '../mocks/scenario'
+import type { EntityKind, FilterChip, FilterField } from '../types'
+
+/** Chip filter semantics shared by the global queue and investigation queues. */
+export function matchesChips(
+  entityIds: string[],
+  severity: string,
+  source: string,
+  status: string,
+  chips: FilterChip[],
+): boolean {
+  if (chips.length === 0) return true
+  const ents = entityIds.map((id) => entities[id]).filter(Boolean)
+
+  return chips.every((chip) => {
+    const vals = chip.values.map((v) => v.toLowerCase())
+    switch (chip.field) {
+      case 'severity':
+        return vals.includes(severity.toLowerCase())
+      case 'source':
+        return vals.includes(source.toLowerCase())
+      case 'status':
+        return vals.includes(status.toLowerCase())
+      case 'host':
+        return ents.some(
+          (e) => e.kind === 'host' && vals.includes(e.label.toLowerCase()),
+        )
+      case 'user':
+        return ents.some(
+          (e) => e.kind === 'user' && vals.includes(e.label.toLowerCase()),
+        )
+      case 'process':
+        return ents.some(
+          (e) => e.kind === 'process' && vals.includes(e.label.toLowerCase()),
+        )
+      case 'ip':
+        return ents.some(
+          (e) => e.kind === 'ip' && vals.includes(e.label.toLowerCase()),
+        )
+      case 'domain':
+        return ents.some(
+          (e) =>
+            (e.kind === 'domain' || e.kind === 'email') &&
+            vals.some((v) => e.label.toLowerCase().includes(v.replace(/[\[\]]/g, ''))),
+        )
+      case 'hash':
+        return ents.some((e) =>
+          vals.some(
+            (v) =>
+              e.attributes.hash?.toLowerCase().includes(v) ||
+              e.attributes.hash?.toLowerCase() === v,
+          ),
+        )
+      default:
+        return true
+    }
+  })
+}
+
+/** Which filter field an entity chip click maps to («Найти связанные»). */
+export function fieldForEntityKind(kind: EntityKind): FilterField | null {
+  switch (kind) {
+    case 'host':
+      return 'host'
+    case 'user':
+      return 'user'
+    case 'process':
+      return 'process'
+    case 'ip':
+      return 'ip'
+    case 'domain':
+      return 'domain'
+    default:
+      return null
+  }
+}
