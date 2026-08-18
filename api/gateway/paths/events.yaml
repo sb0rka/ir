@@ -1,0 +1,233 @@
+openapi: 3.0.3
+info:
+  title: Sb0rka Gateway - events
+  version: 0.0.1
+servers:
+  - url: .
+security:
+  - bearerAuth: []
+
+paths:
+  /api/v1/events/search:
+    post:
+      tags: [events]
+      summary: Search normalized events
+      operationId: searchEvents
+      parameters:
+        - $ref: '../shared/parameters.yaml#/ProjectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SearchEventsRequest'
+      responses:
+        '200':
+          description: Normalized events and their context.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchEventsResponse'
+        '400': { $ref: '../shared/responses.yaml#/BadRequest' }
+        '401': { $ref: '../shared/responses.yaml#/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/NotFound' }
+        '422': { $ref: '../shared/responses.yaml#/ValidationError' }
+        '502': { $ref: '../shared/responses.yaml#/BadGateway' }
+        '504': { $ref: '../shared/responses.yaml#/GatewayTimeout' }
+        '500': { $ref: '../shared/responses.yaml#/InternalError' }
+        default:
+          $ref: '../shared/responses.yaml#/ErrorResponse'
+
+  /api/v1/context/resolve:
+    post:
+      tags: [events, entities]
+      summary: Resolve selected source records
+      operationId: resolveContext
+      parameters:
+        - $ref: '../shared/parameters.yaml#/ProjectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResolveContextRequest'
+      responses:
+        '200':
+          description: Current normalized data for every selected source record.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResolveContextResponse'
+        '400': { $ref: '../shared/responses.yaml#/BadRequest' }
+        '401': { $ref: '../shared/responses.yaml#/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/NotFound' }
+        '422': { $ref: '../shared/responses.yaml#/ValidationError' }
+        '502': { $ref: '../shared/responses.yaml#/BadGateway' }
+        '504': { $ref: '../shared/responses.yaml#/GatewayTimeout' }
+        '500': { $ref: '../shared/responses.yaml#/InternalError' }
+        default:
+          $ref: '../shared/responses.yaml#/ErrorResponse'
+
+components:
+  schemas:
+    Event:
+      type: object
+      description: Security event normalized from one source record.
+      required: [source_code, source_event_id, type, title, severity, occurred_at, entities, attributes, fetched_at]
+      properties:
+        source_code:
+          type: string
+          description: Code of the source that owns the event.
+        source_event_id:
+          type: string
+          description: Original event identifier assigned by that source.
+        source_ref:
+          type: string
+          format: uri
+          description: Optional link to the event in its source system.
+        type:
+          type: string
+          description: Normalized event class.
+        title:
+          type: string
+          description: Short human-readable event summary.
+        severity:
+          type: string
+          description: Severity mapped to the Gateway scale.
+          enum: [info, low, medium, high, critical, unknown]
+        occurred_at:
+          type: string
+          format: date-time
+          description: Time when the event occurred in the source system.
+        entities:
+          type: array
+          description: Canonical entities mentioned by the event.
+          items:
+            $ref: '../shared/schemas.yaml#/EntityRef'
+        attributes:
+          type: object
+          description: Selected event fields that have no canonical top-level property.
+          additionalProperties: true
+        fetched_at:
+          type: string
+          format: date-time
+          description: Time when the Gateway obtained the source data.
+
+    ResolveContextRequest:
+      type: object
+      description: Source records selected by a client for persistence in an investigation.
+      required: [events, entities]
+      properties:
+        events:
+          type: array
+          maxItems: 500
+          uniqueItems: true
+          items:
+            $ref: '../shared/schemas.yaml#/EventSourceRef'
+        entities:
+          type: array
+          maxItems: 2000
+          uniqueItems: true
+          items:
+            $ref: '../shared/schemas.yaml#/EntitySourceRef'
+
+    ResolveContextResponse:
+      type: object
+      description: Normalized records and relationships resolved from source-owned identifiers.
+      required: [events, entities, relations, source_errors]
+      properties:
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/Event'
+        entities:
+          type: array
+          items:
+            $ref: '../shared/schemas.yaml#/Entity'
+        relations:
+          type: array
+          items:
+            $ref: '../shared/schemas.yaml#/Relation'
+        source_errors:
+          type: array
+          items:
+            $ref: '../shared/schemas.yaml#/SourceError'
+
+    TimeRange:
+      type: object
+      description: Inclusive event occurrence-time interval.
+      required: [from, to]
+      properties:
+        from:
+          type: string
+          format: date-time
+          description: Inclusive lower boundary of event occurrence time.
+        to:
+          type: string
+          format: date-time
+          description: Inclusive upper boundary of event occurrence time.
+
+    SearchEventsRequest:
+      type: object
+      description: Filters for a normalized multi-source event search.
+      properties:
+        sources:
+          type: array
+          uniqueItems: true
+          description: Source codes to query; omit to use every allowed source with event search.
+          items:
+            type: string
+        time_range:
+          description: Optional occurrence-time interval.
+          allOf:
+            - $ref: '#/components/schemas/TimeRange'
+        query:
+          type: string
+          maxLength: 1000
+          description: Free-text query interpreted by each selected source.
+        entities:
+          type: array
+          maxItems: 100
+          description: Entity conditions; an event matches when it contains at least one listed entity.
+          items:
+            $ref: '../shared/schemas.yaml#/EntityRef'
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 50
+          description: Maximum number of events returned after merging all sources.
+        cursor:
+          type: string
+          description: Opaque next_cursor from the previous response with the same filters.
+
+    SearchEventsResponse:
+      type: object
+      description: Merged event page with the entities and relations needed to interpret it.
+      required: [events, entities, relations, source_errors]
+      properties:
+        events:
+          type: array
+          description: Normalized events in the current page.
+          items:
+            $ref: '#/components/schemas/Event'
+        entities:
+          type: array
+          description: Canonical entities referenced by the returned events.
+          items:
+            $ref: '../shared/schemas.yaml#/Entity'
+        relations:
+          type: array
+          description: Relationships whose endpoints are present in the returned entities.
+          items:
+            $ref: '../shared/schemas.yaml#/Relation'
+        next_cursor:
+          type: string
+          description: Opaque cursor for the next page; absent when the search is exhausted.
+        source_errors:
+          type: array
+          description: Per-source failures when at least one selected source succeeded.
+          items:
+            $ref: '../shared/schemas.yaml#/SourceError'

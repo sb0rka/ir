@@ -1,0 +1,60 @@
+HealthResponse:
+  description: Service health.
+  content:
+    application/json:
+      schema:
+        $ref: './schemas.yaml#/Health'
+ErrorResponse:
+  description: Error response.
+  content:
+    application/json:
+      schema:
+        $ref: './schemas.yaml#/ErrorEnvelope'
+BadRequest:
+  description: The request is malformed or violates an input constraint.
+  content:
+    application/json:
+      schema:
+        $ref: './schemas.yaml#/ErrorEnvelope'
+Unauthorized:
+  description: A valid bearer access token is required.
+  content:
+    application/json:
+      schema:
+        $ref: './schemas.yaml#/ErrorEnvelope'
+Forbidden:
+  description: The caller has no role in the project or the source is not allowed there.
+  content:
+    application/json:
+      schema:
+        $ref: './schemas.yaml#/ErrorEnvelope'
+NotFound:
+  description: The selected source or requested record does not exist.
+  content:
+    application/json:
+      schema:
+        $ref: './schemas.yaml#/ErrorEnvelope'
+ValidationError:
+  description: The selected source cannot perform the requested operation.
+  content:
+    application/json:
+      schema:
+        $ref: './schemas.yaml#/ErrorEnvelope'
+BadGateway:
+  description: Every selected external source failed.
+  content:
+    application/json:
+      schema:
+        $ref: './schemas.yaml#/ErrorEnvelope'
+GatewayTimeout:
+  description: The Gateway or selected source exceeded its deadline.
+  content:
+    application/json:
+      schema:
+        $ref: './schemas.yaml#/ErrorEnvelope'
+InternalError:
+  description: An unexpected internal failure occurred.
+  content:
+    application/json:
+      schema:
+        $ref: './schemas.yaml#/ErrorEnvelope'

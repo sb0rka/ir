@@ -1,0 +1,8 @@
+ProjectId:
+  name: X-Project-ID
+  in: header
+  required: true
+  description: Sb0rka project whose integration allowlist is used.
+  schema:
+    type: string
+    pattern: '^[a-f0-9]{10,12}$'

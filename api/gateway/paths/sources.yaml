@@ -1,0 +1,72 @@
+openapi: 3.0.3
+info:
+  title: Sb0rka Gateway - sources
+  version: 0.0.1
+servers:
+  - url: .
+security:
+  - bearerAuth: []
+
+paths:
+  /api/v1/sources:
+    get:
+      tags: [sources]
+      summary: List registered sources
+      operationId: listSources
+      parameters:
+        - $ref: '../shared/parameters.yaml#/ProjectId'
+      responses:
+        '200':
+          description: Registered sources.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    description: External security products registered for use through the Gateway.
+                    items:
+                      $ref: '#/components/schemas/Source'
+        '401': { $ref: '../shared/responses.yaml#/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/Forbidden' }
+        '500': { $ref: '../shared/responses.yaml#/InternalError' }
+        default:
+          $ref: '../shared/responses.yaml#/ErrorResponse'
+
+components:
+  schemas:
+    Capability:
+      type: string
+      description: Operation that a source can perform through the Gateway.
+      enum: [events, entity_lookup, artifact_analysis, endpoints, response_catalog]
+
+    Source:
+      type: object
+      description: External security product registered in the Gateway.
+      required: [code, name, kind, mode, status, capabilities]
+      properties:
+        code:
+          type: string
+          description: Stable source identifier used in requests and provenance.
+        name:
+          type: string
+          description: Human-readable product name.
+        kind:
+          type: string
+          description: Functional class of the security product.
+          enum: [siem, ndr, edr, sandbox, threat_intelligence]
+        mode:
+          type: string
+          description: Adapter mode currently backing the source.
+          enum: [mock, proxy]
+        status:
+          type: string
+          description: Whether the source is available for requests.
+          enum: [available, unavailable]
+        capabilities:
+          type: array
+          description: Operations implemented by this source.
+          items:
+            $ref: '#/components/schemas/Capability'

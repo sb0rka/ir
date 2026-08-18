@@ -1,0 +1,595 @@
+openapi: 3.0.3
+info:
+  title: IR — investigations
+  version: 0.0.1
+servers:
+  - url: /api/v1
+security:
+  - bearerAuth: []
+
+paths:
+  /investigations:
+    parameters:
+      - { $ref: '../shared/parameters.yaml#/components/parameters/ProjectId' }
+    post:
+      tags: [investigations]
+      summary: Open an investigation or a hypothesis under one
+      description: A root investigation is a case; a child is a hypothesis.
+      operationId: createInvestigation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/InvestigationCreate' }
+      responses:
+        '201':
+          description: The new investigation
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Investigation' }
+        '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '501': { $ref: '../shared/responses.yaml#/components/responses/NotImplemented' }
+        '500': { $ref: '../shared/responses.yaml#/components/responses/InternalError' }
+        '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
+        '404':
+          description: The parent named in parent_id does not exist in this project.
+          content:
+            application/json:
+              schema: { $ref: '../shared/errors.yaml#/components/schemas/ErrorResponse' }
+        '422': { $ref: '../shared/responses.yaml#/components/responses/ValidationError' }
+    get:
+      tags: [investigations]
+      summary: List investigations
+      description: >-
+        Root cases by default, or the direct children of one. Only one level at
+        a time — fetch the tree endpoint when the whole subtree is needed.
+      operationId: listInvestigations
+      parameters:
+        - name: parent_id
+          in: query
+          description: >-
+            Return the direct children of this investigation instead of the
+            roots. Omit it for the case list.
+          schema: { type: string, format: uuid }
+        - name: status
+          in: query
+          description: Keep only open or only closed investigations.
+          schema: { $ref: '#/components/schemas/InvestigationStatus' }
+        - name: severity
+          in: query
+          description: Keep only investigations of this severity.
+          schema: { $ref: '../shared/enums.yaml#/components/schemas/Severity' }
+        - name: q
+          in: query
+          description: Substring match on the title.
+          schema: { type: string }
+        - { $ref: '../shared/parameters.yaml#/components/parameters/Limit' }
+        - { $ref: '../shared/parameters.yaml#/components/parameters/Cursor' }
+      responses:
+        '200':
+          description: One page of investigations
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/InvestigationPage' }
+        '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '501': { $ref: '../shared/responses.yaml#/components/responses/NotImplemented' }
+        '500': { $ref: '../shared/responses.yaml#/components/responses/InternalError' }
+        '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
+        '422': { $ref: '../shared/responses.yaml#/components/responses/ValidationError' }
+
+  /investigations/{investigation_id}/context:
+    parameters:
+      - { $ref: '../shared/parameters.yaml#/components/parameters/ProjectId' }
+      - { $ref: '../shared/parameters.yaml#/components/parameters/InvestigationId' }
+    post:
+      tags: [investigations]
+      summary: Add analyst-selected Gateway context
+      description: >-
+        Resolves the selected source records through Gateway, stores their
+        normalized form and atomically adds the resulting events and entities
+        to the investigation graph. Event mentions and source relationships
+        become confirmed analyst edges.
+      operationId: addInvestigationContext
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ContextSelection' }
+      responses:
+        '201':
+          description: Import counters
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ContextImportResult' }
+        '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
+        '422': { $ref: '../shared/responses.yaml#/components/responses/ValidationError' }
+        '500': { $ref: '../shared/responses.yaml#/components/responses/InternalError' }
+
+  /investigations/{investigation_id}/agent-results:
+    parameters:
+      - { $ref: '../shared/parameters.yaml#/components/parameters/ProjectId' }
+      - { $ref: '../shared/parameters.yaml#/components/parameters/InvestigationId' }
+    post:
+      tags: [investigations]
+      summary: Save one explicit SOM agent result batch
+      description: >-
+        Resolves source records through Gateway but adds only explicitly listed
+        nodes and edges to the graph. Nodes are attributed to the agent and
+        edges are proposed for review. Local refs address selected records and
+        nodes created in the same batch.
+      operationId: addAgentResults
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AgentResultBatch' }
+      responses:
+        '201':
+          description: Import counters
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ContextImportResult' }
+        '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
+        '422': { $ref: '../shared/responses.yaml#/components/responses/ValidationError' }
+        '500': { $ref: '../shared/responses.yaml#/components/responses/InternalError' }
+  /investigations/{investigation_id}:
+    parameters:
+      - { $ref: '../shared/parameters.yaml#/components/parameters/ProjectId' }
+      - { $ref: '../shared/parameters.yaml#/components/parameters/InvestigationId' }
+    get:
+      tags: [investigations]
+      summary: One investigation
+      description: >-
+        The investigation with its counters — how much evidence it holds and how
+        much still waits for review.
+      operationId: getInvestigation
+      responses:
+        '200':
+          description: The investigation
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Investigation' }
+        '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '501': { $ref: '../shared/responses.yaml#/components/responses/NotImplemented' }
+        '500': { $ref: '../shared/responses.yaml#/components/responses/InternalError' }
+        '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
+    patch:
+      tags: [investigations]
+      summary: Update an investigation
+      description: >-
+        Updates only the supplied fields. Closing requires a verdict; rejecting
+        requires a reason. Confirming a hypothesis without an attached event
+        returns 422 with `details.reason=evidence_required`. A closed
+        investigation can only be reopened; reopening clears the verdict.
+      operationId: updateInvestigation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/InvestigationPatch' }
+      responses:
+        '200':
+          description: The updated investigation
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Investigation' }
+        '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '501': { $ref: '../shared/responses.yaml#/components/responses/NotImplemented' }
+        '500': { $ref: '../shared/responses.yaml#/components/responses/InternalError' }
+        '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
+        '409': { $ref: '../shared/responses.yaml#/components/responses/Conflict' }
+        '422': { $ref: '../shared/responses.yaml#/components/responses/ValidationError' }
+
+    delete:
+      tags: [investigations]
+      summary: Delete an investigation
+      description: >-
+        Deletes the investigation subtree, its graph data and its links to
+        shared events and entities. Project event and entity records remain.
+      operationId: deleteInvestigation
+      responses:
+        '204':
+          description: Deleted
+        '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '501': { $ref: '../shared/responses.yaml#/components/responses/NotImplemented' }
+        '500': { $ref: '../shared/responses.yaml#/components/responses/InternalError' }
+        '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
+
+  /investigations/{investigation_id}/tree:
+    parameters:
+      - { $ref: '../shared/parameters.yaml#/components/parameters/ProjectId' }
+      - { $ref: '../shared/parameters.yaml#/components/parameters/InvestigationId' }
+    get:
+      tags: [investigations]
+      summary: The whole subtree
+      description: >-
+        This investigation and everything under it, flattened in pre-order with
+        a depth on each item. The client rebuilds the tree in one pass — no
+        recursive fetching.
+      operationId: getInvestigationTree
+      responses:
+        '200':
+          description: The subtree
+          content:
+            application/json:
+              schema:
+                type: array
+                description: >-
+                  Every investigation in the subtree in pre-order, starting
+                  with the requested root. Each item carries its depth.
+                items:
+                  allOf:
+                    - { $ref: '#/components/schemas/Investigation' }
+                    - type: object
+                      required: [depth]
+                      properties:
+                        depth:
+                          type: integer
+                          minimum: 0
+                          description: Distance from the root. Zero for the root itself.
+        '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '501': { $ref: '../shared/responses.yaml#/components/responses/NotImplemented' }
+        '500': { $ref: '../shared/responses.yaml#/components/responses/InternalError' }
+        '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
+
+components:
+  schemas:
+    Investigation:
+      type: object
+      description: A case or a nested hypothesis in the selected project.
+      required: [id, project_id, title, status, version, som_workspace_ids, created_at, updated_at, counters]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Identifier of the investigation.
+        project_id:
+          type: string
+          description: >-
+            Project that owns the case. Every child inherits it unchanged, so a
+            whole tree belongs to one project.
+        parent_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: >-
+            The investigation this one refines. Null means it is a root case;
+            anything else means it is a hypothesis inside a larger case.
+        title:
+          type: string
+          description: >-
+            What is being investigated. For a hypothesis this is the claim being
+            tested, phrased so a verdict makes sense against it.
+        description:
+          type: string
+          nullable: true
+          description: Free-form context — what is known, what is being checked and why.
+        status:
+          allOf: [{ $ref: '#/components/schemas/InvestigationStatus' }]
+          description: >-
+            Whether work is still going on. Independent of the verdict: a case
+            can be open with no verdict yet, and closing requires one.
+        # Не задано — это отсутствие поля, а не null. В OpenAPI 3.0 `nullable`
+        # рядом с $ref на enum не работает (null не входит в список из ссылки),
+        # а положить null прямо в enum нельзя: кодоген делает из него
+        # константу-пустышку. Отсутствие — единственный вариант без артефактов.
+        severity:
+          allOf: [{ $ref: '../shared/enums.yaml#/components/schemas/Severity' }]
+          description: >-
+            How bad this looks. Set during triage and revised as evidence
+            arrives. Absent until someone judges it.
+        verdict:
+          allOf: [{ $ref: '#/components/schemas/Verdict' }]
+          description: >-
+            The conclusion. Absent while the investigation is still open,
+            required to close it. Which values are allowed depends on whether
+            this is a root case or a hypothesis — see Verdict.
+        verdict_reason:
+          type: string
+          nullable: true
+          description: Reason for the verdict. Required when rejecting.
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 1
+          nullable: true
+          description: >-
+            How sure the conclusion is. Meaningful for a hypothesis, rarely used
+            on a root case.
+        origin:
+          allOf: [{ $ref: '../shared/enums.yaml#/components/schemas/Origin' }]
+          description: Creator type, assigned by the server.
+        origin_ref:
+          type: string
+          nullable: true
+          description: >-
+            Which one exactly — the analyst's subject id, the rule's code, or the
+            agent run's identifier.
+        version:
+          type: integer
+          description: >-
+            Bumped on every change. Send the value you last read when updating;
+            a mismatch means someone else edited it first.
+        som_workspace_ids:
+          type: array
+          description: SOM workspaces linked to this investigation.
+          items:
+            type: string
+            format: uuid
+        counters:
+          type: object
+          description: >-
+            Size of the case at a glance, so the list does not need a query per
+            row.
+          required: [children, events, entities, proposed_edges]
+          properties:
+            children:
+              type: integer
+              description: Direct child investigations — the open hypotheses under this one.
+            events:
+              type: integer
+              description: Events pulled into this investigation.
+            entities:
+              type: integer
+              description: Distinct entities extracted from those events.
+            proposed_edges:
+              type: integer
+              description: Edges waiting for review.
+        created_at:
+          type: string
+          format: date-time
+          description: When the investigation was opened.
+        updated_at:
+          type: string
+          format: date-time
+          description: When it last changed.
+        closed_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: When it was closed. Cleared if the investigation is reopened.
+
+    EventSourceRef:
+      type: object
+      required: [source_code, source_event_id]
+      properties:
+        source_code:
+          type: string
+          minLength: 1
+          description: Gateway source code, for example maxpatrol-siem.
+        source_event_id:
+          type: string
+          minLength: 1
+          description: Original event identifier assigned by the source.
+
+    EntitySourceRef:
+      type: object
+      required: [source_code, source_entity_id]
+      properties:
+        source_code:
+          type: string
+          minLength: 1
+          description: Gateway source code, for example maxpatrol-siem.
+        source_entity_id:
+          type: string
+          minLength: 1
+          description: Original entity record identifier assigned by the source.
+
+    ContextSelection:
+      type: object
+      description: Source-owned identifiers selected in the Gateway event list.
+      required: [events, entities]
+      properties:
+        events:
+          type: array
+          maxItems: 500
+          uniqueItems: true
+          items: { $ref: '#/components/schemas/EventSourceRef' }
+        entities:
+          type: array
+          maxItems: 2000
+          uniqueItems: true
+          items: { $ref: '#/components/schemas/EntitySourceRef' }
+
+    AgentResultBatch:
+      type: object
+      required: [som_issue_ids, events, entities, nodes, edges]
+      properties:
+        som_issue_ids:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items: { type: string, format: uuid }
+        events:
+          type: array
+          maxItems: 500
+          items: { $ref: '#/components/schemas/AgentEventSelection' }
+        entities:
+          type: array
+          maxItems: 2000
+          items: { $ref: '#/components/schemas/AgentEntitySelection' }
+        nodes:
+          type: array
+          maxItems: 2500
+          items: { $ref: '#/components/schemas/AgentNode' }
+        edges:
+          type: array
+          maxItems: 5000
+          items: { $ref: '#/components/schemas/AgentEdge' }
+
+    AgentEventSelection:
+      type: object
+      description: An event selected by the agent and its batch-local reference.
+      required: [ref, source_code, source_event_id]
+      properties:
+        ref: { type: string, minLength: 1, maxLength: 128 }
+        source_code: { type: string, minLength: 1 }
+        source_event_id: { type: string, minLength: 1 }
+
+    AgentEntitySelection:
+      type: object
+      description: An entity source record selected by the agent and its batch-local reference.
+      required: [ref, source_code, source_entity_id]
+      properties:
+        ref: { type: string, minLength: 1, maxLength: 128 }
+        source_code: { type: string, minLength: 1 }
+        source_entity_id: { type: string, minLength: 1 }
+
+    AgentNode:
+      type: object
+      description: >-
+        A unique local ref and exactly one target: an event/entity selection
+        from this batch, or an existing node in this investigation.
+      required: [ref]
+      properties:
+        ref: { type: string, minLength: 1, maxLength: 128 }
+        event_ref:
+          type: string
+          minLength: 1
+          maxLength: 128
+          description: Local ref of an event selection from this batch.
+        entity_ref:
+          type: string
+          minLength: 1
+          maxLength: 128
+          description: Local ref of an entity selection from this batch.
+        node_id: { type: string, format: uuid }
+
+    AgentEdge:
+      type: object
+      required: [source_ref, target_ref, relation_code, why, evidence_event_refs]
+      properties:
+        source_ref: { type: string, minLength: 1, maxLength: 128 }
+        target_ref: { type: string, minLength: 1, maxLength: 128 }
+        relation_code: { type: string, minLength: 1 }
+        why: { type: string, minLength: 1 }
+        confidence: { type: number, minimum: 0, maximum: 1 }
+        evidence_event_refs:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items: { type: string, minLength: 1, maxLength: 128 }
+
+    ContextImportResult:
+      type: object
+      required: [events, entities, nodes, edges]
+      properties:
+        events: { type: integer, minimum: 0 }
+        entities: { type: integer, minimum: 0 }
+        nodes: { type: integer, minimum: 0 }
+        edges: { type: integer, minimum: 0 }
+
+    InvestigationCreate:
+      type: object
+      description: A new case, or a new hypothesis inside an existing one.
+      required: [title, som_workspace_ids]
+      properties:
+        title:
+          type: string
+          maxLength: 255
+          description: What is being investigated, or the claim being tested.
+        description:
+          type: string
+          description: Context — what is known so far and what needs checking.
+        parent_id:
+          type: string
+          format: uuid
+          description: >-
+            The investigation this one refines. Omit it to open a root case.
+        severity:
+          allOf: [{ $ref: '../shared/enums.yaml#/components/schemas/Severity' }]
+          description: Initial assessment. Can be revised later.
+        som_workspace_ids:
+          type: array
+          description: SOM workspaces to link to the new investigation.
+          minItems: 1
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+    InvestigationPatch:
+      type: object
+      description: >-
+        Fields to change. Anything omitted stays as it is; `version` is always
+        required so concurrent edits cannot overwrite each other silently.
+      required: [version]
+      properties:
+        version:
+          type: integer
+          minimum: 1
+          description: Version the client last read. A mismatch is a 409.
+        title:
+          type: string
+          maxLength: 255
+          description: New title.
+        description:
+          type: string
+          description: New description.
+        status:
+          allOf: [{ $ref: '#/components/schemas/InvestigationStatus' }]
+          description: >-
+            Close the investigation, or reopen a closed one. Closing needs a
+            verdict; reopening clears it.
+        verdict:
+          allOf: [{ $ref: '#/components/schemas/Verdict' }]
+          description: >-
+            The conclusion. Which values are allowed depends on whether this is
+            a root case or a hypothesis.
+        verdict_reason:
+          type: string
+          description: Why. Required when the verdict is rejected.
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: How sure the conclusion is. Meaningful for a hypothesis.
+        severity:
+          allOf: [{ $ref: '../shared/enums.yaml#/components/schemas/Severity' }]
+          description: Revised assessment of how bad this is.
+        som_workspace_ids:
+          type: array
+          description: Complete replacement for the investigation's SOM workspace links.
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+
+    InvestigationStatus:
+      type: string
+      description: >-
+        Whether work is still going on. Says nothing about the outcome — that is
+        the verdict.
+      enum: [open, closed]
+
+    Verdict:
+      type: string
+      description: >-
+        The conclusion, drawn from two vocabularies that share one field.
+        A root case ends as incident, false_positive, not_affected or
+        inconclusive. A hypothesis ends as confirmed, rejected or inconclusive.
+        The server checks the value against the investigation's position in the
+        tree, so a hypothesis cannot be closed as an incident.
+      enum: [incident, false_positive, not_affected, inconclusive, confirmed, rejected]
+
+    InvestigationPage:
+      type: object
+      description: One page of investigations and the cursor for continuing it.
+      required: [investigations]
+      properties:
+        investigations:
+          type: array
+          description: The investigations on this page.
+          items: { $ref: '#/components/schemas/Investigation' }
+        next_cursor:
+          type: string
+          nullable: true
+          description: >-
+            Pass as `cursor` to get the next page. Absent on the last page.

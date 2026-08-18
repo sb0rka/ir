@@ -1,0 +1,156 @@
+services:
+  postgres:
+    image: postgres:18
+    restart: unless-stopped
+    shm_size: 128mb
+    env_file:
+      - .env
+    environment:
+      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256
+      POSTGRES_DB: investigations
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d investigations"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    profiles:
+      - container-db
+
+  # Migrations
+
+  migrate-inv-schema:
+    build:
+      context: .
+      dockerfile: db/Dockerfile
+    restart: no
+    env_file:
+      - .env
+    environment:
+      POSTGRES_DB: investigations
+      POSTGRES_USER: ${DB_ADMIN_USER}
+      POSTGRES_PASSWORD: ${DB_ADMIN_PASSWORD}
+      DB_INV_SCHEMA_NAME: ${DB_INV_SCHEMA_NAME}
+    command:
+      - /app/migrations/investigations/007-extensions.sql
+      - /app/migrations/investigations/008-schema.sql
+    profiles:
+      - migrate
+  
+  migrate-inv:
+    build:
+      context: .
+      dockerfile: db/Dockerfile
+    depends_on:
+      migrate-inv-schema:
+        condition: service_completed_successfully
+    restart: no
+    env_file:
+      - .env
+    environment:
+      POSTGRES_DB: investigations
+      POSTGRES_USER: ${DB_ADMIN_USER}
+      POSTGRES_PASSWORD: ${DB_ADMIN_PASSWORD}
+      DB_INV_SCHEMA_NAME: ${DB_INV_SCHEMA_NAME}
+    command:
+      - /app/migrations/investigations/009-version.sql
+      - /app/migrations/investigations/010-initial_schema.sql
+      - /app/migrations/investigations/901-seed_reference.sql
+    profiles:
+      - migrate
+
+  # Applications
+
+  ir-api:
+    build:
+      context: .
+      dockerfile: apps/investigations/Dockerfile
+      args:
+        BINARY: ir-api
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      SERVER_ADDR: "0.0.0.0"
+      SERVER_PORT: "8090"
+      SERVER_CORS_WHITELIST: "${SERVER_CORS_WHITELIST:-http://localhost:5173,http://localhost:3000}"
+      DATABASE_URI: "postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:5432/investigations?search_path=${DB_INV_SCHEMA_NAME}"
+      LOG_FORMAT: "${LOG_FORMAT:-text}"
+      # Demo: без своей проверки токенов; Authorization пробрасывается в SOM.
+      AUTH_DISABLED: "${IR_AUTH_DISABLED:-true}"
+      # Значения — из ir/.env (см. .env.sample). Пустой SOM_API_BASE_URL выключает som-роуты.
+      SOM_API_BASE_URL: "${SOM_API_BASE_URL:-}"
+      SOM_RELAY_BASE_URL: "${SOM_RELAY_BASE_URL:-}"
+      SOM_HOST_ID: "${SOM_HOST_ID:-}"
+      SOM_REPO_ID: "${SOM_REPO_ID:-}"
+      SOM_REPO_PARENT_PATH: "${SOM_REPO_PARENT_PATH:-/tmp}"
+      SOM_REPO_FOLDER_NAME: "${SOM_REPO_FOLDER_NAME:-ir-demo}"
+      SOM_TARGET_BRANCH: "${SOM_TARGET_BRANCH:-main}"
+      SOM_EXECUTOR: "${SOM_EXECUTOR:-OPENCODE}"
+      # Изнутри compose gateway доступен по имени сервиса, а агенту на daemon
+      # VM нужны адреса, достижимые с той машины, — их задают *_PUBLIC_*.
+      GATEWAY_BASE_URL: "${GATEWAY_BASE_URL:-http://gateway:8091}"
+      IR_PUBLIC_BASE_URL: "${IR_PUBLIC_BASE_URL:-}"
+      GATEWAY_PUBLIC_BASE_URL: "${GATEWAY_PUBLIC_BASE_URL:-}"
+      # Публичный ключ платформы. Без него сервис поднимется,
+      # но любой запрос с токеном получит 401 — конфиг стенда неполон.
+      ACCESS_TOKEN_PUBLIC_KEY_FILE_PATH: "${ACCESS_TOKEN_PUBLIC_KEY_FILE_PATH:-}"
+      ACCESS_TOKEN_ISSUER: "${ACCESS_TOKEN_ISSUER:-auth.local}"
+      ACCESS_TOKEN_AUDIENCE: "${ACCESS_TOKEN_AUDIENCE:-api.local}"
+      ACCESS_TOKEN_KID: "${ACCESS_TOKEN_KID:-ed25519-v1}"
+    ports:
+      - "${API_PORT:-8090}:8090"
+    volumes:
+      - ./keys:/keys:ro
+    networks:
+      - default
+      # SOM remote-server / relay-server from deploy/docker-compose.yml
+      - deploy_default
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8090/ping || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    profiles:
+      - apps
+
+  gateway:
+    build:
+      context: .
+      dockerfile: apps/gateway/Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      SERVER_ADDR: "0.0.0.0"
+      SERVER_PORT: "8091"
+      SERVER_CORS_WHITELIST: "${SERVER_CORS_WHITELIST:-http://localhost:5173,http://localhost:3000}"
+      AUTH_DISABLED: "true"
+      DATABASE_URI: "postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:5432/investigations?search_path=${DB_INV_SCHEMA_NAME}"
+      PROJECT_SOURCE_ALLOWLISTS: '{"abcdef1234":["maxpatrol-siem","pt-sandbox"]}'
+      LOG_FORMAT: "${LOG_FORMAT:-text}"
+      MOCK_EVENT_COUNT: "${GATEWAY_MOCK_EVENT_COUNT:-50000}"
+      MOCK_ENDPOINT_COUNT: "${GATEWAY_MOCK_ENDPOINT_COUNT:-5000}"
+      MOCK_HISTORY_DAYS: "${GATEWAY_MOCK_HISTORY_DAYS:-90}"
+    ports:
+      - "${GATEWAY_PORT:-8091}:8091"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8091/ping || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    profiles:
+      - apps
+
+volumes:
+  pgdata:
+
+networks:
+  deploy_default:
+    external: true
+    name: deploy_default
+

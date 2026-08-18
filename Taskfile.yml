@@ -8,6 +8,8 @@ version: '3'
 vars:
   MODULE: github.com/sb0rka/ir/packages/contract
   SERVER_DIR: apps/investigations/internal/server
+  INVESTIGATIONS_API: api/investigations
+  GATEWAY_API: api/gateway
   REDOCLY: npx --yes @redocly/cli@2.5.0
   CODEGEN: go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@v2.8.0
   IMPL: go run github.com/josharian/impl@v1.5.0
@@ -27,19 +29,42 @@ tasks:
       - task: gen-go
       - task: gen-stubs
       - task: gen-ts
+      - task: gateway-gen
       - gofmt -w packages/contract {{.SERVER_DIR}}
 
+  gateway-spec:
+    desc: Проверить OpenAPI Gateway
+    cmds:
+      - '{{.REDOCLY}} join {{.GATEWAY_API}}/openapi.yaml {{.GATEWAY_API}}/paths/*.yaml -o apps/gateway/api/bundle.yaml --without-x-tag-groups'
+      - '{{.REDOCLY}} lint apps/gateway/api/bundle.yaml'
+
+  gateway-gen:
+    desc: Сгенерировать серверный и клиентский Go-контракты Gateway
+    deps: [gateway-spec]
+    cmds:
+      - >-
+        cd apps/gateway &&
+        {{.CODEGEN}} -package api -generate models,std-http-server
+        -o api/api.gen.go api/bundle.yaml
+      - mkdir -p packages/contract/gateway
+      - >-
+        cd packages/contract &&
+        {{.CODEGEN}} -package gateway -generate models,client
+        -response-type-suffix ClientResponse
+        -o gateway/gateway.gen.go ../../apps/gateway/api/bundle.yaml
+      - gofmt -w apps/gateway/api/api.gen.go packages/contract/gateway/gateway.gen.go
+
   gen-prune:
-    desc: Убрать сгенерированное для доменов, которых больше нет в api/paths
+    desc: Убрать сгенерированное для доменов, которых больше нет в Investigations API
     cmds:
       # Генераторы только создают и перезаписывают. Без этого шага удаление
       # домена оставляет живой Go-пакет и .d.ts, которые компилируются,
       # импортируются и ничего не обслуживают.
       - >-
         node -e "const fs=require('fs');
-        const exists=n=>fs.existsSync('api/paths/'+n+'.yaml');
+        const exists=n=>fs.existsSync('{{.INVESTIGATIONS_API}}/paths/'+n+'.yaml');
         for(const e of fs.readdirSync('packages/contract',{withFileTypes:true}))
-        if(e.isDirectory()&&e.name!=='spec'&&!exists(e.name))
+        if(e.isDirectory()&&e.name!=='spec'&&e.name!=='gateway'&&!exists(e.name))
         fs.rmSync('packages/contract/'+e.name,{recursive:true,force:true});
         for(const f of fs.readdirSync('packages/contract-ts/domains'))
         if(f.endsWith('.d.ts')&&!exists(f.slice(0,-5)))
@@ -52,24 +77,24 @@ tasks:
     desc: Собрать спеку и проверить
     cmds:
       - task: spec-domains
-      - '{{.REDOCLY}} join api/openapi.yaml api/paths/*.yaml -o api/bundle.yaml --without-x-tag-groups'
-      - '{{.REDOCLY}} lint api/bundle.yaml'
+      - '{{.REDOCLY}} join {{.INVESTIGATIONS_API}}/openapi.yaml {{.INVESTIGATIONS_API}}/paths/*.yaml -o {{.INVESTIGATIONS_API}}/bundle.yaml --without-x-tag-groups'
+      - '{{.REDOCLY}} lint {{.INVESTIGATIONS_API}}/bundle.yaml'
 
   spec-domains:
     desc: Развернуть каждый доменный файл в самостоятельный документ
-    sources: ['api/paths/*.yaml']
+    sources: ['{{.INVESTIGATIONS_API}}/paths/*.yaml']
     method: none
     cmds:
       # Каталог пересоздаётся, а не дополняется: иначе удалённый домен оставит
       # здесь свой файл, и gen-go с gen-ts будут вечно генерировать мёртвый
       # пакет — check-generated этого не заметит, потому что diff пустой.
-      - cmd: rm -rf api/build && mkdir -p api/build
+      - cmd: rm -rf {{.INVESTIGATIONS_API}}/build && mkdir -p {{.INVESTIGATIONS_API}}/build
       - for: sources
-        cmd: "{{.REDOCLY}} bundle '{{.ITEM}}' -o api/build/{{osBase .ITEM}}"
+        cmd: "{{.REDOCLY}} bundle '{{.ITEM}}' -o {{.INVESTIGATIONS_API}}/build/{{osBase .ITEM}}"
 
   gen-go:
     desc: Go-контракт — пакет на домен
-    sources: ['api/build/*.yaml']
+    sources: ['{{.INVESTIGATIONS_API}}/build/*.yaml']
     method: none
     cmds:
       - for: sources
@@ -79,11 +104,11 @@ tasks:
           -generate models,std-http-server,strict-server
           -o {{trimSuffix ".yaml" (osBase .ITEM)}}/{{trimSuffix ".yaml" (osBase .ITEM)}}.gen.go
           '../../{{.ITEM}}'
-      - cd packages/contract && {{.CODEGEN}} -package spec -generate embedded-spec -o spec/spec.gen.go ../../api/bundle.yaml
+      - cd packages/contract && {{.CODEGEN}} -package spec -generate embedded-spec -o spec/spec.gen.go ../../{{.INVESTIGATIONS_API}}/bundle.yaml
 
   gen-stubs:
     desc: Заготовки для новых ручек
-    sources: ['api/paths/*.yaml']
+    sources: ['{{.INVESTIGATIONS_API}}/paths/*.yaml']
     method: none
     cmds:
       # Новый домен: impl дописывает в конец файла, но перед этим разбирает
@@ -115,7 +140,7 @@ tasks:
 
   gen-ts:
     desc: TypeScript — по домену плюс общий api.d.ts для клиента
-    sources: ['api/build/*.yaml']
+    sources: ['{{.INVESTIGATIONS_API}}/build/*.yaml']
     method: none
     cmds:
       - for: sources
@@ -123,42 +148,42 @@ tasks:
           {{.OPENAPI_TS}} '{{.ITEM}}'
           -o packages/contract-ts/domains/{{trimSuffix ".yaml" (osBase .ITEM)}}.d.ts
       # Клиенту нужен один paths на весь API — берём из собранной спеки.
-      - '{{.OPENAPI_TS}} api/bundle.yaml -o packages/contract-ts/api.d.ts'
+      - '{{.OPENAPI_TS}} {{.INVESTIGATIONS_API}}/bundle.yaml -o packages/contract-ts/api.d.ts'
 
   spec-docs:
-    desc: Собрать документацию API в api/docs.html
+    desc: Собрать документацию Investigations API
     deps: [spec]
     cmds:
-      - '{{.REDOCLY}} build-docs api/bundle.yaml -o api/docs.html'
+      - '{{.REDOCLY}} build-docs {{.INVESTIGATIONS_API}}/bundle.yaml -o {{.INVESTIGATIONS_API}}/docs.html'
       # Сами не открываем: у Task свой шелл, а `start` — не исполняемый файл,
       # а встроенная команда cmd.exe, и вызов через неё ведёт себя непредсказуемо.
-      - cmd: echo "готово, откройте api/docs.html"
+      - cmd: echo "готово, откройте {{.INVESTIGATIONS_API}}/docs.html"
 
   check-generated:
     desc: Проверить, что сгенерированное соответствует спеке
     cmds:
       - task: gen
-      # Одна проверка на всё: Go-контракт, заготовки, TypeScript. Если
-      # перегенерация что-то изменила — спеку правили, а результат не
-      # закоммитили. Только *.go: рядом с заготовками лежит рукописный README.
+      # Проверяем только результаты генерации: документация рядом с ними может
+      # меняться независимо от спеки и не должна давать ложное срабатывание.
       - cmd: |
-          git diff --exit-code -- packages '{{.SERVER_DIR}}/*.go' || {
+          git diff --exit-code -- ':(glob)packages/contract/**/*.gen.go' packages/contract-ts/api.d.ts ':(glob)packages/contract-ts/domains/*.d.ts' '{{.SERVER_DIR}}/*.go' apps/gateway/api/api.gen.go apps/gateway/api/bundle.yaml || {
             echo ""
             echo "Сгенерированный код разошёлся со спекой."
             echo "Почините: task gen, затем закоммитьте изменения."
             exit 1
           }
       - cmd: |
-          test -z "$(git status --porcelain -- packages '{{.SERVER_DIR}}/*.go')" || {
+          test -z "$(git status --porcelain -- ':(glob)packages/contract/**/*.gen.go' packages/contract-ts/api.d.ts ':(glob)packages/contract-ts/domains/*.d.ts' '{{.SERVER_DIR}}/*.go' apps/gateway/api/api.gen.go apps/gateway/api/bundle.yaml)" || {
             echo ""
             echo "Появились несохранённые сгенерированные файлы:"
-            git status --short -- packages '{{.SERVER_DIR}}/*.go'
+            git status --short -- packages '{{.SERVER_DIR}}/*.go' apps/gateway/api/api.gen.go apps/gateway/api/bundle.yaml
             exit 1
           }
 
   build:
     desc: Собрать сервисы в bin/
     cmds:
+      - go build -o bin/gateway ./apps/gateway/cmd/gateway
       - go build -o bin/ir-api ./apps/investigations/cmd/ir-api
       - go build -o bin/irctl ./apps/investigations/cmd/irctl
 
@@ -170,12 +195,14 @@ tasks:
   vet:
     desc: go vet помодульно (из-за go.work)
     cmds:
+      - cd apps/gateway && go vet ./...
       - cd apps/investigations && go vet ./...
       - cd packages/contract && go vet ./...
 
   test:
     desc: Go-тесты во всех модулях
     cmds:
+      - cd apps/gateway && go test ./...
       - cd apps/investigations && go test ./...
       - cd packages/contract && go test ./...
 
@@ -187,6 +214,7 @@ tasks:
   tidy:
     desc: go mod tidy в каждом модуле
     cmds:
+      - cd apps/gateway && go mod tidy
       - cd apps/investigations && go mod tidy
       - cd packages/contract && go mod tidy
 
@@ -199,22 +227,49 @@ tasks:
       - task: test
       - task: typecheck
 
-  dev:
-    desc: Поднять локальный стенд (Postgres + ir-api)
+  db:up:
+    desc: Start local Postgres
     cmds:
-      - docker compose -f docker-compose.dev.yml up -d --build
+      - docker compose --profile container-db up -d
 
-  dev-down:
-    desc: Остановить стенд
+  db:migrate:
+    desc: Apply investigations database migrations
     cmds:
-      - docker compose -f docker-compose.dev.yml down
+      - docker compose --profile migrate run --rm --build migrate-inv
 
-  dev-logs:
-    desc: Логи стенда
+  db:down:
+    desc: Stop local Postgres
     cmds:
-      - docker compose -f docker-compose.dev.yml logs -f ir-api
+      - docker compose --profile container-db down
 
-  migrate:
-    desc: Применить миграции к локальной базе
+  db:wipe:
+    desc: Stop local Postgres and delete its volume
     cmds:
-      - docker compose -f docker-compose.dev.yml up migrate --exit-code-from migrate
+      - docker compose --profile container-db --profile migrate down -v
+
+  apps:up:
+    desc: Start local apps (ir-api, gateway)
+    cmds:
+      - docker compose --profile apps up -d --build
+
+  apps:logs:
+    desc: Follow logs of local apps
+    cmds:
+      - docker compose --profile apps logs -f
+
+  apps:down:
+    desc: Stop local apps
+    cmds:
+      - docker compose --profile apps down
+
+  exec:gateway:
+    desc: Execute gateway
+    dir: bin
+    cmds:
+      - ./gateway {{.CLI_ARGS}}
+
+  exec:ir-api:
+    desc: Execute ir-api
+    dir: bin
+    cmds:
+      - ./ir-api {{.CLI_ARGS}}

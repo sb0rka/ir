@@ -147,6 +147,73 @@ func (e Verdict) Valid() bool {
 	}
 }
 
+// AgentEdge defines model for AgentEdge.
+type AgentEdge struct {
+	Confidence        *float32 `json:"confidence,omitempty"`
+	EvidenceEventRefs []string `json:"evidence_event_refs"`
+	RelationCode      string   `json:"relation_code"`
+	SourceRef         string   `json:"source_ref"`
+	TargetRef         string   `json:"target_ref"`
+	Why               string   `json:"why"`
+}
+
+// AgentEntitySelection An entity source record selected by the agent and its batch-local reference.
+type AgentEntitySelection struct {
+	Ref            string `json:"ref"`
+	SourceCode     string `json:"source_code"`
+	SourceEntityId string `json:"source_entity_id"`
+}
+
+// AgentEventSelection An event selected by the agent and its batch-local reference.
+type AgentEventSelection struct {
+	Ref           string `json:"ref"`
+	SourceCode    string `json:"source_code"`
+	SourceEventId string `json:"source_event_id"`
+}
+
+// AgentNode A unique local ref and exactly one target: an event/entity selection from this batch, or an existing node in this investigation.
+type AgentNode struct {
+	// EntityRef Local ref of an entity selection from this batch.
+	EntityRef *string `json:"entity_ref,omitempty"`
+
+	// EventRef Local ref of an event selection from this batch.
+	EventRef *string             `json:"event_ref,omitempty"`
+	NodeId   *openapi_types.UUID `json:"node_id,omitempty"`
+	Ref      string              `json:"ref"`
+}
+
+// AgentResultBatch defines model for AgentResultBatch.
+type AgentResultBatch struct {
+	Edges       []AgentEdge            `json:"edges"`
+	Entities    []AgentEntitySelection `json:"entities"`
+	Events      []AgentEventSelection  `json:"events"`
+	Nodes       []AgentNode            `json:"nodes"`
+	SomIssueIds []openapi_types.UUID   `json:"som_issue_ids"`
+}
+
+// ContextImportResult defines model for ContextImportResult.
+type ContextImportResult struct {
+	Edges    int `json:"edges"`
+	Entities int `json:"entities"`
+	Events   int `json:"events"`
+	Nodes    int `json:"nodes"`
+}
+
+// ContextSelection Source-owned identifiers selected in the Gateway event list.
+type ContextSelection struct {
+	Entities []EntitySourceRef `json:"entities"`
+	Events   []EventSourceRef  `json:"events"`
+}
+
+// EntitySourceRef defines model for EntitySourceRef.
+type EntitySourceRef struct {
+	// SourceCode Gateway source code, for example maxpatrol-siem.
+	SourceCode string `json:"source_code"`
+
+	// SourceEntityId Original entity record identifier assigned by the source.
+	SourceEntityId string `json:"source_entity_id"`
+}
+
 // ErrorResponse Body of every non-2xx response. Clients branch on `code`, not on the HTTP status: the status says what happened at the protocol level, the code says what happened in the domain.
 type ErrorResponse struct {
 	// Error The failure itself. Never carries internal details of a 500.
@@ -164,6 +231,15 @@ type ErrorResponse struct {
 
 // ErrorResponseErrorCode Machine-readable reason, stable across releases. `validation` covers both a malformed body (400) and a well-formed but invalid one (422). `not_implemented` means the operation exists in the contract but has no implementation yet — a client can hide the control instead of showing an error.
 type ErrorResponseErrorCode string
+
+// EventSourceRef defines model for EventSourceRef.
+type EventSourceRef struct {
+	// SourceCode Gateway source code, for example maxpatrol-siem.
+	SourceCode string `json:"source_code"`
+
+	// SourceEventId Original event identifier assigned by the source.
+	SourceEventId string `json:"source_event_id"`
+}
 
 // Investigation A case or a nested hypothesis in the selected project.
 type Investigation struct {
@@ -246,16 +322,16 @@ type InvestigationCreate struct {
 	Severity *Severity `json:"severity,omitempty"`
 
 	// SomWorkspaceIds SOM workspaces to link to the new investigation.
-	SomWorkspaceIds *[]openapi_types.UUID `json:"som_workspace_ids,omitempty"`
+	SomWorkspaceIds []openapi_types.UUID `json:"som_workspace_ids"`
 
 	// Title What is being investigated, or the claim being tested.
 	Title string `json:"title"`
 }
 
-// InvestigationPage One page of investigations.
+// InvestigationPage One page of investigations and the cursor for continuing it.
 type InvestigationPage struct {
-	// Items The investigations on this page.
-	Items []Investigation `json:"items"`
+	// Investigations The investigations on this page.
+	Investigations []Investigation `json:"investigations"`
 
 	// NextCursor Pass as `cursor` to get the next page. Absent on the last page.
 	NextCursor *string `json:"next_cursor,omitempty"`
@@ -293,84 +369,6 @@ type InvestigationPatch struct {
 
 // InvestigationStatus Whether work is still going on. Says nothing about the outcome — that is the verdict.
 type InvestigationStatus string
-
-// InvestigationTree A subtree flattened for one-pass rendering.
-type InvestigationTree struct {
-	// Items Every investigation in the subtree in pre-order, starting with the root itself. Each carries its depth, so the client can indent without walking parent links.
-	Items []struct {
-		// ClosedAt When it was closed. Cleared if the investigation is reopened.
-		ClosedAt *time.Time `json:"closed_at,omitempty"`
-
-		// Confidence How sure the conclusion is. Meaningful for a hypothesis, rarely used on a root case.
-		Confidence *float32 `json:"confidence,omitempty"`
-
-		// Counters Size of the case at a glance, so the list does not need a query per row.
-		Counters struct {
-			// Children Direct child investigations — the open hypotheses under this one.
-			Children int `json:"children"`
-
-			// Entities Distinct entities extracted from those events.
-			Entities int `json:"entities"`
-
-			// Events Events pulled into this investigation.
-			Events int `json:"events"`
-
-			// ProposedEdges Edges waiting for review.
-			ProposedEdges int `json:"proposed_edges"`
-		} `json:"counters"`
-
-		// CreatedAt When the investigation was opened.
-		CreatedAt time.Time `json:"created_at"`
-
-		// Depth Distance from the root. Zero for the root itself.
-		Depth int `json:"depth"`
-
-		// Description Free-form context — what is known, what is being checked and why.
-		Description *string `json:"description,omitempty"`
-
-		// Id Identifier of the investigation.
-		Id openapi_types.UUID `json:"id"`
-
-		// Origin Creator type, assigned by the server.
-		Origin *Origin `json:"origin,omitempty"`
-
-		// OriginRef Which one exactly — the analyst's subject id, the rule's code, or the agent run's identifier.
-		OriginRef *string `json:"origin_ref,omitempty"`
-
-		// ParentId The investigation this one refines. Null means it is a root case; anything else means it is a hypothesis inside a larger case.
-		ParentId *openapi_types.UUID `json:"parent_id,omitempty"`
-
-		// ProjectId Project that owns the case. Every child inherits it unchanged, so a whole tree belongs to one project.
-		ProjectId string `json:"project_id"`
-
-		// Severity How bad this looks. Set during triage and revised as evidence arrives. Absent until someone judges it.
-		Severity *Severity `json:"severity,omitempty"`
-
-		// SomWorkspaceIds SOM workspaces linked to this investigation.
-		SomWorkspaceIds []openapi_types.UUID `json:"som_workspace_ids"`
-
-		// Status Whether work is still going on. Independent of the verdict: a case can be open with no verdict yet, and closing requires one.
-		Status InvestigationStatus `json:"status"`
-
-		// Title What is being investigated. For a hypothesis this is the claim being tested, phrased so a verdict makes sense against it.
-		Title string `json:"title"`
-
-		// UpdatedAt When it last changed.
-		UpdatedAt time.Time `json:"updated_at"`
-
-		// Verdict The conclusion. Absent while the investigation is still open, required to close it. Which values are allowed depends on whether this is a root case or a hypothesis — see Verdict.
-		Verdict *Verdict `json:"verdict,omitempty"`
-
-		// VerdictReason Reason for the verdict. Required when rejecting.
-		VerdictReason *string `json:"verdict_reason,omitempty"`
-
-		// Version Bumped on every change. Send the value you last read when updating; a mismatch means someone else edited it first.
-		Version int `json:"version"`
-	} `json:"items"`
-
-	// RootId The investigation the subtree was requested for.
-	RootId openapi_types.UUID `json:"root_id"`
-}
 
 // Origin Who produced the record: a human acting through the API, a deterministic linking rule, or an agent run. Anything not produced by a human is born unconfirmed and has to be reviewed.
 type Origin string
@@ -462,6 +460,18 @@ type UpdateInvestigationParams struct {
 	XProjectID ProjectId `json:"X-Project-ID"`
 }
 
+// AddAgentResultsParams defines parameters for AddAgentResults.
+type AddAgentResultsParams struct {
+	// XProjectID Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored.
+	XProjectID ProjectId `json:"X-Project-ID"`
+}
+
+// AddInvestigationContextParams defines parameters for AddInvestigationContext.
+type AddInvestigationContextParams struct {
+	// XProjectID Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored.
+	XProjectID ProjectId `json:"X-Project-ID"`
+}
+
 // GetInvestigationTreeParams defines parameters for GetInvestigationTree.
 type GetInvestigationTreeParams struct {
 	// XProjectID Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored.
@@ -473,6 +483,12 @@ type CreateInvestigationJSONRequestBody = InvestigationCreate
 
 // UpdateInvestigationJSONRequestBody defines body for UpdateInvestigation for application/json ContentType.
 type UpdateInvestigationJSONRequestBody = InvestigationPatch
+
+// AddAgentResultsJSONRequestBody defines body for AddAgentResults for application/json ContentType.
+type AddAgentResultsJSONRequestBody = AgentResultBatch
+
+// AddInvestigationContextJSONRequestBody defines body for AddInvestigationContext for application/json ContentType.
+type AddInvestigationContextJSONRequestBody = ContextSelection
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
@@ -491,6 +507,12 @@ type ServerInterface interface {
 	// UpdateInvestigation Update an investigation
 	// (PATCH /investigations/{investigation_id})
 	UpdateInvestigation(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, params UpdateInvestigationParams)
+	// AddAgentResults Save one explicit SOM agent result batch
+	// (POST /investigations/{investigation_id}/agent-results)
+	AddAgentResults(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, params AddAgentResultsParams)
+	// AddInvestigationContext Add analyst-selected Gateway context
+	// (POST /investigations/{investigation_id}/context)
+	AddInvestigationContext(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, params AddInvestigationContextParams)
 	// GetInvestigationTree The whole subtree
 	// (GET /investigations/{investigation_id}/tree)
 	GetInvestigationTree(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, params GetInvestigationTreeParams)
@@ -835,6 +857,114 @@ func (siw *ServerInterfaceWrapper) UpdateInvestigation(w http.ResponseWriter, r 
 	handler.ServeHTTP(w, r)
 }
 
+// AddAgentResults operation middleware
+func (siw *ServerInterfaceWrapper) AddAgentResults(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "investigation_id" -------------
+	var investigationId InvestigationId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "investigation_id", r.PathValue("investigation_id"), &investigationId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "investigation_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params AddAgentResultsParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "X-Project-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Project-ID")]; found {
+		var XProjectID ProjectId
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Project-ID", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Project-ID", valueList[0], &XProjectID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Project-ID", Err: err})
+			return
+		}
+
+		params.XProjectID = XProjectID
+
+	} else {
+		err := fmt.Errorf("Header parameter X-Project-ID is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Project-ID", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.AddAgentResults(w, r, investigationId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// AddInvestigationContext operation middleware
+func (siw *ServerInterfaceWrapper) AddInvestigationContext(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "investigation_id" -------------
+	var investigationId InvestigationId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "investigation_id", r.PathValue("investigation_id"), &investigationId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "investigation_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params AddInvestigationContextParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "X-Project-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Project-ID")]; found {
+		var XProjectID ProjectId
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Project-ID", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Project-ID", valueList[0], &XProjectID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Project-ID", Err: err})
+			return
+		}
+
+		params.XProjectID = XProjectID
+
+	} else {
+		err := fmt.Errorf("Header parameter X-Project-ID is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Project-ID", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.AddInvestigationContext(w, r, investigationId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetInvestigationTree operation middleware
 func (siw *ServerInterfaceWrapper) GetInvestigationTree(w http.ResponseWriter, r *http.Request) {
 
@@ -1011,6 +1141,8 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/investigations", wrapper.ListInvestigations)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/investigations", wrapper.CreateInvestigation)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/investigations/{investigation_id}/context", wrapper.AddInvestigationContext)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/investigations/{investigation_id}/agent-results", wrapper.AddAgentResults)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/investigations/{investigation_id}", wrapper.DeleteInvestigation)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/investigations/{investigation_id}", wrapper.GetInvestigation)
 	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/investigations/{investigation_id}", wrapper.UpdateInvestigation)
@@ -1534,6 +1666,194 @@ func (response UpdateInvestigation501JSONResponse) VisitUpdateInvestigationRespo
 	return err
 }
 
+type AddAgentResultsRequestObject struct {
+	InvestigationId InvestigationId `json:"investigation_id"`
+	Params          AddAgentResultsParams
+	Body            *AddAgentResultsJSONRequestBody
+}
+
+type AddAgentResultsResponseObject interface {
+	VisitAddAgentResultsResponse(w http.ResponseWriter) error
+}
+
+type AddAgentResults201JSONResponse ContextImportResult
+
+func (response AddAgentResults201JSONResponse) VisitAddAgentResultsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddAgentResults401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response AddAgentResults401JSONResponse) VisitAddAgentResultsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddAgentResults403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response AddAgentResults403JSONResponse) VisitAddAgentResultsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddAgentResults404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response AddAgentResults404JSONResponse) VisitAddAgentResultsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddAgentResults422JSONResponse struct{ ValidationErrorJSONResponse }
+
+func (response AddAgentResults422JSONResponse) VisitAddAgentResultsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddAgentResults500JSONResponse struct{ InternalErrorJSONResponse }
+
+func (response AddAgentResults500JSONResponse) VisitAddAgentResultsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddInvestigationContextRequestObject struct {
+	InvestigationId InvestigationId `json:"investigation_id"`
+	Params          AddInvestigationContextParams
+	Body            *AddInvestigationContextJSONRequestBody
+}
+
+type AddInvestigationContextResponseObject interface {
+	VisitAddInvestigationContextResponse(w http.ResponseWriter) error
+}
+
+type AddInvestigationContext201JSONResponse ContextImportResult
+
+func (response AddInvestigationContext201JSONResponse) VisitAddInvestigationContextResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddInvestigationContext401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response AddInvestigationContext401JSONResponse) VisitAddInvestigationContextResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddInvestigationContext403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response AddInvestigationContext403JSONResponse) VisitAddInvestigationContextResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddInvestigationContext404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response AddInvestigationContext404JSONResponse) VisitAddInvestigationContextResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddInvestigationContext422JSONResponse struct{ ValidationErrorJSONResponse }
+
+func (response AddInvestigationContext422JSONResponse) VisitAddInvestigationContextResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddInvestigationContext500JSONResponse struct{ InternalErrorJSONResponse }
+
+func (response AddInvestigationContext500JSONResponse) VisitAddInvestigationContextResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type GetInvestigationTreeRequestObject struct {
 	InvestigationId InvestigationId `json:"investigation_id"`
 	Params          GetInvestigationTreeParams
@@ -1543,7 +1863,76 @@ type GetInvestigationTreeResponseObject interface {
 	VisitGetInvestigationTreeResponse(w http.ResponseWriter) error
 }
 
-type GetInvestigationTree200JSONResponse InvestigationTree
+type GetInvestigationTree200JSONResponse []struct {
+	// ClosedAt When it was closed. Cleared if the investigation is reopened.
+	ClosedAt *time.Time `json:"closed_at,omitempty"`
+
+	// Confidence How sure the conclusion is. Meaningful for a hypothesis, rarely used on a root case.
+	Confidence *float32 `json:"confidence,omitempty"`
+
+	// Counters Size of the case at a glance, so the list does not need a query per row.
+	Counters struct {
+		// Children Direct child investigations — the open hypotheses under this one.
+		Children int `json:"children"`
+
+		// Entities Distinct entities extracted from those events.
+		Entities int `json:"entities"`
+
+		// Events Events pulled into this investigation.
+		Events int `json:"events"`
+
+		// ProposedEdges Edges waiting for review.
+		ProposedEdges int `json:"proposed_edges"`
+	} `json:"counters"`
+
+	// CreatedAt When the investigation was opened.
+	CreatedAt time.Time `json:"created_at"`
+
+	// Depth Distance from the root. Zero for the root itself.
+	Depth int `json:"depth"`
+
+	// Description Free-form context — what is known, what is being checked and why.
+	Description *string `json:"description,omitempty"`
+
+	// Id Identifier of the investigation.
+	Id openapi_types.UUID `json:"id"`
+
+	// Origin Creator type, assigned by the server.
+	Origin *Origin `json:"origin,omitempty"`
+
+	// OriginRef Which one exactly — the analyst's subject id, the rule's code, or the agent run's identifier.
+	OriginRef *string `json:"origin_ref,omitempty"`
+
+	// ParentId The investigation this one refines. Null means it is a root case; anything else means it is a hypothesis inside a larger case.
+	ParentId *openapi_types.UUID `json:"parent_id,omitempty"`
+
+	// ProjectId Project that owns the case. Every child inherits it unchanged, so a whole tree belongs to one project.
+	ProjectId string `json:"project_id"`
+
+	// Severity How bad this looks. Set during triage and revised as evidence arrives. Absent until someone judges it.
+	Severity *Severity `json:"severity,omitempty"`
+
+	// SomWorkspaceIds SOM workspaces linked to this investigation.
+	SomWorkspaceIds []openapi_types.UUID `json:"som_workspace_ids"`
+
+	// Status Whether work is still going on. Independent of the verdict: a case can be open with no verdict yet, and closing requires one.
+	Status InvestigationStatus `json:"status"`
+
+	// Title What is being investigated. For a hypothesis this is the claim being tested, phrased so a verdict makes sense against it.
+	Title string `json:"title"`
+
+	// UpdatedAt When it last changed.
+	UpdatedAt time.Time `json:"updated_at"`
+
+	// Verdict The conclusion. Absent while the investigation is still open, required to close it. Which values are allowed depends on whether this is a root case or a hypothesis — see Verdict.
+	Verdict *Verdict `json:"verdict,omitempty"`
+
+	// VerdictReason Reason for the verdict. Required when rejecting.
+	VerdictReason *string `json:"verdict_reason,omitempty"`
+
+	// Version Bumped on every change. Send the value you last read when updating; a mismatch means someone else edited it first.
+	Version int `json:"version"`
+}
 
 func (response GetInvestigationTree200JSONResponse) VisitGetInvestigationTreeResponse(w http.ResponseWriter) error {
 
@@ -1644,6 +2033,12 @@ type StrictServerInterface interface {
 	// UpdateInvestigation Update an investigation
 	// (PATCH /investigations/{investigation_id})
 	UpdateInvestigation(ctx context.Context, request UpdateInvestigationRequestObject) (UpdateInvestigationResponseObject, error)
+	// AddAgentResults Save one explicit SOM agent result batch
+	// (POST /investigations/{investigation_id}/agent-results)
+	AddAgentResults(ctx context.Context, request AddAgentResultsRequestObject) (AddAgentResultsResponseObject, error)
+	// AddInvestigationContext Add analyst-selected Gateway context
+	// (POST /investigations/{investigation_id}/context)
+	AddInvestigationContext(ctx context.Context, request AddInvestigationContextRequestObject) (AddInvestigationContextResponseObject, error)
 	// GetInvestigationTree The whole subtree
 	// (GET /investigations/{investigation_id}/tree)
 	GetInvestigationTree(ctx context.Context, request GetInvestigationTreeRequestObject) (GetInvestigationTreeResponseObject, error)
@@ -1828,6 +2223,74 @@ func (sh *strictHandler) UpdateInvestigation(w http.ResponseWriter, r *http.Requ
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(UpdateInvestigationResponseObject); ok {
 		if err := validResponse.VisitUpdateInvestigationResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// AddAgentResults operation middleware
+func (sh *strictHandler) AddAgentResults(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, params AddAgentResultsParams) {
+	var request AddAgentResultsRequestObject
+
+	request.InvestigationId = investigationId
+	request.Params = params
+
+	var body AddAgentResultsJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.AddAgentResults(ctx, request.(AddAgentResultsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "AddAgentResults")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(AddAgentResultsResponseObject); ok {
+		if err := validResponse.VisitAddAgentResultsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// AddInvestigationContext operation middleware
+func (sh *strictHandler) AddInvestigationContext(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, params AddInvestigationContextParams) {
+	var request AddInvestigationContextRequestObject
+
+	request.InvestigationId = investigationId
+	request.Params = params
+
+	var body AddInvestigationContextJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.AddInvestigationContext(ctx, request.(AddInvestigationContextRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "AddInvestigationContext")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(AddInvestigationContextResponseObject); ok {
+		if err := validResponse.VisitAddInvestigationContextResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

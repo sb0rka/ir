@@ -1,26 +1,41 @@
-bin/
-keys/
-.env
-*.exe
-
-# Ключи и локальные данные стенда
-pgdata/
-
-# Node
-node_modules/
-
-# Python
-__pycache__/
-*.pyc
-
-# Собранная спека — производный артефакт: пересобирается из paths/ и shared/
-# командой `task spec`. В репозитории лежит только источник, разнесённый по
-# доменам, плюс сгенерированные из него типы (их коммитим — компилятор Go
-# и сборка фронта не должны требовать установленного генератора).
-api/bundle.yaml
+# Build and generated files
+/bin/
+/api/investigations/build/
+/api/investigations/bundle.yaml
+/api/investigations/docs.html
 *.tmp.yaml
-api/docs.html
-api/build/
+*.exe
+coverage.out
+
+# Local configuration and data
+.env
+.env.*
+!.env.sample
+/keys/
+/pgdata/
+
+# Dependencies and language caches
+node_modules/
+__pycache__/
+*.py[cod]
+.pytest_cache/
 go.work.sum
-packages/contract-ts/node_modules/
+
+# Tool and editor state
+/.cache/
+/.claude/
+/.gitnexus/
+/.task/
+/CLAUDE.md
+.idea/
+.vscode/
+
+# OS and logs
+.DS_Store
+Thumbs.db
+*.log
 docs-internal/
+docs-internal
+api/build/
+api/bundle.yaml
+api/docs.html

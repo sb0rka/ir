@@ -1,0 +1,32 @@
+openapi: 3.0.3
+info:
+  title: Sb0rka external tools gateway
+  version: 0.0.1
+  license:
+    name: Apache-2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0
+  description: Normalized access to external security tools.
+servers:
+  - url: .
+security:
+  - bearerAuth: []
+tags:
+  - name: health
+    description: Gateway process health and readiness.
+  - name: sources
+    description: Registered external security products.
+  - name: events
+    description: Normalized event search.
+  - name: entities
+    description: Entity lookup across security products.
+  - name: artifacts
+    description: Artifact analysis operations.
+  - name: endpoints
+    description: Endpoint search and response capabilities.
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Sb0rka access token passed as `Bearer <token>`.

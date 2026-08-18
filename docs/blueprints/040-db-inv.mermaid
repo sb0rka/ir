@@ -1,0 +1,275 @@
+---
+config:
+  theme: dark
+  layout: elk
+---
+erDiagram
+	direction TB
+
+	%% REFERENCE DATA
+
+	sources {
+		varchar code PK
+		varchar kind
+		varchar title
+		bool is_enabled
+		timestamptz created_at
+		timestamptz updated_at
+	}
+	%% sources.kind CHECK: siem, edr, ndr, sandbox, infra, other
+	%% sources UNIQUE (title)
+
+	entity_types {
+		varchar code PK
+		varchar title
+		varchar category
+		timestamptz created_at
+		timestamptz updated_at
+	}
+	%% entity_types.category CHECK: identity, network, execution, persistence, asset, other
+	%% entity_types UNIQUE (title)
+
+	relation_types {
+		varchar code PK
+		varchar title
+		varchar source_kind
+		varchar target_kind
+		bool directed
+		timestamptz created_at
+		timestamptz updated_at
+	}
+	%% relation_types.source_kind/target_kind CHECK: entity, event
+	%% relation_types UNIQUE (title)
+
+	%% INVESTIGATIONS TREE
+
+	investigations {
+		uuid id PK
+		uuid parent_id FK
+		varchar project_id
+		varchar title
+		varchar description
+		varchar status
+		varchar severity
+		varchar verdict
+		varchar verdict_reason
+		real confidence
+		varchar origin
+		varchar origin_ref
+		int version
+		timestamptz created_at
+		timestamptz updated_at
+		timestamptz closed_at
+	}
+
+	investigation_som_workspaces {
+		uuid investigation_id PK,FK
+		varchar project_id FK
+		uuid workspace_id PK
+		timestamptz created_at
+	}
+	%% investigations.status CHECK: open, closed
+	%% investigations.severity CHECK: low, medium, high, critical
+	%% investigations.verdict CHECK: incident, false_positive, not_affected, inconclusive, confirmed, rejected
+	%% investigations.origin CHECK: analyst, rule, agent
+	%% investigations UNIQUE (id, project_id)
+	%% investigations: status=closed => verdict NOT NULL
+	%% investigations: verdict=rejected => verdict_reason NOT NULL
+
+	%% EVIDENCE
+
+	events {
+		uuid id PK
+		varchar project_id UK
+		varchar source_code FK
+		varchar source_event_id UK
+		varchar source_ref
+		varchar title
+		varchar event_type
+		timestamptz occurred_at
+		timestamptz ingested_at
+		jsonb normalized_data
+		jsonb provenance
+		timestamptz created_at
+		timestamptz updated_at
+	}
+	%% events UNIQUE (id, project_id)
+	%% events UNIQUE (project_id, source_code, source_event_id)
+
+	entities {
+		uuid id PK
+		varchar project_id UK
+		varchar type_code FK
+		varchar canonical_key UK
+		varchar display_name
+		jsonb metadata
+		timestamptz first_seen
+		timestamptz last_seen
+		timestamptz created_at
+		timestamptz updated_at
+	}
+	%% entities UNIQUE (id, project_id)
+	%% entities UNIQUE (project_id, type_code, canonical_key)
+
+	entity_sources {
+		uuid entity_id PK,FK
+		varchar project_id UK,FK
+		varchar source_code PK,UK,FK
+		varchar source_entity_id PK,UK
+		varchar source_ref
+		timestamptz fetched_at
+		jsonb provenance
+		timestamptz created_at
+		timestamptz updated_at
+	}
+	%% entity_sources UNIQUE (project_id, source_code, source_entity_id)
+
+	event_entity_relations {
+		uuid id PK
+		varchar project_id FK
+		uuid event_id UK,FK
+		uuid entity_id UK,FK
+		varchar relation_code UK,FK
+		timestamptz created_at
+		timestamptz updated_at
+	}
+	%% event_entity_relations UNIQUE (event_id, entity_id, relation_code)
+	%% FK: (event_id, project_id), (entity_id, project_id)
+
+	entity_relations {
+		uuid id PK
+		varchar project_id UK,FK
+		varchar source_code UK,FK
+		varchar source_relation_id UK
+		varchar source_ref
+		uuid source_entity_id FK
+		uuid target_entity_id FK
+		varchar relation_code FK
+		timestamptz occurred_at
+		jsonb provenance
+	}
+
+	%% INVESTIGATION COMPONENTS
+
+	investigation_events {
+		uuid investigation_id PK,FK
+		uuid event_id PK,FK
+		varchar project_id UK,FK
+		timestamptz attached_at
+		varchar attached_by
+		varchar reason
+		timestamptz updated_at
+	}
+	%% investigation_events.attached_by CHECK: analyst, agent, system
+	%% investigation_events UNIQUE (investigation_id, event_id, project_id)
+
+	investigation_entities {
+		uuid investigation_id PK,FK
+		uuid entity_id PK,FK
+		varchar project_id UK,FK
+		varchar added_via
+		timestamptz added_at
+		timestamptz updated_at
+	}
+	%% investigation_entities.added_via CHECK: event, ioc, agent, analyst
+	%% investigation_entities UNIQUE (investigation_id, entity_id, project_id)
+
+	%% GRAPH
+
+	graph_nodes {
+		uuid id PK
+		uuid investigation_id UK,FK
+		varchar node_type
+		uuid entity_id FK
+		uuid event_id FK
+		varchar origin
+		timestamptz created_at
+		timestamptz updated_at
+	}
+	%% graph_nodes.node_type CHECK: entity, event
+	%% graph_nodes.origin CHECK: analyst, rule, agent
+	%% graph_nodes UNIQUE (id, investigation_id)
+	%% UNIQUE (investigation_id, entity_id) WHERE entity_id IS NOT NULL
+	%% UNIQUE (investigation_id, event_id) WHERE event_id IS NOT NULL
+
+	graph_node_som_issues {
+		uuid graph_node_id PK,FK
+		uuid som_issue_id PK
+		timestamptz created_at
+		timestamptz updated_at
+	}
+
+	edges {
+		uuid id PK
+		uuid investigation_id UK,FK
+		uuid source_node_id UK,FK
+		uuid target_node_id UK,FK
+		varchar relation_code UK,FK
+		varchar status
+		varchar reject_reason
+		real confidence
+		varchar why
+		varchar origin
+		varchar origin_ref
+		jsonb metadata
+		int version
+		timestamptz created_at
+		timestamptz updated_at
+	}
+	%% edges.status CHECK: proposed, confirmed, rejected
+	%% edges.origin CHECK: analyst, rule, agent
+	%% edges UNIQUE (id, investigation_id)
+	%% edges UNIQUE (investigation_id, source_node_id, target_node_id, relation_code)
+	%% edges: status=rejected => reject_reason NOT NULL
+	%% FKs: (source_node_id, investigation_id), (target_node_id, investigation_id)
+
+	edge_evidence {
+		uuid edge_id PK,FK
+		uuid event_id PK,FK
+		uuid investigation_id FK
+		timestamptz created_at
+		timestamptz updated_at
+	}
+
+	%% ACCESS CONTROL
+
+	role_bindings {
+		varchar project_id PK
+		uuid subject_id PK
+		varchar role PK
+		uuid granted_by_subject_id
+		timestamptz created_at
+	}
+	%% role_bindings.role CHECK: l1, l2, lead, admin
+
+	sources ||--o{ events : has
+	entity_types ||--o{ entities : has
+	relation_types ||--o{ event_entity_relations : has
+	relation_types ||--o{ edges : has
+
+	investigations |o--o{ investigations : has
+	investigations ||--o{ investigation_events : has
+	investigations ||--o{ investigation_entities : has
+	investigations ||--o{ investigation_som_workspaces : links
+	investigations ||--o{ graph_nodes : has
+	investigations ||--o{ edges : has
+
+	events ||--o{ event_entity_relations : has
+	entities ||--o{ event_entity_relations : has
+	entities ||--o{ entity_sources : has
+	sources ||--o{ entity_sources : has
+	entities ||--o{ entity_relations : source
+	entities ||--o{ entity_relations : target
+	sources ||--o{ entity_relations : has
+	relation_types ||--o{ entity_relations : has
+	events ||--o{ investigation_events : has
+	entities ||--o{ investigation_entities : has
+
+	investigation_entities |o--o| graph_nodes : is
+	investigation_events |o--o| graph_nodes : is
+	graph_nodes ||--o{ graph_node_som_issues : has
+	graph_nodes ||--o{ edges : is_source
+	graph_nodes ||--o{ edges : is_target
+
+	edges ||--o{ edge_evidence : has
+	investigation_events ||--o{ edge_evidence : has

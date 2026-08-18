@@ -1,0 +1,178 @@
+openapi: 3.0.3
+info:
+  title: Sb0rka Gateway - endpoints
+  version: 0.0.1
+servers:
+  - url: .
+security:
+  - bearerAuth: []
+
+paths:
+  /api/v1/endpoints/search:
+    post:
+      tags: [endpoints]
+      summary: Search endpoints
+      operationId: searchEndpoints
+      parameters:
+        - $ref: '../shared/parameters.yaml#/ProjectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SearchEndpointsRequest'
+      responses:
+        '200':
+          description: EDR endpoints.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchEndpointsResponse'
+        '400': { $ref: '../shared/responses.yaml#/BadRequest' }
+        '401': { $ref: '../shared/responses.yaml#/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/NotFound' }
+        '422': { $ref: '../shared/responses.yaml#/ValidationError' }
+        '502': { $ref: '../shared/responses.yaml#/BadGateway' }
+        '504': { $ref: '../shared/responses.yaml#/GatewayTimeout' }
+        '500': { $ref: '../shared/responses.yaml#/InternalError' }
+        default:
+          $ref: '../shared/responses.yaml#/ErrorResponse'
+
+  /api/v1/sources/{source}/endpoints/{external_id}/response-actions:
+    get:
+      tags: [endpoints]
+      summary: List endpoint response actions
+      operationId: listResponseActions
+      parameters:
+        - $ref: '../shared/parameters.yaml#/ProjectId'
+        - name: source
+          in: path
+          required: true
+          description: Source code of the endpoint-security product.
+          schema:
+            type: string
+        - name: external_id
+          in: path
+          required: true
+          description: Endpoint identifier in the selected source system.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Read-only response action catalogue.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    description: Response operations currently advertised for the endpoint.
+                    items:
+                      $ref: '#/components/schemas/ResponseAction'
+        '401': { $ref: '../shared/responses.yaml#/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/NotFound' }
+        '422': { $ref: '../shared/responses.yaml#/ValidationError' }
+        '504': { $ref: '../shared/responses.yaml#/GatewayTimeout' }
+        '500': { $ref: '../shared/responses.yaml#/InternalError' }
+        default:
+          $ref: '../shared/responses.yaml#/ErrorResponse'
+
+components:
+  schemas:
+    Endpoint:
+      type: object
+      description: Endpoint asset reported by an endpoint-security source.
+      required: [id, external_id, hostname, status, attributes, provenance]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Deterministic identifier derived from the source and external endpoint ID.
+        external_id:
+          type: string
+          description: Endpoint or agent identifier in the source system.
+        hostname:
+          type: string
+          description: Host name reported for the endpoint.
+        ip_addresses:
+          type: array
+          description: IP addresses currently associated with the endpoint.
+          items:
+            type: string
+        status:
+          type: string
+          description: Normalized endpoint connectivity state.
+          enum: [online, offline, unknown]
+        attributes:
+          type: object
+          description: Selected inventory and agent fields from the source.
+          additionalProperties: true
+        provenance:
+          description: Source record from which the endpoint was normalized.
+          allOf:
+            - $ref: '../shared/schemas.yaml#/Provenance'
+
+    ResponseAction:
+      type: object
+      description: Response operation advertised for an endpoint; the Gateway does not execute it.
+      required: [code, title, destructive, enabled]
+      properties:
+        code:
+          type: string
+          description: Stable source action code.
+        title:
+          type: string
+          description: Human-readable action name.
+        destructive:
+          type: boolean
+          description: Whether executing the action may disrupt or alter the endpoint.
+        enabled:
+          type: boolean
+          description: Whether the source currently allows the action for the endpoint.
+
+    SearchEndpointsRequest:
+      type: object
+      description: Filters for endpoint inventory search.
+      properties:
+        sources:
+          type: array
+          uniqueItems: true
+          description: Source codes to query; omit to use every allowed endpoint source.
+          items:
+            type: string
+        query:
+          type: string
+          maxLength: 1000
+          description: Free-text query matched against endpoint inventory fields.
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 50
+          description: Maximum number of endpoints returned after merging all sources.
+        cursor:
+          type: string
+          description: Opaque next_cursor from the previous response with the same filters.
+
+    SearchEndpointsResponse:
+      type: object
+      description: Merged endpoint inventory page.
+      required: [items, source_errors]
+      properties:
+        items:
+          type: array
+          description: Normalized endpoints in the current page.
+          items:
+            $ref: '#/components/schemas/Endpoint'
+        next_cursor:
+          type: string
+          description: Opaque cursor for the next page; absent when the search is exhausted.
+        source_errors:
+          type: array
+          description: Per-source failures when at least one selected source succeeded.
+          items:
+            $ref: '../shared/schemas.yaml#/SourceError'

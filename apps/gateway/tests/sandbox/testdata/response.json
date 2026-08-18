@@ -1,0 +1,54 @@
+{
+  "data": {
+    "artifacts": [
+      {
+        "artifacts": [],
+        "engine_results": [
+          {
+            "database_time": 1618398601.0,
+            "detections": [
+              {
+                "detect": "Win.Test.EICAR_HDB-1",
+                "threat": "VIRUS"
+              }
+            ],
+            "engine_code_name": "clamav",
+            "engine_subsystem": "AV",
+            "engine_version": "0.102.2",
+            "result": {
+              "errors": [],
+              "scan_state": "FULL",
+              "threat": "VIRUS",
+              "verdict": "DANGEROUS"
+            }
+          }
+        ],
+        "file_info": {
+          "file_path": "sample.txt",
+          "file_uri": "sha256:275a021bbfb5489e54d471899f7db9d1663fc695ec2fe2a2c4538aabf651fd0f",
+          "md5": "44d88612fea8a7f36de82e1278abb02f",
+          "mime_type": "text/plain; charset=us-ascii",
+          "sha1": "3395856ce81f1b7382dee72602f798b642f14140",
+          "sha256": "275a021bbfb5489e54d471899f7db9d1663fc695ec2fe2a2c4538aabf651fd0f",
+          "size": 69
+        },
+        "result": {
+          "errors": [],
+          "scan_state": "FULL",
+          "threat": "VIRUS",
+          "verdict": "DANGEROUS"
+        },
+        "type": "FILE"
+      }
+    ],
+    "result": {
+      "duration": 0.17754173884168268,
+      "errors": [],
+      "scan_state": "FULL",
+      "threat": "VIRUS",
+      "verdict": "DANGEROUS"
+    },
+    "scan_id": "16d1f7aa-333a-4fe8-8637-786e2956233d"
+  },
+  "errors": []
+}

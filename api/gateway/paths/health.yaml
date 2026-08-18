@@ -1,0 +1,35 @@
+openapi: 3.0.3
+info:
+  title: Sb0rka Gateway - health
+  version: 0.0.1
+servers:
+  - url: .
+security:
+  - bearerAuth: []
+
+paths:
+  /healthz:
+    get:
+      tags: [health]
+      summary: Check process health
+      operationId: healthz
+      security: []
+      responses:
+        '200':
+          $ref: '../shared/responses.yaml#/HealthResponse'
+
+  /ping:
+    get:
+      tags: [health]
+      summary: Ping
+      operationId: ping
+      security: []
+      responses:
+        '200':
+          description: pong
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: pong
+              example: pong
