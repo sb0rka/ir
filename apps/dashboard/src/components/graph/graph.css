@@ -1,0 +1,83 @@
+@import '@xyflow/react/dist/style.css';
+
+/*
+  Graph aliases over the app-wide Tailwind theme tokens (see src/index.css).
+  Single source of truth: change palette in @theme, graph follows.
+*/
+:root {
+  --bg: var(--color-surface-0);
+  --bg-elevated: var(--color-surface-1);
+  --bg-panel: var(--color-surface-1);
+  --bg-node: var(--color-surface-2);
+  --border: var(--color-border);
+  --border-strong: var(--color-border-strong);
+  --text: var(--color-fg);
+  --text-muted: var(--color-fg-muted);
+  --text-dim: var(--color-fg-dim);
+  --accent: var(--color-accent);
+  --accent-soft: color-mix(in srgb, var(--color-accent) 12%, transparent);
+  --edge-seed: #555555;
+  --edge-expanded: var(--color-fg-muted);
+  --severity-critical: var(--color-critical);
+  --severity-high: var(--color-high);
+  --severity-medium: var(--color-medium);
+  --severity-low: var(--color-low);
+  --timeline-track: var(--color-border);
+  --timeline-brush: color-mix(in srgb, var(--color-accent) 9%, transparent);
+  --grid-dot: var(--color-surface-3);
+  color-scheme: dark;
+}
+
+.react-flow {
+  --xy-background-color: var(--bg);
+}
+
+.react-flow__attribution {
+  display: none;
+}
+
+.react-flow__controls {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+  box-shadow: none;
+}
+
+.react-flow__controls-button {
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border);
+  fill: var(--text-muted);
+}
+
+.react-flow__controls-button:hover {
+  background: var(--bg-node);
+  fill: var(--text);
+}
+
+.react-flow__minimap {
+  background: var(--bg-panel) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 6px;
+}
+
+.graph-node {
+  transition:
+    opacity 0.15s ease,
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.graph-node.is-dimmed {
+  opacity: 0.22;
+}
+
+.graph-node.is-highlighted {
+  opacity: 1;
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.graph-node.is-selected {
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 1px var(--accent);
+}
