@@ -24,11 +24,15 @@ func provenanceToAPI(value domain.Provenance) api.Provenance {
 func entitiesToAPI(values []domain.Entity) []api.Entity {
 	result := make([]api.Entity, 0, len(values))
 	for _, value := range values {
-		provenance := make([]api.Provenance, 0, len(value.Provenance))
+		sources := make([]api.EntitySource, 0, len(value.Provenance))
 		for _, item := range value.Provenance {
-			provenance = append(provenance, provenanceToAPI(item))
+			source := api.EntitySource{SourceCode: item.Source, SourceEntityId: item.ExternalID, FetchedAt: item.FetchedAt}
+			if item.SourceURL != "" {
+				source.SourceRef = &item.SourceURL
+			}
+			sources = append(sources, source)
 		}
-		result = append(result, api.Entity{Id: value.ID, Type: value.Type, Value: value.Value, Attributes: nonNilMap(value.Attributes), Provenance: provenance})
+		result = append(result, api.Entity{Type: value.Type, Value: value.Value, Attributes: nonNilMap(value.Attributes), Sources: sources})
 	}
 	return result
 }
@@ -36,7 +40,19 @@ func entitiesToAPI(values []domain.Entity) []api.Entity {
 func eventsToAPI(values []domain.Event) []api.Event {
 	result := make([]api.Event, 0, len(values))
 	for _, value := range values {
-		result = append(result, api.Event{Id: value.ID, Type: value.Type, Title: value.Title, Severity: api.EventSeverity(value.Severity), OccurredAt: value.OccurredAt, EntityIds: value.EntityIDs, Attributes: nonNilMap(value.Attributes), Provenance: provenanceToAPI(value.Provenance)})
+		entities := make([]api.EntityRef, 0, len(value.Entities))
+		for _, entity := range value.Entities {
+			entities = append(entities, api.EntityRef{Type: entity.Type, Value: entity.Value})
+		}
+		item := api.Event{
+			SourceCode: value.Provenance.Source, SourceEventId: value.Provenance.ExternalID,
+			Type: value.Type, Title: value.Title, Severity: api.EventSeverity(value.Severity),
+			OccurredAt: value.OccurredAt, Entities: entities, Attributes: nonNilMap(value.Attributes), FetchedAt: value.Provenance.FetchedAt,
+		}
+		if value.Provenance.SourceURL != "" {
+			item.SourceRef = &value.Provenance.SourceURL
+		}
+		result = append(result, item)
 	}
 	return result
 }
@@ -44,7 +60,17 @@ func eventsToAPI(values []domain.Event) []api.Event {
 func relationsToAPI(values []domain.Relation) []api.Relation {
 	result := make([]api.Relation, 0, len(values))
 	for _, value := range values {
-		result = append(result, api.Relation{Id: value.ID, Type: value.Type, SourceEntityId: value.SourceEntityID, TargetEntityId: value.TargetEntityID, OccurredAt: value.OccurredAt, Provenance: provenanceToAPI(value.Provenance)})
+		item := api.Relation{
+			Type:         value.Type,
+			SourceEntity: api.EntityRef{Type: value.SourceEntity.Type, Value: value.SourceEntity.Value},
+			TargetEntity: api.EntityRef{Type: value.TargetEntity.Type, Value: value.TargetEntity.Value},
+			OccurredAt:   value.OccurredAt, SourceCode: value.Provenance.Source,
+			SourceRelationId: value.Provenance.ExternalID, FetchedAt: value.Provenance.FetchedAt,
+		}
+		if value.Provenance.SourceURL != "" {
+			item.SourceRef = &value.Provenance.SourceURL
+		}
+		result = append(result, item)
 	}
 	return result
 }

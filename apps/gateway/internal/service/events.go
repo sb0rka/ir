@@ -103,17 +103,17 @@ func (service *Service) SearchEvents(ctx context.Context, request SearchEventsRe
 	if moreMerged {
 		result.Events = result.Events[:limit]
 	}
-	selectedEntityIDs := make(map[string]struct{})
+	selectedEntities := make(map[string]struct{})
 	for _, event := range result.Events {
-		for _, id := range event.EntityIDs {
-			selectedEntityIDs[id.String()] = struct{}{}
+		for _, entity := range event.Entities {
+			selectedEntities[entityKey(entity)] = struct{}{}
 		}
 		if continuation := continuations[eventKey(event)]; continuation != "" {
 			state.Positions[event.Provenance.Source] = continuation
 		}
 	}
-	result.Entities = filterEntities(normalization.Entities(result.Entities), selectedEntityIDs)
-	result.Relations = filterRelations(normalization.Relations(result.Relations), selectedEntityIDs)
+	result.Entities = filterEntities(normalization.Entities(result.Entities), selectedEntities)
+	result.Relations = filterRelations(normalization.Relations(result.Relations), selectedEntities)
 	if moreMerged || providerHasMore {
 		state.Fingerprint = fingerprint
 		result.NextCursor, err = encodeCursor(state)
@@ -146,7 +146,7 @@ func eventKey(event domain.Event) string {
 func filterEntities(items []domain.Entity, selected map[string]struct{}) []domain.Entity {
 	result := make([]domain.Entity, 0, len(items))
 	for _, item := range items {
-		if _, ok := selected[item.ID.String()]; ok {
+		if _, ok := selected[entityKey(domain.EntityRef{Type: item.Type, Value: item.Value})]; ok {
 			result = append(result, item)
 		}
 	}
@@ -156,11 +156,16 @@ func filterEntities(items []domain.Entity, selected map[string]struct{}) []domai
 func filterRelations(items []domain.Relation, selected map[string]struct{}) []domain.Relation {
 	result := make([]domain.Relation, 0, len(items))
 	for _, item := range items {
-		_, sourceOK := selected[item.SourceEntityID.String()]
-		_, targetOK := selected[item.TargetEntityID.String()]
+		_, sourceOK := selected[entityKey(item.SourceEntity)]
+		_, targetOK := selected[entityKey(item.TargetEntity)]
 		if sourceOK && targetOK {
 			result = append(result, item)
 		}
 	}
 	return result
+}
+
+func entityKey(entity domain.EntityRef) string {
+	kind := strings.ToLower(strings.TrimSpace(entity.Type))
+	return kind + "\x00" + domain.CanonicalValue(kind, entity.Value)
 }

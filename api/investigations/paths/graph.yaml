@@ -308,7 +308,10 @@ paths:
           description: The cited events
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/GraphEdgeEvidence' }
+              schema:
+                type: array
+                description: The cited events, oldest first.
+                items: { $ref: '#/components/schemas/EvidenceEvent' }
         '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
         '501': { $ref: '../shared/responses.yaml#/components/responses/NotImplemented' }
         '500': { $ref: '../shared/responses.yaml#/components/responses/InternalError' }
@@ -331,7 +334,10 @@ paths:
           description: The evidence after the addition
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/GraphEdgeEvidence' }
+              schema:
+                type: array
+                description: The cited events after the addition, oldest first.
+                items: { $ref: '#/components/schemas/EvidenceEvent' }
         '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
         '501': { $ref: '../shared/responses.yaml#/components/responses/NotImplemented' }
         '500': { $ref: '../shared/responses.yaml#/components/responses/InternalError' }
@@ -666,10 +672,10 @@ components:
 
     NodePage:
       type: object
-      description: One page of nodes.
-      required: [items]
+      description: One page of nodes and the cursor for continuing it.
+      required: [nodes]
       properties:
-        items:
+        nodes:
           type: array
           description: The nodes on this page.
           items: { $ref: '#/components/schemas/GraphNode' }
@@ -680,10 +686,10 @@ components:
 
     GraphEdgePage:
       type: object
-      description: One page of edges.
-      required: [items]
+      description: One page of edges and the cursor for continuing it.
+      required: [edges]
       properties:
-        items:
+        edges:
           type: array
           description: The edges on this page.
           items: { $ref: '#/components/schemas/GraphEdge' }
@@ -691,22 +697,6 @@ components:
           type: string
           nullable: true
           description: Pass as `cursor` to get the next page. Absent on the last page.
-
-    GraphEdgeEvidence:
-      type: object
-      description: The events an edge cites, in full rather than as bare ids.
-      required: [edge_id, items]
-      properties:
-        edge_id:
-          type: string
-          format: uuid
-          description: The edge these events support.
-        items:
-          type: array
-          description: >-
-            The cited events, oldest first. Each carries the link back to its
-            source console.
-          items: { $ref: '#/components/schemas/EvidenceEvent' }
 
     EvidenceEvent:
       type: object

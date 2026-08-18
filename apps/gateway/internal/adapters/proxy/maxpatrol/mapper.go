@@ -39,13 +39,18 @@ func ToEventPage(response EventsResponse, offset int, fetchedAt time.Time) (capa
 		page.Events = append(page.Events, event)
 		page.Continuations = append(page.Continuations, response.Token+":"+strconv.Itoa(offset+index+1))
 		for _, entity := range eventEntities {
-			entities[entity.ID.String()] = entity
+			entities[entity.Type+"\x00"+entity.Value] = entity
 		}
 	}
 	for _, entity := range entities {
 		page.Entities = append(page.Entities, entity)
 	}
-	sort.Slice(page.Entities, func(i, j int) bool { return page.Entities[i].ID.String() < page.Entities[j].ID.String() })
+	sort.Slice(page.Entities, func(i, j int) bool {
+		if page.Entities[i].Type != page.Entities[j].Type {
+			return page.Entities[i].Type < page.Entities[j].Type
+		}
+		return page.Entities[i].Value < page.Entities[j].Value
+	})
 	return page, nil
 }
 
@@ -87,7 +92,6 @@ func toEvent(record EventRecord, fetchedAt time.Time) (domain.Event, []domain.En
 	}
 
 	event := domain.Event{
-		ID:         domain.StableID("event", SourceCode, externalID),
 		Type:       normalize(record.ID),
 		Title:      strings.TrimSpace(record.Text),
 		Severity:   severity(record.Importance),
@@ -107,18 +111,24 @@ func toEvent(record EventRecord, fetchedAt time.Time) (domain.Event, []domain.En
 			FetchedAt:  fetchedAt,
 		}
 		entity := domain.NewEntity(kind, value, entityProvenance)
-		if _, exists := seenEntities[entity.ID.String()]; exists {
+		key := entity.Type + "\x00" + entity.Value
+		if _, exists := seenEntities[key]; exists {
 			return
 		}
-		seenEntities[entity.ID.String()] = struct{}{}
+		seenEntities[key] = struct{}{}
 		entities = append(entities, entity)
-		event.EntityIDs = append(event.EntityIDs, entity.ID)
+		event.Entities = append(event.Entities, domain.EntityRef{Type: entity.Type, Value: entity.Value})
 	}
 	addEntity("host", record.EventSourceHost)
 	addEntity("ip", record.EventSourceIP)
 	addEntity("ip", record.SourceIP)
 	addEntity("ip", record.DestinationIP)
-	sort.Slice(event.EntityIDs, func(i, j int) bool { return event.EntityIDs[i].String() < event.EntityIDs[j].String() })
+	sort.Slice(event.Entities, func(i, j int) bool {
+		if event.Entities[i].Type != event.Entities[j].Type {
+			return event.Entities[i].Type < event.Entities[j].Type
+		}
+		return event.Entities[i].Value < event.Entities[j].Value
+	})
 	return event, entities, nil
 }
 

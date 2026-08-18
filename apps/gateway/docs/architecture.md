@@ -33,7 +33,7 @@ Event cursors are base64url-encoded, stateless state. They contain a request fin
 
 Adapters translate vendor data into `Event`, `Entity`, `Relation`, `Artifact`, `Analysis`, `Endpoint`, `Verdict`, and `Provenance`. `attributes` contains only mapped fields needed by consumers. Full vendor responses, credentials, base URLs, graph UI layout, and executable response actions are not exposed.
 
-Entity identity is `type + canonical value`; event identity is `source + external ID`. Stable UUIDs are derived from those keys. Results are sorted by event time, source, and external ID.
+Entity identity is `type + canonical value`; its source records are addressed by `source_code + source_entity_id`. Event identity is `source_code + source_event_id`, and relation identity is `source_code + source_relation_id`. Gateway exposes these source-owned identifiers directly and does not derive UUIDs for events, entities, or relations. Results are sorted by event time and source-owned identity.
 
 ## Real proxy mode
 

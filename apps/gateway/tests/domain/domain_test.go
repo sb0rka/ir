@@ -6,10 +6,10 @@ import (
 	"github.com/sb0rka/ir/apps/gateway/internal/domain"
 )
 
-func TestStableIDPreservesCaseSensitiveParts(t *testing.T) {
+func TestEntityCanonicalizationPreservesCaseSensitiveValues(t *testing.T) {
 	upper := domain.NewEntity("file", "Readme", domain.Provenance{})
 	lower := domain.NewEntity("file", "README", domain.Provenance{})
-	if upper.ID == lower.ID {
-		t.Fatal("case-sensitive entity values produced the same stable ID")
+	if upper.Value == lower.Value {
+		t.Fatal("case-sensitive entity values were merged")
 	}
 }

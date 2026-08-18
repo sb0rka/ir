@@ -24,8 +24,14 @@ type EventPage struct {
 	HasMore       bool
 }
 
+type ResolveContextRequest struct {
+	EventIDs  []string
+	EntityIDs []string
+}
+
 type EventSource interface {
 	SearchEvents(context.Context, SearchEventsRequest) (EventPage, error)
+	ResolveContext(context.Context, ResolveContextRequest) (EventPage, error)
 }
 
 type LookupEntityRequest struct {

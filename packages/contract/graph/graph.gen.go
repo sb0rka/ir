@@ -243,25 +243,16 @@ type GraphEdgeCreate struct {
 	Why *string `json:"why,omitempty"`
 }
 
-// GraphEdgeEvidence The events an edge cites, in full rather than as bare ids.
-type GraphEdgeEvidence struct {
-	// EdgeId The edge these events support.
-	EdgeId openapi_types.UUID `json:"edge_id"`
-
-	// Items The cited events, oldest first. Each carries the link back to its source console.
-	Items []EvidenceEvent `json:"items"`
-}
-
 // GraphEdgeEvidenceAdd Events to cite in support of an existing edge.
 type GraphEdgeEvidenceAdd struct {
 	// EventIds Events to add. All must belong to the same investigation as the edge. Ones already cited are ignored.
 	EventIds []openapi_types.UUID `json:"event_ids"`
 }
 
-// GraphEdgePage One page of edges.
+// GraphEdgePage One page of edges and the cursor for continuing it.
 type GraphEdgePage struct {
-	// Items The edges on this page.
-	Items []GraphEdge `json:"items"`
+	// Edges The edges on this page.
+	Edges []GraphEdge `json:"edges"`
 
 	// NextCursor Pass as `cursor` to get the next page. Absent on the last page.
 	NextCursor *string `json:"next_cursor,omitempty"`
@@ -342,13 +333,13 @@ type NodeCreate struct {
 	SomIssueIds *[]openapi_types.UUID `json:"som_issue_ids,omitempty"`
 }
 
-// NodePage One page of nodes.
+// NodePage One page of nodes and the cursor for continuing it.
 type NodePage struct {
-	// Items The nodes on this page.
-	Items []GraphNode `json:"items"`
-
 	// NextCursor Pass as `cursor` to get the next page. Absent on the last page.
 	NextCursor *string `json:"next_cursor,omitempty"`
+
+	// Nodes The nodes on this page.
+	Nodes []GraphNode `json:"nodes"`
 }
 
 // NodeType What a graph node stands for. An entity node is a host, account, process, address or hash; an event node is a source record promoted onto the graph.
@@ -2343,7 +2334,7 @@ type ListGraphEdgeEvidenceResponseObject interface {
 	VisitListGraphEdgeEvidenceResponse(w http.ResponseWriter) error
 }
 
-type ListGraphEdgeEvidence200JSONResponse GraphEdgeEvidence
+type ListGraphEdgeEvidence200JSONResponse []EvidenceEvent
 
 func (response ListGraphEdgeEvidence200JSONResponse) VisitListGraphEdgeEvidenceResponse(w http.ResponseWriter) error {
 
@@ -2438,7 +2429,7 @@ type AddGraphEdgeEvidenceResponseObject interface {
 	VisitAddGraphEdgeEvidenceResponse(w http.ResponseWriter) error
 }
 
-type AddGraphEdgeEvidence200JSONResponse GraphEdgeEvidence
+type AddGraphEdgeEvidence200JSONResponse []EvidenceEvent
 
 func (response AddGraphEdgeEvidence200JSONResponse) VisitAddGraphEdgeEvidenceResponse(w http.ResponseWriter) error {
 

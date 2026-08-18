@@ -132,6 +132,25 @@ func corsMiddleware(cfg config.ServerConfig) middlewareChain {
 func authMiddleware(cfg config.ServerConfig, log *slog.Logger, roles RoleResolver) middlewareChain {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ctx := r.Context()
+			// Bearer уходит в контекст до всех проверок: som-домен пробрасывает
+			// его в SOM как есть, в том числе когда своя проверка выключена.
+			if token, err := coreauth.ParseBearerToken(r.Header.Get("Authorization")); err == nil {
+				ctx = socctx.WithBearer(ctx, token)
+			}
+
+			// Demo-режим: подпись не проверяется, role_bindings не читаются.
+			// X-Project-ID остаётся источником project scope для доменных
+			// ручек; без заголовка работают только som-роуты — доменные
+			// хендлеры сами откажут за отсутствием scope.
+			if cfg.Auth.Disabled {
+				if projectID := strings.TrimSpace(r.Header.Get(projectIDHeader)); validProjectID(projectID) {
+					ctx = socctx.WithScope(ctx, socctx.Scope{ProjectID: projectID, Roles: []string{"admin"}})
+				}
+				next.ServeHTTP(w, r.WithContext(ctx))
+				return
+			}
+
 			raw, err := bearerToken(r.Header.Get("Authorization"))
 			if err != nil {
 				httperr.Write(w, log, err)
@@ -152,7 +171,7 @@ func authMiddleware(cfg config.ServerConfig, log *slog.Logger, roles RoleResolve
 
 			var scope socctx.Scope
 			if roles != nil {
-				resolved, err := roles.Resolve(r.Context(), identity.SubjectID, projectID)
+				resolved, err := roles.Resolve(ctx, identity.SubjectID, projectID)
 				if err != nil {
 					httperr.Write(w, log, err)
 					return
@@ -168,7 +187,7 @@ func authMiddleware(cfg config.ServerConfig, log *slog.Logger, roles RoleResolve
 				return
 			}
 
-			ctx := coreauthctx.WithIdentity(r.Context(), identity)
+			ctx = coreauthctx.WithIdentity(ctx, identity)
 			ctx = socctx.WithScope(ctx, scope)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})

@@ -6,7 +6,7 @@
 - Return only types from `internal/domain`.
 - Keep source code stable and lowercase with hyphens.
 - Declare exactly the capabilities backed by non-nil implementations.
-- Derive IDs with `domain.StableID`; use source + external ID for events and type + canonical value for entities.
+- Expose source-owned identity directly: `source_code + source_event_id` for events, `source_code + source_entity_id` for entity source records, and `source_code + source_relation_id` for relations. Merge canonical entities by type + canonical value; do not derive Gateway UUIDs for these records.
 - Put documented, consumer-useful vendor fields in bounded `attributes`; never retain the full vendor response.
 - Register the implementation at the adapter composition boundary; never in an HTTP handler.
 
