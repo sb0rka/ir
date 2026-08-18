@@ -12,6 +12,7 @@ import (
 	maxpatrolapi "github.com/sb0rka/ir/apps/gateway/internal/adapters/proxy/maxpatrol"
 	"github.com/sb0rka/ir/apps/gateway/internal/capability"
 	"github.com/sb0rka/ir/apps/gateway/internal/domain"
+	"github.com/sb0rka/ir/apps/gateway/internal/normalization"
 	"github.com/sb0rka/ir/apps/gateway/internal/registry"
 )
 
@@ -89,6 +90,67 @@ func (adapter *mock) SearchEvents(ctx context.Context, request capability.Search
 	return maxpatrolapi.ToEventPage(response, offset, fetchedAt)
 }
 
+func (adapter *mock) ResolveContext(ctx context.Context, request capability.ResolveContextRequest) (capability.EventPage, error) {
+	wantedEvents := stringSet(request.EventIDs)
+	wantedEntities := stringSet(request.EntityIDs)
+	foundEvents := make(map[string]struct{}, len(wantedEvents))
+	foundEntities := make(map[string]struct{}, len(wantedEntities))
+	result := capability.EventPage{}
+	entities := make([]domain.Entity, 0)
+
+	for index, event := range adapter.scenario.EventsForSource("MaxPatrol") {
+		if index%256 == 0 {
+			if err := ctx.Err(); err != nil {
+				return capability.EventPage{}, err
+			}
+		}
+		page, err := maxpatrolapi.ToEventPage(maxpatrolapi.EventsResponse{
+			Token: "resolve", TotalCount: 1, Events: []maxpatrolapi.EventRecord{adapter.vendorEvent(event)},
+		}, 0, fetchedAt)
+		if err != nil {
+			return capability.EventPage{}, err
+		}
+		selectedEvent := false
+		if len(page.Events) == 1 {
+			_, selectedEvent = wantedEvents[page.Events[0].Provenance.ExternalID]
+			if selectedEvent {
+				foundEvents[page.Events[0].Provenance.ExternalID] = struct{}{}
+				result.Events = append(result.Events, page.Events[0])
+			}
+		}
+		for _, entity := range page.Entities {
+			selectedEntity := selectedEvent
+			for _, provenance := range entity.Provenance {
+				if _, wanted := wantedEntities[provenance.ExternalID]; wanted {
+					selectedEntity = true
+					foundEntities[provenance.ExternalID] = struct{}{}
+				}
+			}
+			if selectedEntity {
+				entities = append(entities, entity)
+			}
+		}
+	}
+	for _, node := range adapter.scenario.NodesForSystem("MaxPatrol") {
+		entity, ok := adapter.scenario.EntityForNode(node, SourceCode, fetchedAt)
+		if !ok {
+			continue
+		}
+		if _, wanted := wantedEntities[node.ID]; wanted {
+			foundEntities[node.ID] = struct{}{}
+			entities = append(entities, entity)
+		}
+	}
+	if missing := missingIDs(wantedEvents, foundEvents); len(missing) > 0 {
+		return capability.EventPage{}, &domain.RequestError{Code: "source_record_not_found", Message: fmt.Sprintf("events not found: %s", strings.Join(missing, ", "))}
+	}
+	if missing := missingIDs(wantedEntities, foundEntities); len(missing) > 0 {
+		return capability.EventPage{}, &domain.RequestError{Code: "source_record_not_found", Message: fmt.Sprintf("entities not found: %s", strings.Join(missing, ", "))}
+	}
+	result.Entities = normalization.Entities(entities)
+	return result, nil
+}
+
 func toEventsRequest(request capability.SearchEventsRequest) maxpatrolapi.EventsRequest {
 	top := int64(request.Limit)
 	if top < 1 || top > 100 {
@@ -120,7 +182,7 @@ func unixOrZero(value time.Time) int64 {
 func (adapter *mock) vendorEvent(event scenario.Event) maxpatrolapi.EventRecord {
 	record := maxpatrolapi.EventRecord{
 		Time:       event.EventTS,
-		UUID:       domain.StableID("maxpatrol-event", event.ID).String(),
+		UUID:       event.ID,
 		ID:         event.EventClass,
 		Text:       event.Title,
 		Importance: event.Severity,
@@ -169,7 +231,19 @@ func matchesEvent(value scenario.Scenario, event scenario.Event, request maxpatr
 		if !ok {
 			continue
 		}
-		if _, wanted := entities[entity.Type+"\x00"+entity.Value]; wanted {
+		if entity.Type != "ip" {
+			if _, wanted := entities[entity.Type+"\x00"+entity.Value]; wanted {
+				return true
+			}
+		}
+	}
+	record := (&mock{scenario: value}).vendorEvent(event)
+	for _, rawIP := range []string{record.EventSourceIP, record.SourceIP, record.DestinationIP} {
+		canonicalIP := domain.CanonicalValue("ip", rawIP)
+		if canonicalIP == "" {
+			continue
+		}
+		if _, wanted := entities["ip\x00"+canonicalIP]; wanted {
 			return true
 		}
 	}
@@ -182,6 +256,25 @@ func entitySet(entities []domain.EntityRef) map[string]struct{} {
 		kind := strings.ToLower(strings.TrimSpace(entity.Type))
 		result[kind+"\x00"+domain.CanonicalValue(kind, entity.Value)] = struct{}{}
 	}
+	return result
+}
+
+func stringSet(values []string) map[string]struct{} {
+	result := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		result[strings.TrimSpace(value)] = struct{}{}
+	}
+	return result
+}
+
+func missingIDs(wanted, found map[string]struct{}) []string {
+	result := make([]string, 0)
+	for id := range wanted {
+		if _, ok := found[id]; !ok {
+			result = append(result, id)
+		}
+	}
+	sort.Strings(result)
 	return result
 }
 

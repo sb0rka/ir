@@ -77,6 +77,65 @@ paths:
         '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
         '422': { $ref: '../shared/responses.yaml#/components/responses/ValidationError' }
 
+  /investigations/{investigation_id}/context:
+    parameters:
+      - { $ref: '../shared/parameters.yaml#/components/parameters/ProjectId' }
+      - { $ref: '../shared/parameters.yaml#/components/parameters/InvestigationId' }
+    post:
+      tags: [investigations]
+      summary: Add analyst-selected Gateway context
+      description: >-
+        Resolves the selected source records through Gateway, stores their
+        normalized form and atomically adds the resulting events and entities
+        to the investigation graph. Event mentions and source relationships
+        become confirmed analyst edges.
+      operationId: addInvestigationContext
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ContextSelection' }
+      responses:
+        '201':
+          description: Import counters
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ContextImportResult' }
+        '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
+        '422': { $ref: '../shared/responses.yaml#/components/responses/ValidationError' }
+        '500': { $ref: '../shared/responses.yaml#/components/responses/InternalError' }
+
+  /investigations/{investigation_id}/agent-results:
+    parameters:
+      - { $ref: '../shared/parameters.yaml#/components/parameters/ProjectId' }
+      - { $ref: '../shared/parameters.yaml#/components/parameters/InvestigationId' }
+    post:
+      tags: [investigations]
+      summary: Save one explicit SOM agent result batch
+      description: >-
+        Resolves source records through Gateway but adds only explicitly listed
+        nodes and edges to the graph. Nodes are attributed to the agent and
+        edges are proposed for review. Local refs address selected records and
+        nodes created in the same batch.
+      operationId: addAgentResults
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AgentResultBatch' }
+      responses:
+        '201':
+          description: Import counters
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ContextImportResult' }
+        '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
+        '422': { $ref: '../shared/responses.yaml#/components/responses/ValidationError' }
+        '500': { $ref: '../shared/responses.yaml#/components/responses/InternalError' }
   /investigations/{investigation_id}:
     parameters:
       - { $ref: '../shared/parameters.yaml#/components/parameters/ProjectId' }
@@ -160,7 +219,21 @@ paths:
           description: The subtree
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/InvestigationTree' }
+              schema:
+                type: array
+                description: >-
+                  Every investigation in the subtree in pre-order, starting
+                  with the requested root. Each item carries its depth.
+                items:
+                  allOf:
+                    - { $ref: '#/components/schemas/Investigation' }
+                    - type: object
+                      required: [depth]
+                      properties:
+                        depth:
+                          type: integer
+                          minimum: 0
+                          description: Distance from the root. Zero for the root itself.
         '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
         '501': { $ref: '../shared/responses.yaml#/components/responses/NotImplemented' }
         '500': { $ref: '../shared/responses.yaml#/components/responses/InternalError' }
@@ -284,10 +357,140 @@ components:
           nullable: true
           description: When it was closed. Cleared if the investigation is reopened.
 
+    EventSourceRef:
+      type: object
+      required: [source_code, source_event_id]
+      properties:
+        source_code:
+          type: string
+          minLength: 1
+          description: Gateway source code, for example maxpatrol-siem.
+        source_event_id:
+          type: string
+          minLength: 1
+          description: Original event identifier assigned by the source.
+
+    EntitySourceRef:
+      type: object
+      required: [source_code, source_entity_id]
+      properties:
+        source_code:
+          type: string
+          minLength: 1
+          description: Gateway source code, for example maxpatrol-siem.
+        source_entity_id:
+          type: string
+          minLength: 1
+          description: Original entity record identifier assigned by the source.
+
+    ContextSelection:
+      type: object
+      description: Source-owned identifiers selected in the Gateway event list.
+      required: [events, entities]
+      properties:
+        events:
+          type: array
+          maxItems: 500
+          uniqueItems: true
+          items: { $ref: '#/components/schemas/EventSourceRef' }
+        entities:
+          type: array
+          maxItems: 2000
+          uniqueItems: true
+          items: { $ref: '#/components/schemas/EntitySourceRef' }
+
+    AgentResultBatch:
+      type: object
+      required: [som_issue_ids, events, entities, nodes, edges]
+      properties:
+        som_issue_ids:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items: { type: string, format: uuid }
+        events:
+          type: array
+          maxItems: 500
+          items: { $ref: '#/components/schemas/AgentEventSelection' }
+        entities:
+          type: array
+          maxItems: 2000
+          items: { $ref: '#/components/schemas/AgentEntitySelection' }
+        nodes:
+          type: array
+          maxItems: 2500
+          items: { $ref: '#/components/schemas/AgentNode' }
+        edges:
+          type: array
+          maxItems: 5000
+          items: { $ref: '#/components/schemas/AgentEdge' }
+
+    AgentEventSelection:
+      type: object
+      description: An event selected by the agent and its batch-local reference.
+      required: [ref, source_code, source_event_id]
+      properties:
+        ref: { type: string, minLength: 1, maxLength: 128 }
+        source_code: { type: string, minLength: 1 }
+        source_event_id: { type: string, minLength: 1 }
+
+    AgentEntitySelection:
+      type: object
+      description: An entity source record selected by the agent and its batch-local reference.
+      required: [ref, source_code, source_entity_id]
+      properties:
+        ref: { type: string, minLength: 1, maxLength: 128 }
+        source_code: { type: string, minLength: 1 }
+        source_entity_id: { type: string, minLength: 1 }
+
+    AgentNode:
+      type: object
+      description: >-
+        A unique local ref and exactly one target: an event/entity selection
+        from this batch, or an existing node in this investigation.
+      required: [ref]
+      properties:
+        ref: { type: string, minLength: 1, maxLength: 128 }
+        event_ref:
+          type: string
+          minLength: 1
+          maxLength: 128
+          description: Local ref of an event selection from this batch.
+        entity_ref:
+          type: string
+          minLength: 1
+          maxLength: 128
+          description: Local ref of an entity selection from this batch.
+        node_id: { type: string, format: uuid }
+
+    AgentEdge:
+      type: object
+      required: [source_ref, target_ref, relation_code, why, evidence_event_refs]
+      properties:
+        source_ref: { type: string, minLength: 1, maxLength: 128 }
+        target_ref: { type: string, minLength: 1, maxLength: 128 }
+        relation_code: { type: string, minLength: 1 }
+        why: { type: string, minLength: 1 }
+        confidence: { type: number, minimum: 0, maximum: 1 }
+        evidence_event_refs:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items: { type: string, minLength: 1, maxLength: 128 }
+
+    ContextImportResult:
+      type: object
+      required: [events, entities, nodes, edges]
+      properties:
+        events: { type: integer, minimum: 0 }
+        entities: { type: integer, minimum: 0 }
+        nodes: { type: integer, minimum: 0 }
+        edges: { type: integer, minimum: 0 }
+
     InvestigationCreate:
       type: object
       description: A new case, or a new hypothesis inside an existing one.
-      required: [title]
+      required: [title, som_workspace_ids]
       properties:
         title:
           type: string
@@ -307,11 +510,11 @@ components:
         som_workspace_ids:
           type: array
           description: SOM workspaces to link to the new investigation.
+          minItems: 1
           uniqueItems: true
           items:
             type: string
             format: uuid
-
     InvestigationPatch:
       type: object
       description: >-
@@ -378,10 +581,10 @@ components:
 
     InvestigationPage:
       type: object
-      description: One page of investigations.
-      required: [items]
+      description: One page of investigations and the cursor for continuing it.
+      required: [investigations]
       properties:
-        items:
+        investigations:
           type: array
           description: The investigations on this page.
           items: { $ref: '#/components/schemas/Investigation' }
@@ -390,29 +593,3 @@ components:
           nullable: true
           description: >-
             Pass as `cursor` to get the next page. Absent on the last page.
-
-    InvestigationTree:
-      type: object
-      description: A subtree flattened for one-pass rendering.
-      required: [root_id, items]
-      properties:
-        root_id:
-          type: string
-          format: uuid
-          description: The investigation the subtree was requested for.
-        items:
-          type: array
-          description: >-
-            Every investigation in the subtree in pre-order, starting with the
-            root itself. Each carries its depth, so the client can indent
-            without walking parent links.
-          items:
-            allOf:
-              - { $ref: '#/components/schemas/Investigation' }
-              - type: object
-                required: [depth]
-                properties:
-                  depth:
-                    type: integer
-                    minimum: 0
-                    description: Distance from the root. Zero for the root itself.

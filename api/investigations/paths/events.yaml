@@ -16,8 +16,7 @@ paths:
       tags: [events]
       summary: Timeline of the investigation
       description: >-
-        Events linked to the investigation, ordered by occurred_at and id. Raw
-        payloads are available from the single-event endpoint.
+        Events linked to the investigation, ordered by occurred_at and id.
       operationId: listEvents
       parameters:
         - name: event_type
@@ -63,37 +62,6 @@ paths:
         '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
         '422': { $ref: '../shared/responses.yaml#/components/responses/ValidationError' }
 
-  /events:
-    parameters:
-      - { $ref: '../shared/parameters.yaml#/components/parameters/ProjectId' }
-    post:
-      tags: [events]
-      summary: Pull events into an investigation
-      description: >-
-        Ingests events from explicit source references or a source query, then
-        links them to an investigation. Existing project events are reused.
-        Repeated links are ignored; a request may include at most 500 events.
-      operationId: attachEvents
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: '#/components/schemas/EventAttachRequest' }
-      responses:
-        '201':
-          description: What the pull produced
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/EventAttachResult' }
-        '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
-        '501': { $ref: '../shared/responses.yaml#/components/responses/NotImplemented' }
-        '500': { $ref: '../shared/responses.yaml#/components/responses/InternalError' }
-        '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
-        '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
-        '409': { $ref: '../shared/responses.yaml#/components/responses/Conflict' }
-        '422': { $ref: '../shared/responses.yaml#/components/responses/ValidationError' }
-        '502': { $ref: '../shared/responses.yaml#/components/responses/SourceUnavailable' }
-
   /events/{event_id}:
     parameters:
       - { $ref: '../shared/parameters.yaml#/components/parameters/ProjectId' }
@@ -101,7 +69,7 @@ paths:
     get:
       tags: [events]
       summary: One event in full
-      description: Returns the normalized event, raw payload and source link.
+      description: Returns the stored normalized Gateway event and source link.
       operationId: getEvent
       responses:
         '200':
@@ -131,7 +99,7 @@ paths:
         '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
         '409': { $ref: '../shared/responses.yaml#/components/responses/Conflict' }
 
-  /events/{event_id}/investigations/{investigation_id}:
+  /investigations/{investigation_id}/events/{event_id}:
     parameters:
       - { $ref: '../shared/parameters.yaml#/components/parameters/ProjectId' }
       - { $ref: '../shared/parameters.yaml#/components/parameters/EventId' }
@@ -160,7 +128,7 @@ components:
       description: >-
         An immutable project event. Investigation membership is stored
         separately, so one event may be linked to multiple investigations.
-      required: [id, source_code, source_event_id, event_type, occurred_at, ingested_at]
+      required: [id, source_code, source_event_id, title, event_type, occurred_at, ingested_at]
       properties:
         id:
           type: string
@@ -182,6 +150,9 @@ components:
           type: string
           nullable: true
           description: Link or query that opens the source record.
+        title:
+          type: string
+          description: Normalized short summary returned by Gateway.
         event_type:
           type: string
           description: Normalized event type, such as process_start or logon.
@@ -198,11 +169,6 @@ components:
           description: >-
             The event mapped onto the common envelope — subject, action, object,
             status — so events from different tools can be compared and searched.
-          additionalProperties: true
-        raw_data:
-          type: object
-          nullable: true
-          description: Original source payload. Omitted from list responses.
           additionalProperties: true
         entities:
           type: array
@@ -226,7 +192,7 @@ components:
     EventSummary:
       type: object
       description: Event without the raw payload.
-      required: [id, source_code, source_event_id, event_type, occurred_at, ingested_at]
+      required: [id, source_code, source_event_id, title, event_type, occurred_at, ingested_at]
       properties:
         id:
           type: string
@@ -256,6 +222,9 @@ components:
           type: string
           nullable: true
           description: Link that opens the record in the source console.
+        title:
+          type: string
+          description: Normalized short summary returned by Gateway.
         event_type:
           type: string
           description: Normalized event type.
@@ -286,95 +255,12 @@ components:
                 type: string
                 description: Its role in the event.
 
-    EventAttachRequest:
-      type: object
-      description: >-
-        Events to ingest and link. Exactly one of refs and query must be set.
-      required: [investigation_id]
-      properties:
-        investigation_id:
-          type: string
-          format: uuid
-          description: Investigation to link the events to.
-        refs:
-          type: array
-          maxItems: 500
-          description: >-
-            Records addressed directly. Used when the analyst has already picked
-            them out, or when an agent cites what it found.
-          items:
-            type: object
-            required: [source_code, source_event_id]
-            properties:
-              source_code:
-                type: string
-                description: Which tool holds the record.
-
-              source_event_id:
-                type: string
-                description: Its identifier in that tool.
-        query:
-          type: object
-          description: Selection to run against one source.
-          required: [source_code]
-          properties:
-            source_code:
-              type: string
-              description: Which source to query.
-            entity_key:
-              type: string
-              description: >-
-                Value to pivot on — a hostname, account, address or hash.
-                Matched against the source's own fields.
-            from:
-              type: string
-              format: date-time
-              description: Lower bound of the time window, inclusive.
-            to:
-              type: string
-              format: date-time
-              description: Upper bound of the time window, exclusive.
-            substring:
-              type: string
-              description: Free-text fragment to match, for cases a key cannot express.
-            limit:
-              type: integer
-              maximum: 500
-              default: 100
-              description: Cap on records to pull. The hard ceiling is 500 per call.
-        reason:
-          type: string
-          description: Explanation stored on the investigation-event link.
-
-    EventAttachResult:
-      type: object
-      description: What the pull changed in the investigation.
-      required: [attached, duplicates, entities_extracted, edges_created]
-      properties:
-        attached:
-          type: integer
-          description: Events newly added to the case, whether ingested now or already known.
-        reused:
-          type: integer
-          description: Existing project events newly linked to the investigation.
-        duplicates:
-          type: integer
-          description: Events already linked to the investigation and skipped.
-        entities_extracted:
-          type: integer
-          description: >-
-            Entities created or updated from the new events. Counts entities,
-            not mentions.
-        edges_created:
-          type: integer
-          description: Edges created by linking rules.
-
     EventPage:
       type: object
-      description: One page of the timeline.
-      required: [items]
+      description: One page of the timeline and the cursor for continuing it.
+      required: [events]
       properties:
-        items:
+        events:
           type: array
           description: Events, oldest first.
           items: { $ref: '#/components/schemas/EventSummary' }

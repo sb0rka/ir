@@ -416,29 +416,19 @@ export interface components {
                 [key: string]: unknown;
             };
         };
-        /** @description One page of nodes. */
+        /** @description One page of nodes and the cursor for continuing it. */
         NodePage: {
             /** @description The nodes on this page. */
-            items: components["schemas"]["GraphNode"][];
+            nodes: components["schemas"]["GraphNode"][];
             /** @description Pass as `cursor` to get the next page. Absent on the last page. */
             next_cursor?: string | null;
         };
-        /** @description One page of edges. */
+        /** @description One page of edges and the cursor for continuing it. */
         GraphEdgePage: {
             /** @description The edges on this page. */
-            items: components["schemas"]["GraphEdge"][];
+            edges: components["schemas"]["GraphEdge"][];
             /** @description Pass as `cursor` to get the next page. Absent on the last page. */
             next_cursor?: string | null;
-        };
-        /** @description The events an edge cites, in full rather than as bare ids. */
-        GraphEdgeEvidence: {
-            /**
-             * Format: uuid
-             * @description The edge these events support.
-             */
-            edge_id: string;
-            /** @description The cited events, oldest first. Each carries the link back to its source console. */
-            items: components["schemas"]["EvidenceEvent"][];
         };
         /** @description A cited event, trimmed to what a provenance panel shows. The full record is one request away. */
         EvidenceEvent: {
@@ -1008,7 +998,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["GraphEdgeEvidence"];
+                    "application/json": components["schemas"]["EvidenceEvent"][];
                 };
             };
             401: components["responses"]["Unauthorized"];
@@ -1045,7 +1035,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["GraphEdgeEvidence"];
+                    "application/json": components["schemas"]["EvidenceEvent"][];
                 };
             };
             401: components["responses"]["Unauthorized"];

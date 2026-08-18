@@ -39,14 +39,20 @@ tasks:
       - '{{.REDOCLY}} lint apps/gateway/api/bundle.yaml'
 
   gateway-gen:
-    desc: Сгенерировать Go-контракт Gateway
+    desc: Сгенерировать серверный и клиентский Go-контракты Gateway
     deps: [gateway-spec]
     cmds:
       - >-
         cd apps/gateway &&
         {{.CODEGEN}} -package api -generate models,std-http-server
         -o api/api.gen.go api/bundle.yaml
-      - gofmt -w apps/gateway/api/api.gen.go
+      - mkdir -p packages/contract/gateway
+      - >-
+        cd packages/contract &&
+        {{.CODEGEN}} -package gateway -generate models,client
+        -response-type-suffix ClientResponse
+        -o gateway/gateway.gen.go ../../apps/gateway/api/bundle.yaml
+      - gofmt -w apps/gateway/api/api.gen.go packages/contract/gateway/gateway.gen.go
 
   gen-prune:
     desc: Убрать сгенерированное для доменов, которых больше нет в Investigations API
@@ -58,7 +64,7 @@ tasks:
         node -e "const fs=require('fs');
         const exists=n=>fs.existsSync('{{.INVESTIGATIONS_API}}/paths/'+n+'.yaml');
         for(const e of fs.readdirSync('packages/contract',{withFileTypes:true}))
-        if(e.isDirectory()&&e.name!=='spec'&&!exists(e.name))
+        if(e.isDirectory()&&e.name!=='spec'&&e.name!=='gateway'&&!exists(e.name))
         fs.rmSync('packages/contract/'+e.name,{recursive:true,force:true});
         for(const f of fs.readdirSync('packages/contract-ts/domains'))
         if(f.endsWith('.d.ts')&&!exists(f.slice(0,-5)))
@@ -221,22 +227,49 @@ tasks:
       - task: test
       - task: typecheck
 
-  dev:
-    desc: Поднять локальный стенд (Postgres + ir-api)
+  db:up:
+    desc: Start local Postgres
     cmds:
-      - docker compose -f docker-compose.dev.yml up -d --build
+      - docker compose --profile container-db up -d
 
-  dev-down:
-    desc: Остановить стенд
+  db:migrate:
+    desc: Apply investigations database migrations
     cmds:
-      - docker compose -f docker-compose.dev.yml down
+      - docker compose --profile migrate run --rm --build migrate-inv
 
-  dev-logs:
-    desc: Логи стенда
+  db:down:
+    desc: Stop local Postgres
     cmds:
-      - docker compose -f docker-compose.dev.yml logs -f ir-api gateway
+      - docker compose --profile container-db down
 
-  migrate:
-    desc: Применить миграции к локальной базе
+  db:wipe:
+    desc: Stop local Postgres and delete its volume
     cmds:
-      - docker compose -f docker-compose.dev.yml up migrate --exit-code-from migrate
+      - docker compose --profile container-db --profile migrate down -v
+
+  apps:up:
+    desc: Start local apps (ir-api, gateway)
+    cmds:
+      - docker compose --profile apps up -d --build
+
+  apps:logs:
+    desc: Follow logs of local apps
+    cmds:
+      - docker compose --profile apps logs -f
+
+  apps:down:
+    desc: Stop local apps
+    cmds:
+      - docker compose --profile apps down
+
+  exec:gateway:
+    desc: Execute gateway
+    dir: bin
+    cmds:
+      - ./gateway {{.CLI_ARGS}}
+
+  exec:ir-api:
+    desc: Execute ir-api
+    dir: bin
+    cmds:
+      - ./ir-api {{.CLI_ARGS}}

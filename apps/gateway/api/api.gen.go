@@ -307,11 +307,8 @@ type Entity struct {
 	// Attributes Selected source-specific fields; never the complete vendor response.
 	Attributes map[string]interface{} `json:"attributes"`
 
-	// Id Deterministic identifier derived from the entity type and canonical value.
-	Id openapi_types.UUID `json:"id"`
-
-	// Provenance Source records in which this entity was observed.
-	Provenance []Provenance `json:"provenance"`
+	// Sources Source records in which this entity was observed.
+	Sources []EntitySource `json:"sources"`
 
 	// Type Canonical entity kind.
 	Type string `json:"type"`
@@ -327,6 +324,23 @@ type EntityRef struct {
 
 	// Value Entity value to normalize and look up.
 	Value string `json:"value"`
+}
+
+// EntitySource Source record in which a canonical entity was observed.
+type EntitySource struct {
+	FetchedAt      time.Time `json:"fetched_at"`
+	SourceCode     string    `json:"source_code"`
+	SourceEntityId string    `json:"source_entity_id"`
+	SourceRef      *string   `json:"source_ref,omitempty"`
+}
+
+// EntitySourceRef Stable reference to an entity record in its source system.
+type EntitySourceRef struct {
+	// SourceCode Code of the source that owns the entity record.
+	SourceCode string `json:"source_code"`
+
+	// SourceEntityId Original entity identifier assigned by that source.
+	SourceEntityId string `json:"source_entity_id"`
 }
 
 // ErrorEnvelope Error returned when a request cannot be completed.
@@ -346,20 +360,26 @@ type Event struct {
 	// Attributes Selected event fields that have no canonical top-level property.
 	Attributes map[string]interface{} `json:"attributes"`
 
-	// EntityIds Canonical entities mentioned by the event.
-	EntityIds []openapi_types.UUID `json:"entity_ids"`
+	// Entities Canonical entities mentioned by the event.
+	Entities []EntityRef `json:"entities"`
 
-	// Id Deterministic identifier derived from the source and external event ID.
-	Id openapi_types.UUID `json:"id"`
+	// FetchedAt Time when the Gateway obtained the source data.
+	FetchedAt time.Time `json:"fetched_at"`
 
 	// OccurredAt Time when the event occurred in the source system.
 	OccurredAt time.Time `json:"occurred_at"`
 
-	// Provenance Source record from which the event was normalized.
-	Provenance Provenance `json:"provenance"`
-
 	// Severity Severity mapped to the Gateway scale.
 	Severity EventSeverity `json:"severity"`
+
+	// SourceCode Code of the source that owns the event.
+	SourceCode string `json:"source_code"`
+
+	// SourceEventId Original event identifier assigned by that source.
+	SourceEventId string `json:"source_event_id"`
+
+	// SourceRef Optional link to the event in its source system.
+	SourceRef *string `json:"source_ref,omitempty"`
 
 	// Title Short human-readable event summary.
 	Title string `json:"title"`
@@ -370,6 +390,15 @@ type Event struct {
 
 // EventSeverity Severity mapped to the Gateway scale.
 type EventSeverity string
+
+// EventSourceRef Stable reference to an event in its source system.
+type EventSourceRef struct {
+	// SourceCode Code of the source that owns the event.
+	SourceCode string `json:"source_code"`
+
+	// SourceEventId Original event identifier assigned by that source.
+	SourceEventId string `json:"source_event_id"`
+}
 
 // Hashes Cryptographic checksums available for an artifact.
 type Hashes struct {
@@ -433,23 +462,40 @@ type Provenance struct {
 
 // Relation Normalized relationship between two canonical entities.
 type Relation struct {
-	// Id Deterministic identifier of the relationship.
-	Id openapi_types.UUID `json:"id"`
+	FetchedAt time.Time `json:"fetched_at"`
 
 	// OccurredAt Optional time when the relationship was observed.
 	OccurredAt *time.Time `json:"occurred_at,omitempty"`
 
-	// Provenance Source record supporting the relationship.
-	Provenance Provenance `json:"provenance"`
+	// SourceCode Code of the source that supplied the relationship.
+	SourceCode string `json:"source_code"`
 
-	// SourceEntityId Identifier of the entity from which the relationship starts.
-	SourceEntityId openapi_types.UUID `json:"source_entity_id"`
+	// SourceEntity Canonical entity from which the relationship starts.
+	SourceEntity EntityRef `json:"source_entity"`
+	SourceRef    *string   `json:"source_ref,omitempty"`
 
-	// TargetEntityId Identifier of the entity at which the relationship ends.
-	TargetEntityId openapi_types.UUID `json:"target_entity_id"`
+	// SourceRelationId Original relationship identifier assigned by that source.
+	SourceRelationId string `json:"source_relation_id"`
+
+	// TargetEntity Canonical entity at which the relationship ends.
+	TargetEntity EntityRef `json:"target_entity"`
 
 	// Type Normalized relationship type, such as connected_to or resolves_to.
 	Type string `json:"type"`
+}
+
+// ResolveContextRequest Source records selected by a client for persistence in an investigation.
+type ResolveContextRequest struct {
+	Entities []EntitySourceRef `json:"entities"`
+	Events   []EventSourceRef  `json:"events"`
+}
+
+// ResolveContextResponse Normalized records and relationships resolved from source-owned identifiers.
+type ResolveContextResponse struct {
+	Entities     []Entity      `json:"entities"`
+	Events       []Event       `json:"events"`
+	Relations    []Relation    `json:"relations"`
+	SourceErrors []SourceError `json:"source_errors"`
 }
 
 // ResponseAction Response operation advertised for an endpoint; the Gateway does not execute it.
@@ -650,6 +696,12 @@ type GetArtifactAnalysisParams struct {
 	XProjectID ProjectId `json:"X-Project-ID"`
 }
 
+// ResolveContextParams defines parameters for ResolveContext.
+type ResolveContextParams struct {
+	// XProjectID Sb0rka project whose integration allowlist is used.
+	XProjectID ProjectId `json:"X-Project-ID"`
+}
+
 // SearchEndpointsParams defines parameters for SearchEndpoints.
 type SearchEndpointsParams struct {
 	// XProjectID Sb0rka project whose integration allowlist is used.
@@ -683,6 +735,9 @@ type ListResponseActionsParams struct {
 // CreateArtifactAnalysisJSONRequestBody defines body for CreateArtifactAnalysis for application/json ContentType.
 type CreateArtifactAnalysisJSONRequestBody = CreateArtifactAnalysisRequest
 
+// ResolveContextJSONRequestBody defines body for ResolveContext for application/json ContentType.
+type ResolveContextJSONRequestBody = ResolveContextRequest
+
 // SearchEndpointsJSONRequestBody defines body for SearchEndpoints for application/json ContentType.
 type SearchEndpointsJSONRequestBody = SearchEndpointsRequest
 
@@ -700,6 +755,9 @@ type ServerInterface interface {
 	// GetArtifactAnalysis Get an artifact analysis
 	// (GET /api/v1/artifact-analyses/{analysis_id})
 	GetArtifactAnalysis(w http.ResponseWriter, r *http.Request, analysisId openapi_types.UUID, params GetArtifactAnalysisParams)
+	// ResolveContext Resolve selected source records
+	// (POST /api/v1/context/resolve)
+	ResolveContext(w http.ResponseWriter, r *http.Request, params ResolveContextParams)
 	// SearchEndpoints Search endpoints
 	// (POST /api/v1/endpoints/search)
 	SearchEndpoints(w http.ResponseWriter, r *http.Request, params SearchEndpointsParams)
@@ -718,9 +776,9 @@ type ServerInterface interface {
 	// Healthz Check process health
 	// (GET /healthz)
 	Healthz(w http.ResponseWriter, r *http.Request)
-	// Readyz Check service readiness
-	// (GET /readyz)
-	Readyz(w http.ResponseWriter, r *http.Request)
+	// Ping Ping
+	// (GET /ping)
+	Ping(w http.ResponseWriter, r *http.Request)
 }
 
 // ServerInterfaceWrapper converts contexts to parameters.
@@ -822,6 +880,51 @@ func (siw *ServerInterfaceWrapper) GetArtifactAnalysis(w http.ResponseWriter, r 
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetArtifactAnalysis(w, r, analysisId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ResolveContext operation middleware
+func (siw *ServerInterfaceWrapper) ResolveContext(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ResolveContextParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "X-Project-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Project-ID")]; found {
+		var XProjectID ProjectId
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Project-ID", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Project-ID", valueList[0], &XProjectID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Project-ID", Err: err})
+			return
+		}
+
+		params.XProjectID = XProjectID
+
+	} else {
+		err := fmt.Errorf("Header parameter X-Project-ID is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Project-ID", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ResolveContext(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1088,11 +1191,11 @@ func (siw *ServerInterfaceWrapper) Healthz(w http.ResponseWriter, r *http.Reques
 	handler.ServeHTTP(w, r)
 }
 
-// Readyz operation middleware
-func (siw *ServerInterfaceWrapper) Readyz(w http.ResponseWriter, r *http.Request) {
+// Ping operation middleware
+func (siw *ServerInterfaceWrapper) Ping(w http.ResponseWriter, r *http.Request) {
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.Readyz(w, r)
+		siw.Handler.Ping(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1228,8 +1331,9 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/sources/{source}/endpoints/{external_id}/response-actions", wrapper.ListResponseActions)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/entities/lookup", wrapper.LookupEntity)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/events/search", wrapper.SearchEvents)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/context/resolve", wrapper.ResolveContext)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/healthz", wrapper.Healthz)
-	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/readyz", wrapper.Readyz)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/ping", wrapper.Ping)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/sources", wrapper.ListSources)
 
 	return m

@@ -281,6 +281,48 @@ paths:
           $ref: '#/components/responses/ErrorResponse'
       security:
         - bearerAuth: []
+  /api/v1/context/resolve:
+    post:
+      tags:
+        - events
+        - entities
+      summary: Resolve selected source records
+      operationId: resolveContext
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResolveContextRequest'
+      responses:
+        '200':
+          description: Current normalized data for every selected source record.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResolveContextResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '502':
+          $ref: '#/components/responses/BadGateway'
+        '504':
+          $ref: '#/components/responses/GatewayTimeout'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+      security:
+        - bearerAuth: []
   /healthz:
     get:
       tags:
@@ -291,16 +333,22 @@ paths:
       responses:
         '200':
           $ref: '#/components/responses/HealthResponse'
-  /readyz:
+  /ping:
     get:
       tags:
         - health
-      summary: Check service readiness
-      operationId: readyz
+      summary: Ping
+      operationId: ping
       security: []
       responses:
         '200':
-          $ref: '#/components/responses/HealthResponse'
+          description: pong
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: pong
+              example: pong
   /api/v1/sources:
     get:
       tags:
@@ -717,22 +765,33 @@ components:
         value:
           type: string
           description: Entity value to normalize and look up.
+    EntitySource:
+      type: object
+      description: Source record in which a canonical entity was observed.
+      required:
+        - source_code
+        - source_entity_id
+        - fetched_at
+      properties:
+        source_code:
+          type: string
+        source_entity_id:
+          type: string
+        source_ref:
+          type: string
+          format: uri
+        fetched_at:
+          type: string
+          format: date-time
     Entity:
       type: object
       description: Canonical representation of an observable or asset.
       required:
-        - id
         - type
         - value
         - attributes
-        - provenance
+        - sources
       properties:
-        id:
-          type: string
-          format: uuid
-          description: >-
-            Deterministic identifier derived from the entity type and canonical
-            value.
         type:
           type: string
           description: Canonical entity kind.
@@ -743,63 +802,73 @@ components:
           type: object
           description: Selected source-specific fields; never the complete vendor response.
           additionalProperties: true
-        provenance:
+        sources:
           type: array
           description: Source records in which this entity was observed.
           items:
-            $ref: '#/components/schemas/Provenance'
+            $ref: '#/components/schemas/EntitySource'
     Relation:
       type: object
       description: Normalized relationship between two canonical entities.
       required:
-        - id
         - type
-        - source_entity_id
-        - target_entity_id
-        - provenance
+        - source_entity
+        - target_entity
+        - source_code
+        - source_relation_id
+        - fetched_at
       properties:
-        id:
-          type: string
-          format: uuid
-          description: Deterministic identifier of the relationship.
         type:
           type: string
           description: Normalized relationship type, such as connected_to or resolves_to.
-        source_entity_id:
-          type: string
-          format: uuid
-          description: Identifier of the entity from which the relationship starts.
-        target_entity_id:
-          type: string
-          format: uuid
-          description: Identifier of the entity at which the relationship ends.
+        source_entity:
+          description: Canonical entity from which the relationship starts.
+          allOf:
+            - $ref: '#/components/schemas/EntityRef'
+        target_entity:
+          description: Canonical entity at which the relationship ends.
+          allOf:
+            - $ref: '#/components/schemas/EntityRef'
         occurred_at:
           type: string
           format: date-time
           description: Optional time when the relationship was observed.
-        provenance:
-          description: Source record supporting the relationship.
-          allOf:
-            - $ref: '#/components/schemas/Provenance'
+        source_code:
+          type: string
+          description: Code of the source that supplied the relationship.
+        source_relation_id:
+          type: string
+          description: Original relationship identifier assigned by that source.
+        source_ref:
+          type: string
+          format: uri
+        fetched_at:
+          type: string
+          format: date-time
     Event:
       type: object
       description: Security event normalized from one source record.
       required:
-        - id
+        - source_code
+        - source_event_id
         - type
         - title
         - severity
         - occurred_at
-        - entity_ids
+        - entities
         - attributes
-        - provenance
+        - fetched_at
       properties:
-        id:
+        source_code:
           type: string
-          format: uuid
-          description: >-
-            Deterministic identifier derived from the source and external event
-            ID.
+          description: Code of the source that owns the event.
+        source_event_id:
+          type: string
+          description: Original event identifier assigned by that source.
+        source_ref:
+          type: string
+          format: uri
+          description: Optional link to the event in its source system.
         type:
           type: string
           description: Normalized event class.
@@ -820,20 +889,65 @@ components:
           type: string
           format: date-time
           description: Time when the event occurred in the source system.
-        entity_ids:
+        entities:
           type: array
           description: Canonical entities mentioned by the event.
           items:
-            type: string
-            format: uuid
+            $ref: '#/components/schemas/EntityRef'
         attributes:
           type: object
           description: Selected event fields that have no canonical top-level property.
           additionalProperties: true
-        provenance:
-          description: Source record from which the event was normalized.
-          allOf:
-            - $ref: '#/components/schemas/Provenance'
+        fetched_at:
+          type: string
+          format: date-time
+          description: Time when the Gateway obtained the source data.
+    ResolveContextRequest:
+      type: object
+      description: Source records selected by a client for persistence in an investigation.
+      required:
+        - events
+        - entities
+      properties:
+        events:
+          type: array
+          maxItems: 500
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/EventSourceRef'
+        entities:
+          type: array
+          maxItems: 2000
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/EntitySourceRef'
+    ResolveContextResponse:
+      type: object
+      description: >-
+        Normalized records and relationships resolved from source-owned
+        identifiers.
+      required:
+        - events
+        - entities
+        - relations
+        - source_errors
+      properties:
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/Event'
+        entities:
+          type: array
+          items:
+            $ref: '#/components/schemas/Entity'
+        relations:
+          type: array
+          items:
+            $ref: '#/components/schemas/Relation'
+        source_errors:
+          type: array
+          items:
+            $ref: '#/components/schemas/SourceError'
     TimeRange:
       type: object
       description: Inclusive event occurrence-time interval.
@@ -922,6 +1036,32 @@ components:
           description: Per-source failures when at least one selected source succeeded.
           items:
             $ref: '#/components/schemas/SourceError'
+    EventSourceRef:
+      type: object
+      description: Stable reference to an event in its source system.
+      required:
+        - source_code
+        - source_event_id
+      properties:
+        source_code:
+          type: string
+          description: Code of the source that owns the event.
+        source_event_id:
+          type: string
+          description: Original event identifier assigned by that source.
+    EntitySourceRef:
+      type: object
+      description: Stable reference to an entity record in its source system.
+      required:
+        - source_code
+        - source_entity_id
+      properties:
+        source_code:
+          type: string
+          description: Code of the source that owns the entity record.
+        source_entity_id:
+          type: string
+          description: Original entity identifier assigned by that source.
     Health:
       type: object
       description: Service health response.

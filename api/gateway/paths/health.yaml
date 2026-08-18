@@ -18,12 +18,18 @@ paths:
         '200':
           $ref: '../shared/responses.yaml#/HealthResponse'
 
-  /readyz:
+  /ping:
     get:
       tags: [health]
-      summary: Check service readiness
-      operationId: readyz
+      summary: Ping
+      operationId: ping
       security: []
       responses:
         '200':
-          $ref: '../shared/responses.yaml#/HealthResponse'
+          description: pong
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: pong
+              example: pong

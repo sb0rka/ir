@@ -6,7 +6,7 @@
 - Return only types from `internal/domain`.
 - Keep source code stable and lowercase with hyphens.
 - Declare exactly the capabilities backed by non-nil implementations.
-- Derive IDs with `domain.StableID`; use source + external ID for events and type + canonical value for entities.
+- Expose source-owned identity directly: `source_code + source_event_id` for events, `source_code + source_entity_id` for entity source records, and `source_code + source_relation_id` for relations. Merge canonical entities by type + canonical value; do not derive Gateway UUIDs for these records.
 - Put documented, consumer-useful vendor fields in bounded `attributes`; never retain the full vendor response.
 - Register the implementation at the adapter composition boundary; never in an HTTP handler.
 
@@ -32,4 +32,4 @@ cd apps/gateway && go vet ./...
 docker compose -f docker-compose.dev.yml up -d --build gateway
 ```
 
-Smoke `readyz`, the registered source descriptors, MaxPatrol SIEM events, and PT Sandbox analysis. Test another capability only after its provider contract is reviewed and registered.
+Smoke `ping`, the registered source descriptors, MaxPatrol SIEM events, and PT Sandbox analysis. Test another capability only after its provider contract is reviewed and registered.

@@ -22,6 +22,8 @@ tags:
     description: Investigation graph nodes, edges and evidence.
   - name: reference
     description: Entity types, relations and configured sources.
+  - name: som
+    description: SOM kanban facade — issues as runnable agent tasks.
 
 components:
   securitySchemes:

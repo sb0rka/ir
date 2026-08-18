@@ -1,11 +1,9 @@
--- Migration: 003 справочники и демо-конфигурация
---
 -- Ядро типов сущностей и базовые типы связей — без них не построить граф.
 -- Источники засеяны четырьмя классами: SIEM, EDR, NDR, инфраструктурные логи.
 
 BEGIN;
 
-SET LOCAL search_path = inv, public, pg_temp;
+SET LOCAL search_path = :"DB_INV_SCHEMA_NAME", pg_temp;
 
 INSERT INTO entity_types (code, title, category) VALUES
     ('host',      'Узел',           'asset'),
@@ -21,6 +19,7 @@ ON CONFLICT (code) DO NOTHING;
 
 -- Роли сущности в событии
 INSERT INTO relation_types (code, title, source_kind, target_kind, directed) VALUES
+    ('mentions', 'Упоминает',       'event',  'entity', true),
     ('actor',   'Инициатор',      'entity', 'event',  true),
     ('object',  'Объект',         'entity', 'event',  true),
     ('src',     'Источник',       'entity', 'event',  true),
@@ -47,7 +46,14 @@ INSERT INTO sources (code, kind, title) VALUES
     ('siem',  'siem',  'SIEM (демо-датасет)'),
     ('edr',   'edr',   'EDR (демо-датасет)'),
     ('ndr',   'ndr',   'NDR (демо-датасет)'),
-    ('infra', 'infra', 'Инфраструктурные логи (демо-датасет)')
+    ('infra_logs', 'infra', 'Инфраструктурные логи (демо-датасет)')
+ON CONFLICT (code) DO NOTHING;
+
+-- Источники, которые отдаёт Gateway: ingest событий (attachEvents) пишет их
+-- code в events.source_code, и без записи здесь упадёт FK.
+INSERT INTO sources (code, kind, title) VALUES
+    ('maxpatrol-siem', 'siem',    'MaxPatrol SIEM (Gateway)'),
+    ('pt-sandbox',     'sandbox', 'PT Sandbox (Gateway)')
 ON CONFLICT (code) DO NOTHING;
 
 COMMIT;

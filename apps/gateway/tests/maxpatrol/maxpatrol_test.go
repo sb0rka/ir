@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"reflect"
 	"testing"
 	"time"
 
@@ -49,8 +50,106 @@ func TestMockUsesMappedVendorPage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(next.Events) != 1 || next.Events[0].ID == page.Events[0].ID {
+	if len(next.Events) != 1 || next.Events[0].Provenance.ExternalID == page.Events[0].Provenance.ExternalID {
 		t.Fatalf("cursor did not advance: %#v", next)
+	}
+}
+
+func TestMockSearchEventsMatchesCanonicalIPFromHostDetails(t *testing.T) {
+	value, err := scenario.Load(fixtures.Investigation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	provider := mockmaxpatrol.NewMock(value)
+
+	page, err := provider.Events.SearchEvents(context.Background(), capability.SearchEventsRequest{
+		Entities: []domain.EntityRef{{Type: "ip", Value: "192.0.2.62"}},
+		Limit:    100,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	wantEventIDs := []string{"ev-13", "ev-12", "ev-11"}
+	if got := sourceEventIDs(page.Events); !reflect.DeepEqual(got, wantEventIDs) {
+		t.Fatalf("event IDs=%v want=%v", got, wantEventIDs)
+	}
+	if !hasEntity(page.Entities, "host", "ws-beta.corp.example") {
+		t.Fatalf("ws-beta host is missing from normalized entities: %#v", page.Entities)
+	}
+}
+
+func TestMockSearchEventsPreservesQueryAndHostMatching(t *testing.T) {
+	value, err := scenario.Load(fixtures.Investigation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	provider := mockmaxpatrol.NewMock(value)
+
+	tests := []struct {
+		name    string
+		request capability.SearchEventsRequest
+		want    []string
+	}{
+		{
+			name:    "query",
+			request: capability.SearchEventsRequest{Query: "impacket_smbexec", Limit: 100},
+			want:    []string{"ev-12"},
+		},
+		{
+			name: "host",
+			request: capability.SearchEventsRequest{
+				Entities: []domain.EntityRef{{Type: "host", Value: "ws-beta.corp.example"}},
+				Limit:    100,
+			},
+			want: []string{"ev-13", "ev-12", "ev-11"},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			page, err := provider.Events.SearchEvents(context.Background(), test.request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := sourceEventIDs(page.Events); !reflect.DeepEqual(got, test.want) {
+				t.Fatalf("event IDs=%v want=%v", got, test.want)
+			}
+		})
+	}
+}
+
+func TestMockSearchEventsDoesNotMatchIPExcludedByVendorMapping(t *testing.T) {
+	value, err := scenario.Load([]byte(`{
+		"nodes": [
+			{"id":"host-1","data":{"label":"host-1.example","kind":"host","system":"MaxPatrol","details":{"ip":"192.0.2.1"}}},
+			{"id":"host-2","data":{"label":"host-2.example","kind":"host","system":"MaxPatrol","details":{"ip":"192.0.2.2"}}},
+			{"id":"host-3","data":{"label":"host-3.example","kind":"host","system":"MaxPatrol","details":{"ip":"192.0.2.3"}}}
+		],
+		"events": [{
+			"id":"event-1",
+			"source":"MaxPatrol",
+			"event_class":"Lateral Movement",
+			"event_ts":"2026-07-23T11:20:00Z",
+			"title":"Three hosts",
+			"severity":"high",
+			"entity_ids":["host-1","host-2","host-3"]
+		}]
+	}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	provider := mockmaxpatrol.NewMock(value)
+
+	page, err := provider.Events.SearchEvents(context.Background(), capability.SearchEventsRequest{
+		Entities: []domain.EntityRef{{Type: "ip", Value: "192.0.2.3"}},
+		Limit:    100,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(page.Events) != 0 {
+		t.Fatalf("third host IP is not emitted by the vendor mapping but matched: %#v", page.Events)
 	}
 }
 
@@ -111,6 +210,23 @@ func TestToEventPageRejectsMalformedRecord(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected missing uuid to fail")
 	}
+}
+
+func sourceEventIDs(events []domain.Event) []string {
+	ids := make([]string, len(events))
+	for index, event := range events {
+		ids[index] = event.Provenance.ExternalID
+	}
+	return ids
+}
+
+func hasEntity(entities []domain.Entity, kind, value string) bool {
+	for _, entity := range entities {
+		if entity.Type == kind && entity.Value == value {
+			return true
+		}
+	}
+	return false
 }
 
 func readFixture(t *testing.T, path string) []byte {

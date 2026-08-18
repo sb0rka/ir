@@ -34,3 +34,8 @@ go.work.sum
 .DS_Store
 Thumbs.db
 *.log
+docs-internal/
+docs-internal
+api/build/
+api/bundle.yaml
+api/docs.html

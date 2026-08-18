@@ -12,6 +12,7 @@ import (
 	"github.com/sb0rka/ir/packages/contract/graph"
 	"github.com/sb0rka/ir/packages/contract/investigations"
 	"github.com/sb0rka/ir/packages/contract/reference"
+	"github.com/sb0rka/ir/packages/contract/som"
 )
 
 const baseURL = "/api/v1"
@@ -33,6 +34,7 @@ type API interface {
 	graph.StrictServerInterface
 	investigations.StrictServerInterface
 	reference.StrictServerInterface
+	som.StrictServerInterface
 }
 
 type Dependencies struct {
@@ -40,18 +42,12 @@ type Dependencies struct {
 	Log    *slog.Logger
 	Server API
 	Roles  RoleResolver
-	DB     Pinger
-}
-
-// Pinger, а не *psql.DB: транспорту нужен один метод, не весь стор.
-type Pinger interface {
-	Ping(ctx context.Context) error
 }
 
 func NewHandler(deps Dependencies) http.Handler {
 	public := http.NewServeMux()
 	public.HandleFunc("GET /healthz", liveness)
-	public.HandleFunc("GET /readyz", readiness(deps.DB))
+	public.HandleFunc("GET /ping", ping)
 	// Документация без авторизации: она нужна до получения токена.
 	public.HandleFunc("GET /openapi.json", openAPISpec)
 	public.HandleFunc("GET /swagger", swaggerUI)
@@ -127,27 +123,24 @@ func registerDomains(mux *http.ServeMux, deps Dependencies) {
 			BaseURL: baseURL, BaseRouter: mux, ErrorHandlerFunc: onRequestError,
 		})
 
+	som.HandlerWithOptions(
+		som.NewStrictHandlerWithOptions(deps.Server, nil, som.StrictHTTPServerOptions{
+			RequestErrorHandlerFunc:  onRequestError,
+			ResponseErrorHandlerFunc: onResponseError,
+		}),
+		som.StdHTTPServerOptions{
+			BaseURL: baseURL, BaseRouter: mux, ErrorHandlerFunc: onRequestError,
+		})
+
 }
 
-// liveness говорит только «процесс жив»: с мёртвым соединением к базе он
-// всё равно ответит OK. Отличить «может обслуживать» — это readiness ниже.
 func liveness(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte(`{"status":"ok"}`))
 }
 
-func readiness(db Pinger) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		if db != nil {
-			if err := db.Ping(r.Context()); err != nil {
-				w.WriteHeader(http.StatusServiceUnavailable)
-				_, _ = w.Write([]byte(`{"status":"unavailable","reason":"database"}`))
-				return
-			}
-		}
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"status":"ready"}`))
-	}
+func ping(w http.ResponseWriter, _ *http.Request) {
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte("pong"))
 }

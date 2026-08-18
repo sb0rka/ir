@@ -26,8 +26,10 @@ task spec       # Собрать и проверить OpenAPI
 task gen        # Обновить Go/TypeScript-контракты и заглушки
 task build      # Собрать bin/ir-api и bin/irctl
 task check      # Генерация, сборка и go vet
-task dev        # Postgres, миграции и ir-api
-task dev-down
+task db:up      # Локальный Postgres
+task db:migrate # Миграции
+task apps:up    # ir-api и gateway
+task apps:down
 ```
 
 Сгенерированные файлы коммитятся, но вручную не редактируются. Источник правды
@@ -36,10 +38,21 @@ task dev-down
 ## Локальный запуск
 
 ```bash
-docker compose -f docker-compose.dev.yml up -d --build
+# Запуск
+task db:up
+task db:migrate
+task apps:up
 
-curl http://localhost:8090/healthz
-curl http://localhost:8090/readyz
+# Проверка
+curl http://localhost:8090/ping
+curl http://localhost:8091/ping
+
+# Логи
+task apps:logs
+
+# Остановка
+task apps:down
+task db:down
 ```
 
 Для защищённых ручек нужен access-токен платформы с audience `api.local`,
