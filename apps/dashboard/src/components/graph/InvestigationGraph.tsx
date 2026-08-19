@@ -7,7 +7,7 @@ export function InvestigationGraph({
   /** Bump to trigger fitView (e.g. when opening the graph view). */
   fitNonce = 0,
 }: {
-  fitNonce?: number
+  fitNonce?: number | string
 } = {}) {
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col">

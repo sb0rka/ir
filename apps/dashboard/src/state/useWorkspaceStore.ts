@@ -201,7 +201,9 @@ function buildFromApp(inv: Investigation): GraphInvestigation {
     ...entities.flatMap((e) => [e.first_seen, e.last_seen]),
     ...alerts.map((a) => a.event_ts),
   ])
-  const minT = times.length ? Math.min(...times) : Date.now()
+  // Empty graph (list stub before bundle load) must not clamp to "now":
+  // bind preserves filters, and a now±5min window hides every real node.
+  const minT = times.length ? Math.min(...times) : 0
   const maxT = times.length ? Math.max(...times) : Date.now()
   const windowStart = new Date(minT - 5 * 60_000).toISOString()
   const windowEnd = new Date(maxT + 5 * 60_000).toISOString()
@@ -283,9 +285,23 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     }
     const prev = get().activeInvestigation
     const built = buildFromApp(inv)
-    // Preserve filters / positions if same investigation
-    if (prev && prev.id === investigationId) {
-      built.filters = prev.filters
+    const hadGraph =
+      !!prev &&
+      prev.id === investigationId &&
+      (prev.entities.length > 0 || prev.alerts.length > 0)
+    // Keep user filters/positions only after the graph has real data.
+    // First bind is the list stub (no nodes); preserving its time window
+    // would hide every node once the bundle arrives.
+    if (hadGraph) {
+      const nextRange = built.filters.timeRange
+      const prevRange = prev.filters.timeRange
+      const overlaps =
+        !prevRange ||
+        !nextRange ||
+        (prevRange.end >= nextRange.start && prevRange.start <= nextRange.end)
+      built.filters = overlaps
+        ? prev.filters
+        : { ...prev.filters, timeRange: nextRange }
       const posById = new Map(prev.entities.map((e) => [e.id, e.position]))
       built.entities = built.entities.map((e) => ({
         ...e,
