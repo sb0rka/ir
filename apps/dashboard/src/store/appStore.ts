@@ -522,10 +522,10 @@ export const useAppStore = create<AppState>((set, get) => ({
       investigationId ??
       (get().activeTab !== 'queue' ? get().activeTab : undefined)
     const edge = get().graphEdges[id]
-    if (!invId || !edge || edge.version == null) {
-      set({ edgeReviews: { ...get().edgeReviews, [id]: review } })
-      return
-    }
+    const previous = get().edgeReviews[id] ?? edge?.review
+    // Apply locally first so the proposed list stays interactive if /review is 501.
+    set({ edgeReviews: { ...get().edgeReviews, [id]: review } })
+    if (!invId || !edge || edge.version == null) return
     void (async () => {
       try {
         const body: Ir['schemas']['ReviewRequest'] =
@@ -533,14 +533,13 @@ export const useAppStore = create<AppState>((set, get) => ({
             ? { reject: [{ id, version: edge.version ?? 1, reason: 'Отклонено аналитиком' }] }
             : { confirm: [{ id, version: edge.version ?? 1 }] }
         await reviewEdges(invId, body)
-        set({ edgeReviews: { ...get().edgeReviews, [id]: review } })
         await get().loadInvestigation(invId)
       } catch (err) {
-        if (isNotImplemented(err)) {
-          set({ lastNotImplemented: errorMessage(err) })
-          return
-        }
-        set({ lastError: errorMessage(err) })
+        if (isNotImplemented(err)) return
+        set({
+          lastError: errorMessage(err),
+          edgeReviews: { ...get().edgeReviews, [id]: previous ?? 'proposed' },
+        })
       }
     })()
   },

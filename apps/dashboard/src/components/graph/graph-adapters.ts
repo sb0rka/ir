@@ -130,6 +130,7 @@ export function buildVisibleGraph(args: {
     }),
   ]
 
+  const curvatureByTarget = new Map<string, number>()
   const rfEdges: RFEdge[] = edges
     .filter((e) => filters.edgeOrigins.has(e.origin))
     .filter((e) => visibleIds.has(e.source_id) && visibleIds.has(e.target_id))
@@ -143,6 +144,8 @@ export function buildVisibleGraph(args: {
         !hoverEntityIds.has(e.target_id) &&
         !relatedAlertIds.has(e.source_id) &&
         !relatedAlertIds.has(e.target_id)
+      const curveIndex = curvatureByTarget.get(e.target_id) ?? 0
+      curvatureByTarget.set(e.target_id, curveIndex + 1)
 
       return {
         id: e.id,
@@ -150,6 +153,7 @@ export function buildVisibleGraph(args: {
         target: e.target_id,
         label: e.kind,
         animated: isExpanded,
+        pathOptions: { curvature: 0.2 + (curveIndex % 5) * 0.08 },
         style: {
           stroke: isExpanded ? 'var(--edge-expanded)' : 'var(--edge-seed)',
           strokeWidth: 1.5,

@@ -4,7 +4,6 @@ import { ContextQueuePage } from '../components/ContextQueue'
 import { InvestigationGraph } from '../components/graph'
 import { DetailPanel } from '../components/DetailPanel'
 import { AgentPanel } from '../components/AgentPanel'
-import { ProposedReviewOverlay } from '../components/ProposedReviewOverlay'
 import { useAppStore } from '../store/appStore'
 import { useWorkspaceStore } from '../state/useWorkspaceStore'
 
@@ -12,12 +11,25 @@ export function InvestigationPage({ investigationId }: { investigationId: string
   const inv = useAppStore((s) => s.investigations[investigationId])
   const detailPanelOpen = useAppStore((s) => s.detailPanelOpen)
   const agentPanelOpen = useAppStore((s) => s.agentPanelOpen)
+  const setAgentPanelOpen = useAppStore((s) => s.setAgentPanelOpen)
   const loadInvestigation = useAppStore((s) => s.loadInvestigation)
   const loading = useAppStore((s) => s.investigationLoading)
+  const edgeReviews = useAppStore((s) => s.edgeReviews)
+  const graphEdges = useAppStore((s) => s.graphEdges)
 
   useEffect(() => {
     void loadInvestigation(investigationId)
   }, [investigationId, loadInvestigation])
+
+  const hasProposedEdges = Boolean(
+    inv?.edgeIds.some(
+      (id) => (edgeReviews[id] ?? graphEdges[id]?.review) === 'proposed',
+    ),
+  )
+
+  useEffect(() => {
+    if (hasProposedEdges) setAgentPanelOpen(true)
+  }, [investigationId, hasProposedEdges, setAgentPanelOpen])
 
   // Layout (not paint): children see session on the first frame that has size.
   // Cleanup must not clear a newer tab's binding — InvestigationPage stays mounted A→B.
@@ -56,7 +68,6 @@ export function InvestigationPage({ investigationId }: { investigationId: string
           ) : (
             <div className="relative flex min-h-0 flex-1 flex-col">
               <InvestigationGraph fitNonce={investigationId} />
-              <ProposedReviewOverlay investigationId={investigationId} />
             </div>
           )}
         </div>

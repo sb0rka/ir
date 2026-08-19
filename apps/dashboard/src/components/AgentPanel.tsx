@@ -3,6 +3,7 @@ import { issueTemplates, useAppStore } from '../store/appStore'
 import { Button, Chip, Panel } from './ui'
 import { clsx, formatTime, statusLabel } from '../lib/utils'
 import {
+  Check,
   CheckCircle2,
   CircleDashed,
   Loader2,
@@ -22,6 +23,100 @@ function StatusIcon({ status }: { status: string }) {
   if (status === 'cancelled')
     return <CircleDashed className="h-3.5 w-3.5 text-fg-dim" />
   return null
+}
+
+/** Agent-proposed graph edges waiting for analyst accept/reject. */
+function ProposedLinksSection({ investigationId }: { investigationId: string }) {
+  const inv = useAppStore((s) => s.investigations[investigationId])
+  const nodeReviews = useAppStore((s) => s.nodeReviews)
+  const edgeReviews = useAppStore((s) => s.edgeReviews)
+  const setReview = useAppStore((s) => s.setReview)
+  const graphNodes = useAppStore((s) => s.graphNodes)
+  const graphEdges = useAppStore((s) => s.graphEdges)
+
+  if (!inv) return null
+
+  const proposedEdges = inv.edgeIds
+    .map((id) => graphEdges[id])
+    .filter(Boolean)
+    .filter((e) => (edgeReviews[e.id] ?? e.review) === 'proposed')
+
+  const proposedNodeCount = inv.nodeIds
+    .map((id) => graphNodes[id])
+    .filter(Boolean)
+    .filter((n) => (nodeReviews[n.id] ?? n.review) === 'proposed').length
+
+  if (proposedEdges.length === 0) return null
+
+  const selectedId = inv.selectedNodeId
+
+  return (
+    <div className="rounded border border-proposed/30 bg-surface-0">
+      <div className="flex items-baseline justify-between gap-2 border-b border-border px-2.5 py-1.5">
+        <div className="text-[10px] uppercase tracking-wider text-fg-dim">
+          Предложенные связи
+        </div>
+        <div className="shrink-0 text-[10px] text-proposed">
+          {proposedEdges.length}
+          {proposedNodeCount > 0 && ` · узлов: ${proposedNodeCount}`}
+        </div>
+      </div>
+      <div className="max-h-72 divide-y divide-border/80 overflow-y-auto">
+        {proposedEdges.map((e) => {
+          const related =
+            Boolean(selectedId) &&
+            (e.source === selectedId || e.target === selectedId)
+          return (
+            <div
+              key={e.id}
+              className={clsx(
+                'flex items-start justify-between gap-2 px-2.5 py-2',
+                related && 'bg-proposed/5',
+              )}
+            >
+              <div className="min-w-0">
+                <div className="text-xs text-fg-muted">
+                  {graphNodes[e.source]?.label} —{e.relation}→{' '}
+                  {graphNodes[e.target]?.label}
+                </div>
+                {e.rationale && (
+                  <div className="mt-0.5 text-[11px] text-fg-dim">{e.rationale}</div>
+                )}
+              </div>
+              <div className="flex shrink-0 gap-0.5">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  title="Принять связь"
+                  onClick={() => {
+                    setReview('edge', e.id, 'confirmed', investigationId)
+                    const src = graphNodes[e.source]
+                    const tgt = graphNodes[e.target]
+                    if (src && (nodeReviews[src.id] ?? src.review) === 'proposed') {
+                      setReview('node', src.id, 'confirmed')
+                    }
+                    if (tgt && (nodeReviews[tgt.id] ?? tgt.review) === 'proposed') {
+                      setReview('node', tgt.id, 'confirmed')
+                    }
+                  }}
+                >
+                  <Check className="h-3 w-3 text-confirmed" />
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  title="Отклонить связь"
+                  onClick={() => setReview('edge', e.id, 'rejected', investigationId)}
+                >
+                  <X className="h-3 w-3 text-critical" />
+                </Button>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
 }
 
 export function AgentPanel({ investigationId }: { investigationId: string }) {
@@ -51,9 +146,9 @@ export function AgentPanel({ investigationId }: { investigationId: string }) {
 
   return (
     <Panel
-      title="ИИ-агент · задачи"
+      title="ИИ-агент"
       side="left"
-      className="w-96 shrink-0"
+      className="relative z-10 w-96 shrink-0"
       actions={
         <div className="flex items-center gap-1">
           <Button size="sm" variant="ghost" onClick={() => setShowCreate((v) => !v)}>
@@ -66,6 +161,8 @@ export function AgentPanel({ investigationId }: { investigationId: string }) {
       }
     >
       <div className="space-y-3 p-3">
+        <ProposedLinksSection investigationId={investigationId} />
+
         <Button className="w-full" onClick={() => runEnrichment(investigationId)}>
           Запустить насыщение контекста
         </Button>

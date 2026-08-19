@@ -31,10 +31,15 @@ export function InvestigationHeader({ investigationId }: { investigationId: stri
   const setDetailPanelOpen = useAppStore((s) => s.setDetailPanelOpen)
   const detailPanelOpen = useAppStore((s) => s.detailPanelOpen)
   const setActiveTab = useAppStore((s) => s.setActiveTab)
+  const edgeReviews = useAppStore((s) => s.edgeReviews)
+  const graphEdges = useAppStore((s) => s.graphEdges)
 
   if (!inv) return null
 
   const running = inv.issueIds.some((id) => issues[id]?.status === 'running')
+  const proposedCount = inv.edgeIds.filter(
+    (id) => (edgeReviews[id] ?? graphEdges[id]?.review) === 'proposed',
+  ).length
 
   return (
     <div className="border-b border-border bg-surface-1 px-4 py-3">
@@ -130,10 +135,15 @@ export function InvestigationHeader({ investigationId }: { investigationId: stri
             size="sm"
             variant={agentPanelOpen ? 'default' : 'ghost'}
             onClick={() => setAgentPanelOpen(!agentPanelOpen)}
-            title="Задачи ИИ-агента по расследованию"
+            title="Задачи и предложенные связи ИИ-агента"
           >
             <Bot className="h-3.5 w-3.5" />
-            Задачи
+            Агент
+            {proposedCount > 0 && (
+              <span className="rounded bg-proposed/20 px-1 font-mono text-[10px] text-proposed">
+                {proposedCount}
+              </span>
+            )}
           </Button>
         </div>
       </div>

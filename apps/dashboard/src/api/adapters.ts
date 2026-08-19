@@ -238,9 +238,196 @@ function compareEventsByTime(a: GraphNode, b: GraphNode): number {
   return a.id.localeCompare(b.id)
 }
 
+type LayoutEdge = Pick<GraphEdge, 'source' | 'target'>
+type Point = { x: number; y: number }
+
+const EVENT_ORIGIN_X = 80
+const EVENT_STEP_X = 256
+const EVENT_BASE_Y = 260
+const EVENT_WAVE_Y = 20
+const NODE_GAP_X = 32
+const NODE_GAP_Y = 24
+const COL_GAP = 48
+const BAND_GAP = 36
+const STAGGER_X = 22
+const EVENT_SIZE = { w: 220, h: 72 }
+const ENTITY_SIZE = { w: 180, h: 56 }
+const ENTITY_ROW = ENTITY_SIZE.h + NODE_GAP_Y
+const SEPARATE_ITERS = 8
+
+function nodeBox(kind: GraphNode['kind']) {
+  return kind === 'event' ? EVENT_SIZE : ENTITY_SIZE
+}
+
+function eventWaveY(index: number): number {
+  return EVENT_BASE_Y + Math.round(Math.sin(index * (Math.PI / 2.2)) * EVENT_WAVE_Y)
+}
+
+function compareEntities(a: GraphNode, b: GraphNode): number {
+  if (a.kind !== b.kind) return a.kind.localeCompare(b.kind)
+  return a.id.localeCompare(b.id)
+}
+
+function buildNeighbors(
+  ids: Set<string>,
+  edges: LayoutEdge[],
+): Map<string, string[]> {
+  const neighbors = new Map<string, string[]>()
+  for (const id of ids) neighbors.set(id, [])
+  for (const edge of edges) {
+    if (edge.source === edge.target) continue
+    if (!ids.has(edge.source) || !ids.has(edge.target)) continue
+    neighbors.get(edge.source)?.push(edge.target)
+    neighbors.get(edge.target)?.push(edge.source)
+  }
+  return neighbors
+}
+
+function boxesTooClose(
+  a: Point,
+  sa: { w: number; h: number },
+  b: Point,
+  sb: { w: number; h: number },
+): boolean {
+  const overlapX = Math.min(a.x + sa.w, b.x + sb.w) - Math.max(a.x, b.x) + NODE_GAP_X
+  const overlapY = Math.min(a.y + sa.h, b.y + sb.h) - Math.max(a.y, b.y) + NODE_GAP_Y
+  return overlapX > 0 && overlapY > 0
+}
+
+function overlappingSavedIds(
+  saved: Record<string, Point>,
+  entities: GraphNode[],
+  eventPos: Map<string, Point>,
+): Set<string> {
+  const ignored = new Set<string>()
+  const withSaved = entities.filter((entity) => saved[entity.id])
+  const savedPoints = Object.values(saved)
+  if (savedPoints.length >= 3) {
+    let minX = Infinity
+    let maxX = -Infinity
+    let minY = Infinity
+    let maxY = -Infinity
+    for (const p of savedPoints) {
+      minX = Math.min(minX, p.x)
+      maxX = Math.max(maxX, p.x)
+      minY = Math.min(minY, p.y)
+      maxY = Math.max(maxY, p.y)
+    }
+    const expectedW =
+      EVENT_ORIGIN_X + Math.max(0, eventPos.size - 1) * EVENT_STEP_X + EVENT_SIZE.w
+    if (maxX - minX > expectedW * 1.45 || maxY - minY > 720) {
+      for (const entity of withSaved) ignored.add(entity.id)
+      return ignored
+    }
+  }
+  for (let i = 0; i < withSaved.length; i++) {
+    const a = withSaved[i]
+    const pa = saved[a.id]
+    for (const [, pe] of eventPos) {
+      if (boxesTooClose(pa, ENTITY_SIZE, pe, EVENT_SIZE)) ignored.add(a.id)
+    }
+    for (let j = i + 1; j < withSaved.length; j++) {
+      const b = withSaved[j]
+      if (boxesTooClose(pa, ENTITY_SIZE, saved[b.id], ENTITY_SIZE)) {
+        ignored.add(a.id)
+        ignored.add(b.id)
+      }
+    }
+  }
+  return ignored
+}
+
+function meanPoint(ids: string[], pos: Map<string, Point>): Point | null {
+  let x = 0
+  let y = 0
+  let n = 0
+  for (const id of ids) {
+    const p = pos.get(id)
+    if (!p) continue
+    x += p.x
+    y += p.y
+    n += 1
+  }
+  if (n === 0) return null
+  return { x: x / n, y: y / n }
+}
+
+function fanAround(
+  origin: Point,
+  members: GraphNode[],
+  mode: 'right' | 'above',
+): Map<string, Point> {
+  const placed = new Map<string, Point>()
+  const n = members.length
+  const startY =
+    origin.y + EVENT_SIZE.h / 2 - ENTITY_SIZE.h / 2 - ((n - 1) * ENTITY_ROW) / 2
+  members.forEach((ent, i) => {
+    if (mode === 'right') {
+      placed.set(ent.id, {
+        x: origin.x + EVENT_SIZE.w + COL_GAP + (i % 2 === 0 ? 0 : STAGGER_X),
+        y: startY + i * ENTITY_ROW,
+      })
+      return
+    }
+    placed.set(ent.id, {
+      x: origin.x + (i % 2 === 0 ? 0 : STAGGER_X),
+      y: origin.y - BAND_GAP - ENTITY_SIZE.h - i * ENTITY_ROW,
+    })
+  })
+  return placed
+}
+
+function separateOverlaps(
+  nodes: GraphNode[],
+  pos: Map<string, Point>,
+  pinned: Set<string>,
+) {
+  for (let pass = 0; pass < 2; pass++) {
+    for (let i = 0; i < nodes.length; i++) {
+      for (let j = i + 1; j < nodes.length; j++) {
+        const a = nodes[i]
+        const b = nodes[j]
+        const pa = pos.get(a.id)
+        const pb = pos.get(b.id)
+        if (!pa || !pb) continue
+
+        const sa = nodeBox(a.kind)
+        const sb = nodeBox(b.kind)
+        const overlapX =
+          Math.min(pa.x + sa.w, pb.x + sb.w) - Math.max(pa.x, pb.x) + NODE_GAP_X
+        const overlapY =
+          Math.min(pa.y + sa.h, pb.y + sb.h) - Math.max(pa.y, pb.y) + NODE_GAP_Y
+        if (overlapX <= 0 || overlapY <= 0) continue
+
+        const aPinned = pinned.has(a.id)
+        const bPinned = pinned.has(b.id)
+        if (aPinned && bPinned) continue
+
+        const acx = pa.x + sa.w / 2
+        const acy = pa.y + sa.h / 2
+        const bcx = pb.x + sb.w / 2
+        const bcy = pb.y + sb.h / 2
+
+        if (overlapX < overlapY) {
+          const dir = bcx === acx ? 1 : Math.sign(bcx - acx)
+          const push = aPinned || bPinned ? overlapX : overlapX / 2
+          if (!aPinned) pa.x -= push * dir
+          if (!bPinned) pb.x += push * dir
+        } else {
+          const dir = bcy === acy ? 1 : Math.sign(bcy - acy)
+          const push = aPinned || bPinned ? overlapY : overlapY / 2
+          if (!aPinned) pa.y -= push * dir
+          if (!bPinned) pb.y += push * dir
+        }
+      }
+    }
+  }
+}
+
 export function layoutGraph(
   investigationId: string,
   nodes: GraphNode[],
+  edges: LayoutEdge[] = [],
 ): GraphNode[] {
   const saved = loadLayout(investigationId)
   const events = nodes
@@ -248,32 +435,94 @@ export function layoutGraph(
     .slice()
     .sort(compareEventsByTime)
   const entities = nodes.filter((n) => n.kind !== 'event')
-  const byKind = new Map<string, GraphNode[]>()
-  for (const n of entities) {
-    const list = byKind.get(n.kind) ?? []
-    list.push(n)
-    byKind.set(n.kind, list)
-  }
+  const eventIds = new Set(events.map((n) => n.id))
+  const ids = new Set(nodes.map((n) => n.id))
+  const neighbors = buildNeighbors(ids, edges)
+  const pos = new Map<string, Point>()
+  const pinned = new Set<string>()
+  const fanMode = events.length <= 1 ? 'right' : 'above'
 
-  const positioned = new Map<string, GraphNode>()
   events.forEach((n, i) => {
     // Event X is always chronological so a saved alphabetical layout cannot stick.
-    positioned.set(n.id, { ...n, x: 80 + i * 220, y: 280 })
+    pos.set(n.id, { x: EVENT_ORIGIN_X + i * EVENT_STEP_X, y: eventWaveY(i) })
+    pinned.add(n.id)
   })
 
-  let kindIndex = 0
-  for (const group of byKind.values()) {
-    group.forEach((n, i) => {
-      const pos = saved[n.id] ?? {
-        x: 80 + i * 200 + hashOffset(n.id),
-        y: 40 + kindIndex * 140,
-      }
-      positioned.set(n.id, { ...n, x: pos.x, y: pos.y })
-    })
-    kindIndex += 1
+  const ignoreSaved = overlappingSavedIds(saved, entities, pos)
+  const fans = new Map<string, GraphNode[]>()
+  const shared: GraphNode[] = []
+  for (const event of events) fans.set(event.id, [])
+  for (const entity of entities) {
+    if (saved[entity.id] && !ignoreSaved.has(entity.id)) continue
+    const eventNeighbors = (neighbors.get(entity.id) ?? []).filter((id) =>
+      eventIds.has(id),
+    )
+    if (eventNeighbors.length >= 2) {
+      shared.push(entity)
+      continue
+    }
+    const primary = events.find((event) => eventNeighbors.includes(event.id))
+    if (primary) fans.get(primary.id)?.push(entity)
   }
 
-  return nodes.map((n) => positioned.get(n.id) ?? n)
+  for (const event of events) {
+    const members = (fans.get(event.id) ?? []).slice().sort(compareEntities)
+    const origin = pos.get(event.id)
+    if (!origin || members.length === 0) continue
+    for (const [id, point] of fanAround(origin, members, fanMode)) {
+      pos.set(id, point)
+    }
+  }
+
+  for (const entity of shared) {
+    const eventNeighbors = (neighbors.get(entity.id) ?? []).filter((id) =>
+      eventIds.has(id),
+    )
+    const bary = meanPoint(eventNeighbors, pos)
+    if (!bary) continue
+    pos.set(entity.id, {
+      x: bary.x,
+      y: bary.y - BAND_GAP - ENTITY_SIZE.h,
+    })
+  }
+
+  let fallbackIndex = 0
+  for (const entity of entities) {
+    if (pos.has(entity.id)) continue
+    const savedPos = saved[entity.id]
+    if (savedPos && !ignoreSaved.has(entity.id)) {
+      pos.set(entity.id, { x: savedPos.x, y: savedPos.y })
+      continue
+    }
+    const bary = meanPoint(neighbors.get(entity.id) ?? [], pos)
+    if (bary) {
+      pos.set(entity.id, {
+        x: bary.x,
+        y: bary.y - BAND_GAP - ENTITY_SIZE.h,
+      })
+    } else {
+      pos.set(entity.id, {
+        x: EVENT_ORIGIN_X + fallbackIndex * (ENTITY_SIZE.w + NODE_GAP_X) + hashOffset(entity.id),
+        y: EVENT_BASE_Y - ENTITY_ROW * (1 + (fallbackIndex % 3)),
+      })
+      fallbackIndex += 1
+    }
+  }
+
+  for (let iter = 0; iter < SEPARATE_ITERS; iter++) {
+    separateOverlaps(nodes, pos, pinned)
+    for (const entity of entities) {
+      const current = pos.get(entity.id)
+      if (!current) continue
+      current.x = Math.max(24, current.x)
+    }
+  }
+
+  return nodes.map((n) => {
+    const p = pos.get(n.id)
+    if (!p) return n
+    return { ...n, x: Math.round(p.x), y: Math.round(p.y) }
+  })
 }
 
 export function mapGraphNode(node: IrNode): GraphNode {

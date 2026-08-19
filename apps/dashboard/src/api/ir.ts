@@ -166,17 +166,16 @@ export async function loadInvestigationBundle(
   }
 
   const nodes: Record<string, GraphNode> = {}
+  const mappedEdges = (graph.edges ?? []).map(mapGraphEdge)
   const mappedNodes = layoutGraph(
     investigationId,
     (graph.nodes ?? []).map(mapGraphNode),
+    mappedEdges,
   )
   for (const node of mappedNodes) nodes[node.id] = node
 
   const edges: Record<string, GraphEdge> = {}
-  for (const edge of graph.edges ?? []) {
-    const mapped = mapGraphEdge(edge)
-    edges[mapped.id] = mapped
-  }
+  for (const edge of mappedEdges) edges[edge.id] = edge
 
   return {
     investigation: mapIrInvestigation(inv, {
