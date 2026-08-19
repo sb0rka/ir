@@ -3,13 +3,13 @@ package server
 import (
 	"context"
 	"errors"
-	"fmt"
 	"net/http"
 	"strings"
 
 	"github.com/google/uuid"
 
 	"github.com/sb0rka/ir/apps/investigations/internal/somclient"
+	"github.com/sb0rka/ir/apps/investigations/internal/somprompt"
 	"github.com/sb0rka/ir/apps/investigations/internal/transport/httperr"
 	"github.com/sb0rka/ir/apps/investigations/internal/transport/socctx"
 	"github.com/sb0rka/ir/packages/contract/som"
@@ -120,6 +120,13 @@ func (s *Server) RunSomIssue(ctx context.Context, request som.RunSomIssueRequest
 	if err := s.som.RunConfigured(); err != nil {
 		return nil, somNotConfigured(err)
 	}
+	if s.prompt.GatewayBaseURL == "" {
+		return nil, somNotConfigured(errors.New("GATEWAY_PUBLIC_BASE_URL is not set"))
+	}
+	scope, err := s.scope(ctx)
+	if err != nil {
+		return nil, err
+	}
 
 	issueID := request.IssueId.String()
 	issue, err := s.som.GetIssue(ctx, bearer, issueID)
@@ -132,7 +139,17 @@ func (s *Server) RunSomIssue(ctx context.Context, request som.RunSomIssueRequest
 	}
 
 	investigationID := request.Body.InvestigationId.String()
-	prompt := s.buildRunPrompt(ctx, issue, investigationID)
+	description := ""
+	if issue.Description != nil {
+		description = *issue.Description
+	}
+	prompt := somprompt.Build(issue.Title, description, somprompt.Context{
+		IRBaseURL:       s.prompt.IRBaseURL,
+		GatewayBaseURL:  s.prompt.GatewayBaseURL,
+		ProjectID:       scope.ProjectID,
+		InvestigationID: investigationID,
+		SomIssueID:      issue.ID,
+	})
 	name := runName(issue)
 	exec := somclient.ResolveExecutorConfig(request.Body.Variant, request.Body.ModelId)
 
@@ -181,43 +198,6 @@ func (s *Server) RunSomIssue(ctx context.Context, request som.RunSomIssueRequest
 		SomEnvironmentId:   somEnvUUID,
 		RepoId:             &repoUUID,
 	}), nil
-}
-
-// buildRunPrompt дописывает к тексту issue контекст IR: адреса сервисов и
-// идентификаторы, без которых агент не сможет вернуть находки в расследование.
-func (s *Server) buildRunPrompt(ctx context.Context, issue somclient.Issue, investigationID string) string {
-	var b strings.Builder
-	b.WriteString(issue.Title)
-	if issue.Description != nil && strings.TrimSpace(*issue.Description) != "" {
-		b.WriteString("\n\n")
-		b.WriteString(*issue.Description)
-	}
-
-	b.WriteString("\n\n---\nIR context (appended by ir-api):\n")
-	writeLine := func(key, value string) {
-		if value != "" {
-			fmt.Fprintf(&b, "- %s: %s\n", key, value)
-		}
-	}
-	writeLine("ir_api_base_url", s.prompt.IRBaseURL)
-	writeLine("gateway_base_url", s.prompt.GatewayBaseURL)
-	if scope, ok := socctx.ScopeFromContext(ctx); ok {
-		writeLine("project_id (send as X-Project-ID header)", scope.ProjectID)
-	}
-	writeLine("investigation_id", investigationID)
-	writeLine("som_issue_id", issue.ID)
-
-	b.WriteString("\nHow to investigate sources and report findings back to IR:\n" +
-		"1. Use GET {ir_api_base_url}/openapi.json and GET {gateway_base_url}/openapi.yaml as the request-contract source of truth. Read the investigation's current timeline and graph with GET {ir_api_base_url}/api/v1/investigations/{investigation_id}/events and GET {ir_api_base_url}/api/v1/investigations/{investigation_id}/graph. Follow timeline pagination until the available context is exhausted.\n" +
-		"2. Search Gateway directly with POST {gateway_base_url}/api/v1/events/search. Start from the issue and attached alert, derive a bounded time window from evidence timestamps, and pivot iteratively on normalized host, IP, and other entity keys discovered in results. Keep source_code plus source_event_id/source_entity_id for every record you select.\n" +
-		"3. Persist selected discoveries with POST {ir_api_base_url}/api/v1/investigations/{investigation_id}/agent-results. You may send any number of overlapping batches while investigating. Use som_issue_ids [\"" + issue.ID + "\"] in every batch; events and entities may be submitted with empty nodes and edges to enrich the timeline without drawing them. A discovery batch can look like {\"som_issue_ids\":[\"" + issue.ID + "\"],\"events\":[{\"ref\":\"selected-event\",\"source_code\":\"...\",\"source_event_id\":\"...\"}],\"entities\":[],\"nodes\":[],\"edges\":[]}. Replaying the same source records and graph facts is idempotent.\n" +
-		"4. Before drawing the final graph, read the complete timeline and graph again. Keep useful benign or false-positive context on the timeline, but promote only evidence-backed stages and entities needed for a minimal causal explanation. A new node points to a selected record with event_ref or entity_ref. An existing graph node is reused with node_id; include it in the final batch when it must also be linked to this SOM issue. Every node has a unique batch-local ref.\n" +
-		"5. Edges address those node refs through source_ref and target_ref. evidence_event_refs contains batch-local refs of event nodes from the same batch, including event nodes reused through node_id; it never contains event selection refs, source event IDs, or database event IDs. Every edge needs a non-empty evidence-based why. IR assigns agent origin and proposed edge status.\n" +
-		"6. Submit the final graph batch, then verify both GET endpoints again.\n")
-	if s.prompt.GatewayBaseURL != "" {
-		b.WriteString("Gateway searches do not write to ir-api; only agent-results persists selected context.\n")
-	}
-	return b.String()
 }
 
 func runName(issue somclient.Issue) string {
