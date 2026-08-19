@@ -43,18 +43,16 @@ export function buildVisibleGraph(args: {
     args
 
   const range = filters.timeRange
-  const entityInTime = (entity: Entity) => {
+  const inRange = (startIso?: string, endIso?: string) => {
     if (!range) return true
-    const first = toMs(entity.first_seen)
-    const last = toMs(entity.last_seen)
+    const first = startIso ? toMs(startIso) : NaN
+    const last = endIso ? toMs(endIso) : first
+    if (!Number.isFinite(first) || !Number.isFinite(last)) return true
     return last >= range.start && first <= range.end
   }
 
-  const alertInTime = (alert: AlertNode) => {
-    if (!range) return true
-    const t = toMs(alert.event_ts)
-    return t >= range.start && t <= range.end
-  }
+  const entityInTime = (entity: Entity) => inRange(entity.first_seen, entity.last_seen)
+  const alertInTime = (alert: AlertNode) => inRange(alert.event_ts, alert.event_ts)
 
   const visibleEntities = entities.filter(
     (e) => filters.entityTypes.has(e.type_code) && entityInTime(e),
@@ -82,7 +80,10 @@ export function buildVisibleGraph(args: {
 
   const nodes: RFNode<GraphNodeData>[] = [
     ...visibleEntities.map((e) => {
-      const highlighted = hovering && hoverEntityIds.has(e.id)
+      const highlighted =
+        hovering &&
+        (hoverEntityIds.has(e.id) ||
+          (!!e.entity_id && hoverEntityIds.has(e.entity_id)))
       const dimmed = hovering && !highlighted
       return {
         id: e.id,
@@ -95,13 +96,18 @@ export function buildVisibleGraph(args: {
           entityType: e.type_code,
           dimmed,
           highlighted,
-          selected: selectedId === e.id,
-          entityId: e.id,
+          selected:
+            selectedId === e.id ||
+            (!!e.entity_id && selectedId === e.entity_id),
+          entityId: e.entity_id ?? e.id,
         },
       }
     }),
     ...visibleAlerts.map((a) => {
-      const linkedToHover = hovering && relatedAlertIds.has(a.id)
+      const linkedToHover =
+        hovering &&
+        (relatedAlertIds.has(a.id) ||
+          (!!a.event_id && relatedAlertIds.has(a.event_id)))
       const dimmed = hovering && !linkedToHover
       return {
         id: a.id,
@@ -114,8 +120,11 @@ export function buildVisibleGraph(args: {
           severity: a.severity,
           dimmed,
           highlighted: linkedToHover,
-          selected: selectedId === a.id,
-          alertId: a.id,
+          selected:
+            selectedId === a.id ||
+            (!!a.event_id &&
+              (selectedId === a.event_id || selectedId === `alert-${a.event_id}`)),
+          alertId: a.event_id ?? a.id,
         },
       }
     }),

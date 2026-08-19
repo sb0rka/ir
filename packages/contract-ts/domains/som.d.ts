@@ -84,7 +84,7 @@ export interface paths {
         put?: never;
         /**
          * Run an agent on a SOM issue
-         * @description Orchestrates a run: reads the issue from SOM, opens a relay session to the configured daemon host, starts an environment with the issue text as the prompt, then links the environment back to the issue in SOM. Stateless — nothing is persisted in IR; the ids in the response are the only handle on the run.
+         * @description Orchestrates a run: reads the issue from SOM, opens a relay session to the configured daemon host, starts an environment with the issue text as the prompt, then links the environment back to the issue in SOM. `variant` and `model_id` are forwarded as daemon `executor_config`. Stateless — nothing is persisted in IR; the ids in the response are the only handle on the run.
          */
         post: operations["runSomIssue"];
         delete?: never;
@@ -171,6 +171,10 @@ export interface components {
              * @description Investigation the agent should enrich. Passed to the agent inside the prompt so it knows where to attach found events and nodes.
              */
             investigation_id: string;
+            /** @description Daemon executor variant, e.g. DEFAULT. Omitted uses the executor's default variant. */
+            variant?: string;
+            /** @description OpenCode model id in `provider/model` form, forwarded as executor_config.model_id. Omitted value is `openrouter/deepseek/deepseek-v4-flash`. */
+            model_id?: string;
         };
         /** @description Handles of the started run. IR stores nothing about it — poll SOM or the daemon with these ids. */
         SomIssueRunResult: {

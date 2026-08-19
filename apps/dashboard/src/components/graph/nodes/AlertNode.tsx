@@ -47,7 +47,7 @@ export function AlertNode({ data }: NodeProps<AlertFlowNode>) {
           className="text-[10px] font-semibold uppercase tracking-wide"
           style={{ color }}
         >
-          {data.sublabel} alert
+          {data.sublabel}
         </div>
         <div className="line-clamp-2 text-xs font-medium leading-snug">
           {data.label}

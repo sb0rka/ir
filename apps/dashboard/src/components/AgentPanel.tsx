@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { entities, issueTemplates, useAppStore } from '../store/appStore'
+import { issueTemplates, useAppStore } from '../store/appStore'
 import { Button, Chip, Panel } from './ui'
 import { clsx, formatTime, statusLabel } from '../lib/utils'
 import {
@@ -33,6 +33,7 @@ export function AgentPanel({ investigationId }: { investigationId: string }) {
   const createIssue = useAppStore((s) => s.createIssue)
   const cancelIssue = useAppStore((s) => s.cancelIssue)
   const addComment = useAppStore((s) => s.addIssueComment)
+  const entities = useAppStore((s) => s.entities)
 
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [commentDraft, setCommentDraft] = useState('')

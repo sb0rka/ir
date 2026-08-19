@@ -1,11 +1,5 @@
-import {
-  alerts,
-  correlations,
-  entities,
-  queueOrder,
-  useAppStore,
-} from '../store/appStore'
-import type { AlertEvent, CorrelationGroup } from '../types'
+import { useAppStore } from '../store/appStore'
+import type { AlertEvent, CorrelationGroup, Entity } from '../types'
 import { Button, Chip, SeverityBadge } from './ui'
 import { clsx, formatTime, statusLabel } from '../lib/utils'
 import { fieldForEntityKind, matchesChips } from '../lib/filters'
@@ -14,9 +8,11 @@ import { ChevronDown, ChevronRight, Layers, Play } from 'lucide-react'
 function EntityChips({
   entityIds,
   max = 4,
+  entities,
 }: {
   entityIds: string[]
   max?: number
+  entities: Record<string, Entity>
 }) {
   const addChip = useAppStore((s) => s.addChip)
   const shown = entityIds.slice(0, max)
@@ -51,9 +47,11 @@ function EntityChips({
 function AlertRow({
   alert,
   nested,
+  entities,
 }: {
   alert: AlertEvent
   nested?: boolean
+  entities: Record<string, Entity>
 }) {
   const selected = useAppStore((s) => s.selectedAlertIds.includes(alert.id))
   const toggle = useAppStore((s) => s.toggleAlertSelect)
@@ -86,7 +84,7 @@ function AlertRow({
         <div className="text-xs text-fg-dim">{alert.rule}</div>
       </td>
       <td className="px-3 py-2">
-        <EntityChips entityIds={alert.entityIds} />
+        <EntityChips entityIds={alert.entityIds} entities={entities} />
       </td>
       <td className="px-3 py-2">
         <span className="rounded border border-border px-1.5 py-0.5 font-mono text-[11px]">
@@ -109,7 +107,15 @@ function AlertRow({
   )
 }
 
-function CorrelationRow({ group }: { group: CorrelationGroup }) {
+function CorrelationRow({
+  group,
+  alerts,
+  entities,
+}: {
+  group: CorrelationGroup
+  alerts: Record<string, AlertEvent>
+  entities: Record<string, Entity>
+}) {
   const expanded = useAppStore((s) => s.expandedCorrelationIds.includes(group.id))
   const toggleExpand = useAppStore((s) => s.toggleCorrelationExpand)
   const selected = useAppStore((s) => s.selectedAlertIds.includes(group.id))
@@ -164,7 +170,7 @@ function CorrelationRow({ group }: { group: CorrelationGroup }) {
           </button>
         </td>
         <td className="px-3 py-2.5">
-          <EntityChips entityIds={group.entityIds} max={5} />
+          <EntityChips entityIds={group.entityIds} max={5} entities={entities} />
         </td>
         <td className="px-3 py-2.5">
           <div className="flex flex-wrap gap-1">
@@ -189,7 +195,7 @@ function CorrelationRow({ group }: { group: CorrelationGroup }) {
       {expanded &&
         group.eventIds.map((eid) => {
           const a = alerts[eid]
-          return a ? <AlertRow key={eid} alert={a} nested /> : null
+          return a ? <AlertRow key={eid} alert={a} nested entities={entities} /> : null
         })}
     </>
   )
@@ -200,27 +206,32 @@ export function AlertTable() {
   const selected = useAppStore((s) => s.selectedAlertIds)
   const start = useAppStore((s) => s.startInvestigation)
   const clear = useAppStore((s) => s.clearAlertSelection)
+  const alerts = useAppStore((s) => s.alerts)
+  const correlations = useAppStore((s) => s.correlations)
+  const queueOrder = useAppStore((s) => s.queueOrder)
+  const entities = useAppStore((s) => s.entities)
+  const loading = useAppStore((s) => s.queueLoading)
 
   const rows = queueOrder.filter((item) => {
     if (item.kind === 'correlation') {
       const g = correlations[item.id]
       if (!g) return false
-      // Match if any member matches, or group entities match
       const groupMatch = matchesChips(
         g.entityIds,
         g.severity,
-        Object.keys(g.sourceCounts)[0] ?? 'EDR',
+        Object.keys(g.sourceCounts)[0] ?? '',
         g.status,
         chips,
+        entities,
       )
       if (groupMatch) return true
       return g.eventIds.some((eid) => {
         const a = alerts[eid]
-        return a && matchesChips(a.entityIds, a.severity, a.source, a.status, chips)
+        return a && matchesChips(a.entityIds, a.severity, a.source, a.status, chips, entities)
       })
     }
     const a = alerts[item.id]
-    return a && matchesChips(a.entityIds, a.severity, a.source, a.status, chips)
+    return a && matchesChips(a.entityIds, a.severity, a.source, a.status, chips, entities)
   })
 
   const criticalCount = rows.filter((r) => {
@@ -237,6 +248,7 @@ export function AlertTable() {
         <div className="flex items-center gap-3 text-sm">
           <span className="text-fg-muted">
             Срабатываний: <span className="text-fg">{rows.length}</span>
+            {loading && <span className="ml-2 text-fg-dim">загрузка…</span>}
           </span>
           <span className="text-fg-muted">
             critical/high: <span className="text-high">{criticalCount}</span>
@@ -272,9 +284,14 @@ export function AlertTable() {
           <tbody>
             {rows.map((item) =>
               item.kind === 'correlation' ? (
-                <CorrelationRow key={item.id} group={correlations[item.id]} />
+                <CorrelationRow
+                  key={item.id}
+                  group={correlations[item.id]}
+                  alerts={alerts}
+                  entities={entities}
+                />
               ) : (
-                <AlertRow key={item.id} alert={alerts[item.id]} />
+                <AlertRow key={item.id} alert={alerts[item.id]} entities={entities} />
               ),
             )}
             {rows.length === 0 && (

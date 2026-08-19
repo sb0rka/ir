@@ -1,0 +1,362 @@
+import type {
+  AlertEvent,
+  ContextEvent,
+  CorrelationGroup,
+  Entity,
+  EntityKind,
+  EventOrigin,
+  GraphEdge,
+  GraphNode,
+  Investigation,
+  QueueItem,
+  ReviewState,
+  Severity,
+} from '../types'
+import type { components as Ir } from '@ir/contract'
+import type { components as Gw } from '@ir/contract/gateway'
+
+type GwEvent = Gw['schemas']['Event']
+type GwEntity = Gw['schemas']['Entity']
+type IrEvent = Ir['schemas']['EventSummary']
+type IrEntity = Ir['schemas']['Entity']
+type IrNode = Ir['schemas']['GraphNode']
+type IrEdge = Ir['schemas']['GraphEdge']
+type IrInvestigation = Ir['schemas']['Investigation']
+
+const SEVERITY_ORDER: Severity[] = ['critical', 'high', 'medium', 'low', 'info']
+
+export function gatewayEventId(event: Pick<GwEvent, 'source_code' | 'source_event_id'>): string {
+  return `${event.source_code}/${event.source_event_id}`
+}
+
+export function parseGatewayEventId(
+  id: string,
+): { source_code: string; source_event_id: string } | null {
+  const idx = id.indexOf('/')
+  if (idx <= 0) return null
+  return { source_code: id.slice(0, idx), source_event_id: id.slice(idx + 1) }
+}
+
+export function gatewayEntityId(entity: { type: string; value: string }): string {
+  return `${entity.type}:${entity.value}`
+}
+
+export function mapSeverity(value: string | undefined | null): Severity {
+  if (value === 'critical' || value === 'high' || value === 'medium' || value === 'low' || value === 'info') {
+    return value
+  }
+  return 'info'
+}
+
+export function mapEntityKind(value: string | undefined | null): EntityKind {
+  switch (value) {
+    case 'host':
+    case 'user':
+    case 'process':
+    case 'file_hash':
+    case 'ip':
+    case 'domain':
+    case 'email':
+    case 'account':
+    case 'url':
+      return value
+    case 'file':
+      return 'file_hash'
+    default:
+      return 'host'
+  }
+}
+
+export function mapOrigin(value: string | undefined | null): EventOrigin {
+  if (value === 'agent' || value === 'analyst' || value === 'rule' || value === 'seed') return value
+  if (value === 'system') return 'seed'
+  return 'seed'
+}
+
+function stringifyAttrs(value: Record<string, unknown> | undefined): Record<string, string> {
+  if (!value) return {}
+  const out: Record<string, string> = {}
+  for (const [k, v] of Object.entries(value)) {
+    if (v == null) continue
+    out[k] = typeof v === 'string' ? v : JSON.stringify(v)
+  }
+  return out
+}
+
+export function mapGatewayEntity(entity: GwEntity): Entity {
+  const id = gatewayEntityId(entity)
+  return {
+    id,
+    kind: mapEntityKind(entity.type),
+    label: entity.value,
+    attributes: stringifyAttrs(entity.attributes as Record<string, unknown> | undefined),
+  }
+}
+
+export function mapIrEntity(entity: IrEntity): Entity {
+  return {
+    id: entity.id,
+    kind: mapEntityKind(entity.type_code),
+    label: entity.display_name || entity.canonical_key,
+    attributes: {
+      canonical_key: entity.canonical_key,
+      type_code: entity.type_code,
+      ...stringifyAttrs(entity.metadata as Record<string, unknown> | undefined),
+    },
+    firstSeen: entity.first_seen ?? undefined,
+    lastSeen: entity.last_seen ?? undefined,
+  }
+}
+
+export function mapGatewayEvent(
+  event: GwEvent,
+  entityIds: string[],
+): AlertEvent {
+  const attrs = stringifyAttrs(event.attributes as Record<string, unknown> | undefined)
+  return {
+    id: gatewayEventId(event),
+    time: event.occurred_at,
+    severity: mapSeverity(event.severity),
+    title: event.title,
+    rule: attrs.correlation_name || event.type,
+    source: event.source_code,
+    status: 'new',
+    entityIds,
+    description: event.title,
+    raw: attrs,
+    sourceEventId: event.source_event_id,
+  }
+}
+
+export function mapGatewayContextEvent(
+  event: GwEvent,
+  entityIds: string[],
+): ContextEvent {
+  const alert = mapGatewayEvent(event, entityIds)
+  return {
+    id: alert.id,
+    time: alert.time,
+    severity: alert.severity,
+    title: alert.title,
+    type: event.type,
+    source: alert.source,
+    entityIds,
+    origin: event.type === 'correlation_alert' ? 'seed' : 'seed',
+    review: 'confirmed',
+    description: alert.description,
+    sourceEventId: event.source_event_id,
+  }
+}
+
+function severityFromNormalized(data: Record<string, unknown> | undefined): Severity {
+  const raw = data?.severity
+  return mapSeverity(typeof raw === 'string' ? raw : undefined)
+}
+
+export function mapIrEvent(event: IrEvent, entityIds: string[]): ContextEvent {
+  const origin = mapOrigin(event.attached_by)
+  const review: ReviewState = origin === 'agent' || origin === 'rule' ? 'proposed' : 'confirmed'
+  return {
+    id: event.id,
+    time: event.occurred_at,
+    severity: severityFromNormalized(event.normalized_data as Record<string, unknown> | undefined),
+    title: event.title,
+    type: event.event_type,
+    source: event.source_code,
+    entityIds,
+    origin,
+    review,
+    description: event.reason || event.title,
+    sourceEventId: event.source_event_id,
+  }
+}
+
+export function mapIrInvestigation(
+  inv: IrInvestigation,
+  extras?: Partial<Investigation>,
+): Investigation {
+  return {
+    id: inv.id,
+    title: inv.title,
+    severity: mapSeverity(inv.severity),
+    status: inv.status === 'closed' ? 'closed' : 'open',
+    parentId: inv.parent_id ?? undefined,
+    assignee: 'аналитик',
+    seedEventIds: extras?.seedEventIds ?? [],
+    eventIds: extras?.eventIds ?? [],
+    entityIds: extras?.entityIds ?? [],
+    nodeIds: extras?.nodeIds ?? [],
+    edgeIds: extras?.edgeIds ?? [],
+    findingIds: extras?.findingIds ?? [],
+    issueIds: extras?.issueIds ?? [],
+    createdAt: inv.created_at,
+    view: extras?.view ?? 'graph',
+    selectedEntityIds: extras?.selectedEntityIds ?? [],
+    version: inv.version,
+    somWorkspaceIds: inv.som_workspace_ids,
+  }
+}
+
+const LAYOUT_KEY = (investigationId: string) => `ir.layout.${investigationId}`
+
+export function loadLayout(investigationId: string): Record<string, { x: number; y: number }> {
+  try {
+    const raw = localStorage.getItem(LAYOUT_KEY(investigationId))
+    if (!raw) return {}
+    return JSON.parse(raw) as Record<string, { x: number; y: number }>
+  } catch {
+    return {}
+  }
+}
+
+export function saveLayout(
+  investigationId: string,
+  positions: Record<string, { x: number; y: number }>,
+): void {
+  try {
+    localStorage.setItem(LAYOUT_KEY(investigationId), JSON.stringify(positions))
+  } catch {
+    /* ignore */
+  }
+}
+
+function hashOffset(id: string): number {
+  let h = 0
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) | 0
+  return (Math.abs(h) % 80) - 40
+}
+
+export function layoutGraph(
+  investigationId: string,
+  nodes: GraphNode[],
+): GraphNode[] {
+  const saved = loadLayout(investigationId)
+  const events = nodes
+    .filter((n) => n.kind === 'event')
+    .slice()
+    .sort((a, b) => a.label.localeCompare(b.label))
+  const entities = nodes.filter((n) => n.kind !== 'event')
+  const byKind = new Map<string, GraphNode[]>()
+  for (const n of entities) {
+    const list = byKind.get(n.kind) ?? []
+    list.push(n)
+    byKind.set(n.kind, list)
+  }
+
+  const positioned = new Map<string, GraphNode>()
+  events.forEach((n, i) => {
+    const pos = saved[n.id] ?? { x: 80 + i * 220, y: 280 }
+    positioned.set(n.id, { ...n, x: pos.x, y: pos.y })
+  })
+
+  let kindIndex = 0
+  for (const group of byKind.values()) {
+    group.forEach((n, i) => {
+      const pos = saved[n.id] ?? {
+        x: 80 + i * 200 + hashOffset(n.id),
+        y: 40 + kindIndex * 140,
+      }
+      positioned.set(n.id, { ...n, x: pos.x, y: pos.y })
+    })
+    kindIndex += 1
+  }
+
+  return nodes.map((n) => positioned.get(n.id) ?? n)
+}
+
+export function mapGraphNode(node: IrNode): GraphNode {
+  const isEvent = node.node_type === 'event'
+  const review: ReviewState = node.origin === 'analyst' ? 'confirmed' : 'proposed'
+  return {
+    id: node.id,
+    kind: isEvent ? 'event' : mapEntityKind(node.type_code),
+    refId: (isEvent ? node.event_id : node.entity_id) || node.id,
+    label: node.label || node.canonical_key || node.id,
+    review,
+    x: 0,
+    y: 0,
+    origin: mapOrigin(node.origin),
+    occurredAt: node.occurred_at ?? undefined,
+  }
+}
+
+export function mapGraphEdge(edge: IrEdge): GraphEdge {
+  return {
+    id: edge.id,
+    source: edge.source_node_id,
+    target: edge.target_node_id,
+    relation: edge.relation_code,
+    review: edge.status,
+    rationale: edge.why ?? undefined,
+    version: edge.version,
+    origin: mapOrigin(edge.origin),
+  }
+}
+
+export function groupQueue(
+  events: AlertEvent[],
+  _entitiesById: Record<string, Entity>,
+): { correlations: Record<string, CorrelationGroup>; queueOrder: QueueItem[] } {
+  const alerts = new Map(events.map((e) => [e.id, e]))
+  const correlationAlerts = events.filter(
+    (event) => event.raw?.correlation_name || event.rule === 'correlation_alert',
+  )
+  const groupedIds = new Set<string>()
+  const correlations: Record<string, CorrelationGroup> = {}
+  const queueOrder: QueueItem[] = []
+
+  for (const seed of correlationAlerts) {
+    const name = seed.raw?.correlation_name || seed.title
+    const id = `corr:${name}`
+    if (correlations[id]) {
+      if (!correlations[id].eventIds.includes(seed.id)) {
+        correlations[id].eventIds.push(seed.id)
+      }
+      groupedIds.add(seed.id)
+      continue
+    }
+    const members = events.filter(
+      (event) =>
+        event.id === seed.id ||
+        event.entityIds.some((eid) => seed.entityIds.includes(eid)),
+    )
+    const entityIds = [...new Set(members.flatMap((m) => m.entityIds))]
+    const sourceCounts: CorrelationGroup['sourceCounts'] = {}
+    for (const m of members) {
+      sourceCounts[m.source] = (sourceCounts[m.source] ?? 0) + 1
+    }
+    const severity =
+      members
+        .map((m) => m.severity)
+        .sort((a, b) => SEVERITY_ORDER.indexOf(a) - SEVERITY_ORDER.indexOf(b))[0] ?? 'high'
+    const latest = members.slice().sort((a, b) => b.time.localeCompare(a.time))[0]
+    correlations[id] = {
+      id,
+      title: name,
+      reason: seed.title,
+      severity,
+      time: latest?.time ?? seed.time,
+      status: 'new',
+      sourceCounts,
+      eventIds: members.map((m) => m.id),
+      entityIds,
+    }
+    members.forEach((m) => groupedIds.add(m.id))
+    queueOrder.push({ kind: 'correlation', id })
+  }
+
+  for (const event of events) {
+    if (groupedIds.has(event.id)) continue
+    queueOrder.push({ kind: 'alert', id: event.id })
+  }
+
+  queueOrder.sort((a, b) => {
+    const timeOf = (item: QueueItem) =>
+      item.kind === 'correlation'
+        ? correlations[item.id]?.time ?? ''
+        : alerts.get(item.id)?.time ?? ''
+    return timeOf(b).localeCompare(timeOf(a))
+  })
+
+  return { correlations, queueOrder }
+}

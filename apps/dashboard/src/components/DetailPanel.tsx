@@ -1,9 +1,4 @@
-import {
-  contextEvents,
-  entities,
-  graphNodes,
-  useAppStore,
-} from '../store/appStore'
+import { useAppStore } from '../store/appStore'
 import { Button, Chip, Panel, SeverityBadge } from './ui'
 import { formatTime, kindLabel, statusLabel } from '../lib/utils'
 import {
@@ -30,6 +25,9 @@ export function DetailPanel({ investigationId }: { investigationId: string }) {
   const nodeReviews = useAppStore((s) => s.nodeReviews)
   const eventReviews = useAppStore((s) => s.eventReviews)
   const setReview = useAppStore((s) => s.setReview)
+  const graphNodes = useAppStore((s) => s.graphNodes)
+  const entities = useAppStore((s) => s.entities)
+  const contextEvents = useAppStore((s) => s.contextEvents)
 
   if (!inv || !detailPanelOpen) return null
 
@@ -200,7 +198,7 @@ export function DetailPanel({ investigationId }: { investigationId: string }) {
                 >
                   <Plus className="h-3 w-3" /> В находки
                 </Button>
-                {(entity.kind === 'process' || entity.kind === 'file') && (
+                {(entity.kind === 'process' || entity.kind === 'file_hash') && (
                   <Button
                     size="sm"
                     onClick={() => runEntityAction(entity.id, 'decode')}
@@ -208,7 +206,7 @@ export function DetailPanel({ investigationId }: { investigationId: string }) {
                     <Binary className="h-3 w-3" /> Декодировать
                   </Button>
                 )}
-                {(entity.kind === 'file' || entity.attributes.hash) && (
+                {(entity.kind === 'file_hash' || entity.attributes.hash) && (
                   <Button
                     size="sm"
                     onClick={() => runEntityAction(entity.id, 'sandbox')}

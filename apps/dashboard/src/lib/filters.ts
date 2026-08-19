@@ -1,5 +1,4 @@
-import { entities } from '../mocks/scenario'
-import type { EntityKind, FilterChip, FilterField } from '../types'
+import type { Entity, EntityKind, FilterChip, FilterField } from '../types'
 
 /** Chip filter semantics shared by the global queue and investigation queues. */
 export function matchesChips(
@@ -8,6 +7,7 @@ export function matchesChips(
   source: string,
   status: string,
   chips: FilterChip[],
+  entities: Record<string, Entity>,
 ): boolean {
   if (chips.length === 0) return true
   const ents = entityIds.map((id) => entities[id]).filter(Boolean)
@@ -27,7 +27,9 @@ export function matchesChips(
         )
       case 'user':
         return ents.some(
-          (e) => e.kind === 'user' && vals.includes(e.label.toLowerCase()),
+          (e) =>
+            (e.kind === 'user' || e.kind === 'account') &&
+            vals.includes(e.label.toLowerCase()),
         )
       case 'process':
         return ents.some(
@@ -40,15 +42,17 @@ export function matchesChips(
       case 'domain':
         return ents.some(
           (e) =>
-            (e.kind === 'domain' || e.kind === 'email') &&
+            (e.kind === 'domain' || e.kind === 'email' || e.kind === 'url') &&
             vals.some((v) => e.label.toLowerCase().includes(v.replace(/[\[\]]/g, ''))),
         )
       case 'hash':
         return ents.some((e) =>
           vals.some(
             (v) =>
+              e.kind === 'file_hash' ||
               e.attributes.hash?.toLowerCase().includes(v) ||
-              e.attributes.hash?.toLowerCase() === v,
+              e.attributes.hash?.toLowerCase() === v ||
+              e.label.toLowerCase().includes(v),
           ),
         )
       default:
@@ -63,13 +67,18 @@ export function fieldForEntityKind(kind: EntityKind): FilterField | null {
     case 'host':
       return 'host'
     case 'user':
+    case 'account':
       return 'user'
     case 'process':
       return 'process'
     case 'ip':
       return 'ip'
     case 'domain':
+    case 'url':
+    case 'email':
       return 'domain'
+    case 'file_hash':
+      return 'hash'
     default:
       return null
   }

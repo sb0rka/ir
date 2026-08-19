@@ -1,10 +1,6 @@
 import { useState } from 'react'
-import {
-  filterFieldLabels,
-  filterValueOptions,
-  savedViews,
-  useAppStore,
-} from '../store/appStore'
+import { savedViews, useAppStore } from '../store/appStore'
+import { filterFieldLabels } from '../lib/catalog'
 import type { FilterChip as FilterChipModel, FilterField } from '../types'
 import { Button, Chip } from './ui'
 import { clsx } from '../lib/utils'
@@ -31,8 +27,13 @@ export interface FilterBarProps {
   onApplySavedView?: (id: string) => void
   /** Recently applied filters, most recent first. Click re-applies. */
   history?: Array<{ field: FilterField; value: string }>
-  /** Extra controls rendered after the time presets. */
   extra?: React.ReactNode
+  query?: string
+  onQueryChange?: (query: string) => void
+}
+
+function useFilterOptions() {
+  return useAppStore((s) => s.filterValueOptions)
 }
 
 /**
@@ -50,7 +51,10 @@ export function FilterBar({
   onApplySavedView,
   history,
   extra,
+  query,
+  onQueryChange,
 }: FilterBarProps) {
+  const filterValueOptions = useFilterOptions()
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchField, setSearchFieldRaw] = useState<FilterField | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
@@ -81,6 +85,11 @@ export function FilterBar({
           onClick={() => setSearchOpen(true)}
         >
           <Search className="h-3.5 w-3.5 text-fg-dim" />
+          {query && onQueryChange && (
+            <Chip onRemove={() => onQueryChange('')}>
+              <span className="text-fg-muted">q:</span> {query}
+            </Chip>
+          )}
           {chips.map((chip) => (
             <Chip key={chip.id} onRemove={() => onRemoveChip(chip.id)}>
               <span className="text-fg-muted">{filterFieldLabels[chip.field]}:</span>{' '}
@@ -111,14 +120,23 @@ export function FilterBar({
               setSearchQuery(e.target.value)
             }}
             onFocus={() => setSearchOpen(true)}
+            onKeyDown={(e) => {
+              if (e.key !== 'Enter' || !searchQuery.trim()) return
+              if (!searchField && onQueryChange) {
+                onQueryChange(searchQuery.trim())
+                setSearchQuery('')
+                setSearchOpen(false)
+              }
+            }}
           />
-          {chips.length > 0 && (
+          {(chips.length > 0 || query) && (
             <button
               type="button"
               className="text-fg-dim hover:text-fg"
               onClick={(e) => {
                 e.stopPropagation()
                 onClearChips()
+                onQueryChange?.('')
               }}
             >
               <X className="h-3.5 w-3.5" />
@@ -252,11 +270,15 @@ export function GlobalFilterBar() {
   const setChips = useAppStore((s) => s.setChips)
   const setTimePreset = useAppStore((s) => s.setTimePreset)
   const applySavedView = useAppStore((s) => s.applySavedView)
+  const queueQuery = useAppStore((s) => s.queueQuery)
+  const setQueueQuery = useAppStore((s) => s.setQueueQuery)
 
   return (
     <FilterBar
       chips={chips}
       timePreset={timePreset}
+      query={queueQuery}
+      onQueryChange={setQueueQuery}
       onAddChip={addChip}
       onRemoveChip={removeChip}
       onRemoveChipValue={removeChipValue}

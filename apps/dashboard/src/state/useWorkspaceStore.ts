@@ -16,13 +16,7 @@ import type {
   Selection,
   Severity,
 } from '../components/graph/types'
-import {
-  contextEvents,
-  entities as mockEntities,
-  graphEdges as mockGraphEdges,
-  graphNodes as mockGraphNodes,
-  useAppStore,
-} from '../store/appStore'
+import { persistNodePosition, useAppStore } from '../store/appStore'
 import type { Investigation } from '../types'
 
 function mapEntityType(kind: string): EntityTypeCode {
@@ -30,16 +24,19 @@ function mapEntityType(kind: string): EntityTypeCode {
     case 'host':
       return 'host'
     case 'user':
+    case 'account':
       return 'user'
     case 'process':
       return 'process'
     case 'ip':
       return 'ip'
+    case 'file_hash':
     case 'file':
       return 'file_hash'
     case 'domain':
       return 'domain'
     case 'email':
+    case 'url':
       return 'url'
     default:
       return 'host'
@@ -71,104 +68,96 @@ function defaultFilters(windowStart: string, windowEnd: string): GraphSessionFil
   }
 }
 
-function buildFromApp(inv: Investigation): GraphInvestigation {
-  const reviews = useAppStore.getState().nodeReviews
-  const edgeReviews = useAppStore.getState().edgeReviews
-  const eventReviews = useAppStore.getState().eventReviews
+function collectTimes(values: Array<string | undefined>): number[] {
+  const times: number[] = []
+  for (const value of values) {
+    if (!value) continue
+    const t = new Date(value).getTime()
+    if (Number.isFinite(t)) times.push(t)
+  }
+  return times
+}
 
-  const entityNodes = inv.nodeIds
-    .map((id) => mockGraphNodes[id])
+function buildFromApp(inv: Investigation): GraphInvestigation {
+  const app = useAppStore.getState()
+  const reviews = app.nodeReviews
+  const edgeReviews = app.edgeReviews
+  const eventReviews = app.eventReviews
+  const graphNodes = app.graphNodes
+  const storeEntities = app.entities
+  const storeEdges = app.graphEdges
+  const contextEvents = app.contextEvents
+
+  const visibleGraphNodes = inv.nodeIds
+    .map((id) => graphNodes[id])
     .filter(Boolean)
-    .filter((n) => n.kind !== 'event')
     .filter((n) => (reviews[n.id] ?? n.review) !== 'rejected')
 
-  const entities: Entity[] = entityNodes.map((n) => {
-    const src = mockEntities[n.refId]
+  const entityGraphNodes = visibleGraphNodes.filter((n) => n.kind !== 'event')
+  const eventGraphNodes = visibleGraphNodes.filter((n) => n.kind === 'event')
+
+  const entities: Entity[] = entityGraphNodes.map((n) => {
+    const src = storeEntities[n.refId]
     const review = reviews[n.id] ?? n.review
     return {
-      id: n.refId,
+      id: n.id,
+      entity_id: n.refId,
       type_code: mapEntityType(n.kind),
-      key: src?.attributes.hash ?? src?.attributes.ip ?? n.label,
+      key: src?.attributes.canonical_key ?? src?.attributes.hash ?? src?.attributes.ip ?? n.label,
       display_name: src?.label ?? n.label,
-      first_seen: '2026-08-12T13:50:00Z',
-      last_seen: '2026-08-12T14:35:00Z',
+      first_seen: src?.firstSeen,
+      last_seen: src?.lastSeen,
       metadata: {
         ...(src?.attributes ?? {}),
         review,
         node_id: n.id,
+        entity_id: n.refId,
       },
       position: { x: n.x, y: n.y },
     }
   })
 
-  // Alert nodes from critical/high seed context events
-  const alerts: AlertNode[] = inv.eventIds
-    .map((id) => contextEvents[id])
-    .filter(Boolean)
-    .filter((ev) => ev.severity === 'critical' || ev.severity === 'high')
-    .filter((ev) => (eventReviews[ev.id] ?? ev.review) !== 'rejected')
-    .slice(0, 4)
-    .map((ev, i) => ({
-      id: `alert-${ev.id}`,
-      title: ev.title,
-      severity: mapSeverity(ev.severity),
-      event_ts: ev.time,
-      source: ev.source,
-      description: ev.description,
-      position: { x: 120 + i * 160, y: -40 },
-    }))
+  const alerts: AlertNode[] = eventGraphNodes.map((n) => {
+    const ev = contextEvents[n.refId]
+    return {
+      id: n.id,
+      event_id: n.refId,
+      title: ev?.title ?? n.label,
+      severity: mapSeverity(ev?.severity ?? 'low'),
+      event_ts: ev?.time ?? n.occurredAt ?? '',
+      source: ev?.source ?? '',
+      description: ev?.description ?? n.label,
+      position: { x: n.x, y: n.y },
+    }
+  })
 
-  const entityIdSet = new Set(entities.map((e) => e.id))
-  const alertIdSet = new Set(alerts.map((a) => a.id))
-
-  // Map graph node ids → entity/alert ids for edges
-  const nodeToEndpoint = new Map<string, string>()
-  for (const n of entityNodes) {
-    nodeToEndpoint.set(n.id, n.refId)
-  }
+  const canvasIds = new Set([
+    ...entities.map((e) => e.id),
+    ...alerts.map((a) => a.id),
+  ])
 
   const edges: Edge[] = inv.edgeIds
-    .map((id) => mockGraphEdges[id])
+    .map((id) => storeEdges[id])
     .filter(Boolean)
     .filter((e) => (edgeReviews[e.id] ?? e.review) !== 'rejected')
     .map((e) => {
       const review = edgeReviews[e.id] ?? e.review
-      const source = nodeToEndpoint.get(e.source) ?? e.source
-      const target = nodeToEndpoint.get(e.target) ?? e.target
       const origin: EdgeOrigin = review === 'proposed' || e.rationale ? 'expanded' : 'seed'
       return {
         id: e.id,
-        source_id: source,
-        target_id: target,
+        source_id: e.source,
+        target_id: e.target,
         kind: e.relation,
         origin,
         status: review,
         confidence: review === 'confirmed' ? 0.92 : review === 'proposed' ? 0.65 : 0.2,
-        expand_from: origin === 'expanded' ? source : undefined,
+        expand_from: origin === 'expanded' ? e.source : undefined,
       }
     })
-    .filter(
-      (e) =>
-        (entityIdSet.has(e.source_id) || alertIdSet.has(e.source_id)) &&
-        (entityIdSet.has(e.target_id) || alertIdSet.has(e.target_id)),
-    )
+    .filter((e) => canvasIds.has(e.source_id) && canvasIds.has(e.target_id))
 
-  // Link alerts to first related entity visually via edges
-  for (const alert of alerts) {
-    const evId = alert.id.replace(/^alert-/, '')
-    const ev = contextEvents[evId]
-    const firstEnt = ev?.entityIds.find((id) => entityIdSet.has(id))
-    if (!firstEnt) continue
-    edges.push({
-      id: `edge-alert-${alert.id}`,
-      source_id: alert.id,
-      target_id: firstEnt,
-      kind: 'triggered',
-      origin: 'seed',
-      status: 'confirmed',
-      confidence: 0.9,
-    })
-  }
+  const entityNodeByRef = new Map(entityGraphNodes.map((n) => [n.refId, n.id]))
+  const eventNodeByRef = new Map(eventGraphNodes.map((n) => [n.refId, n.id]))
 
   const events: EventRef[] = inv.eventIds
     .map((id) => contextEvents[id])
@@ -183,20 +172,21 @@ function buildFromApp(inv: Investigation): GraphInvestigation {
       title: ev.title,
       severity: mapSeverity(ev.severity),
       summary: ev.description,
-      entity_ids: ev.entityIds.filter((id) => entityIdSet.has(id)),
-      alert_id:
-        ev.severity === 'critical' || ev.severity === 'high'
-          ? `alert-${ev.id}`
-          : undefined,
+      entity_ids: ev.entityIds
+        .map((id) => entityNodeByRef.get(id))
+        .filter((id): id is string => Boolean(id)),
+      alert_id: eventNodeByRef.get(ev.id),
     }))
 
-  const times = events.map((e) => new Date(e.event_ts).getTime())
-  const windowStart = new Date(
-    (times.length ? Math.min(...times) : Date.parse('2026-08-12T13:50:00Z')) - 5 * 60_000,
-  ).toISOString()
-  const windowEnd = new Date(
-    (times.length ? Math.max(...times) : Date.parse('2026-08-12T14:40:00Z')) + 5 * 60_000,
-  ).toISOString()
+  const times = collectTimes([
+    ...events.map((e) => e.event_ts),
+    ...entities.flatMap((e) => [e.first_seen, e.last_seen]),
+    ...alerts.map((a) => a.event_ts),
+  ])
+  const minT = times.length ? Math.min(...times) : Date.now()
+  const maxT = times.length ? Math.max(...times) : Date.now()
+  const windowStart = new Date(minT - 5 * 60_000).toISOString()
+  const windowEnd = new Date(maxT + 5 * 60_000).toISOString()
 
   const running = inv.issueIds.some(
     (id) => useAppStore.getState().issues[id]?.status === 'running',
@@ -270,7 +260,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     }
     const inv = useAppStore.getState().investigations[investigationId]
     if (!inv) {
-      set({ activeInvestigation: null, boundInvestigationId: null })
+      set({ activeInvestigation: null, boundInvestigationId: investigationId })
       return
     }
     const prev = get().activeInvestigation
@@ -313,7 +303,9 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     if (selection) app.setDetailPanelOpen(true)
 
     if (selection?.kind === 'entity') {
-      const nodeId = Object.values(mockGraphNodes).find((n) => n.refId === selection.id)?.id
+      const app = useAppStore.getState()
+    const mockGraphNodes = app.graphNodes
+    const nodeId = Object.values(mockGraphNodes).find((n) => n.refId === selection.id)?.id
       app.updateInvestigation(invId, {
         selectedNodeId: nodeId,
         selectedEventId: undefined,
@@ -327,8 +319,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
         selectedNodeId: undefined,
       })
     } else if (selection?.kind === 'alert') {
-      // Alert nodes are keyed as alert-<contextEventId>
       const eventId = selection.id.replace(/^alert-/, '')
+      const contextEvents = useAppStore.getState().contextEvents
       app.updateInvestigation(invId, {
         selectedEventId: contextEvents[eventId] ? eventId : undefined,
         selectedNodeId: undefined,
@@ -414,10 +406,14 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     // Expandable if any mock edge from this entity leads to a node not yet in the graph
     const inv = get().activeInvestigation
     if (!inv) return false
-    const present = new Set(inv.entities.map((e) => e.id))
-    return Object.values(mockGraphEdges).some((e) => {
-      const src = mockGraphNodes[e.source]
-      const tgt = mockGraphNodes[e.target]
+    const present = new Set([
+      ...inv.entities.map((e) => e.entity_id ?? e.id),
+      ...inv.alerts.map((a) => a.event_id ?? a.id),
+    ])
+    const { graphNodes, graphEdges } = useAppStore.getState()
+    return Object.values(graphEdges).some((e) => {
+      const src = graphNodes[e.source]
+      const tgt = graphNodes[e.target]
       if (!src || !tgt) return false
       const touches = src.refId === entityId || tgt.refId === entityId
       if (!touches) return false
@@ -439,6 +435,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     const presentEdges = new Set(appInv.edgeIds)
     const addNodes: string[] = []
     const addEdges: string[] = []
+
+    const { graphNodes: mockGraphNodes, graphEdges: mockGraphEdges } = useAppStore.getState()
 
     for (const e of Object.values(mockGraphEdges)) {
       const src = mockGraphNodes[e.source]
@@ -482,6 +480,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     if (!invId || !appInv) return
 
     // Remove nodes that were only connected via expand from this entity and are proposed
+    const { graphNodes: mockGraphNodes, graphEdges: mockGraphEdges } = useAppStore.getState()
     const removeNodes = new Set<string>()
     for (const eid of appInv.edgeIds) {
       const e = mockGraphEdges[eid]
@@ -517,6 +516,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   updateNodePosition: (nodeId, position) => {
     const inv = get().activeInvestigation
     if (!inv) return
+    persistNodePosition(inv.id, nodeId, position)
     set({
       activeInvestigation: {
         ...inv,
@@ -543,7 +543,9 @@ useAppStore.subscribe((state, prev) => {
     state.nodeReviews !== prev.nodeReviews ||
     state.edgeReviews !== prev.edgeReviews ||
     state.eventReviews !== prev.eventReviews ||
-    state.issues !== prev.issues
+    state.issues !== prev.issues ||
+    state.graphNodes !== prev.graphNodes ||
+    state.graphEdges !== prev.graphEdges
   ) {
     useWorkspaceStore.getState().refreshFromApp()
   }

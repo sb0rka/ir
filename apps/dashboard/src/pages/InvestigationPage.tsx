@@ -13,6 +13,12 @@ export function InvestigationPage({ investigationId }: { investigationId: string
   const detailPanelOpen = useAppStore((s) => s.detailPanelOpen)
   const agentPanelOpen = useAppStore((s) => s.agentPanelOpen)
   const bindInvestigation = useWorkspaceStore((s) => s.bindInvestigation)
+  const loadInvestigation = useAppStore((s) => s.loadInvestigation)
+  const loading = useAppStore((s) => s.investigationLoading)
+
+  useEffect(() => {
+    void loadInvestigation(investigationId)
+  }, [investigationId, loadInvestigation])
 
   useEffect(() => {
     bindInvestigation(investigationId)
@@ -22,7 +28,7 @@ export function InvestigationPage({ investigationId }: { investigationId: string
   if (!inv) {
     return (
       <div className="flex h-full items-center justify-center text-fg-dim">
-        Расследование не найдено
+        {loading ? 'Загрузка расследования…' : 'Расследование не найдено'}
       </div>
     )
   }

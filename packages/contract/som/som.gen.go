@@ -121,6 +121,12 @@ type SomIssueList struct {
 type SomIssueRunRequest struct {
 	// InvestigationId Investigation the agent should enrich. Passed to the agent inside the prompt so it knows where to attach found events and nodes.
 	InvestigationId openapi_types.UUID `json:"investigation_id"`
+
+	// ModelId OpenCode model id in `provider/model` form, forwarded as executor_config.model_id. Omitted value is `openrouter/deepseek/deepseek-v4-flash`.
+	ModelId *string `json:"model_id,omitempty"`
+
+	// Variant Daemon executor variant, e.g. DEFAULT. Omitted uses the executor's default variant.
+	Variant *string `json:"variant,omitempty"`
 }
 
 // SomIssueRunResult Handles of the started run. IR stores nothing about it — poll SOM or the daemon with these ids.

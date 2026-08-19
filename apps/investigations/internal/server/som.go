@@ -134,6 +134,7 @@ func (s *Server) RunSomIssue(ctx context.Context, request som.RunSomIssueRequest
 	investigationID := request.Body.InvestigationId.String()
 	prompt := s.buildRunPrompt(ctx, issue, investigationID)
 	name := runName(issue)
+	exec := somclient.ResolveExecutorConfig(request.Body.Variant, request.Body.ModelId)
 
 	sessionID, err := s.som.CreateRelaySession(ctx, bearer)
 	if err != nil {
@@ -143,7 +144,7 @@ func (s *Server) RunSomIssue(ctx context.Context, request som.RunSomIssueRequest
 	if err != nil {
 		return nil, somError(err)
 	}
-	localEnvironmentID, err := s.som.StartEnvironment(ctx, sessionID, repoID, name, prompt)
+	localEnvironmentID, err := s.som.StartEnvironment(ctx, sessionID, repoID, name, prompt, exec)
 	if err != nil {
 		return nil, somError(err)
 	}
@@ -169,7 +170,9 @@ func (s *Server) RunSomIssue(ctx context.Context, request som.RunSomIssueRequest
 		"issue_id", issueID,
 		"board_id", issue.BoardID,
 		"local_environment_id", localEnvironmentID,
-		"som_environment_id", somEnvironmentID)
+		"som_environment_id", somEnvironmentID,
+		"model_id", exec.ModelID,
+		"variant", exec.Variant)
 
 	return som.RunSomIssue201JSONResponse(som.SomIssueRunResult{
 		IssueId:            request.IssueId,

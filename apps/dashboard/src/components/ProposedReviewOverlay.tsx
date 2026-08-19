@@ -1,8 +1,4 @@
-import {
-  graphEdges,
-  graphNodes,
-  useAppStore,
-} from '../store/appStore'
+import { useAppStore } from '../store/appStore'
 import { Button, Chip } from './ui'
 import { Check, X } from 'lucide-react'
 
@@ -12,6 +8,9 @@ export function ProposedReviewOverlay({ investigationId }: { investigationId: st
   const nodeReviews = useAppStore((s) => s.nodeReviews)
   const edgeReviews = useAppStore((s) => s.edgeReviews)
   const setReview = useAppStore((s) => s.setReview)
+  const graphNodes = useAppStore((s) => s.graphNodes)
+  const graphEdges = useAppStore((s) => s.graphEdges)
+  const lastNotImplemented = useAppStore((s) => s.lastNotImplemented)
 
   if (!inv) return null
 
@@ -52,12 +51,14 @@ export function ProposedReviewOverlay({ investigationId }: { investigationId: st
           <Button
             size="sm"
             onClick={() => setReview('node', selectedNode.id, 'confirmed')}
+            disabled={Boolean(lastNotImplemented)}
           >
             <Check className="h-3 w-3" /> Принять
           </Button>
           <Button
             size="sm"
             variant="danger"
+            disabled={Boolean(lastNotImplemented)}
             onClick={() => setReview('node', selectedNode.id, 'rejected')}
           >
             <X className="h-3 w-3" /> Отклонить
@@ -90,8 +91,9 @@ export function ProposedReviewOverlay({ investigationId }: { investigationId: st
                 <Button
                   size="sm"
                   variant="ghost"
+                  disabled={Boolean(lastNotImplemented)}
                   onClick={() => {
-                    setReview('edge', e.id, 'confirmed')
+                    setReview('edge', e.id, 'confirmed', investigationId)
                     // Also confirm endpoints if they were proposed
                     const src = graphNodes[e.source]
                     const tgt = graphNodes[e.target]
@@ -108,7 +110,8 @@ export function ProposedReviewOverlay({ investigationId }: { investigationId: st
                 <Button
                   size="sm"
                   variant="ghost"
-                  onClick={() => setReview('edge', e.id, 'rejected')}
+                  onClick={() => setReview('edge', e.id, 'rejected', investigationId)}
+                  disabled={Boolean(lastNotImplemented)}
                 >
                   <X className="h-3 w-3 text-critical" />
                 </Button>

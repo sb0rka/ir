@@ -96,6 +96,35 @@ export function Button({
   )
 }
 
+export function ErrorBanner({
+  message,
+  tone = 'error',
+  onDismiss,
+}: {
+  message: string | null
+  tone?: 'error' | 'warning'
+  onDismiss?: () => void
+}) {
+  if (!message) return null
+  return (
+    <div
+      className={clsx(
+        'flex items-start justify-between gap-3 border-b px-4 py-2 text-xs',
+        tone === 'warning'
+          ? 'border-proposed/40 bg-proposed/10 text-fg'
+          : 'border-critical/40 bg-critical/10 text-critical',
+      )}
+    >
+      <span>{message}</span>
+      {onDismiss && (
+        <button type="button" className="shrink-0 text-fg-dim hover:text-fg" onClick={onDismiss}>
+          ×
+        </button>
+      )}
+    </div>
+  )
+}
+
 export function Panel({
   title,
   children,

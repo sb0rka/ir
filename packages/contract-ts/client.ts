@@ -8,7 +8,11 @@ export function createIrClient(options: {
   projectId: string;
   token: () => string | null;
 }) {
-  const client = createClient<paths>({ baseUrl: options.baseUrl });
+  // Match OpenAPI form+explode:false (e.g. statuses=proposed,confirmed).
+  const client = createClient<paths>({
+    baseUrl: options.baseUrl,
+    querySerializer: { array: { explode: false, style: "form" } },
+  });
 
   client.use({
     onRequest({ request }) {
@@ -25,7 +29,7 @@ export function createIrClient(options: {
   return client;
 }
 
-export type { paths };
+export type { paths, components } from "./api.d.ts";
 
 //   import type { components } from "@ir/contract/domains/graph";
 //   type GraphEdge = components["schemas"]["GraphEdge"];

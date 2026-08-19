@@ -97,6 +97,7 @@ paths:
         Orchestrates a run: reads the issue from SOM, opens a relay session to
         the configured daemon host, starts an environment with the issue text
         as the prompt, then links the environment back to the issue in SOM.
+        `variant` and `model_id` are forwarded as daemon `executor_config`.
         Stateless — nothing is persisted in IR; the ids in the response are the
         only handle on the run.
       operationId: runSomIssue
@@ -224,6 +225,17 @@ components:
           description: >-
             Investigation the agent should enrich. Passed to the agent inside
             the prompt so it knows where to attach found events and nodes.
+        variant:
+          type: string
+          description: >-
+            Daemon executor variant, e.g. DEFAULT. Omitted uses the executor's
+            default variant.
+        model_id:
+          type: string
+          description: >-
+            OpenCode model id in `provider/model` form, forwarded as
+            executor_config.model_id. Omitted value is
+            `openrouter/deepseek/deepseek-v4-flash`.
 
     SomIssueRunResult:
       type: object

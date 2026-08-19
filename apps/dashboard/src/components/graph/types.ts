@@ -23,18 +23,24 @@ export type EdgeOrigin = 'seed' | 'expanded'
 export type EdgeStatus = 'proposed' | 'confirmed' | 'rejected'
 
 export interface Entity {
+  /** Graph node id — React Flow node id and edge endpoint. */
   id: string
+  /** Underlying IR entity id, for the detail panel. */
+  entity_id?: string
   type_code: EntityTypeCode
   key: string
   display_name: string
-  first_seen: string
-  last_seen: string
+  first_seen?: string
+  last_seen?: string
   metadata?: Record<string, string>
   position: { x: number; y: number }
 }
 
 export interface AlertNode {
+  /** Graph node id — React Flow node id and edge endpoint. */
   id: string
+  /** Underlying IR event id, for selection / the detail panel. */
+  event_id?: string
   title: string
   severity: Severity
   event_ts: string

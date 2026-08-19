@@ -9,7 +9,7 @@ export function QueuePage() {
           Глобальная очередь срабатываний
         </h1>
         <p className="mt-0.5 text-xs text-fg-dim">
-          Триаж событий и корреляций из EDR / NDR / SIEM / Email — начните расследование из строки
+          Триаж событий и корреляций из Gateway — начните расследование из строки
         </p>
       </div>
       <GlobalFilterBar />

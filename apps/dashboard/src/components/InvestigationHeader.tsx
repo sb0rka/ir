@@ -1,6 +1,4 @@
 import {
-  contextEvents,
-  entities,
   emptyContextQueue,
   useAppStore,
 } from '../store/appStore'
@@ -150,6 +148,8 @@ export function ContextTable({ investigationId }: { investigationId: string }) {
   const setReview = useAppStore((s) => s.setReview)
   const update = useAppStore((s) => s.updateInvestigation)
   const addContextChip = useAppStore((s) => s.addContextChip)
+  const contextEvents = useAppStore((s) => s.contextEvents)
+  const entities = useAppStore((s) => s.entities)
 
   if (!inv) return null
 
