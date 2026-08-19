@@ -49,6 +49,42 @@ func (d *DB) InvestigationEvents(ctx context.Context, projectID, investigationID
 		}
 		out = append(out, item)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	rows.Close()
+	ids := make([]string, 0, len(out))
+	for _, item := range out {
+		ids = append(ids, item.ID)
+	}
+	relations, err := d.eventEntities(ctx, projectID, ids)
+	if err != nil {
+		return nil, err
+	}
+	for i := range out {
+		out[i].Entities = relations[out[i].ID]
+	}
+	return out, nil
+}
+
+func (d *DB) eventEntities(ctx context.Context, projectID string, eventIDs []string) (map[string][]model.EventEntity, error) {
+	out := make(map[string][]model.EventEntity, len(eventIDs))
+	if len(eventIDs) == 0 {
+		return out, nil
+	}
+	rows, err := d.Pgx().Query(ctx, `SELECT event_id::text,entity_id::text,relation_code FROM event_entity_relations WHERE project_id=$1 AND event_id::text=ANY($2::text[]) ORDER BY event_id,entity_id,relation_code`, projectID, eventIDs)
+	if err != nil {
+		return nil, fmt.Errorf("list event entities: %w", mapConstraint(err))
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var eventID string
+		var rel model.EventEntity
+		if err := rows.Scan(&eventID, &rel.EntityID, &rel.RelationCode); err != nil {
+			return nil, err
+		}
+		out[eventID] = append(out[eventID], rel)
+	}
 	return out, rows.Err()
 }
 

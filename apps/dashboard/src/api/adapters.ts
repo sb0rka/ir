@@ -226,6 +226,18 @@ function hashOffset(id: string): number {
   return (Math.abs(h) % 80) - 40
 }
 
+function eventTimeMs(node: GraphNode): number {
+  if (!node.occurredAt) return Number.POSITIVE_INFINITY
+  const t = new Date(node.occurredAt).getTime()
+  return Number.isFinite(t) ? t : Number.POSITIVE_INFINITY
+}
+
+function compareEventsByTime(a: GraphNode, b: GraphNode): number {
+  const dt = eventTimeMs(a) - eventTimeMs(b)
+  if (dt !== 0) return dt
+  return a.id.localeCompare(b.id)
+}
+
 export function layoutGraph(
   investigationId: string,
   nodes: GraphNode[],
@@ -234,7 +246,7 @@ export function layoutGraph(
   const events = nodes
     .filter((n) => n.kind === 'event')
     .slice()
-    .sort((a, b) => a.label.localeCompare(b.label))
+    .sort(compareEventsByTime)
   const entities = nodes.filter((n) => n.kind !== 'event')
   const byKind = new Map<string, GraphNode[]>()
   for (const n of entities) {
@@ -245,8 +257,8 @@ export function layoutGraph(
 
   const positioned = new Map<string, GraphNode>()
   events.forEach((n, i) => {
-    const pos = saved[n.id] ?? { x: 80 + i * 220, y: 280 }
-    positioned.set(n.id, { ...n, x: pos.x, y: pos.y })
+    // Event X is always chronological so a saved alphabetical layout cannot stick.
+    positioned.set(n.id, { ...n, x: 80 + i * 220, y: 280 })
   })
 
   let kindIndex = 0

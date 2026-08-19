@@ -72,6 +72,14 @@ export function GraphDetailsDrawer() {
       const relatedEdges = edges.filter(
         (e) => e.source_id === alert.id || e.target_id === alert.id,
       )
+      const linkedEntityIds = [
+        ...new Set([
+          ...relatedEvents.flatMap((ev) => ev.entity_ids),
+          ...relatedEdges.flatMap((e) =>
+            [e.source_id, e.target_id].filter((id) => id !== alert.id),
+          ).filter((id) => entities.some((ent) => ent.id === id)),
+        ]),
+      ]
       return {
         title: alert.title,
         badge: alert.severity,
@@ -83,6 +91,7 @@ export function GraphDetailsDrawer() {
         ],
         events: relatedEvents,
         edges: relatedEdges,
+        linkedEntityIds,
       }
     }
 
@@ -252,13 +261,15 @@ export function GraphDetailsDrawer() {
               <ul className="space-y-1">
                 {content.linkedEntityIds.map((id) => {
                   const ent = activeInvestigation.entities.find(
-                    (e) => e.id === id,
+                    (e) => e.id === id || e.entity_id === id,
                   )
                   return (
                     <li key={id}>
                       <button
                         type="button"
-                        onClick={() => select({ kind: 'entity', id })}
+                        onClick={() =>
+                          select({ kind: 'entity', id: ent?.entity_id ?? id })
+                        }
                         className="w-full rounded-md border border-[var(--border)] px-2 py-1 text-left text-[11px] text-[var(--accent)] hover:bg-[var(--bg-node)]"
                       >
                         {ent?.display_name ?? id}

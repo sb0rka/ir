@@ -158,12 +158,12 @@ type EventSummary struct {
 	AttachedBy     string
 	Reason         *string
 	NormalizedData []byte
+	Entities       []EventEntity
 }
 
 type Event struct {
 	EventSummary
 	InvestigationIDs []string
-	Entities         []EventEntity
 }
 
 type EventEntity struct {

@@ -159,24 +159,42 @@ function buildFromApp(inv: Investigation): GraphInvestigation {
   const entityNodeByRef = new Map(entityGraphNodes.map((n) => [n.refId, n.id]))
   const eventNodeByRef = new Map(eventGraphNodes.map((n) => [n.refId, n.id]))
 
+  const entityCanvasIds = new Set(entities.map((e) => e.id))
+
   const events: EventRef[] = inv.eventIds
     .map((id) => contextEvents[id])
     .filter(Boolean)
     .filter((ev) => (eventReviews[ev.id] ?? ev.review) !== 'rejected')
-    .map((ev) => ({
-      id: ev.id,
-      source: ev.source,
-      source_event_id: ev.id,
-      event_class: mapEventClass(ev.type),
-      event_ts: ev.time,
-      title: ev.title,
-      severity: mapSeverity(ev.severity),
-      summary: ev.description,
-      entity_ids: ev.entityIds
-        .map((id) => entityNodeByRef.get(id))
-        .filter((id): id is string => Boolean(id)),
-      alert_id: eventNodeByRef.get(ev.id),
-    }))
+    .map((ev) => {
+      const alertId = eventNodeByRef.get(ev.id)
+      const entityIds = new Set(
+        ev.entityIds
+          .map((id) => entityNodeByRef.get(id))
+          .filter((id): id is string => Boolean(id)),
+      )
+      if (alertId) {
+        for (const edge of edges) {
+          if (edge.source_id === alertId && entityCanvasIds.has(edge.target_id)) {
+            entityIds.add(edge.target_id)
+          }
+          if (edge.target_id === alertId && entityCanvasIds.has(edge.source_id)) {
+            entityIds.add(edge.source_id)
+          }
+        }
+      }
+      return {
+        id: ev.id,
+        source: ev.source,
+        source_event_id: ev.id,
+        event_class: mapEventClass(ev.type),
+        event_ts: ev.time,
+        title: ev.title,
+        severity: mapSeverity(ev.severity),
+        summary: ev.description,
+        entity_ids: [...entityIds],
+        alert_id: alertId,
+      }
+    })
 
   const times = collectTimes([
     ...events.map((e) => e.event_ts),
@@ -303,9 +321,9 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     if (selection) app.setDetailPanelOpen(true)
 
     if (selection?.kind === 'entity') {
-      const app = useAppStore.getState()
-    const mockGraphNodes = app.graphNodes
-    const nodeId = Object.values(mockGraphNodes).find((n) => n.refId === selection.id)?.id
+      const nodeId = Object.values(app.graphNodes).find(
+        (n) => n.kind !== 'event' && n.refId === selection.id,
+      )?.id
       app.updateInvestigation(invId, {
         selectedNodeId: nodeId,
         selectedEventId: undefined,
@@ -314,16 +332,28 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
           : [...inv.selectedEntityIds, selection.id],
       })
     } else if (selection?.kind === 'event') {
+      const nodeId = Object.values(app.graphNodes).find(
+        (n) => n.kind === 'event' && n.refId === selection.id,
+      )?.id
       app.updateInvestigation(invId, {
         selectedEventId: selection.id,
-        selectedNodeId: undefined,
+        selectedNodeId: nodeId,
       })
     } else if (selection?.kind === 'alert') {
       const eventId = selection.id.replace(/^alert-/, '')
-      const contextEvents = useAppStore.getState().contextEvents
+      const nodeId = Object.values(app.graphNodes).find(
+        (n) =>
+          n.kind === 'event' &&
+          (n.refId === eventId || n.id === selection.id || n.id === eventId),
+      )?.id
+      const resolvedEventId = nodeId
+        ? app.graphNodes[nodeId]?.refId
+        : app.contextEvents[eventId]
+          ? eventId
+          : undefined
       app.updateInvestigation(invId, {
-        selectedEventId: contextEvents[eventId] ? eventId : undefined,
-        selectedNodeId: undefined,
+        selectedEventId: resolvedEventId,
+        selectedNodeId: nodeId,
       })
     } else if (selection === null) {
       app.updateInvestigation(invId, {
