@@ -554,33 +554,34 @@ export function mapGraphEdge(edge: IrEdge): GraphEdge {
   }
 }
 
+/** Vendor attribute for a correlation instance. Rename when the source mapping lands. */
+const CORRELATION_EVENT_ID_ATTR = 'correlation_event_id'
+
+function correlationEventId(event: AlertEvent): string | undefined {
+  const value = event.raw?.[CORRELATION_EVENT_ID_ATTR]?.trim()
+  return value || undefined
+}
+
 export function groupQueue(
   events: AlertEvent[],
   _entitiesById: Record<string, Entity>,
 ): { correlations: Record<string, CorrelationGroup>; queueOrder: QueueItem[] } {
   const alerts = new Map(events.map((e) => [e.id, e]))
-  const correlationAlerts = events.filter(
-    (event) => event.raw?.correlation_name || event.rule === 'correlation_alert',
-  )
   const groupedIds = new Set<string>()
   const correlations: Record<string, CorrelationGroup> = {}
   const queueOrder: QueueItem[] = []
+  const membersById = new Map<string, AlertEvent[]>()
 
-  for (const seed of correlationAlerts) {
-    const name = seed.raw?.correlation_name || seed.title
-    const id = `corr:${name}`
-    if (correlations[id]) {
-      if (!correlations[id].eventIds.includes(seed.id)) {
-        correlations[id].eventIds.push(seed.id)
-      }
-      groupedIds.add(seed.id)
-      continue
-    }
-    const members = events.filter(
-      (event) =>
-        event.id === seed.id ||
-        event.entityIds.some((eid) => seed.entityIds.includes(eid)),
-    )
+  for (const event of events) {
+    const corrId = correlationEventId(event)
+    if (!corrId) continue
+    const members = membersById.get(corrId)
+    if (members) members.push(event)
+    else membersById.set(corrId, [event])
+  }
+
+  for (const [corrId, members] of membersById) {
+    const id = `corr:${corrId}`
     const entityIds = [...new Set(members.flatMap((m) => m.entityIds))]
     const sourceCounts: CorrelationGroup['sourceCounts'] = {}
     for (const m of members) {
@@ -591,12 +592,13 @@ export function groupQueue(
         .map((m) => m.severity)
         .sort((a, b) => SEVERITY_ORDER.indexOf(a) - SEVERITY_ORDER.indexOf(b))[0] ?? 'high'
     const latest = members.slice().sort((a, b) => b.time.localeCompare(a.time))[0]
+    const named = members.find((m) => m.raw?.correlation_name) ?? latest
     correlations[id] = {
       id,
-      title: name,
-      reason: seed.title,
+      title: named?.raw?.correlation_name || named?.title || corrId,
+      reason: named?.title ?? '',
       severity,
-      time: latest?.time ?? seed.time,
+      time: latest?.time ?? '',
       status: 'new',
       sourceCounts,
       eventIds: members.map((m) => m.id),
