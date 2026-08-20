@@ -97,12 +97,30 @@ func TestMockSearchEventsPreservesQueryAndHostMatching(t *testing.T) {
 			want:    []string{"ev-12"},
 		},
 		{
+			name:    "background rdp rule",
+			request: capability.SearchEventsRequest{Query: "multiple_failed_rdp_logon", Limit: 100},
+			want:    []string{"ev-noise-1"},
+		},
+		{
+			name:    "background share rule",
+			request: capability.SearchEventsRequest{Query: "unusual_admin_share_access", Limit: 100},
+			want:    []string{"ev-noise-2"},
+		},
+		{
 			name: "host",
 			request: capability.SearchEventsRequest{
 				Entities: []domain.EntityRef{{Type: "host", Value: "ws-beta.corp.example"}},
 				Limit:    100,
 			},
 			want: []string{"ev-13", "ev-12", "ev-11"},
+		},
+		{
+			name: "background host is isolated from attack chain",
+			request: capability.SearchEventsRequest{
+				Entities: []domain.EntityRef{{Type: "host", Value: "srv-jump-eu.ops.internal"}},
+				Limit:    100,
+			},
+			want: []string{"ev-noise-1"},
 		},
 	}
 
@@ -116,6 +134,47 @@ func TestMockSearchEventsPreservesQueryAndHostMatching(t *testing.T) {
 				t.Fatalf("event IDs=%v want=%v", got, test.want)
 			}
 		})
+	}
+}
+
+func TestMockCorrelationNameComesFromCorrelationNode(t *testing.T) {
+	value, err := scenario.Load(fixtures.Investigation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	provider := mockmaxpatrol.NewMock(value)
+
+	page, err := provider.Events.SearchEvents(context.Background(), capability.SearchEventsRequest{
+		Query: "impacket_smbexec",
+		Limit: 1,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(page.Events) != 1 {
+		t.Fatalf("expected one event, got %#v", page.Events)
+	}
+	name, _ := page.Events[0].Attributes["correlation_name"].(string)
+	if name != "impacket_smbexec" {
+		t.Fatalf("correlation_name=%q", name)
+	}
+
+	noise, err := provider.Events.SearchEvents(context.Background(), capability.SearchEventsRequest{
+		Query: "multiple_failed_rdp_logon",
+		Limit: 1,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(noise.Events) != 1 {
+		t.Fatalf("expected one noise event, got %#v", noise.Events)
+	}
+	noiseName, _ := noise.Events[0].Attributes["correlation_name"].(string)
+	if noiseName != "multiple_failed_rdp_logon" {
+		t.Fatalf("noise correlation_name=%q", noiseName)
+	}
+	if hasEntity(noise.Entities, "host", "ws-alpha.corp.example") || hasEntity(noise.Entities, "ip", "192.0.2.44") {
+		t.Fatalf("noise event leaked demo entities: %#v", noise.Entities)
 	}
 }
 

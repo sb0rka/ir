@@ -187,23 +187,34 @@ func (adapter *mock) vendorEvent(event scenario.Event) maxpatrolapi.EventRecord 
 		Text:       event.Title,
 		Importance: event.Severity,
 	}
-	if strings.Contains(strings.ToLower(event.EventClass), "correlation") {
-		name := "impacket_smbexec"
-		record.CorrelationName = &name
-	}
-	for index, nodeID := range event.EntityIDs {
+	for _, nodeID := range event.EntityIDs {
 		node, ok := adapter.scenario.Node(nodeID)
 		if !ok {
 			continue
 		}
 		hostname := strings.TrimSpace(strings.Split(node.Data.Label, "\n")[0])
 		ip, _ := node.Data.Details["ip"].(string)
-		if index == 0 {
-			record.EventSourceHost = hostname
-			record.EventSourceIP = ip
-			record.SourceIP = ip
-		} else if record.DestinationIP == "" {
-			record.DestinationIP = ip
+		switch strings.ToLower(node.Data.Kind) {
+		case "correlation":
+			if record.CorrelationName == nil && hostname != "" {
+				name := hostname
+				record.CorrelationName = &name
+			}
+		case "host":
+			if record.EventSourceHost == "" {
+				record.EventSourceHost = hostname
+				record.EventSourceIP = ip
+				record.SourceIP = ip
+			} else if record.DestinationIP == "" && ip != "" && ip != record.SourceIP {
+				record.DestinationIP = ip
+			}
+		default:
+			if record.EventSourceHost == "" && hostname != "" {
+				record.EventSourceHost = hostname
+			}
+			if record.DestinationIP == "" && ip != "" {
+				record.DestinationIP = ip
+			}
 		}
 	}
 	return record
@@ -216,8 +227,18 @@ func matchesEvent(value scenario.Scenario, event scenario.Event, request maxpatr
 		return false
 	}
 	query = strings.ToLower(strings.TrimSpace(query))
-	if query != "" && !strings.Contains(strings.ToLower(event.Title+" "+event.EventClass+" "+event.Severity), query) {
-		return false
+	if query != "" {
+		haystack := event.Title + " " + event.EventClass + " " + event.Severity
+		for _, nodeID := range event.EntityIDs {
+			node, ok := value.Node(nodeID)
+			if ok && strings.EqualFold(node.Data.Kind, "correlation") {
+				haystack += " " + node.Data.Label
+				break
+			}
+		}
+		if !strings.Contains(strings.ToLower(haystack), query) {
+			return false
+		}
 	}
 	if len(entities) == 0 {
 		return true

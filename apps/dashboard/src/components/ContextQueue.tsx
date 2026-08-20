@@ -1,4 +1,4 @@
-import { contextEvents, entities, useAppStore, emptyContextQueue } from '../store/appStore'
+import { useAppStore, emptyContextQueue } from '../store/appStore'
 import type { EventOrigin, ReviewState } from '../types'
 import { FilterBar } from './FilterBar'
 import { Button, Chip, SeverityBadge } from './ui'
@@ -11,6 +11,7 @@ const ORIGIN_FILTERS: Array<{ id: EventOrigin | 'all'; label: string }> = [
   { id: 'seed', label: 'исходные' },
   { id: 'agent', label: 'агент' },
   { id: 'analyst', label: 'аналитик' },
+  { id: 'rule', label: 'правило' },
 ]
 
 const REVIEW_FILTERS: Array<{ id: ReviewState | 'all'; label: string }> = [
@@ -25,6 +26,7 @@ export function ContextQueueToolbar({ investigationId }: { investigationId: stri
   const inv = useAppStore((s) => s.investigations[investigationId])
   const queue = useAppStore((s) => s.contextQueue[investigationId]) ?? emptyContextQueue
   const eventReviews = useAppStore((s) => s.eventReviews)
+  const contextEvents = useAppStore((s) => s.contextEvents)
   const setContextQueue = useAppStore((s) => s.setContextQueue)
   const setReview = useAppStore((s) => s.setReview)
   const update = useAppStore((s) => s.updateInvestigation)
@@ -134,6 +136,8 @@ export function ContextQueuePage({ investigationId }: { investigationId: string 
   const inv = useAppStore((s) => s.investigations[investigationId])
   const queue = useAppStore((s) => s.contextQueue[investigationId]) ?? emptyContextQueue
   const eventReviews = useAppStore((s) => s.eventReviews)
+  const contextEvents = useAppStore((s) => s.contextEvents)
+  const entities = useAppStore((s) => s.entities)
   const setContextQueue = useAppStore((s) => s.setContextQueue)
   const addContextChip = useAppStore((s) => s.addContextChip)
   const removeContextChip = useAppStore((s) => s.removeContextChip)
@@ -145,7 +149,9 @@ export function ContextQueuePage({ investigationId }: { investigationId: string 
   if (!inv) return null
 
   const rows = Object.values(contextEvents)
-    .filter((ev) => matchesChips(ev.entityIds, ev.severity, ev.source, '', queue.chips))
+    .filter((ev) =>
+      matchesChips(ev.entityIds, ev.severity, ev.source, '', queue.chips, entities),
+    )
     .filter((ev) => !queue.hideAdded || !inv.eventIds.includes(ev.id))
     .sort((a, b) => a.time.localeCompare(b.time))
 

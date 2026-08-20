@@ -38,11 +38,11 @@ import { useWorkspaceStore } from '../../state/useWorkspaceStore'
 Point that import at your store (or a thin adapter). Required surface:
 
 - `activeInvestigation` — see `GraphInvestigation` in `types.ts`
-- `selection`, `hoverEntityIds`
-- `select`, `setHoverTime`, `setTimeRange`
+- `selection`, `hoverEventId`
+- `select`, `setHoverEvent`, `setTimeRange`
 - `toggleEntityType`, `toggleSeverity`, `toggleEdgeOrigin`, `resetGraphFilters`
 - `expandRelated`, `collapseRelated`, `canExpand`, `isExpanded`
-- `updateNodePosition`
+- `updateNodePosition`, `arrangeNodes`
 
 3. Render:
 
@@ -58,4 +58,4 @@ Or compose pieces yourself (`GraphToolbar` + `GraphCanvas` + `GraphDetailsDrawer
 
 ## Data shape
 
-Feed `activeInvestigation` with `entities`, `alerts`, `edges`, `events`, time window, and `filters`. Positions live on each entity/alert (`position: { x, y }`). Expand/collapse is host-owned (this UI only calls the callbacks).
+Feed `activeInvestigation` with `entities`, `alerts`, `edges`, `events`, time window, and `filters`. Positions live on each entity/alert (`position: { x, y }`). Each entity, alert, and edge has `origin: 'agent' | 'analyst'`; the toolbar origin chips hide both nodes and links. Expand/collapse is host-owned (this UI only calls the callbacks).

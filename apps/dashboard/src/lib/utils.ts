@@ -73,8 +73,12 @@ export const kindLabel: Record<string, string> = {
   user: 'пользователь',
   process: 'процесс',
   file: 'файл',
+  file_hash: 'файл / хеш',
   ip: 'IP',
   domain: 'домен',
   email: 'email',
+  account: 'учётная запись',
+  url: 'URL',
   event: 'событие',
+  rule: 'правило',
 }

@@ -13,6 +13,10 @@ export function formatClock(isoOrMs: string | number): string {
   })
 }
 
+export function formatEventTooltip(ts: string | number, title: string): string {
+  return `${formatClock(ts)} — ${title}`
+}
+
 export function formatShortDate(isoOrMs: string | number): string {
   const d = typeof isoOrMs === 'number' ? new Date(isoOrMs) : new Date(isoOrMs)
   return (

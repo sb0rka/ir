@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useMemo } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import {
   Background,
   BackgroundVariant,
+  ControlButton,
   Controls,
   MiniMap,
   ReactFlow,
@@ -9,10 +10,12 @@ import {
   useEdgesState,
   useNodesState,
   useReactFlow,
+  useStore,
   type Node,
   type NodeMouseHandler,
   type OnNodeDrag,
 } from '@xyflow/react'
+import { LayoutGrid } from 'lucide-react'
 import { useWorkspaceStore } from '../../state/useWorkspaceStore'
 import { SEVERITY_COLOR } from './constants'
 import { buildVisibleGraph, type GraphNodeData } from './graph-adapters'
@@ -24,22 +27,31 @@ const nodeTypes = {
   alert: AlertNode,
 }
 
-function GraphInner({ fitToken }: { fitToken: number }) {
+type FitToken = number | string
+
+function GraphInner({ fitToken }: { fitToken: FitToken }) {
   const {
-    activeInvestigation,
+    activeInvestigation: session,
     selection,
-    hoverEntityIds,
+    hoverEventId,
     select,
     expandRelated,
     collapseRelated,
     canExpand,
     isExpanded,
     updateNodePosition,
+    arrangeNodes,
   } = useWorkspaceStore()
 
   const { fitView } = useReactFlow()
-
-  const session = activeInvestigation
+  const paneWidth = useStore((s) => s.width)
+  const paneHeight = useStore((s) => s.height)
+  const hasSize = paneWidth > 0 && paneHeight > 0
+  const nodesMeasured = useStore((s) => {
+    if (s.nodes.length === 0) return false
+    return s.nodes.every((n) => (n.measured?.width ?? 0) > 0)
+  })
+  const fittedSizeKey = useRef<string | null>(null)
 
   const { nodes: derivedNodes, edges: derivedEdges } = useMemo(() => {
     if (!session) return { nodes: [], edges: [] }
@@ -55,9 +67,16 @@ function GraphInner({ fitToken }: { fitToken: number }) {
         timeRange: session.filters.timeRange,
       },
       selection,
-      hoverEntityIds,
+      hoverEventId,
     })
-  }, [session, selection, hoverEntityIds])
+  }, [session, selection, hoverEventId])
+
+  // Length alone misses “same count, new ids” after agent enrichment.
+  const graphSig = useMemo(() => {
+    const nodeIds = derivedNodes.map((n) => n.id).sort().join(',')
+    const edgeIds = derivedEdges.map((e) => e.id).sort().join(',')
+    return `${nodeIds}|${edgeIds}`
+  }, [derivedNodes, derivedEdges])
 
   const [nodes, setNodes, onNodesChange] = useNodesState(derivedNodes as Node[])
   const [rfEdges, setEdges, onEdgesChange] = useEdgesState(derivedEdges)
@@ -67,10 +86,16 @@ function GraphInner({ fitToken }: { fitToken: number }) {
       const currentById = new Map(current.map((n) => [n.id, n]))
       return (derivedNodes as Node[]).map((n) => {
         const existing = currentById.get(n.id)
-        if (existing?.dragging) {
-          return { ...n, position: existing.position, dragging: true }
+        if (!existing) return n
+        // Keep measured size so edges stay attached across selection/hover updates.
+        return {
+          ...n,
+          position: existing.dragging ? existing.position : n.position,
+          dragging: existing.dragging,
+          measured: existing.measured,
+          width: existing.width,
+          height: existing.height,
         }
-        return n
       })
     })
   }, [derivedNodes, setNodes])
@@ -80,13 +105,22 @@ function GraphInner({ fitToken }: { fitToken: number }) {
   }, [derivedEdges, setEdges])
 
   useEffect(() => {
-    // Delay until React Flow has measured node dimensions, otherwise the
-    // viewport fits an empty bounding box and clips the top rows.
-    const t = window.setTimeout(() => {
-      fitView({ padding: 0.15, duration: 300 })
-    }, 180)
-    return () => window.clearTimeout(t)
-  }, [fitToken, fitView, derivedNodes.length])
+    if (!hasSize || !nodesMeasured || derivedNodes.length === 0) return
+    const key = `${fitToken}:${paneWidth}x${paneHeight}:${graphSig}`
+    if (fittedSizeKey.current === key) return
+    const duration = fittedSizeKey.current === null ? 0 : 200
+    fittedSizeKey.current = key
+    void fitView({ padding: 0.15, duration })
+  }, [
+    fitToken,
+    paneWidth,
+    paneHeight,
+    fitView,
+    graphSig,
+    derivedNodes.length,
+    hasSize,
+    nodesMeasured,
+  ])
 
   const onNodeClick: NodeMouseHandler = useCallback(
     (_evt, node) => {
@@ -123,13 +157,26 @@ function GraphInner({ fitToken }: { fitToken: number }) {
 
   const onPaneClick = useCallback(() => select(null), [select])
 
-  if (!session) {
-    return (
-      <div className="flex h-full items-center justify-center text-sm text-[var(--text-dim)]">
-        Расследование не выбрано
-      </div>
+  const onArrange = useCallback(() => {
+    arrangeNodes()
+    const next = useWorkspaceStore.getState().activeInvestigation
+    if (!next) return
+    const posById = new Map<string, { x: number; y: number }>([
+      ...next.entities.map((e) => [e.id, e.position] as const),
+      ...next.alerts.map((a) => [a.id, a.position] as const),
+    ])
+    setNodes((current) =>
+      current.map((n) => ({
+        ...n,
+        position: posById.get(n.id) ?? n.position,
+      })),
     )
-  }
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        void fitView({ padding: 0.15, duration: 200 })
+      })
+    })
+  }, [arrangeNodes, fitView, setNodes])
 
   return (
     <ReactFlow
@@ -143,11 +190,11 @@ function GraphInner({ fitToken }: { fitToken: number }) {
       onNodeDragStop={onNodeDragStop}
       onPaneClick={onPaneClick}
       nodesDraggable
-      fitView
       minZoom={0.3}
       maxZoom={1.8}
       proOptions={{ hideAttribution: true }}
       colorMode="dark"
+      style={{ width: '100%', height: '100%' }}
     >
       <Background
         variant={BackgroundVariant.Dots}
@@ -155,7 +202,15 @@ function GraphInner({ fitToken }: { fitToken: number }) {
         size={1}
         color="var(--grid-dot)"
       />
-      <Controls showInteractive={false} position="bottom-left" />
+      <Controls
+        showInteractive={false}
+        position="top-right"
+        orientation="horizontal"
+      >
+        <ControlButton onClick={onArrange} title="Arrange nodes" aria-label="Arrange nodes">
+          <LayoutGrid size={16} />
+        </ControlButton>
+      </Controls>
       <MiniMap
         pannable
         zoomable
@@ -163,6 +218,7 @@ function GraphInner({ fitToken }: { fitToken: number }) {
         style={{ width: 140, height: 92 }}
         nodeColor={(n) => {
           const d = n.data as GraphNodeData
+          if (d.kind === 'alert' && d.isSeed) return 'var(--accent)'
           if (d.kind === 'alert' && d.severity) return SEVERITY_COLOR[d.severity]
           return 'var(--border-strong)'
         }}
@@ -172,13 +228,47 @@ function GraphInner({ fitToken }: { fitToken: number }) {
   )
 }
 
-export function GraphCanvas({ fitToken }: { fitToken: number }) {
+export function GraphCanvas({ fitToken }: { fitToken: FitToken }) {
+  const session = useWorkspaceStore((s) => s.activeInvestigation)
+  const wrapRef = useRef<HTMLDivElement>(null)
+  const [ready, setReady] = useState(false)
+
+  // Mount React Flow only after the flex slot has a real box. On first tab open
+  // the parent is often 0×0 for a frame; initializing then leaves the viewport empty.
+  useLayoutEffect(() => {
+    const el = wrapRef.current
+    if (!el) return
+    let cancelled = false
+    const update = () => {
+      if (cancelled) return
+      const r = el.getBoundingClientRect()
+      if (r.width > 1 && r.height > 1) setReady(true)
+    }
+    update()
+    const ro = new ResizeObserver(update)
+    ro.observe(el)
+    const raf = window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(update)
+    })
+    return () => {
+      cancelled = true
+      ro.disconnect()
+      window.cancelAnimationFrame(raf)
+    }
+  }, [session?.id])
+
   return (
-    <div className="relative h-full w-full">
-      <ReactFlowProvider>
-        <GraphInner fitToken={fitToken} />
-      </ReactFlowProvider>
-      <div className="pointer-events-none absolute bottom-3 left-12 rounded-md border border-[var(--border)] bg-[var(--bg-panel)]/90 px-2 py-1 text-[10px] text-[var(--text-dim)]">
+    <div ref={wrapRef} className="absolute inset-0">
+      {session && ready ? (
+        <ReactFlowProvider key={session.id}>
+          <GraphInner fitToken={fitToken} />
+        </ReactFlowProvider>
+      ) : (
+        <div className="flex h-full items-center justify-center text-sm text-[var(--text-dim)]">
+          {session ? '' : 'Расследование не выбрано'}
+        </div>
+      )}
+      <div className="pointer-events-none absolute bottom-3 left-3 rounded-md border border-[var(--border)] bg-[var(--bg-panel)]/90 px-2 py-1 text-[10px] text-[var(--text-dim)]">
         Узлы можно перетаскивать · правый клик по сущности — развернуть или
         свернуть связанные
       </div>

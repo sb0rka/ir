@@ -2,18 +2,21 @@ export type Severity = 'critical' | 'high' | 'medium' | 'low' | 'info'
 
 export type AlertStatus = 'new' | 'investigating' | 'closed'
 
-export type Source = 'EDR' | 'NDR' | 'SIEM' | 'Email' | 'ThreatIntel'
+/** Gateway / ir-api source code, e.g. maxpatrol-siem. */
+export type Source = string
 
 export type EntityKind =
   | 'host'
   | 'user'
+  | 'account'
   | 'process'
-  | 'file'
+  | 'file_hash'
   | 'ip'
   | 'domain'
   | 'email'
+  | 'url'
 
-export type EventOrigin = 'seed' | 'agent' | 'analyst'
+export type EventOrigin = 'seed' | 'agent' | 'analyst' | 'rule'
 
 export type ReviewState = 'confirmed' | 'proposed' | 'rejected'
 
@@ -37,6 +40,8 @@ export interface Entity {
   kind: EntityKind
   label: string
   attributes: Record<string, string>
+  firstSeen?: string
+  lastSeen?: string
 }
 
 export interface AlertEvent {
@@ -50,6 +55,7 @@ export interface AlertEvent {
   entityIds: string[]
   description: string
   raw?: Record<string, string>
+  sourceEventId?: string
 }
 
 export interface CorrelationGroup {
@@ -80,6 +86,7 @@ export interface ContextEvent {
   origin: EventOrigin
   review: ReviewState
   description: string
+  sourceEventId?: string
 }
 
 export interface GraphNode {
@@ -90,6 +97,8 @@ export interface GraphNode {
   review: ReviewState
   x: number
   y: number
+  origin?: EventOrigin
+  occurredAt?: string
 }
 
 export interface GraphEdge {
@@ -99,6 +108,8 @@ export interface GraphEdge {
   relation: string
   review: ReviewState
   rationale?: string
+  version?: number
+  origin?: EventOrigin
 }
 
 export interface Finding {
@@ -131,6 +142,8 @@ export interface Issue {
   edgesFound: number
   findingsFound: number
   resultSummary?: string
+  /** Daemon environment id from runSomIssue — used to poll completion. */
+  localEnvironmentId?: string
   comments: IssueComment[]
   createdAt: string
 }
@@ -155,6 +168,8 @@ export interface Investigation {
   selectedEventId?: string
   selectedEntityIds: string[]
   timelineRange?: [number, number]
+  version?: number
+  somWorkspaceIds?: string[]
 }
 
 export interface FilterChip {
@@ -184,6 +199,7 @@ export interface SavedView {
   name: string
   chips: FilterChip[]
   timePreset: string
+  query?: string
 }
 
 export interface ActionResult {

@@ -107,7 +107,7 @@ export const entities: Record<string, Entity> = {
   },
   'ent-file-invoice': {
     id: 'ent-file-invoice',
-    kind: 'file',
+    kind: 'file_hash',
     label: 'Счёт_август.docm',
     attributes: {
       path: 'C:\\Users\\i.petrov\\Downloads\\Счёт_август.docm',
@@ -118,7 +118,7 @@ export const entities: Record<string, Entity> = {
   },
   'ent-file-mimi': {
     id: 'ent-file-mimi',
-    kind: 'file',
+    kind: 'file_hash',
     label: 'mimi.exe',
     attributes: {
       path: 'C:\\Users\\i.petrov\\AppData\\Local\\Temp\\mimi.exe',
@@ -593,7 +593,7 @@ export const graphNodes: Record<string, GraphNode> = {
   },
   'node-file-invoice': {
     id: 'node-file-invoice',
-    kind: 'file',
+    kind: 'file_hash',
     refId: 'ent-file-invoice',
     label: 'Счёт_август.docm',
     review: 'confirmed',
@@ -629,7 +629,7 @@ export const graphNodes: Record<string, GraphNode> = {
   },
   'node-file-mimi': {
     id: 'node-file-mimi',
-    kind: 'file',
+    kind: 'file_hash',
     refId: 'ent-file-mimi',
     label: 'mimi.exe',
     review: 'confirmed',

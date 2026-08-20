@@ -29,7 +29,9 @@ export function GraphDetailsDrawer() {
     const { entities, alerts, events, edges } = activeInvestigation
 
     if (selection.kind === 'entity') {
-      const entity = entities.find((e) => e.id === selection.id)
+      const entity = entities.find(
+        (e) => e.id === selection.id || e.entity_id === selection.id,
+      )
       if (!entity) return null
       const relatedEvents = events.filter((ev) =>
         ev.entity_ids.includes(entity.id),
@@ -42,25 +44,42 @@ export function GraphDetailsDrawer() {
         badge: entity.type_code,
         rows: [
           ['Key', entity.key],
-          ['First seen', formatShortDate(entity.first_seen)],
-          ['Last seen', formatShortDate(entity.last_seen)],
+          ...(entity.first_seen
+            ? ([['First seen', formatShortDate(entity.first_seen)]] as [string, string][])
+            : []),
+          ...(entity.last_seen
+            ? ([['Last seen', formatShortDate(entity.last_seen)]] as [string, string][])
+            : []),
           ...Object.entries(entity.metadata ?? {}).map(
             ([k, v]) => [k, v] as [string, string],
           ),
         ],
         events: relatedEvents,
         edges: relatedEdges,
-        entityId: entity.id,
+        entityId: entity.entity_id ?? entity.id,
       }
     }
 
     if (selection.kind === 'alert') {
-      const alert = alerts.find((a) => a.id === selection.id)
+      const alert = alerts.find(
+        (a) =>
+          a.id === selection.id ||
+          a.event_id === selection.id ||
+          selection.id === `alert-${a.event_id}`,
+      )
       if (!alert) return null
       const relatedEvents = events.filter((ev) => ev.alert_id === alert.id)
       const relatedEdges = edges.filter(
         (e) => e.source_id === alert.id || e.target_id === alert.id,
       )
+      const linkedEntityIds = [
+        ...new Set([
+          ...relatedEvents.flatMap((ev) => ev.entity_ids),
+          ...relatedEdges.flatMap((e) =>
+            [e.source_id, e.target_id].filter((id) => id !== alert.id),
+          ).filter((id) => entities.some((ent) => ent.id === id)),
+        ]),
+      ]
       return {
         title: alert.title,
         badge: alert.severity,
@@ -72,6 +91,7 @@ export function GraphDetailsDrawer() {
         ],
         events: relatedEvents,
         edges: relatedEdges,
+        linkedEntityIds,
       }
     }
 
@@ -241,13 +261,15 @@ export function GraphDetailsDrawer() {
               <ul className="space-y-1">
                 {content.linkedEntityIds.map((id) => {
                   const ent = activeInvestigation.entities.find(
-                    (e) => e.id === id,
+                    (e) => e.id === id || e.entity_id === id,
                   )
                   return (
                     <li key={id}>
                       <button
                         type="button"
-                        onClick={() => select({ kind: 'entity', id })}
+                        onClick={() =>
+                          select({ kind: 'entity', id: ent?.entity_id ?? id })
+                        }
                         className="w-full rounded-md border border-[var(--border)] px-2 py-1 text-left text-[11px] text-[var(--accent)] hover:bg-[var(--bg-node)]"
                       >
                         {ent?.display_name ?? id}

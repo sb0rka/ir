@@ -3,19 +3,23 @@
   "version": "0.0.1",
   "description": "Типы и клиент Investigations API, сгенерированные из OpenAPI",
   "type": "module",
-  "types": "./api.d.ts",
+  "types": "./client.ts",
   "exports": {
     ".": {
-      "types": "./api.d.ts",
+      "types": "./client.ts",
       "default": "./client.ts"
     },
     "./domains/*": {
       "types": "./domains/*.d.ts"
+    },
+    "./gateway": {
+      "types": "./gateway.d.ts"
     }
   },
   "files": [
     "domains",
     "api.d.ts",
+    "gateway.d.ts",
     "client.ts"
   ],
   "scripts": {

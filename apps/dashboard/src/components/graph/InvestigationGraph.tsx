@@ -4,10 +4,10 @@ import { Timeline } from './Timeline'
 
 /** Full graph + timeline stack. Details use the host DetailPanel, not GraphDetailsDrawer. */
 export function InvestigationGraph({
-  /** Bump to trigger fitView (e.g. when opening the graph view). */
+  /** Bump to trigger fitView (e.g. when opening the graph view). Pane resizes from side panels also fit. */
   fitNonce = 0,
 }: {
-  fitNonce?: number
+  fitNonce?: number | string
 } = {}) {
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col">

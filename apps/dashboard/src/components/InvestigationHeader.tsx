@@ -1,6 +1,4 @@
 import {
-  contextEvents,
-  entities,
   emptyContextQueue,
   useAppStore,
 } from '../store/appStore'
@@ -26,17 +24,22 @@ export function InvestigationHeader({ investigationId }: { investigationId: stri
   )
   const issues = useAppStore((s) => s.issues)
   const update = useAppStore((s) => s.updateInvestigation)
-  const runEnrichment = useAppStore((s) => s.runEnrichment)
+  const openAgentPanel = useAppStore((s) => s.openAgentPanel)
   const createChild = useAppStore((s) => s.createChildInvestigation)
   const setAgentPanelOpen = useAppStore((s) => s.setAgentPanelOpen)
   const agentPanelOpen = useAppStore((s) => s.agentPanelOpen)
   const setDetailPanelOpen = useAppStore((s) => s.setDetailPanelOpen)
   const detailPanelOpen = useAppStore((s) => s.detailPanelOpen)
   const setActiveTab = useAppStore((s) => s.setActiveTab)
+  const edgeReviews = useAppStore((s) => s.edgeReviews)
+  const graphEdges = useAppStore((s) => s.graphEdges)
 
   if (!inv) return null
 
   const running = inv.issueIds.some((id) => issues[id]?.status === 'running')
+  const proposedCount = inv.edgeIds.filter(
+    (id) => (edgeReviews[id] ?? graphEdges[id]?.review) === 'proposed',
+  ).length
 
   return (
     <div className="border-b border-border bg-surface-1 px-4 py-3">
@@ -102,7 +105,7 @@ export function InvestigationHeader({ investigationId }: { investigationId: stri
             </button>
           </div>
 
-          <Button size="sm" onClick={() => runEnrichment(investigationId)}>
+          <Button size="sm" onClick={() => void openAgentPanel()}>
             <Bot className="h-3.5 w-3.5" />
             Насыщение контекста
           </Button>
@@ -132,10 +135,15 @@ export function InvestigationHeader({ investigationId }: { investigationId: stri
             size="sm"
             variant={agentPanelOpen ? 'default' : 'ghost'}
             onClick={() => setAgentPanelOpen(!agentPanelOpen)}
-            title="Задачи ИИ-агента по расследованию"
+            title="Задачи и предложенные связи ИИ-агента"
           >
             <Bot className="h-3.5 w-3.5" />
-            Задачи
+            Агент
+            {proposedCount > 0 && (
+              <span className="rounded bg-proposed/20 px-1 font-mono text-[10px] text-proposed">
+                {proposedCount}
+              </span>
+            )}
           </Button>
         </div>
       </div>
@@ -150,6 +158,8 @@ export function ContextTable({ investigationId }: { investigationId: string }) {
   const setReview = useAppStore((s) => s.setReview)
   const update = useAppStore((s) => s.updateInvestigation)
   const addContextChip = useAppStore((s) => s.addContextChip)
+  const contextEvents = useAppStore((s) => s.contextEvents)
+  const entities = useAppStore((s) => s.entities)
 
   if (!inv) return null
 

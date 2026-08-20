@@ -1,12 +1,14 @@
-import { useState } from 'react'
-import { entities, issueTemplates, useAppStore } from '../store/appStore'
+import { useEffect, useState } from 'react'
+import { issueTemplates, useAppStore } from '../store/appStore'
 import { Button, Chip, Panel } from './ui'
 import { clsx, formatTime, statusLabel } from '../lib/utils'
 import {
+  Check,
   CheckCircle2,
   CircleDashed,
   Loader2,
   MessageSquare,
+  Play,
   Plus,
   Square,
   X,
@@ -24,35 +26,132 @@ function StatusIcon({ status }: { status: string }) {
   return null
 }
 
+/** Agent-proposed graph edges waiting for analyst accept/reject. */
+function ProposedLinksSection({ investigationId }: { investigationId: string }) {
+  const inv = useAppStore((s) => s.investigations[investigationId])
+  const nodeReviews = useAppStore((s) => s.nodeReviews)
+  const edgeReviews = useAppStore((s) => s.edgeReviews)
+  const setReview = useAppStore((s) => s.setReview)
+  const graphNodes = useAppStore((s) => s.graphNodes)
+  const graphEdges = useAppStore((s) => s.graphEdges)
+
+  if (!inv) return null
+
+  const proposedEdges = inv.edgeIds
+    .map((id) => graphEdges[id])
+    .filter(Boolean)
+    .filter((e) => (edgeReviews[e.id] ?? e.review) === 'proposed')
+
+  const proposedNodeCount = inv.nodeIds
+    .map((id) => graphNodes[id])
+    .filter(Boolean)
+    .filter((n) => (nodeReviews[n.id] ?? n.review) === 'proposed').length
+
+  if (proposedEdges.length === 0) return null
+
+  const selectedId = inv.selectedNodeId
+
+  return (
+    <div className="rounded border border-proposed/30 bg-surface-0">
+      <div className="flex items-baseline justify-between gap-2 border-b border-border px-2.5 py-1.5">
+        <div className="text-[10px] uppercase tracking-wider text-fg-dim">
+          Предложенные связи
+        </div>
+        <div className="shrink-0 text-[10px] text-proposed">
+          {proposedEdges.length}
+          {proposedNodeCount > 0 && ` · узлов: ${proposedNodeCount}`}
+        </div>
+      </div>
+      <div className="max-h-72 divide-y divide-border/80 overflow-y-auto">
+        {proposedEdges.map((e) => {
+          const related =
+            Boolean(selectedId) &&
+            (e.source === selectedId || e.target === selectedId)
+          return (
+            <div
+              key={e.id}
+              className={clsx(
+                'flex items-start justify-between gap-2 px-2.5 py-2',
+                related && 'bg-proposed/5',
+              )}
+            >
+              <div className="min-w-0">
+                <div className="text-xs text-fg-muted">
+                  {graphNodes[e.source]?.label} —{e.relation}→{' '}
+                  {graphNodes[e.target]?.label}
+                </div>
+                {e.rationale && (
+                  <div className="mt-0.5 text-[11px] text-fg-dim">{e.rationale}</div>
+                )}
+              </div>
+              <div className="flex shrink-0 gap-0.5">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  title="Принять связь"
+                  onClick={() => {
+                    setReview('edge', e.id, 'confirmed', investigationId)
+                    const src = graphNodes[e.source]
+                    const tgt = graphNodes[e.target]
+                    if (src && (nodeReviews[src.id] ?? src.review) === 'proposed') {
+                      setReview('node', src.id, 'confirmed')
+                    }
+                    if (tgt && (nodeReviews[tgt.id] ?? tgt.review) === 'proposed') {
+                      setReview('node', tgt.id, 'confirmed')
+                    }
+                  }}
+                >
+                  <Check className="h-3 w-3 text-confirmed" />
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  title="Отклонить связь"
+                  onClick={() => setReview('edge', e.id, 'rejected', investigationId)}
+                >
+                  <X className="h-3 w-3 text-critical" />
+                </Button>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 export function AgentPanel({ investigationId }: { investigationId: string }) {
   const inv = useAppStore((s) => s.investigations[investigationId])
   const issues = useAppStore((s) => s.issues)
   const open = useAppStore((s) => s.agentPanelOpen)
   const setOpen = useAppStore((s) => s.setAgentPanelOpen)
+  const catalog = useAppStore((s) => s.somCatalog)
+  const loadSomCatalog = useAppStore((s) => s.loadSomCatalog)
   const runEnrichment = useAppStore((s) => s.runEnrichment)
   const createIssue = useAppStore((s) => s.createIssue)
   const cancelIssue = useAppStore((s) => s.cancelIssue)
   const addComment = useAppStore((s) => s.addIssueComment)
+  const entities = useAppStore((s) => s.entities)
 
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [commentDraft, setCommentDraft] = useState('')
   const [showCreate, setShowCreate] = useState(false)
 
+  useEffect(() => {
+    if (open) void loadSomCatalog()
+  }, [open, loadSomCatalog])
+
   if (!inv || !open) return null
 
-  const list = inv.issueIds
-    .map((id) => issues[id])
-    .filter(Boolean)
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-
-  const roots = list.filter((i) => !i.parentId)
-  const subsOf = (id: string) => list.filter((i) => i.parentId === id)
+  const boardIssues = catalog?.issues ?? []
+  const subsOf = (id: string) =>
+    inv.issueIds.map((iid) => issues[iid]).filter((i) => i?.parentId === id)
 
   return (
     <Panel
-      title="ИИ-агент · задачи"
+      title="ИИ-агент"
       side="left"
-      className="w-96 shrink-0"
+      className="relative z-10 w-96 shrink-0"
       actions={
         <div className="flex items-center gap-1">
           <Button size="sm" variant="ghost" onClick={() => setShowCreate((v) => !v)}>
@@ -65,9 +164,7 @@ export function AgentPanel({ investigationId }: { investigationId: string }) {
       }
     >
       <div className="space-y-3 p-3">
-        <Button className="w-full" onClick={() => runEnrichment(investigationId)}>
-          Запустить насыщение контекста
-        </Button>
+        <ProposedLinksSection investigationId={investigationId} />
 
         {showCreate && (
           <div className="rounded border border-border bg-surface-2 p-2">
@@ -99,40 +196,29 @@ export function AgentPanel({ investigationId }: { investigationId: string }) {
           </div>
         )}
 
-        {roots.length === 0 && (
-          <div className="rounded border border-dashed border-border px-3 py-6 text-center">
-            <div className="text-sm text-fg-muted">Задач пока нет</div>
-            <div className="mt-1 text-xs text-fg-dim">
-              Запустите насыщение контекста — агент найдёт связанные события и
-              предложит их на ревью. Issue по сущности создаётся из панели
-              «Детали».
-            </div>
-          </div>
-        )}
-
-        {roots.map((issue) => {
-          const expanded = expandedId === issue.id
-          const subs = subsOf(issue.id)
+        {boardIssues.map((item) => {
+          const issue = issues[item.id]
+          const expanded = expandedId === item.id
+          const subs = issue ? subsOf(issue.id) : []
+          const busy = issue?.status === 'running'
           return (
-            <div
-              key={issue.id}
-              className="rounded border border-border bg-surface-0"
-            >
+            <div key={item.id} className="rounded border border-border bg-surface-0">
               <button
                 type="button"
                 className="flex w-full items-start gap-2 p-2.5 text-left"
-                onClick={() => setExpandedId(expanded ? null : issue.id)}
+                onClick={() => setExpandedId(expanded ? null : item.id)}
               >
-                <StatusIcon status={issue.status} />
+                {issue && <StatusIcon status={issue.status} />}
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium">{issue.title}</span>
-                    <Chip>{statusLabel[issue.status]}</Chip>
+                    <span className="text-sm font-medium">{item.title}</span>
+                    {issue && <Chip>{statusLabel[issue.status]}</Chip>}
                   </div>
                   <div className="mt-0.5 text-[11px] text-fg-dim">
-                    {formatTime(issue.createdAt)} · {issue.template}
+                    {item.simple_id}
+                    {issue?.createdAt ? ` · ${formatTime(issue.createdAt)}` : ''}
                   </div>
-                  {issue.entityIds.length > 0 && (
+                  {issue && issue.entityIds.length > 0 && (
                     <div className="mt-1 flex flex-wrap gap-1">
                       {issue.entityIds.map((id) => (
                         <span
@@ -144,102 +230,103 @@ export function AgentPanel({ investigationId }: { investigationId: string }) {
                       ))}
                     </div>
                   )}
-                  {(issue.eventsFound > 0 ||
-                    issue.edgesFound > 0 ||
-                    issue.findingsFound > 0) && (
-                    <div className="mt-1 text-[11px] text-fg-muted">
-                      +{issue.eventsFound} соб. · +{issue.edgesFound} связей · +
-                      {issue.findingsFound} находок
-                    </div>
-                  )}
-                  {issue.resultSummary && (
+                  {issue?.resultSummary && (
                     <div className="mt-1 text-[11px] text-fg-dim">{issue.resultSummary}</div>
                   )}
                 </div>
               </button>
 
-              {issue.status === 'running' && (
-                <div className="border-t border-border px-2.5 py-1.5">
-                  <Button size="sm" variant="ghost" onClick={() => cancelIssue(issue.id)}>
+              <div className="space-y-1 border-t border-border p-2.5">
+                <Button
+                  className="w-full"
+                  disabled={busy}
+                  onClick={() => void runEnrichment(investigationId, item.id)}
+                >
+                  {busy ? (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" /> Выполняется…
+                    </>
+                  ) : (
+                    <>
+                      <Play className="h-3.5 w-3.5" /> Запустить
+                    </>
+                  )}
+                </Button>
+                {busy && (
+                  <Button
+                    className="w-full"
+                    variant="ghost"
+                    onClick={() => cancelIssue(item.id)}
+                  >
                     <Square className="h-3 w-3" /> Остановить
                   </Button>
-                </div>
-              )}
+                )}
+              </div>
 
               {expanded && (
                 <div className="space-y-2 border-t border-border p-2.5">
-                  <p className="text-xs text-fg-muted">{issue.description}</p>
+                  {(item.description?.trim() || issue?.description) && (
+                    <p className="whitespace-pre-wrap text-xs text-fg-muted">
+                      {item.description?.trim() || issue?.description}
+                    </p>
+                  )}
 
-                  <div className="flex gap-1">
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() =>
-                        createIssue(
-                          investigationId,
-                          'tpl-reputation',
-                          issue.entityIds,
-                          issue.id,
-                        )
-                      }
-                    >
-                      + Sub-issue
-                    </Button>
-                  </div>
-
-                  {subs.map((sub) => (
-                    <div
-                      key={sub.id}
-                      className={clsx(
-                        'ml-2 rounded border border-border/80 bg-surface-2 p-2 text-xs',
-                      )}
-                    >
-                      <div className="flex items-center gap-1.5">
-                        <StatusIcon status={sub.status} />
-                        <span>{sub.title}</span>
-                        <Chip>{statusLabel[sub.status]}</Chip>
-                      </div>
-                      {sub.resultSummary && (
-                        <div className="mt-1 text-fg-dim">{sub.resultSummary}</div>
-                      )}
-                    </div>
-                  ))}
-
-                  <div>
-                    <div className="mb-1 flex items-center gap-1 text-[10px] uppercase tracking-wider text-fg-dim">
-                      <MessageSquare className="h-3 w-3" />
-                      Комментарии ({issue.comments.length})
-                    </div>
-                    <div className="space-y-1.5">
-                      {issue.comments.map((c) => (
-                        <div key={c.id} className="rounded bg-surface-2 p-1.5 text-xs">
-                          <div className="text-fg-dim">
-                            {c.author} · {formatTime(c.time)}
+                  {issue &&
+                    subs.map((sub) =>
+                      sub ? (
+                        <div
+                          key={sub.id}
+                          className="ml-2 rounded border border-border/80 bg-surface-2 p-2 text-xs"
+                        >
+                          <div className="flex items-center gap-1.5">
+                            <StatusIcon status={sub.status} />
+                            <span>{sub.title}</span>
+                            <Chip>{statusLabel[sub.status]}</Chip>
                           </div>
-                          <div className="text-fg-muted">{c.text}</div>
+                          {sub.resultSummary && (
+                            <div className="mt-1 text-fg-dim">{sub.resultSummary}</div>
+                          )}
                         </div>
-                      ))}
+                      ) : null,
+                    )}
+
+                  {issue && (
+                    <div>
+                      <div className="mb-1 flex items-center gap-1 text-[10px] uppercase tracking-wider text-fg-dim">
+                        <MessageSquare className="h-3 w-3" />
+                        Комментарии ({issue.comments.length})
+                      </div>
+                      <div className="space-y-1.5">
+                        {issue.comments.map((c) => (
+                          <div key={c.id} className="rounded bg-surface-2 p-1.5 text-xs">
+                            <div className="text-fg-dim">
+                              {c.author} · {formatTime(c.time)}
+                            </div>
+                            <div className="text-fg-muted">{c.text}</div>
+                          </div>
+                        ))}
+                      </div>
+                      <form
+                        className="mt-2 flex gap-1"
+                        onSubmit={(e) => {
+                          e.preventDefault()
+                          if (!commentDraft.trim()) return
+                          addComment(issue.id, commentDraft.trim())
+                          setCommentDraft('')
+                        }}
+                      >
+                        <input
+                          className="flex-1 rounded border border-border bg-surface-0 px-2 py-1 text-xs outline-none focus:border-fg/30"
+                          placeholder="Комментарий / обоснование…"
+                          value={commentDraft}
+                          onChange={(e) => setCommentDraft(e.target.value)}
+                        />
+                        <Button size="sm" type="submit">
+                          →
+                        </Button>
+                      </form>
                     </div>
-                    <form
-                      className="mt-2 flex gap-1"
-                      onSubmit={(e) => {
-                        e.preventDefault()
-                        if (!commentDraft.trim()) return
-                        addComment(issue.id, commentDraft.trim())
-                        setCommentDraft('')
-                      }}
-                    >
-                      <input
-                        className="flex-1 rounded border border-border bg-surface-0 px-2 py-1 text-xs outline-none focus:border-fg/30"
-                        placeholder="Комментарий / обоснование…"
-                        value={commentDraft}
-                        onChange={(e) => setCommentDraft(e.target.value)}
-                      />
-                      <Button size="sm" type="submit">
-                        →
-                      </Button>
-                    </form>
-                  </div>
+                  )}
                 </div>
               )}
             </div>

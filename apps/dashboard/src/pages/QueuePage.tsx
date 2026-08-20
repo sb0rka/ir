@@ -1,5 +1,6 @@
 import { GlobalFilterBar } from '../components/FilterBar'
 import { AlertTable } from '../components/AlertTable'
+import { QueueDetailPanel } from '../components/QueueDetailPanel'
 
 export function QueuePage() {
   return (
@@ -9,12 +10,15 @@ export function QueuePage() {
           Глобальная очередь срабатываний
         </h1>
         <p className="mt-0.5 text-xs text-fg-dim">
-          Триаж событий и корреляций из EDR / NDR / SIEM / Email — начните расследование из строки
+          Триаж событий и корреляций из Gateway — откройте строку, чтобы начать расследование
         </p>
       </div>
       <GlobalFilterBar />
-      <div className="min-h-0 flex-1">
-        <AlertTable />
+      <div className="flex min-h-0 flex-1">
+        <div className="min-w-0 flex-1">
+          <AlertTable />
+        </div>
+        <QueueDetailPanel />
       </div>
     </div>
   )

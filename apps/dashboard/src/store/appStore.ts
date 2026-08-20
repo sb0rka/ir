@@ -1,40 +1,66 @@
 import { create } from 'zustand'
 import type {
   ActionResult,
+  AlertEvent,
+  ContextEvent,
   ContextQueueState,
+  CorrelationGroup,
+  Entity,
   FilterChip,
   FilterField,
+  Finding,
+  GraphEdge,
+  GraphNode,
   Investigation,
   Issue,
+  QueueItem,
   ReviewState,
 } from '../types'
-import {
-  alerts,
-  contextEvents,
-  correlations,
-  enrichmentPayload,
-  entities,
-  findings,
-  graphEdges,
-  graphNodes,
-  issueTemplates,
-  savedViews,
-  seedInvestigationEdges,
-  seedInvestigationEvents,
-  seedInvestigationNodes,
-} from '../mocks/scenario'
 import { uid } from '../lib/utils'
+import { defaultFilterValueOptions, issueTemplates, savedViews } from '../lib/catalog'
+import { parseGatewayEventId, saveLayout } from '../api/adapters'
+import { errorMessage, isNotImplemented, isUnauthorized } from '../api/error'
+import {
+  analyzeArtifact,
+  lookupEntity,
+  searchQueue,
+} from '../api/search'
+import {
+  addContext,
+  countProposedAgentEdges,
+  createInvestigation,
+  getEntityCard,
+  getSomEnvironment,
+  listInvestigations,
+  loadInvestigationBundle,
+  patchInvestigation,
+  resolveSomCatalog,
+  reviewEdges,
+  runSomIssue,
+  type SomCatalog,
+} from '../api/ir'
+import type { components as Ir } from '@ir/contract'
 
 export type TabId = 'queue' | string
 
+export const emptyContextQueue: ContextQueueState = {
+  chips: [],
+  timePreset: '30d',
+  history: [],
+  selectedIds: [],
+  hideAdded: false,
+  originFilter: 'all',
+  reviewFilter: 'all',
+}
+
 interface AppState {
-  // Queue
   chips: FilterChip[]
   timePreset: string
+  queueQuery: string
   selectedAlertIds: string[]
   expandedCorrelationIds: string[]
+  inspectedQueueItem: QueueItem | null
 
-  // Tabs / investigations
   tabs: TabId[]
   activeTab: TabId
   investigations: Record<string, Investigation>
@@ -48,61 +74,76 @@ interface AppState {
   agentPanelOpen: boolean
   detailPanelOpen: boolean
 
-  // Actions
+  alerts: Record<string, AlertEvent>
+  correlations: Record<string, CorrelationGroup>
+  queueOrder: QueueItem[]
+  entities: Record<string, Entity>
+  contextEvents: Record<string, ContextEvent>
+  graphNodes: Record<string, GraphNode>
+  graphEdges: Record<string, GraphEdge>
+  findings: Record<string, Finding>
+  filterValueOptions: Record<string, string[]>
+
+  queueLoading: boolean
+  investigationLoading: boolean
+  lastError: string | null
+  lastNotImplemented: string | null
+  somHint: string | null
+  somCatalog: SomCatalog | null
+
   setChips: (chips: FilterChip[]) => void
   addChip: (field: FilterField, value: string) => void
   removeChip: (id: string) => void
   removeChipValue: (id: string, value: string) => void
   setTimePreset: (preset: string) => void
+  setQueueQuery: (query: string) => void
   applySavedView: (viewId: string) => void
   toggleAlertSelect: (id: string) => void
   clearAlertSelection: () => void
   toggleCorrelationExpand: (id: string) => void
+  inspectQueueItem: (item: QueueItem | null) => void
 
   setActiveTab: (tab: TabId) => void
   closeTab: (tab: TabId) => void
-  startInvestigation: (alertOrCorrIds: string[]) => string
-  createChildInvestigation: (parentId: string, entityIds: string[]) => string
+  startInvestigation: (alertOrCorrIds: string[]) => Promise<string>
+  createChildInvestigation: (parentId: string, entityIds: string[]) => Promise<string>
   updateInvestigation: (id: string, patch: Partial<Investigation>) => void
+  persistInvestigation: (id: string, patch: Partial<Investigation>) => Promise<void>
+  loadQueue: () => Promise<void>
+  bootstrap: () => Promise<void>
+  loadInvestigation: (id: string) => Promise<void>
+  clearError: () => void
 
   setReview: (
     kind: 'event' | 'node' | 'edge' | 'finding',
     id: string,
     review: ReviewState,
+    investigationId?: string,
   ) => void
   setContextQueue: (investigationId: string, patch: Partial<ContextQueueState>) => void
   addContextChip: (investigationId: string, field: FilterField, value: string) => void
   removeContextChip: (investigationId: string, chipId: string) => void
   removeContextChipValue: (investigationId: string, chipId: string, value: string) => void
   clearContextChips: (investigationId: string) => void
-  addEventsToContext: (investigationId: string, eventIds: string[]) => void
+  addEventsToContext: (investigationId: string, eventIds: string[]) => Promise<void>
   setAgentPanelOpen: (open: boolean) => void
   setDetailPanelOpen: (open: boolean) => void
+  loadSomCatalog: () => Promise<void>
+  openAgentPanel: () => Promise<void>
 
-  runEnrichment: (investigationId: string) => void
+  runEnrichment: (investigationId: string, issueId: string) => Promise<void>
   createIssue: (
     investigationId: string,
     templateId: string,
     entityIds: string[],
     parentId?: string,
-  ) => void
+  ) => Promise<void>
   cancelIssue: (issueId: string) => void
   addIssueComment: (issueId: string, text: string) => void
-  runEntityAction: (entityId: string, action: string) => void
+  runEntityAction: (entityId: string, action: string) => Promise<void>
   addFindingFromEntity: (investigationId: string, entityId: string) => void
 }
 
-export const emptyContextQueue: ContextQueueState = {
-  chips: [],
-  timePreset: '24h',
-  history: [],
-  selectedIds: [],
-  hideAdded: false,
-  originFilter: 'all',
-  reviewFilter: 'all',
-}
-
-/** Adds a value to the chip of its field, or creates the chip. */
 function mergeChipValue(
   chips: FilterChip[],
   field: FilterField,
@@ -116,85 +157,130 @@ function mergeChipValue(
   )
 }
 
-function buildInvestigationFromSeed(ids: string[]): Investigation {
-  const seedEventIds = [...seedInvestigationEvents]
-  const entityIdSet = new Set<string>()
-  for (const eid of seedEventIds) {
-    contextEvents[eid]?.entityIds.forEach((x) => entityIdSet.add(x))
+function mergeEntities(
+  current: Record<string, Entity>,
+  incoming: Record<string, Entity>,
+): Record<string, Entity> {
+  return { ...current, ...incoming }
+}
+
+function sourceRefsFromIds(
+  ids: string[],
+  alerts: Record<string, AlertEvent>,
+  correlations: Record<string, CorrelationGroup>,
+  contextEvents: Record<string, ContextEvent>,
+): Ir['schemas']['EventSourceRef'][] {
+  const refs: Ir['schemas']['EventSourceRef'][] = []
+  const seen = new Set<string>()
+  const push = (source: string, sourceEventId: string | undefined, fallbackId: string) => {
+    const parsed = parseGatewayEventId(fallbackId)
+    const source_code = source || parsed?.source_code
+    const source_event_id = sourceEventId || parsed?.source_event_id
+    if (!source_code || !source_event_id) return
+    const key = `${source_code}/${source_event_id}`
+    if (seen.has(key)) return
+    seen.add(key)
+    refs.push({ source_code, source_event_id })
   }
-  // Also pull entities from selected alerts/correlations
   for (const id of ids) {
-    if (alerts[id]) alerts[id].entityIds.forEach((x) => entityIdSet.add(x))
-    if (correlations[id]) correlations[id].entityIds.forEach((x) => entityIdSet.add(x))
+    if (correlations[id]) {
+      for (const eid of correlations[id].eventIds) {
+        const a = alerts[eid] ?? contextEvents[eid]
+        if (a) push(a.source, a.sourceEventId, a.id)
+      }
+      continue
+    }
+    const a = alerts[id] ?? contextEvents[id]
+    if (a) push(a.source, a.sourceEventId, a.id)
   }
+  return refs
+}
 
-  const title =
-    ids.length === 1 && correlations[ids[0]]
-      ? correlations[ids[0]].title
-      : ids.length === 1 && alerts[ids[0]]
-        ? alerts[ids[0]].title
-        : `Расследование (${ids.length})`
-
-  const severity =
-    ids
-      .map((id) => correlations[id]?.severity ?? alerts[id]?.severity)
-      .filter(Boolean)
-      .sort((a, b) => {
-        const order = ['critical', 'high', 'medium', 'low', 'info']
-        return order.indexOf(a!) - order.indexOf(b!)
-      })[0] ?? 'high'
-
+function applyBundle(
+  get: () => AppState,
+  bundle: Awaited<ReturnType<typeof loadInvestigationBundle>>,
+  keepView?: Investigation,
+) {
+  const eventReviews = { ...get().eventReviews }
+  const nodeReviews = { ...get().nodeReviews }
+  const edgeReviews = { ...get().edgeReviews }
+  for (const ev of Object.values(bundle.events)) eventReviews[ev.id] = ev.review
+  for (const n of Object.values(bundle.nodes)) nodeReviews[n.id] = n.review
+  for (const e of Object.values(bundle.edges)) edgeReviews[e.id] = e.review
   return {
-    id: uid('inv'),
-    title,
-    severity: severity as Investigation['severity'],
-    status: 'in_progress',
-    assignee: 'а.соколов',
-    seedEventIds: [...ids],
-    eventIds: [...seedEventIds],
-    entityIds: [...entityIdSet],
-    nodeIds: [...seedInvestigationNodes],
-    edgeIds: [...seedInvestigationEdges],
-    findingIds: ['find-001', 'find-002'],
-    issueIds: [],
-    createdAt: new Date().toISOString(),
-    view: 'graph',
-    selectedEntityIds: [],
+    investigations: {
+      ...get().investigations,
+      [bundle.investigation.id]: {
+        ...bundle.investigation,
+        view: keepView?.view ?? bundle.investigation.view,
+        selectedEntityIds: keepView?.selectedEntityIds ?? [],
+        selectedEventId: keepView?.selectedEventId,
+        selectedNodeId: keepView?.selectedNodeId,
+        seedEventIds: keepView?.seedEventIds ?? bundle.investigation.seedEventIds,
+        issueIds: keepView?.issueIds ?? bundle.investigation.issueIds,
+        findingIds: keepView?.findingIds ?? bundle.investigation.findingIds,
+      },
+    },
+    contextEvents: { ...get().contextEvents, ...bundle.events },
+    entities: mergeEntities(get().entities, bundle.entities),
+    graphNodes: { ...get().graphNodes, ...bundle.nodes },
+    graphEdges: { ...get().graphEdges, ...bundle.edges },
+    eventReviews,
+    nodeReviews,
+    edgeReviews,
   }
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
   chips: [],
-  timePreset: '24h',
+  timePreset: '30d',
+  queueQuery: 'impacket_smbexec',
   selectedAlertIds: [],
-  expandedCorrelationIds: ['corr-001'],
+  expandedCorrelationIds: [],
+  inspectedQueueItem: null,
 
   tabs: ['queue'],
   activeTab: 'queue',
   investigations: {},
   issues: {},
-  eventReviews: Object.fromEntries(
-    Object.values(contextEvents).map((e) => [e.id, e.review]),
-  ),
-  nodeReviews: Object.fromEntries(
-    Object.values(graphNodes).map((n) => [n.id, n.review]),
-  ),
-  edgeReviews: Object.fromEntries(
-    Object.values(graphEdges).map((e) => [e.id, e.review]),
-  ),
-  findingReviews: Object.fromEntries(
-    Object.values(findings).map((f) => [f.id, f.review]),
-  ),
+  eventReviews: {},
+  nodeReviews: {},
+  edgeReviews: {},
+  findingReviews: {},
   actionResults: {},
   contextQueue: {},
   agentPanelOpen: false,
   detailPanelOpen: false,
 
-  setChips: (chips) => set({ chips }),
+  alerts: {},
+  correlations: {},
+  queueOrder: [],
+  entities: {},
+  contextEvents: {},
+  graphNodes: {},
+  graphEdges: {},
+  findings: {},
+  filterValueOptions: defaultFilterValueOptions,
+
+  queueLoading: false,
+  investigationLoading: false,
+  lastError: null,
+  lastNotImplemented: null,
+  somHint: null,
+  somCatalog: null,
+
+  setChips: (chips) => {
+    set({ chips })
+    void get().loadQueue()
+  },
   addChip: (field, value) => {
     set({ chips: mergeChipValue(get().chips, field, value) })
+    void get().loadQueue()
   },
-  removeChip: (id) => set({ chips: get().chips.filter((c) => c.id !== id) }),
+  removeChip: (id) => {
+    set({ chips: get().chips.filter((c) => c.id !== id) })
+    void get().loadQueue()
+  },
   removeChipValue: (id, value) => {
     set({
       chips: get()
@@ -203,15 +289,25 @@ export const useAppStore = create<AppState>((set, get) => ({
         )
         .filter((c) => c.values.length > 0),
     })
+    void get().loadQueue()
   },
-  setTimePreset: (timePreset) => set({ timePreset }),
+  setTimePreset: (timePreset) => {
+    set({ timePreset })
+    void get().loadQueue()
+  },
+  setQueueQuery: (queueQuery) => {
+    set({ queueQuery })
+    void get().loadQueue()
+  },
   applySavedView: (viewId) => {
     const view = savedViews.find((v) => v.id === viewId)
     if (!view) return
     set({
       chips: view.chips.map((c) => ({ ...c, id: uid('chip') })),
       timePreset: view.timePreset,
+      queueQuery: view.query ?? '',
     })
+    void get().loadQueue()
   },
   toggleAlertSelect: (id) => {
     const sel = get().selectedAlertIds
@@ -220,6 +316,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     })
   },
   clearAlertSelection: () => set({ selectedAlertIds: [] }),
+  inspectQueueItem: (item) => set({ inspectedQueueItem: item }),
   toggleCorrelationExpand: (id) => {
     const cur = get().expandedCorrelationIds
     set({
@@ -236,56 +333,150 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ tabs, activeTab })
   },
 
-  startInvestigation: (ids) => {
-    const inv = buildInvestigationFromSeed(ids)
-    set({
-      investigations: { ...get().investigations, [inv.id]: inv },
-      tabs: [...get().tabs, inv.id],
-      activeTab: inv.id,
-      selectedAlertIds: [],
-    })
-    return inv.id
+  clearError: () => set({ lastError: null, lastNotImplemented: null }),
+
+  bootstrap: async () => {
+    try {
+      const listed = await listInvestigations()
+      if (listed.length) {
+        const investigations = { ...get().investigations }
+        const tabs = [...get().tabs]
+        for (const inv of listed) {
+          investigations[inv.id] = inv
+          if (!tabs.includes(inv.id)) tabs.push(inv.id)
+        }
+        set({ investigations, tabs })
+      }
+    } catch (err) {
+      set({ lastError: errorMessage(err) })
+    }
+    await get().loadQueue()
   },
 
-  createChildInvestigation: (parentId, entityIds) => {
+  loadQueue: async () => {
+    set({ queueLoading: true, lastError: null })
+    try {
+      const result = await searchQueue(get().chips, get().timePreset, get().queueQuery)
+      const hosts = new Set(get().filterValueOptions.host ?? [])
+      const ips = new Set(get().filterValueOptions.ip ?? [])
+      for (const e of Object.values(result.entities)) {
+        if (e.kind === 'host') hosts.add(e.label)
+        if (e.kind === 'ip') ips.add(e.label)
+      }
+      set({
+        alerts: result.alerts,
+        correlations: result.correlations,
+        queueOrder: result.queueOrder,
+        entities: mergeEntities(get().entities, result.entities),
+        contextEvents: { ...get().contextEvents, ...result.contextEvents },
+        expandedCorrelationIds: result.queueOrder
+          .filter((i) => i.kind === 'correlation')
+          .map((i) => i.id)
+          .slice(0, 3),
+        filterValueOptions: {
+          ...get().filterValueOptions,
+          host: [...hosts],
+          ip: [...ips],
+        },
+        queueLoading: false,
+        lastError: result.sourceErrors.length ? result.sourceErrors.join('; ') : null,
+      })
+    } catch (err) {
+      set({ queueLoading: false, lastError: errorMessage(err) })
+    }
+  },
+
+  loadInvestigation: async (id) => {
+    const keep = get().investigations[id]
+    set({ investigationLoading: true, lastError: null })
+    try {
+      const bundle = await loadInvestigationBundle(id, keep)
+      set({ ...applyBundle(get, bundle, keep), investigationLoading: false })
+    } catch (err) {
+      set({ investigationLoading: false, lastError: errorMessage(err) })
+    }
+  },
+
+  startInvestigation: async (ids) => {
+    const { alerts, correlations } = get()
+    const title =
+      ids.length === 1 && correlations[ids[0]]
+        ? correlations[ids[0]].title
+        : ids.length === 1 && alerts[ids[0]]
+          ? alerts[ids[0]].title
+          : `Расследование (${ids.length})`
+    const severity =
+      ids
+        .map((id) => correlations[id]?.severity ?? alerts[id]?.severity)
+        .filter(Boolean)
+        .sort((a, b) => {
+          const order = ['critical', 'high', 'medium', 'low', 'info']
+          return order.indexOf(a!) - order.indexOf(b!)
+        })[0] ?? 'high'
+
+    set({ investigationLoading: true, lastError: null })
+    try {
+      const created = await createInvestigation({ title, severity })
+      const refs = sourceRefsFromIds(ids, alerts, correlations, get().contextEvents)
+      if (refs.length) await addContext(created.id, refs)
+      const bundle = await loadInvestigationBundle(created.id, {
+        seedEventIds: ids,
+        view: 'graph',
+      })
+      set({
+        ...applyBundle(get, bundle),
+        tabs: [...get().tabs, created.id],
+        activeTab: created.id,
+        selectedAlertIds: [],
+        inspectedQueueItem: null,
+        agentPanelOpen: true,
+        investigationLoading: false,
+      })
+      void get().loadSomCatalog()
+      return created.id
+    } catch (err) {
+      set({ investigationLoading: false, lastError: errorMessage(err) })
+      return ''
+    }
+  },
+
+  createChildInvestigation: async (parentId, entityIds) => {
     const parent = get().investigations[parentId]
     if (!parent) return ''
-    const child: Investigation = {
-      ...parent,
-      id: uid('inv'),
-      title: `${parent.title} → ветка`,
-      parentId,
-      entityIds: [...entityIds],
-      selectedEntityIds: [],
-      selectedNodeId: undefined,
-      selectedEventId: undefined,
-      // Keep events/nodes that touch selected entities
-      eventIds: parent.eventIds.filter((eid) =>
-        contextEvents[eid]?.entityIds.some((x) => entityIds.includes(x)),
-      ),
-      nodeIds: parent.nodeIds.filter((nid) => {
-        const n = graphNodes[nid]
-        return n && entityIds.includes(n.refId)
-      }),
-      edgeIds: parent.edgeIds.filter((eid) => {
-        const e = graphEdges[eid]
-        if (!e) return false
-        const s = graphNodes[e.source]
-        const t = graphNodes[e.target]
-        return (
-          (s && entityIds.includes(s.refId)) || (t && entityIds.includes(t.refId))
-        )
-      }),
-      issueIds: [],
-      createdAt: new Date().toISOString(),
-      status: 'in_progress',
+    set({ investigationLoading: true, lastError: null })
+    try {
+      const created = await createInvestigation({
+        title: `${parent.title} → ветка`,
+        severity: parent.severity,
+        parentId,
+        workspaceId: parent.somWorkspaceIds?.[0],
+      })
+      const relatedEvents = parent.eventIds.filter((eid) =>
+        get().contextEvents[eid]?.entityIds.some((x) => entityIds.includes(x)),
+      )
+      const refs = sourceRefsFromIds(
+        relatedEvents,
+        get().alerts,
+        get().correlations,
+        get().contextEvents,
+      )
+      if (refs.length) await addContext(created.id, refs)
+      const bundle = await loadInvestigationBundle(created.id, {
+        parentId,
+        view: 'graph',
+        selectedEntityIds: [],
+      })
+      set({
+        ...applyBundle(get, bundle),
+        tabs: [...get().tabs, created.id],
+        activeTab: created.id,
+        investigationLoading: false,
+      })
+      return created.id
+    } catch (err) {
+      set({ investigationLoading: false, lastError: errorMessage(err) })
+      return ''
     }
-    set({
-      investigations: { ...get().investigations, [child.id]: child },
-      tabs: [...get().tabs, child.id],
-      activeTab: child.id,
-    })
-    return child.id
   },
 
   updateInvestigation: (id, patch) => {
@@ -299,16 +490,68 @@ export const useAppStore = create<AppState>((set, get) => ({
     })
   },
 
-  setReview: (kind, id, review) => {
+  persistInvestigation: async (id, patch) => {
+    const inv = get().investigations[id]
+    if (!inv || inv.version == null) {
+      get().updateInvestigation(id, patch)
+      return
+    }
+    try {
+      await patchInvestigation(id, {
+        version: inv.version,
+        title: patch.title,
+        status: patch.status === 'closed' ? 'closed' : patch.status === 'open' ? 'open' : undefined,
+        severity:
+          patch.severity && patch.severity !== 'info' ? patch.severity : undefined,
+      })
+      get().updateInvestigation(id, patch)
+    } catch (err) {
+      if (isNotImplemented(err)) {
+        set({ lastNotImplemented: errorMessage(err) })
+        return
+      }
+      set({ lastError: errorMessage(err) })
+    }
+  },
+
+  setReview: (kind, id, review, investigationId) => {
     if (kind === 'event') {
       set({ eventReviews: { ...get().eventReviews, [id]: review } })
-    } else if (kind === 'node') {
-      set({ nodeReviews: { ...get().nodeReviews, [id]: review } })
-    } else if (kind === 'edge') {
-      set({ edgeReviews: { ...get().edgeReviews, [id]: review } })
-    } else {
-      set({ findingReviews: { ...get().findingReviews, [id]: review } })
+      return
     }
+    if (kind === 'node') {
+      set({ nodeReviews: { ...get().nodeReviews, [id]: review } })
+      return
+    }
+    if (kind === 'finding') {
+      set({ findingReviews: { ...get().findingReviews, [id]: review } })
+      return
+    }
+
+    const invId =
+      investigationId ??
+      (get().activeTab !== 'queue' ? get().activeTab : undefined)
+    const edge = get().graphEdges[id]
+    const previous = get().edgeReviews[id] ?? edge?.review
+    // Apply locally first so the proposed list stays interactive if /review is 501.
+    set({ edgeReviews: { ...get().edgeReviews, [id]: review } })
+    if (!invId || !edge || edge.version == null) return
+    void (async () => {
+      try {
+        const body: Ir['schemas']['ReviewRequest'] =
+          review === 'rejected'
+            ? { reject: [{ id, version: edge.version ?? 1, reason: 'Отклонено аналитиком' }] }
+            : { confirm: [{ id, version: edge.version ?? 1 }] }
+        await reviewEdges(invId, body)
+        await get().loadInvestigation(invId)
+      } catch (err) {
+        if (isNotImplemented(err)) return
+        set({
+          lastError: errorMessage(err),
+          edgeReviews: { ...get().edgeReviews, [id]: previous ?? 'proposed' },
+        })
+      }
+    })()
   },
 
   setContextQueue: (investigationId, patch) => {
@@ -336,6 +579,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         },
       },
     })
+    void get().loadQueue()
   },
 
   removeContextChip: (investigationId, chipId) => {
@@ -378,200 +622,204 @@ export const useAppStore = create<AppState>((set, get) => ({
     })
   },
 
-  addEventsToContext: (investigationId, eventIds) => {
-    const inv = get().investigations[investigationId]
-    if (!inv) return
-    const newIds = eventIds.filter(
-      (id) => contextEvents[id] && !inv.eventIds.includes(id),
+  addEventsToContext: async (investigationId, eventIds) => {
+    const refs = sourceRefsFromIds(
+      eventIds,
+      get().alerts,
+      get().correlations,
+      get().contextEvents,
     )
-    if (newIds.length === 0) return
-
-    const entityIdSet = new Set(inv.entityIds)
-    const eventReviews = { ...get().eventReviews }
-    newIds.forEach((id) => {
-      const ev = contextEvents[id]
-      ev.entityIds.forEach((x) => entityIdSet.add(x))
-      // Manual add: the analyst vouches for the event, no review needed
-      contextEvents[id] = { ...ev, origin: 'analyst' }
-      eventReviews[id] = 'confirmed'
-    })
-
-    const cur = get().contextQueue[investigationId] ?? emptyContextQueue
-    set({
-      eventReviews,
-      investigations: {
-        ...get().investigations,
-        [investigationId]: {
-          ...inv,
-          eventIds: [...inv.eventIds, ...newIds],
-          entityIds: [...entityIdSet],
+    if (refs.length === 0) return
+    try {
+      await addContext(investigationId, refs)
+      const cur = get().contextQueue[investigationId] ?? emptyContextQueue
+      set({
+        contextQueue: {
+          ...get().contextQueue,
+          [investigationId]: { ...cur, selectedIds: [] },
         },
-      },
-      contextQueue: {
-        ...get().contextQueue,
-        [investigationId]: { ...cur, selectedIds: [] },
-      },
-    })
+      })
+      await get().loadInvestigation(investigationId)
+    } catch (err) {
+      set({ lastError: errorMessage(err) })
+    }
   },
 
   setAgentPanelOpen: (agentPanelOpen) => set({ agentPanelOpen }),
   setDetailPanelOpen: (detailPanelOpen) => set({ detailPanelOpen }),
 
-  runEnrichment: (investigationId) => {
-    const inv = get().investigations[investigationId]
-    if (!inv) return
-
-    const issue: Issue = {
-      id: uid('issue'),
-      investigationId,
-      template: 'Насыщение контекста',
-      title: 'Насыщение контекста',
-      description: issueTemplates[0].description,
-      entityIds: inv.entityIds.slice(0, 4),
-      status: 'running',
-      eventsFound: 0,
-      edgesFound: 0,
-      findingsFound: 0,
-      comments: [],
-      createdAt: new Date().toISOString(),
+  loadSomCatalog: async () => {
+    try {
+      set({ somCatalog: await resolveSomCatalog() })
+    } catch (err) {
+      set({ lastError: errorMessage(err) })
     }
+  },
 
-    set({
-      issues: { ...get().issues, [issue.id]: issue },
-      investigations: {
-        ...get().investigations,
-        [investigationId]: {
-          ...inv,
-          issueIds: [...inv.issueIds, issue.id],
-        },
-      },
-      agentPanelOpen: true,
-    })
+  openAgentPanel: async () => {
+    set({ agentPanelOpen: true })
+    if (!get().somCatalog) await get().loadSomCatalog()
+  },
 
-    // Simulate async enrichment
-    setTimeout(() => {
-      const current = get().investigations[investigationId]
-      const currentIssue = get().issues[issue.id]
-      if (!current || !currentIssue || currentIssue.status === 'cancelled') return
-
-      const newEventIds = enrichmentPayload.eventIds.filter(
-        (id) => !current.eventIds.includes(id),
-      )
-      const newNodeIds = enrichmentPayload.nodeIds.filter(
-        (id) => !current.nodeIds.includes(id),
-      )
-      const newEdgeIds = enrichmentPayload.edgeIds.filter(
-        (id) => !current.edgeIds.includes(id),
-      )
-      const newFindingIds = enrichmentPayload.findingIds.filter(
-        (id) => !current.findingIds.includes(id),
-      )
-
-      // Ensure proposed reviews
-      const eventReviews = { ...get().eventReviews }
-      const nodeReviews = { ...get().nodeReviews }
-      const edgeReviews = { ...get().edgeReviews }
-      const findingReviews = { ...get().findingReviews }
-      newEventIds.forEach((id) => {
-        eventReviews[id] = 'proposed'
-      })
-      newNodeIds.forEach((id) => {
-        nodeReviews[id] = 'proposed'
-      })
-      newEdgeIds.forEach((id) => {
-        edgeReviews[id] = 'proposed'
-      })
-      newFindingIds.forEach((id) => {
-        findingReviews[id] = 'proposed'
-      })
-
-      const newEntityIds = new Set(current.entityIds)
-      newNodeIds.forEach((nid) => {
-        const n = graphNodes[nid]
-        if (n) newEntityIds.add(n.refId)
-      })
-
+  runEnrichment: async (investigationId, issueId) => {
+    const inv = get().investigations[investigationId]
+    if (!inv || !issueId) return
+    set({ agentPanelOpen: true, lastError: null, somHint: null })
+    try {
+      let catalog = get().somCatalog
+      if (!catalog) {
+        catalog = await resolveSomCatalog()
+        set({ somCatalog: catalog })
+      }
+      const issueDef = catalog.issues.find((i) => i.id === issueId)
+      if (!issueDef) {
+        set({ lastError: 'Issue не найден' })
+        return
+      }
+      if (get().issues[issueDef.id]?.status === 'running') return
+      const issue: Issue = {
+        id: issueDef.id,
+        investigationId,
+        template: issueDef.simple_id,
+        title: issueDef.title,
+        description: issueDef.description || 'Насыщение контекста',
+        entityIds: inv.entityIds.slice(0, 4),
+        status: 'running',
+        eventsFound: 0,
+        edgesFound: 0,
+        findingsFound: 0,
+        comments: [],
+        createdAt: new Date().toISOString(),
+      }
       set({
-        eventReviews,
-        nodeReviews,
-        edgeReviews,
-        findingReviews,
-        issues: {
-          ...get().issues,
-          [issue.id]: {
-            ...currentIssue,
-            status: 'completed',
-            eventsFound: newEventIds.length,
-            edgesFound: newEdgeIds.length,
-            findingsFound: newFindingIds.length,
-            resultSummary: `Найдено: ${newEventIds.length} событий, ${newEdgeIds.length} связей, ${newFindingIds.length} находок. Требуется подтверждение.`,
-          },
-        },
+        issues: { ...get().issues, [issue.id]: issue },
         investigations: {
           ...get().investigations,
           [investigationId]: {
-            ...current,
-            eventIds: [...current.eventIds, ...newEventIds],
-            nodeIds: [...current.nodeIds, ...newNodeIds],
-            edgeIds: [...current.edgeIds, ...newEdgeIds],
-            findingIds: [...current.findingIds, ...newFindingIds],
-            entityIds: [...newEntityIds],
+            ...inv,
+            issueIds: inv.issueIds.includes(issue.id)
+              ? inv.issueIds
+              : [...inv.issueIds, issue.id],
           },
         },
       })
-    }, 2500)
-  },
-
-  createIssue: (investigationId, templateId, entityIds, parentId) => {
-    const tpl = issueTemplates.find((t) => t.id === templateId) ?? issueTemplates[0]
-    const inv = get().investigations[investigationId]
-    if (!inv) return
-
-    const issue: Issue = {
-      id: uid('issue'),
-      investigationId,
-      parentId,
-      template: tpl.title,
-      title: tpl.title,
-      description: tpl.description,
-      entityIds,
-      status: 'running',
-      eventsFound: 0,
-      edgesFound: 0,
-      findingsFound: 0,
-      comments: [],
-      createdAt: new Date().toISOString(),
-    }
-
-    set({
-      issues: { ...get().issues, [issue.id]: issue },
-      investigations: {
-        ...get().investigations,
-        [investigationId]: {
-          ...inv,
-          issueIds: [...inv.issueIds, issue.id],
-        },
-      },
-      agentPanelOpen: true,
-    })
-
-    setTimeout(() => {
-      const currentIssue = get().issues[issue.id]
-      if (!currentIssue || currentIssue.status === 'cancelled') return
+      const before = await countProposedAgentEdges(investigationId)
+      const run = await runSomIssue(issueDef.id, investigationId)
+      const localEnvironmentId = run.local_environment_id
       set({
         issues: {
           ...get().issues,
-          [issue.id]: {
-            ...currentIssue,
-            status: 'completed',
-            eventsFound: templateId === 'tpl-hash-hunt' ? 2 : 1,
-            edgesFound: 1,
-            findingsFound: 1,
-            resultSummary: 'Проверка завершена. Результаты добавлены как предложения.',
-          },
+          [issue.id]: { ...get().issues[issue.id]!, localEnvironmentId },
         },
       })
-    }, 2000)
+
+      const poll = async () => {
+        const currentIssue = get().issues[issue.id]
+        if (!currentIssue || currentIssue.status === 'cancelled') return
+        try {
+          await get().loadInvestigation(investigationId)
+          const now = await countProposedAgentEdges(investigationId)
+          const edgesFound = Math.max(0, now - before)
+          const env = await getSomEnvironment(localEnvironmentId)
+
+          if (env.status === 'running') {
+            const live = get().issues[issue.id]
+            if (live && live.status === 'running') {
+              set({
+                issues: {
+                  ...get().issues,
+                  [issue.id]: { ...live, edgesFound, localEnvironmentId },
+                },
+              })
+            }
+            window.setTimeout(() => void poll(), 2500)
+            return
+          }
+
+          const live = get().issues[issue.id]
+          if (!live || live.status === 'cancelled') return
+          const latest = get().investigations[investigationId]
+          const proposed = latest
+            ? latest.edgeIds.filter(
+                (eid) => (get().edgeReviews[eid] ?? get().graphEdges[eid]?.review) === 'proposed',
+              ).length
+            : now
+
+          if (env.status === 'failed') {
+            set({
+              issues: {
+                ...get().issues,
+                [issue.id]: {
+                  ...live,
+                  status: 'error',
+                  edgesFound,
+                  localEnvironmentId,
+                  resultSummary: 'Агент завершился с ошибкой.',
+                },
+              },
+            })
+            return
+          }
+
+          set({
+            issues: {
+              ...get().issues,
+              [issue.id]: {
+                ...live,
+                status: 'completed',
+                edgesFound,
+                localEnvironmentId,
+                resultSummary:
+                  proposed > 0
+                    ? `Агент предложил ${proposed} связей. Нужно ревью.`
+                    : 'Агент завершился. Новых proposed-связей нет.',
+              },
+            },
+          })
+        } catch {
+          window.setTimeout(() => void poll(), 2500)
+        }
+      }
+      window.setTimeout(() => void poll(), 2500)
+    } catch (err) {
+      const failed = get().issues[issueId]
+      if (failed?.status === 'running') {
+        set({
+          issues: {
+            ...get().issues,
+            [issueId]: {
+              ...failed,
+              status: 'error',
+              resultSummary: errorMessage(err),
+            },
+          },
+        })
+      }
+      set({
+        lastError: errorMessage(err),
+        somHint: isUnauthorized(err)
+          ? 'Обновите SOM-токен в шапке — он живёт около часа'
+          : null,
+      })
+    }
+  },
+
+  createIssue: async (investigationId, templateId, entityIds, parentId) => {
+    await get().openAgentPanel()
+    const inv = get().investigations[investigationId]
+    if (!inv || !parentId) return
+    const tpl = issueTemplates.find((t) => t.id === templateId) ?? issueTemplates[0]
+    const running = inv.issueIds
+      .map((id) => get().issues[id])
+      .find((i) => i?.status === 'running')
+    if (running) {
+      set({
+        issues: {
+          ...get().issues,
+          [running.id]: { ...running, parentId, entityIds, template: tpl.title },
+        },
+      })
+    }
   },
 
   cancelIssue: (issueId) => {
@@ -597,7 +845,7 @@ export const useAppStore = create<AppState>((set, get) => ({
             ...issue.comments,
             {
               id: uid('cmt'),
-              author: 'а.соколов',
+              author: 'аналитик',
               time: new Date().toISOString(),
               text,
             },
@@ -607,19 +855,36 @@ export const useAppStore = create<AppState>((set, get) => ({
     })
   },
 
-  runEntityAction: (entityId, action) => {
-    const entity = entities[entityId]
+  runEntityAction: async (entityId, action) => {
+    const entity = get().entities[entityId]
     if (!entity) return
     const results = get().actionResults[entityId] ?? []
-    const bodies: Record<string, string> = {
-      enrich: `Обогащение ${entity.label}: найдены 3 связанных события за последние 7 дней, 1 внешняя репутация.`,
-      reputation:
-        entity.kind === 'ip' || entity.kind === 'domain' || entity.kind === 'file'
-          ? `Репутация ${entity.label}: malicious / known_c2 (VirusTotal 42/72, AbuseIPDB confidence 89).`
-          : `Репутация для ${entity.kind} недоступна в TI-источниках.`,
-      decode: `Декодирование cmdline: Get-Content ... | IEX — загрузка payload с http://185.234.72.19/p.bin`,
-      sandbox: `Песочница: файл ${entity.label} — детект Mimikatz-like behavior, network to 185.234.72.19.`,
-      related: `Найдено 12 связанных событий по ${entity.label} в окне 24ч.`,
+    let body = `Действие ${action} выполнено`
+    try {
+      if (action === 'reputation') {
+        body = await lookupEntity(entity.kind === 'file_hash' ? 'hash' : entity.kind, entity.label)
+      } else if (action === 'sandbox') {
+        body = await analyzeArtifact(
+          entity.label,
+          entity.attributes.hash || entity.attributes.sha256,
+        )
+      } else if (action === 'related') {
+        const card = await getEntityCard(entityId).catch(() => null)
+        body = card
+          ? `Связанные события: ${card.events_count}. Расследований: ${card.occurrences.length}`
+          : `Связанные события по ${entity.label}`
+      } else if (action === 'decode') {
+        body = entity.attributes.cmdline
+          ? `cmdline: ${entity.attributes.cmdline}`
+          : 'Декодирование недоступно: у сущности нет cmdline'
+      } else if (action === 'enrich') {
+        const card = await getEntityCard(entityId).catch(() => null)
+        body = card
+          ? `Карточка ${entity.label}: ${card.events_count} событий, соседей: ${card.neighbors?.length ?? 0}`
+          : `Обогащение ${entity.label}`
+      }
+    } catch (err) {
+      body = errorMessage(err)
     }
     const titles: Record<string, string> = {
       enrich: 'Обогащение',
@@ -632,7 +897,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       id: uid('act'),
       action,
       title: titles[action] ?? action,
-      body: bodies[action] ?? `Действие ${action} выполнено`,
+      body,
       time: new Date().toISOString(),
     }
     set({
@@ -646,11 +911,10 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   addFindingFromEntity: (investigationId, entityId) => {
     const inv = get().investigations[investigationId]
-    const entity = entities[entityId]
+    const entity = get().entities[entityId]
     if (!inv || !entity) return
     const fid = uid('find')
-    // Store as dynamic finding via findingReviews only — keep simple
-    findings[fid] = {
+    const finding: Finding = {
       id: fid,
       title: `Находка: ${entity.label}`,
       severity: 'high',
@@ -660,6 +924,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       origin: 'analyst',
     }
     set({
+      findings: { ...get().findings, [fid]: finding },
       findingReviews: { ...get().findingReviews, [fid]: 'confirmed' },
       investigations: {
         ...get().investigations,
@@ -672,18 +937,37 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 }))
 
-// Re-export mock accessors for components
-export {
-  alerts,
-  correlations,
-  contextEvents,
-  entities,
-  findings,
-  graphEdges,
-  graphNodes,
-  queueOrder,
-  savedViews,
-  filterFieldLabels,
-  filterValueOptions,
-  issueTemplates,
-} from '../mocks/scenario'
+export { savedViews, issueTemplates, filterFieldLabels } from '../lib/catalog'
+
+export function persistNodePosition(
+  investigationId: string,
+  nodeId: string,
+  position: { x: number; y: number },
+) {
+  const nodes = useAppStore.getState().graphNodes
+  const match = Object.values(nodes).find((n) => n.id === nodeId || n.refId === nodeId)
+  if (!match) return
+  persistGraphLayout(investigationId, [
+    { ...match, x: position.x, y: position.y },
+  ])
+}
+
+export function persistGraphLayout(investigationId: string, nodes: GraphNode[]) {
+  if (nodes.length === 0) return
+  const current = useAppStore.getState().graphNodes
+  const next = { ...current }
+  for (const node of nodes) {
+    const match = next[node.id] ?? Object.values(next).find((n) => n.refId === node.id)
+    if (!match) continue
+    next[match.id] = { ...match, x: node.x, y: node.y }
+  }
+  useAppStore.setState({ graphNodes: next })
+  const layout: Record<string, { x: number; y: number }> = {}
+  const invNodeIds = new Set(
+    useAppStore.getState().investigations[investigationId]?.nodeIds ?? [],
+  )
+  for (const n of Object.values(next)) {
+    if (invNodeIds.has(n.id)) layout[n.id] = { x: n.x, y: n.y }
+  }
+  saveLayout(investigationId, layout)
+}

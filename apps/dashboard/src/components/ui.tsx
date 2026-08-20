@@ -58,6 +58,7 @@ export function Button({
   className,
   type = 'button',
   title,
+  tabIndex,
 }: {
   children: React.ReactNode
   onClick?: (e: React.MouseEvent) => void
@@ -67,6 +68,7 @@ export function Button({
   className?: string
   type?: 'button' | 'submit'
   title?: string
+  tabIndex?: number
 }) {
   const variants = {
     default: 'border-border bg-surface-2 text-fg hover:bg-surface-3',
@@ -83,6 +85,7 @@ export function Button({
       type={type}
       disabled={disabled}
       title={title}
+      tabIndex={tabIndex}
       onClick={onClick}
       className={clsx(
         'inline-flex items-center justify-center gap-1.5 rounded border font-medium transition-colors disabled:opacity-40',
@@ -93,6 +96,35 @@ export function Button({
     >
       {children}
     </button>
+  )
+}
+
+export function ErrorBanner({
+  message,
+  tone = 'error',
+  onDismiss,
+}: {
+  message: string | null
+  tone?: 'error' | 'warning'
+  onDismiss?: () => void
+}) {
+  if (!message) return null
+  return (
+    <div
+      className={clsx(
+        'flex items-start justify-between gap-3 border-b px-4 py-2 text-xs',
+        tone === 'warning'
+          ? 'border-proposed/40 bg-proposed/10 text-fg'
+          : 'border-critical/40 bg-critical/10 text-critical',
+      )}
+    >
+      <span>{message}</span>
+      {onDismiss && (
+        <button type="button" className="shrink-0 text-fg-dim hover:text-fg" onClick={onDismiss}>
+          ×
+        </button>
+      )}
+    </div>
   )
 }
 

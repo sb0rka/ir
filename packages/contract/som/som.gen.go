@@ -52,6 +52,27 @@ func (e ErrorResponseErrorCode) Valid() bool {
 	}
 }
 
+// Defines values for SomEnvironmentStatusStatus.
+const (
+	Completed SomEnvironmentStatusStatus = "completed"
+	Failed    SomEnvironmentStatusStatus = "failed"
+	Running   SomEnvironmentStatusStatus = "running"
+)
+
+// Valid indicates whether the value is a known member of the SomEnvironmentStatusStatus enum.
+func (e SomEnvironmentStatusStatus) Valid() bool {
+	switch e {
+	case Completed:
+		return true
+	case Failed:
+		return true
+	case Running:
+		return true
+	default:
+		return false
+	}
+}
+
 // ErrorResponse Body of every non-2xx response. Clients branch on `code`, not on the HTTP status: the status says what happened at the protocol level, the code says what happened in the domain.
 type ErrorResponse struct {
 	// Error The failure itself. Never carries internal details of a 500.
@@ -81,6 +102,24 @@ type SomBoard struct {
 	// WorkspaceId Workspace the board belongs to.
 	WorkspaceId openapi_types.UUID `json:"workspace_id"`
 }
+
+// SomEnvironmentStatus Coarse agent-run status derived from the daemon environment summary (`latest_process_status`).
+type SomEnvironmentStatus struct {
+	// IsErrored True while status is failed.
+	IsErrored *bool `json:"is_errored,omitempty"`
+
+	// IsRunning True while status is running.
+	IsRunning *bool `json:"is_running,omitempty"`
+
+	// LocalEnvironmentId Daemon environment id being polled.
+	LocalEnvironmentId openapi_types.UUID `json:"local_environment_id"`
+
+	// Status `running` while the latest coding-agent/setup/cleanup process is `running` or has not appeared yet; `failed` when it is `failed` or `killed`; `completed` when it is `completed`.
+	Status SomEnvironmentStatusStatus `json:"status"`
+}
+
+// SomEnvironmentStatusStatus `running` while the latest coding-agent/setup/cleanup process is `running` or has not appeared yet; `failed` when it is `failed` or `killed`; `completed` when it is `completed`.
+type SomEnvironmentStatusStatus string
 
 // SomIssue A SOM issue — a research task (skill) that an agent can execute.
 type SomIssue struct {
@@ -121,6 +160,12 @@ type SomIssueList struct {
 type SomIssueRunRequest struct {
 	// InvestigationId Investigation the agent should enrich. Passed to the agent inside the prompt so it knows where to attach found events and nodes.
 	InvestigationId openapi_types.UUID `json:"investigation_id"`
+
+	// ModelId OpenCode model id in `provider/model` form, forwarded as executor_config.model_id. Omitted value is `openrouter/deepseek/deepseek-v4-flash`.
+	ModelId *string `json:"model_id,omitempty"`
+
+	// Variant Daemon executor variant, e.g. DEFAULT. Omitted uses the executor's default variant.
+	Variant *string `json:"variant,omitempty"`
 }
 
 // SomIssueRunResult Handles of the started run. IR stores nothing about it — poll SOM or the daemon with these ids.
@@ -188,6 +233,9 @@ type ServerInterface interface {
 	// ListSomIssues Issues of a SOM board
 	// (GET /som/boards/{board_id}/issues)
 	ListSomIssues(w http.ResponseWriter, r *http.Request, boardId openapi_types.UUID)
+	// GetSomEnvironment Status of a SOM agent environment
+	// (GET /som/environments/{local_environment_id})
+	GetSomEnvironment(w http.ResponseWriter, r *http.Request, localEnvironmentId openapi_types.UUID)
 	// RunSomIssue Run an agent on a SOM issue
 	// (POST /som/issues/{issue_id}/run)
 	RunSomIssue(w http.ResponseWriter, r *http.Request, issueId openapi_types.UUID)
@@ -225,6 +273,32 @@ func (siw *ServerInterfaceWrapper) ListSomIssues(w http.ResponseWriter, r *http.
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ListSomIssues(w, r, boardId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetSomEnvironment operation middleware
+func (siw *ServerInterfaceWrapper) GetSomEnvironment(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "local_environment_id" -------------
+	var localEnvironmentId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "local_environment_id", r.PathValue("local_environment_id"), &localEnvironmentId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "local_environment_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetSomEnvironment(w, r, localEnvironmentId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -424,6 +498,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/som/workspaces/{workspace_id}/boards", wrapper.ListSomBoards)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/som/boards/{board_id}/issues", wrapper.ListSomIssues)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/som/issues/{issue_id}/run", wrapper.RunSomIssue)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/som/environments/{local_environment_id}", wrapper.GetSomEnvironment)
 
 	return m
 }
@@ -521,6 +596,98 @@ func (response ListSomIssues501JSONResponse) VisitListSomIssuesResponse(w http.R
 type ListSomIssues502JSONResponse struct{ SourceUnavailableJSONResponse }
 
 func (response ListSomIssues502JSONResponse) VisitListSomIssuesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(502)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetSomEnvironmentRequestObject struct {
+	LocalEnvironmentId openapi_types.UUID `json:"local_environment_id"`
+}
+
+type GetSomEnvironmentResponseObject interface {
+	VisitGetSomEnvironmentResponse(w http.ResponseWriter) error
+}
+
+type GetSomEnvironment200JSONResponse SomEnvironmentStatus
+
+func (response GetSomEnvironment200JSONResponse) VisitGetSomEnvironmentResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetSomEnvironment401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response GetSomEnvironment401JSONResponse) VisitGetSomEnvironmentResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetSomEnvironment404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response GetSomEnvironment404JSONResponse) VisitGetSomEnvironmentResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetSomEnvironment500JSONResponse struct{ InternalErrorJSONResponse }
+
+func (response GetSomEnvironment500JSONResponse) VisitGetSomEnvironmentResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetSomEnvironment501JSONResponse struct{ NotImplementedJSONResponse }
+
+func (response GetSomEnvironment501JSONResponse) VisitGetSomEnvironmentResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(501)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetSomEnvironment502JSONResponse struct{ SourceUnavailableJSONResponse }
+
+func (response GetSomEnvironment502JSONResponse) VisitGetSomEnvironmentResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -813,6 +980,9 @@ type StrictServerInterface interface {
 	// ListSomIssues Issues of a SOM board
 	// (GET /som/boards/{board_id}/issues)
 	ListSomIssues(ctx context.Context, request ListSomIssuesRequestObject) (ListSomIssuesResponseObject, error)
+	// GetSomEnvironment Status of a SOM agent environment
+	// (GET /som/environments/{local_environment_id})
+	GetSomEnvironment(ctx context.Context, request GetSomEnvironmentRequestObject) (GetSomEnvironmentResponseObject, error)
 	// RunSomIssue Run an agent on a SOM issue
 	// (POST /som/issues/{issue_id}/run)
 	RunSomIssue(ctx context.Context, request RunSomIssueRequestObject) (RunSomIssueResponseObject, error)
@@ -882,6 +1052,32 @@ func (sh *strictHandler) ListSomIssues(w http.ResponseWriter, r *http.Request, b
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(ListSomIssuesResponseObject); ok {
 		if err := validResponse.VisitListSomIssuesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetSomEnvironment operation middleware
+func (sh *strictHandler) GetSomEnvironment(w http.ResponseWriter, r *http.Request, localEnvironmentId openapi_types.UUID) {
+	var request GetSomEnvironmentRequestObject
+
+	request.LocalEnvironmentId = localEnvironmentId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetSomEnvironment(ctx, request.(GetSomEnvironmentRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetSomEnvironment")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetSomEnvironmentResponseObject); ok {
+		if err := validResponse.VisitGetSomEnvironmentResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

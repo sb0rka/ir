@@ -88,19 +88,9 @@ func (s *Server) GetEvent(ctx context.Context, request events.GetEventRequestObj
 		ids = append(ids, id)
 	}
 	out.InvestigationIds = &ids
-	relations := make([]struct {
-		EntityId     openapi_types.UUID `json:"entity_id"`
-		RelationCode string             `json:"relation_code"`
-	}, 0, len(item.Entities))
-	for _, relation := range item.Entities {
-		id, err := dbUUID(relation.EntityID)
-		if err != nil {
-			return nil, err
-		}
-		relations = append(relations, struct {
-			EntityId     openapi_types.UUID `json:"entity_id"`
-			RelationCode string             `json:"relation_code"`
-		}{id, relation.RelationCode})
+	relations, err := convertEventEntities(item.Entities)
+	if err != nil {
+		return nil, err
 	}
 	out.Entities = &relations
 	return events.GetEvent200JSONResponse(out), nil
@@ -118,6 +108,32 @@ func convertEventSummary(item model.EventSummary) (events.EventSummary, error) {
 		return events.EventSummary{}, err
 	}
 	out.NormalizedData = &normalized
+	relations, err := convertEventEntities(item.Entities)
+	if err != nil {
+		return events.EventSummary{}, err
+	}
+	out.Entities = &relations
+	return out, nil
+}
+
+func convertEventEntities(items []model.EventEntity) ([]struct {
+	EntityId     openapi_types.UUID `json:"entity_id"`
+	RelationCode string             `json:"relation_code"`
+}, error) {
+	out := make([]struct {
+		EntityId     openapi_types.UUID `json:"entity_id"`
+		RelationCode string             `json:"relation_code"`
+	}, 0, len(items))
+	for _, relation := range items {
+		id, err := dbUUID(relation.EntityID)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, struct {
+			EntityId     openapi_types.UUID `json:"entity_id"`
+			RelationCode string             `json:"relation_code"`
+		}{id, relation.RelationCode})
+	}
 	return out, nil
 }
 

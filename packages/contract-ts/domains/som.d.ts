@@ -84,9 +84,32 @@ export interface paths {
         put?: never;
         /**
          * Run an agent on a SOM issue
-         * @description Orchestrates a run: reads the issue from SOM, opens a relay session to the configured daemon host, starts an environment with the issue text as the prompt, then links the environment back to the issue in SOM. Stateless — nothing is persisted in IR; the ids in the response are the only handle on the run.
+         * @description Orchestrates a run: reads the issue from SOM, opens a relay session to the configured daemon host, starts an environment with the issue text as the prompt, then links the environment back to the issue in SOM. `variant` and `model_id` are forwarded as daemon `executor_config`. Stateless — nothing is persisted in IR; the ids in the response are the only handle on the run.
          */
         post: operations["runSomIssue"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/som/environments/{local_environment_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Daemon environment id returned by runSomIssue. */
+                local_environment_id: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * Status of a SOM agent environment
+         * @description Opens a relay session to the configured daemon host and reads `POST /api/environments/summaries` (not `GET /api/environments/{id}`, which omits run flags). Maps `latest_process_status` into a coarse status for the IR UI to poll until the coding-agent process finishes.
+         */
+        get: operations["getSomEnvironment"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -171,6 +194,10 @@ export interface components {
              * @description Investigation the agent should enrich. Passed to the agent inside the prompt so it knows where to attach found events and nodes.
              */
             investigation_id: string;
+            /** @description Daemon executor variant, e.g. DEFAULT. Omitted uses the executor's default variant. */
+            variant?: string;
+            /** @description OpenCode model id in `provider/model` form, forwarded as executor_config.model_id. Omitted value is `openrouter/deepseek/deepseek-v4-flash`. */
+            model_id?: string;
         };
         /** @description Handles of the started run. IR stores nothing about it — poll SOM or the daemon with these ids. */
         SomIssueRunResult: {
@@ -199,6 +226,23 @@ export interface components {
              * @description Daemon repository the environment was started on.
              */
             repo_id?: string;
+        };
+        /** @description Coarse agent-run status derived from the daemon environment summary (`latest_process_status`). */
+        SomEnvironmentStatus: {
+            /**
+             * Format: uuid
+             * @description Daemon environment id being polled.
+             */
+            local_environment_id: string;
+            /**
+             * @description `running` while the latest coding-agent/setup/cleanup process is `running` or has not appeared yet; `failed` when it is `failed` or `killed`; `completed` when it is `completed`.
+             * @enum {string}
+             */
+            status: "running" | "completed" | "failed";
+            /** @description True while status is running. */
+            is_running?: boolean;
+            /** @description True while status is failed. */
+            is_errored?: boolean;
         };
         /** @description Body of every non-2xx response. Clients branch on `code`, not on the HTTP status: the status says what happened at the protocol level, the code says what happened in the domain. */
         ErrorResponse: {
@@ -389,6 +433,34 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
             422: components["responses"]["ValidationError"];
+            500: components["responses"]["InternalError"];
+            501: components["responses"]["NotImplemented"];
+            502: components["responses"]["SourceUnavailable"];
+        };
+    };
+    getSomEnvironment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Daemon environment id returned by runSomIssue. */
+                local_environment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current environment status */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SomEnvironmentStatus"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
             501: components["responses"]["NotImplemented"];
             502: components["responses"]["SourceUnavailable"];

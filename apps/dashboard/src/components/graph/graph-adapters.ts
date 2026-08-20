@@ -8,7 +8,7 @@ import type {
   EventRef,
   Severity,
 } from './types'
-import { toMs } from './time'
+import { formatEventTooltip, toMs } from './time'
 
 export type GraphNodeData = {
   kind: 'entity' | 'alert'
@@ -21,6 +21,8 @@ export type GraphNodeData = {
   selected: boolean
   entityId?: string
   alertId?: string
+  isSeed?: boolean
+  tooltip?: string
 }
 
 export type GraphFilters = {
@@ -37,30 +39,35 @@ export function buildVisibleGraph(args: {
   events: EventRef[]
   filters: GraphFilters
   selection: { kind: string; id: string } | null
-  hoverEntityIds: Set<string>
+  hoverEventId: string | null
 }): { nodes: RFNode<GraphNodeData>[]; edges: RFEdge[] } {
-  const { entities, alerts, edges, events, filters, selection, hoverEntityIds } =
+  const { entities, alerts, edges, events, filters, selection, hoverEventId } =
     args
 
   const range = filters.timeRange
-  const entityInTime = (entity: Entity) => {
+  const inRange = (startIso?: string, endIso?: string) => {
     if (!range) return true
-    const first = toMs(entity.first_seen)
-    const last = toMs(entity.last_seen)
+    const first = startIso ? toMs(startIso) : NaN
+    const last = endIso ? toMs(endIso) : first
+    if (!Number.isFinite(first) || !Number.isFinite(last)) return true
     return last >= range.start && first <= range.end
   }
 
-  const alertInTime = (alert: AlertNode) => {
-    if (!range) return true
-    const t = toMs(alert.event_ts)
-    return t >= range.start && t <= range.end
-  }
+  const entityInTime = (entity: Entity) => inRange(entity.first_seen, entity.last_seen)
+  const alertInTime = (alert: AlertNode) => inRange(alert.event_ts, alert.event_ts)
+  const originVisible = (origin: EdgeOrigin) => filters.edgeOrigins.has(origin)
 
   const visibleEntities = entities.filter(
-    (e) => filters.entityTypes.has(e.type_code) && entityInTime(e),
+    (e) =>
+      filters.entityTypes.has(e.type_code) &&
+      entityInTime(e) &&
+      originVisible(e.origin),
   )
   const visibleAlerts = alerts.filter(
-    (a) => filters.severities.has(a.severity) && alertInTime(a),
+    (a) =>
+      filters.severities.has(a.severity) &&
+      alertInTime(a) &&
+      originVisible(a.origin),
   )
 
   const visibleIds = new Set([
@@ -68,41 +75,46 @@ export function buildVisibleGraph(args: {
     ...visibleAlerts.map((a) => a.id),
   ])
 
-  const hovering = hoverEntityIds.size > 0
+  const hovering = Boolean(hoverEventId)
   const selectedId = selection?.id ?? null
-
-  const relatedAlertIds = new Set<string>()
-  if (hovering) {
-    for (const ev of events) {
-      if (ev.entity_ids.some((id) => hoverEntityIds.has(id)) && ev.alert_id) {
-        relatedAlertIds.add(ev.alert_id)
-      }
-    }
+  const hoverEvent = hoverEventId
+    ? events.find((ev) => ev.id === hoverEventId)
+    : undefined
+  const hoverAlertIds = new Set<string>()
+  if (hoverEventId) {
+    hoverAlertIds.add(hoverEventId)
+    if (hoverEvent?.alert_id) hoverAlertIds.add(hoverEvent.alert_id)
   }
 
+  const isHoveredAlert = (a: AlertNode) =>
+    hovering &&
+    (hoverAlertIds.has(a.id) ||
+      (!!a.event_id && hoverAlertIds.has(a.event_id)))
+  const hoveredAlertNodeIds = new Set(
+    visibleAlerts.filter(isHoveredAlert).map((a) => a.id),
+  )
+
   const nodes: RFNode<GraphNodeData>[] = [
-    ...visibleEntities.map((e) => {
-      const highlighted = hovering && hoverEntityIds.has(e.id)
-      const dimmed = hovering && !highlighted
-      return {
-        id: e.id,
-        type: 'entity',
-        position: e.position,
-        data: {
-          kind: 'entity' as const,
-          label: e.display_name,
-          sublabel: e.type_code,
-          entityType: e.type_code,
-          dimmed,
-          highlighted,
-          selected: selectedId === e.id,
-          entityId: e.id,
-        },
-      }
-    }),
+    ...visibleEntities.map((e) => ({
+      id: e.id,
+      type: 'entity',
+      position: e.position,
+      data: {
+        kind: 'entity' as const,
+        label: e.display_name,
+        sublabel: e.type_code,
+        entityType: e.type_code,
+        dimmed: hovering,
+        highlighted: false,
+        selected:
+          selectedId === e.id ||
+          (!!e.entity_id && selectedId === e.entity_id),
+        entityId: e.entity_id ?? e.id,
+      },
+    })),
     ...visibleAlerts.map((a) => {
-      const linkedToHover = hovering && relatedAlertIds.has(a.id)
-      const dimmed = hovering && !linkedToHover
+      const highlighted = isHoveredAlert(a)
+      const dimmed = hovering && !highlighted
       return {
         id: a.id,
         type: 'alert',
@@ -113,38 +125,47 @@ export function buildVisibleGraph(args: {
           sublabel: a.severity,
           severity: a.severity,
           dimmed,
-          highlighted: linkedToHover,
-          selected: selectedId === a.id,
-          alertId: a.id,
+          highlighted,
+          selected:
+            selectedId === a.id ||
+            (!!a.event_id &&
+              (selectedId === a.event_id || selectedId === `alert-${a.event_id}`)),
+          alertId: a.event_id ?? a.id,
+          isSeed: a.isSeed,
+          tooltip: `${a.isSeed ? 'исходный · ' : ''}${
+            a.event_ts ? formatEventTooltip(a.event_ts, a.title) : a.title
+          }`,
         },
       }
     }),
   ]
 
+  const curvatureByTarget = new Map<string, number>()
   const rfEdges: RFEdge[] = edges
     .filter((e) => filters.edgeOrigins.has(e.origin))
     .filter((e) => visibleIds.has(e.source_id) && visibleIds.has(e.target_id))
     .map((e) => {
-      const isExpanded = e.origin === 'expanded'
+      const fromAgent = e.origin === 'agent'
       const opacity =
         e.status === 'proposed' ? 0.45 : e.status === 'rejected' ? 0.2 : 0.85
       const endpointsDimmed =
         hovering &&
-        !hoverEntityIds.has(e.source_id) &&
-        !hoverEntityIds.has(e.target_id) &&
-        !relatedAlertIds.has(e.source_id) &&
-        !relatedAlertIds.has(e.target_id)
+        !hoveredAlertNodeIds.has(e.source_id) &&
+        !hoveredAlertNodeIds.has(e.target_id)
+      const curveIndex = curvatureByTarget.get(e.target_id) ?? 0
+      curvatureByTarget.set(e.target_id, curveIndex + 1)
 
       return {
         id: e.id,
         source: e.source_id,
         target: e.target_id,
         label: e.kind,
-        animated: isExpanded,
+        animated: fromAgent,
+        pathOptions: { curvature: 0.2 + (curveIndex % 5) * 0.08 },
         style: {
-          stroke: isExpanded ? 'var(--edge-expanded)' : 'var(--edge-seed)',
+          stroke: fromAgent ? 'var(--edge-expanded)' : 'var(--edge-seed)',
           strokeWidth: 1.5,
-          strokeDasharray: isExpanded ? '5 4' : undefined,
+          strokeDasharray: fromAgent ? '5 4' : undefined,
           opacity: endpointsDimmed ? 0.15 : opacity,
         },
         labelStyle: {

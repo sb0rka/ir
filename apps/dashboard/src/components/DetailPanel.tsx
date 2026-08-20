@@ -1,11 +1,7 @@
-import {
-  contextEvents,
-  entities,
-  graphNodes,
-  useAppStore,
-} from '../store/appStore'
+import { useAppStore } from '../store/appStore'
 import { Button, Chip, Panel, SeverityBadge } from './ui'
 import { formatTime, kindLabel, statusLabel } from '../lib/utils'
+import type { ContextEvent, GraphEdge, GraphNode } from '../types'
 import {
   Binary,
   Box,
@@ -30,6 +26,10 @@ export function DetailPanel({ investigationId }: { investigationId: string }) {
   const nodeReviews = useAppStore((s) => s.nodeReviews)
   const eventReviews = useAppStore((s) => s.eventReviews)
   const setReview = useAppStore((s) => s.setReview)
+  const graphNodes = useAppStore((s) => s.graphNodes)
+  const graphEdges = useAppStore((s) => s.graphEdges)
+  const entities = useAppStore((s) => s.entities)
+  const contextEvents = useAppStore((s) => s.contextEvents)
 
   if (!inv || !detailPanelOpen) return null
 
@@ -39,7 +39,12 @@ export function DetailPanel({ investigationId }: { investigationId: string }) {
 
   if (inv.selectedNodeId) {
     selectedGraphNodeId = inv.selectedNodeId
-    entityId = graphNodes[inv.selectedNodeId]?.refId
+    const node = graphNodes[inv.selectedNodeId]
+    if (node?.kind === 'event') {
+      eventId = node.refId
+    } else {
+      entityId = node?.refId
+    }
   } else if (inv.selectedEventId) {
     eventId = inv.selectedEventId
   } else if (inv.selectedEntityIds[0]) {
@@ -51,6 +56,18 @@ export function DetailPanel({ investigationId }: { investigationId: string }) {
 
   const entity = entityId ? entities[entityId] : null
   const event = eventId ? contextEvents[eventId] : null
+  const eventNodeId =
+    selectedGraphNodeId && graphNodes[selectedGraphNodeId]?.kind === 'event'
+      ? selectedGraphNodeId
+      : Object.values(graphNodes).find((n) => n.kind === 'event' && n.refId === eventId)
+          ?.id
+  const eventEntityIds = linkedEntityIds(
+    event,
+    eventNodeId,
+    graphNodes,
+    graphEdges,
+    inv.edgeIds,
+  )
 
   const nodeReview = selectedGraphNodeId
     ? (nodeReviews[selectedGraphNodeId] ??
@@ -200,7 +217,7 @@ export function DetailPanel({ investigationId }: { investigationId: string }) {
                 >
                   <Plus className="h-3 w-3" /> В находки
                 </Button>
-                {(entity.kind === 'process' || entity.kind === 'file') && (
+                {(entity.kind === 'process' || entity.kind === 'file_hash') && (
                   <Button
                     size="sm"
                     onClick={() => runEntityAction(entity.id, 'decode')}
@@ -208,7 +225,7 @@ export function DetailPanel({ investigationId }: { investigationId: string }) {
                     <Binary className="h-3 w-3" /> Декодировать
                   </Button>
                 )}
-                {(entity.kind === 'file' || entity.attributes.hash) && (
+                {(entity.kind === 'file_hash' || entity.attributes.hash) && (
                   <Button
                     size="sm"
                     onClick={() => runEntityAction(entity.id, 'sandbox')}
@@ -331,18 +348,18 @@ export function DetailPanel({ investigationId }: { investigationId: string }) {
                 Связанные сущности
               </div>
               <div className="space-y-1">
-                {event.entityIds.map((id) => {
+                {eventEntityIds.map((id) => {
                   const e = entities[id]
-                  if (!e) return null
+                  const node = Object.values(graphNodes).find(
+                    (n) => n.kind !== 'event' && n.refId === id,
+                  )
+                  if (!e && !node) return null
                   return (
                     <button
                       key={id}
                       type="button"
                       className="flex w-full items-center justify-between rounded border border-border px-2 py-1.5 text-left text-xs hover:bg-surface-2"
                       onClick={() => {
-                        const node = Object.values(graphNodes).find(
-                          (n) => n.refId === id,
-                        )
                         update(investigationId, {
                           selectedEventId: undefined,
                           selectedNodeId: node?.id,
@@ -352,8 +369,12 @@ export function DetailPanel({ investigationId }: { investigationId: string }) {
                         })
                       }}
                     >
-                      <span className="text-fg-dim">{kindLabel[e.kind]}</span>
-                      <span className="font-mono text-fg">{e.label}</span>
+                      <span className="text-fg-dim">
+                        {e ? kindLabel[e.kind] : node?.kind}
+                      </span>
+                      <span className="font-mono text-fg">
+                        {e?.label ?? node?.label ?? id}
+                      </span>
                     </button>
                   )
                 })}
@@ -364,4 +385,29 @@ export function DetailPanel({ investigationId }: { investigationId: string }) {
       </div>
     </Panel>
   )
+}
+
+function linkedEntityIds(
+  event: ContextEvent | null,
+  eventNodeId: string | undefined,
+  graphNodes: Record<string, GraphNode>,
+  graphEdges: Record<string, GraphEdge>,
+  edgeIds: string[],
+): string[] {
+  const ids = new Set<string>(event?.entityIds ?? [])
+  if (!eventNodeId) return [...ids]
+  for (const edgeId of edgeIds) {
+    const edge = graphEdges[edgeId]
+    if (!edge) continue
+    const otherId =
+      edge.source === eventNodeId
+        ? edge.target
+        : edge.target === eventNodeId
+          ? edge.source
+          : undefined
+    if (!otherId) continue
+    const other = graphNodes[otherId]
+    if (other && other.kind !== 'event') ids.add(other.refId)
+  }
+  return [...ids]
 }

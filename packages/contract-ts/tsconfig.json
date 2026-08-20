@@ -12,6 +12,7 @@
   "include": [
     "client.ts",
     "api.d.ts",
+    "gateway.d.ts",
     "domains/*.d.ts"
   ]
 }

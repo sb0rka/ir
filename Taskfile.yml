@@ -149,6 +149,8 @@ tasks:
           -o packages/contract-ts/domains/{{trimSuffix ".yaml" (osBase .ITEM)}}.d.ts
       # Клиенту нужен один paths на весь API — берём из собранной спеки.
       - '{{.OPENAPI_TS}} {{.INVESTIGATIONS_API}}/bundle.yaml -o packages/contract-ts/api.d.ts'
+      # Gateway живёт отдельной спекой; фронту нужен тот же openapi-typescript вывод.
+      - '{{.OPENAPI_TS}} apps/gateway/api/bundle.yaml -o packages/contract-ts/gateway.d.ts'
 
   spec-docs:
     desc: Собрать документацию Investigations API
@@ -166,14 +168,14 @@ tasks:
       # Проверяем только результаты генерации: документация рядом с ними может
       # меняться независимо от спеки и не должна давать ложное срабатывание.
       - cmd: |
-          git diff --exit-code -- ':(glob)packages/contract/**/*.gen.go' packages/contract-ts/api.d.ts ':(glob)packages/contract-ts/domains/*.d.ts' '{{.SERVER_DIR}}/*.go' apps/gateway/api/api.gen.go apps/gateway/api/bundle.yaml || {
+          git diff --exit-code -- ':(glob)packages/contract/**/*.gen.go' packages/contract-ts/api.d.ts packages/contract-ts/gateway.d.ts ':(glob)packages/contract-ts/domains/*.d.ts' '{{.SERVER_DIR}}/*.go' apps/gateway/api/api.gen.go apps/gateway/api/bundle.yaml || {
             echo ""
             echo "Сгенерированный код разошёлся со спекой."
             echo "Почините: task gen, затем закоммитьте изменения."
             exit 1
           }
       - cmd: |
-          test -z "$(git status --porcelain -- ':(glob)packages/contract/**/*.gen.go' packages/contract-ts/api.d.ts ':(glob)packages/contract-ts/domains/*.d.ts' '{{.SERVER_DIR}}/*.go' apps/gateway/api/api.gen.go apps/gateway/api/bundle.yaml)" || {
+          test -z "$(git status --porcelain -- ':(glob)packages/contract/**/*.gen.go' packages/contract-ts/api.d.ts packages/contract-ts/gateway.d.ts ':(glob)packages/contract-ts/domains/*.d.ts' '{{.SERVER_DIR}}/*.go' apps/gateway/api/api.gen.go apps/gateway/api/bundle.yaml)" || {
             echo ""
             echo "Появились несохранённые сгенерированные файлы:"
             git status --short -- packages '{{.SERVER_DIR}}/*.go' apps/gateway/api/api.gen.go apps/gateway/api/bundle.yaml

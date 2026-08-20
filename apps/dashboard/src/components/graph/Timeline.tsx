@@ -8,14 +8,14 @@ import {
 import { useWorkspaceStore } from '../../state/useWorkspaceStore'
 import { SEVERITY_COLOR } from './constants'
 import { eventsInRange } from './graph-adapters'
-import { clamp, formatClock, formatShortDate, toMs } from './time'
+import { clamp, formatClock, formatEventTooltip, formatShortDate, toMs } from './time'
 import type { EventRef, Selection } from './types'
 
 export function Timeline() {
   const {
     activeInvestigation,
     selection,
-    setHoverTime,
+    setHoverEvent,
     select,
     setTimeRange,
   } = useWorkspaceStore()
@@ -43,7 +43,7 @@ export function Timeline() {
       range={range}
       events={events}
       selectedEventId={selectedEventId}
-      setHoverTime={setHoverTime}
+      setHoverEvent={setHoverEvent}
       select={select}
       setTimeRange={setTimeRange}
     />
@@ -56,7 +56,7 @@ function TimelineInner({
   range,
   events,
   selectedEventId,
-  setHoverTime,
+  setHoverEvent,
   select,
   setTimeRange,
 }: {
@@ -65,7 +65,7 @@ function TimelineInner({
   range: { start: number; end: number }
   events: EventRef[]
   selectedEventId: string | null
-  setHoverTime: (ms: number | null, entityIds?: string[]) => void
+  setHoverEvent: (eventId: string | null) => void
   select: (s: Selection) => void
   setTimeRange: (range: { start: number; end: number } | null) => void
 }) {
@@ -208,7 +208,7 @@ function TimelineInner({
               key={ev.id}
               type="button"
               data-marker
-              title={`${formatClock(ev.event_ts)} — ${ev.title}`}
+              title={`${ev.isSeed ? 'исходный · ' : ''}${formatEventTooltip(ev.event_ts, ev.title)}`}
               className="absolute z-10 -translate-x-1/2 rounded-sm border px-1.5 py-0.5 text-left transition-opacity"
               style={{
                 left: `${pct}%`,
@@ -219,21 +219,29 @@ function TimelineInner({
                   : `color-mix(in srgb, ${color} 12%, var(--bg-node))`,
                 opacity: inRange ? 1 : 0.25,
                 maxWidth: 136,
+                boxShadow: ev.isSeed
+                  ? `0 0 0 1px var(--bg), 0 0 0 2px var(--text)`
+                  : undefined,
               }}
-              onMouseEnter={() =>
-                setHoverTime(toMs(ev.event_ts), ev.entity_ids)
-              }
-              onMouseLeave={() => setHoverTime(null)}
+              onMouseEnter={() => setHoverEvent(ev.id)}
+              onMouseLeave={() => setHoverEvent(null)}
               onClick={(e) => {
                 e.stopPropagation()
                 select({ kind: 'event', id: ev.id })
               }}
             >
               <div
-                className="truncate text-[10px] font-medium leading-tight"
+                className="flex items-center gap-1 truncate text-[10px] font-medium leading-tight"
                 style={{ color }}
               >
-                {ev.title}
+                {ev.isSeed && (
+                  <span
+                    className="inline-block h-1.5 w-1.5 shrink-0 rotate-45 border"
+                    style={{ borderColor: color, background: color }}
+                    aria-hidden
+                  />
+                )}
+                <span className="truncate">{ev.title}</span>
               </div>
             </button>
           )

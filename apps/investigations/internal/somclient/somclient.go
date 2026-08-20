@@ -35,6 +35,35 @@ type Config struct {
 	Executor string
 }
 
+// DefaultModelID — OpenRouter DeepSeek V4 Flash, формат OpenCode provider/model.
+const DefaultModelID = "openrouter/deepseek/deepseek-v4-flash"
+
+// ExecutorConfig — поля daemon executor_config, которые IR пробрасывает
+// из тела POST /som/issues/{id}/run. Executor берётся из конфига клиента.
+type ExecutorConfig struct {
+	Variant string
+	ModelID string
+}
+
+// ResolveExecutorConfig подставляет default model, если клиент его не задал.
+func ResolveExecutorConfig(variant, modelID *string) ExecutorConfig {
+	out := ExecutorConfig{ModelID: DefaultModelID}
+	if value := optionalString(variant); value != "" {
+		out.Variant = value
+	}
+	if value := optionalString(modelID); value != "" {
+		out.ModelID = value
+	}
+	return out
+}
+
+func optionalString(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return strings.TrimSpace(*value)
+}
+
 type Client struct {
 	cfg  Config
 	http *http.Client
@@ -215,19 +244,17 @@ func (c *Client) EnsureRepo(ctx context.Context, sessionID string) (string, erro
 // StartEnvironment создаёт и запускает окружение с агентом. linked_issue не
 // передаётся сознательно — фронтенд SOM делает так же, а связь с issue
 // оформляется на стороне SOM через LinkEnvironment.
-func (c *Client) StartEnvironment(ctx context.Context, sessionID, repoID, name, prompt string) (string, error) {
+func (c *Client) StartEnvironment(ctx context.Context, sessionID, repoID, name, prompt string, exec ExecutorConfig) (string, error) {
 	body := map[string]any{
 		"name": name,
 		"repos": []map[string]any{{
 			"repo_id":       repoID,
 			"target_branch": c.cfg.TargetBranch,
 		}},
-		"linked_issue": nil,
-		"executor_config": map[string]any{
-			"executor": c.cfg.Executor,
-		},
-		"prompt":         prompt,
-		"attachment_ids": nil,
+		"linked_issue":    nil,
+		"executor_config": executorConfigPayload(c.cfg.Executor, exec),
+		"prompt":          prompt,
+		"attachment_ids":  nil,
 	}
 	var out struct {
 		Environment struct {
@@ -237,6 +264,89 @@ func (c *Client) StartEnvironment(ctx context.Context, sessionID, repoID, name, 
 	err := c.doDaemon(ctx, "daemon start environment", http.MethodPost,
 		c.relayURL(sessionID, "/api/environments/start"), body, &out)
 	return out.Environment.ID, err
+}
+
+// EnvironmentStatus — подмножество daemon EnvironmentWithStatus для polling.
+type EnvironmentStatus struct {
+	ID        string
+	IsRunning bool
+	IsErrored bool
+}
+
+// GetEnvironment читает статус окружения на daemon через relay-сессию.
+//
+// Важно: `GET /api/environments/{id}` отдаёт plain Environment без
+// `is_running`/`is_errored`. Парсить его нельзя — нули выглядят как
+// completed, пока агент ещё работает. Статус берём из
+// `POST /api/environments/summaries` → `latest_process_status` (то же
+// семейство процессов, что считает `is_running` в WS-стриме SOM).
+func (c *Client) GetEnvironment(ctx context.Context, sessionID, environmentID string) (EnvironmentStatus, error) {
+	for _, archived := range []bool{false, true} {
+		status, found, err := c.lookupEnvironmentSummary(ctx, sessionID, environmentID, archived)
+		if err != nil {
+			return EnvironmentStatus{}, err
+		}
+		if found {
+			status.ID = environmentID
+			return status, nil
+		}
+	}
+	return EnvironmentStatus{}, &UpstreamError{
+		Op:     "daemon get environment",
+		Status: http.StatusNotFound,
+		Body:   "environment not found in daemon summaries",
+	}
+}
+
+func (c *Client) lookupEnvironmentSummary(
+	ctx context.Context, sessionID, environmentID string, archived bool,
+) (EnvironmentStatus, bool, error) {
+	var out struct {
+		Summaries []struct {
+			EnvironmentID       string  `json:"environment_id"`
+			LatestProcessStatus *string `json:"latest_process_status"`
+		} `json:"summaries"`
+	}
+	err := c.doDaemon(ctx, "daemon environment summaries", http.MethodPost,
+		c.relayURL(sessionID, "/api/environments/summaries"),
+		map[string]any{"archived": archived}, &out)
+	if err != nil {
+		return EnvironmentStatus{}, false, err
+	}
+	for _, summary := range out.Summaries {
+		if !strings.EqualFold(summary.EnvironmentID, environmentID) {
+			continue
+		}
+		return statusFromLatestProcess(summary.LatestProcessStatus), true, nil
+	}
+	return EnvironmentStatus{}, false, nil
+}
+
+// statusFromLatestProcess: нет процесса → ещё стартует (running);
+// failed/killed → errored; completed → idle.
+func statusFromLatestProcess(latest *string) EnvironmentStatus {
+	if latest == nil || strings.TrimSpace(*latest) == "" {
+		return EnvironmentStatus{IsRunning: true}
+	}
+	switch strings.ToLower(strings.TrimSpace(*latest)) {
+	case "running":
+		return EnvironmentStatus{IsRunning: true}
+	case "failed", "killed":
+		return EnvironmentStatus{IsErrored: true}
+	default:
+		return EnvironmentStatus{}
+	}
+}
+
+func executorConfigPayload(executor string, exec ExecutorConfig) map[string]any {
+	payload := map[string]any{
+		"executor": executor,
+		"model_id": exec.ModelID,
+	}
+	if exec.Variant != "" {
+		payload["variant"] = exec.Variant
+	}
+	return payload
 }
 
 // --- HTTP ---
