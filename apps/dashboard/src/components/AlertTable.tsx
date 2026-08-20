@@ -1,7 +1,7 @@
 import { useAppStore } from '../store/appStore'
 import type { AlertEvent, CorrelationGroup, Entity, QueueItem } from '../types'
 import { Button, Chip, SeverityBadge } from './ui'
-import { clsx, formatTime, statusLabel } from '../lib/utils'
+import { clsx, formatTime } from '../lib/utils'
 import { fieldForEntityKind, matchesChips } from '../lib/filters'
 import { ChevronDown, ChevronRight, Layers, Play } from 'lucide-react'
 
@@ -99,7 +99,6 @@ function AlertRow({
           {alert.source}
         </span>
       </td>
-      <td className="px-3 py-2 text-xs text-fg-muted">{statusLabel[alert.status]}</td>
     </tr>
   )
 }
@@ -191,7 +190,6 @@ function CorrelationRow({
             ))}
           </div>
         </td>
-        <td className="px-3 py-2.5 text-xs text-fg-muted">{statusLabel[group.status]}</td>
       </tr>
       {expanded &&
         group.eventIds.map((eid) => {
@@ -278,7 +276,6 @@ export function AlertTable() {
               <th className="px-3 py-2">Срабатывание</th>
               <th className="px-3 py-2">Сущности</th>
               <th className="px-3 py-2">Источник</th>
-              <th className="px-3 py-2">Статус</th>
             </tr>
           </thead>
           <tbody>
@@ -296,7 +293,7 @@ export function AlertTable() {
             )}
             {rows.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-4 py-12 text-center">
+                <td colSpan={6} className="px-4 py-12 text-center">
                   <div className="text-sm text-fg-muted">
                     Нет срабатываний по текущим фильтрам
                   </div>
