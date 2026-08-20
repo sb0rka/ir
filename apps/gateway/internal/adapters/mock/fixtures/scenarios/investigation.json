@@ -332,6 +332,66 @@
       }
     },
     {
+      "id": "host-jump-eu",
+      "type": "host",
+      "data": {
+        "label": "srv-jump-eu.ops.internal",
+        "kind": "host",
+        "system": "MaxPatrol",
+        "severity": "medium",
+        "sourceUrl": "https://maxpatrol.example/console/assets/srv-jump-eu.ops.internal",
+        "details": {
+          "role": "Нейтральный фон очереди (не связан с демо-атакой)",
+          "ip": "10.55.3.11",
+          "status": "online"
+        }
+      }
+    },
+    {
+      "id": "host-fs-backup",
+      "type": "host",
+      "data": {
+        "label": "fs-backup.ops.internal",
+        "kind": "host",
+        "system": "MaxPatrol",
+        "severity": "low",
+        "sourceUrl": "https://maxpatrol.example/console/assets/fs-backup.ops.internal",
+        "details": {
+          "role": "Нейтральный фон очереди (не связан с демо-атакой)",
+          "ip": "10.55.9.40",
+          "status": "online"
+        }
+      }
+    },
+    {
+      "id": "correlation-failed-rdp",
+      "type": "correlation",
+      "data": {
+        "label": "multiple_failed_rdp_logon",
+        "kind": "correlation",
+        "system": "MaxPatrol",
+        "severity": "high",
+        "sourceUrl": "https://maxpatrol.example/console/correlations/multiple_failed_rdp_logon",
+        "details": {
+          "note": "Фоновая сработка очереди; к цепочке impacket_smbexec не относится"
+        }
+      }
+    },
+    {
+      "id": "correlation-admin-share",
+      "type": "correlation",
+      "data": {
+        "label": "unusual_admin_share_access",
+        "kind": "correlation",
+        "system": "MaxPatrol",
+        "severity": "high",
+        "sourceUrl": "https://maxpatrol.example/console/correlations/unusual_admin_share_access",
+        "details": {
+          "note": "Фоновая сработка очереди; к цепочке impacket_smbexec не относится"
+        }
+      }
+    },
+    {
       "id": "response-action",
       "type": "response",
       "data": {
@@ -742,6 +802,30 @@
       "entity_ids": [
         "host-beta",
         "event-service-created"
+      ]
+    },
+    {
+      "id": "ev-noise-1",
+      "source": "MaxPatrol",
+      "event_class": "Correlation Alert",
+      "event_ts": "2026-07-23T11:58:00.000Z",
+      "title": "Сработка правила корреляции multiple_failed_rdp_logon",
+      "severity": "high",
+      "entity_ids": [
+        "host-jump-eu",
+        "correlation-failed-rdp"
+      ]
+    },
+    {
+      "id": "ev-noise-2",
+      "source": "MaxPatrol",
+      "event_class": "Correlation Alert",
+      "event_ts": "2026-07-23T11:50:00.000Z",
+      "title": "Сработка правила корреляции unusual_admin_share_access",
+      "severity": "high",
+      "entity_ids": [
+        "host-fs-backup",
+        "correlation-admin-share"
       ]
     }
   ]
