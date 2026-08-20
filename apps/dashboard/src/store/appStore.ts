@@ -428,7 +428,6 @@ export const useAppStore = create<AppState>((set, get) => ({
         inspectedQueueItem: null,
         investigationLoading: false,
       })
-      void get().runEnrichment(created.id)
       return created.id
     } catch (err) {
       set({ investigationLoading: false, lastError: errorMessage(err) })
@@ -468,7 +467,6 @@ export const useAppStore = create<AppState>((set, get) => ({
         activeTab: created.id,
         investigationLoading: false,
       })
-      void get().runEnrichment(created.id)
       return created.id
     } catch (err) {
       set({ investigationLoading: false, lastError: errorMessage(err) })
