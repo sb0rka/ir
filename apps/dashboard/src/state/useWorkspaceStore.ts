@@ -61,7 +61,7 @@ function defaultFilters(windowStart: string, windowEnd: string): GraphSessionFil
   return {
     entityTypes: [...ALL_ENTITY_TYPES],
     severities: [...ALL_SEVERITIES],
-    edgeOrigins: ['seed', 'expanded'],
+    edgeOrigins: ['agent', 'analyst'],
     timeRange: {
       start: new Date(windowStart).getTime(),
       end: new Date(windowEnd).getTime(),
@@ -91,6 +91,11 @@ function isSeedEvent(
   const seed = new Set(seedEventIds)
   if (ids.some((id) => id && seed.has(id))) return true
   return origin === 'seed' || origin === 'analyst'
+}
+
+function graphOrigin(origin: string | undefined): EdgeOrigin {
+  if (origin === 'agent' || origin === 'rule') return 'agent'
+  return 'analyst'
 }
 
 function buildFromApp(inv: Investigation): GraphInvestigation {
@@ -129,11 +134,17 @@ function buildFromApp(inv: Investigation): GraphInvestigation {
         entity_id: n.refId,
       },
       position: { x: n.x, y: n.y },
+      origin: graphOrigin(n.origin),
     }
   })
 
   const alerts: AlertNode[] = eventGraphNodes.map((n) => {
     const ev = contextEvents[n.refId]
+    const isSeed = isSeedEvent(
+      ev?.origin ?? n.origin,
+      [n.refId, n.id, ev?.id],
+      inv.seedEventIds,
+    )
     return {
       id: n.id,
       event_id: n.refId,
@@ -143,7 +154,8 @@ function buildFromApp(inv: Investigation): GraphInvestigation {
       source: ev?.source ?? '',
       description: ev?.description ?? n.label,
       position: { x: n.x, y: n.y },
-      isSeed: isSeedEvent(ev?.origin ?? n.origin, [n.refId, n.id, ev?.id], inv.seedEventIds),
+      isSeed,
+      origin: graphOrigin(ev?.origin ?? n.origin),
     }
   })
 
@@ -158,7 +170,7 @@ function buildFromApp(inv: Investigation): GraphInvestigation {
     .filter((e) => (edgeReviews[e.id] ?? e.review) !== 'rejected')
     .map((e) => {
       const review = edgeReviews[e.id] ?? e.review
-      const origin: EdgeOrigin = review === 'proposed' || e.rationale ? 'expanded' : 'seed'
+      const origin = graphOrigin(e.origin)
       return {
         id: e.id,
         source_id: e.source,
@@ -167,7 +179,7 @@ function buildFromApp(inv: Investigation): GraphInvestigation {
         origin,
         status: review,
         confidence: review === 'confirmed' ? 0.92 : review === 'proposed' ? 0.65 : 0.2,
-        expand_from: origin === 'expanded' ? e.source : undefined,
+        expand_from: origin === 'agent' ? e.source : undefined,
       }
     })
     .filter((e) => canvasIds.has(e.source_id) && canvasIds.has(e.target_id))

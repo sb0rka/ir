@@ -55,12 +55,19 @@ export function buildVisibleGraph(args: {
 
   const entityInTime = (entity: Entity) => inRange(entity.first_seen, entity.last_seen)
   const alertInTime = (alert: AlertNode) => inRange(alert.event_ts, alert.event_ts)
+  const originVisible = (origin: EdgeOrigin) => filters.edgeOrigins.has(origin)
 
   const visibleEntities = entities.filter(
-    (e) => filters.entityTypes.has(e.type_code) && entityInTime(e),
+    (e) =>
+      filters.entityTypes.has(e.type_code) &&
+      entityInTime(e) &&
+      originVisible(e.origin),
   )
   const visibleAlerts = alerts.filter(
-    (a) => filters.severities.has(a.severity) && alertInTime(a),
+    (a) =>
+      filters.severities.has(a.severity) &&
+      alertInTime(a) &&
+      originVisible(a.origin),
   )
 
   const visibleIds = new Set([
@@ -138,7 +145,7 @@ export function buildVisibleGraph(args: {
     .filter((e) => filters.edgeOrigins.has(e.origin))
     .filter((e) => visibleIds.has(e.source_id) && visibleIds.has(e.target_id))
     .map((e) => {
-      const isExpanded = e.origin === 'expanded'
+      const fromAgent = e.origin === 'agent'
       const opacity =
         e.status === 'proposed' ? 0.45 : e.status === 'rejected' ? 0.2 : 0.85
       const endpointsDimmed =
@@ -153,12 +160,12 @@ export function buildVisibleGraph(args: {
         source: e.source_id,
         target: e.target_id,
         label: e.kind,
-        animated: isExpanded,
+        animated: fromAgent,
         pathOptions: { curvature: 0.2 + (curveIndex % 5) * 0.08 },
         style: {
-          stroke: isExpanded ? 'var(--edge-expanded)' : 'var(--edge-seed)',
+          stroke: fromAgent ? 'var(--edge-expanded)' : 'var(--edge-seed)',
           strokeWidth: 1.5,
-          strokeDasharray: isExpanded ? '5 4' : undefined,
+          strokeDasharray: fromAgent ? '5 4' : undefined,
           opacity: endpointsDimmed ? 0.15 : opacity,
         },
         labelStyle: {

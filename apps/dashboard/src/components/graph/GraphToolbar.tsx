@@ -63,14 +63,14 @@ export function GraphToolbar() {
         ))}
       </FilterGroup>
 
-      <FilterGroup label="Связи">
-        {(['seed', 'expanded'] as EdgeOrigin[]).map((origin) => (
+      <FilterGroup label="Происхождение">
+        {(['agent', 'analyst'] as EdgeOrigin[]).map((origin) => (
           <Chip
             key={origin}
             active={edgeOrigins.has(origin)}
             onClick={() => toggleEdgeOrigin(origin)}
           >
-            {origin === 'seed' ? 'исходные' : 'добавленные'}
+            {origin === 'agent' ? 'агент' : 'аналитик'}
           </Chip>
         ))}
       </FilterGroup>

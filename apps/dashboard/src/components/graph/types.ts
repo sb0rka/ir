@@ -19,7 +19,7 @@ export type EventClass =
 
 export type EventSource = 'SIEM' | 'EDR' | 'NDR' | 'LOGS'
 
-export type EdgeOrigin = 'seed' | 'expanded'
+export type EdgeOrigin = 'agent' | 'analyst'
 export type EdgeStatus = 'proposed' | 'confirmed' | 'rejected'
 
 export interface Entity {
@@ -34,6 +34,8 @@ export interface Entity {
   last_seen?: string
   metadata?: Record<string, string>
   position: { x: number; y: number }
+  /** Who attached the node: agent/rule vs analyst/seed. */
+  origin: EdgeOrigin
 }
 
 export interface AlertNode {
@@ -48,6 +50,7 @@ export interface AlertNode {
   description: string
   position: { x: number; y: number }
   isSeed?: boolean
+  origin: EdgeOrigin
 }
 
 export interface Edge {

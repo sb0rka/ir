@@ -58,4 +58,4 @@ Or compose pieces yourself (`GraphToolbar` + `GraphCanvas` + `GraphDetailsDrawer
 
 ## Data shape
 
-Feed `activeInvestigation` with `entities`, `alerts`, `edges`, `events`, time window, and `filters`. Positions live on each entity/alert (`position: { x, y }`). Expand/collapse is host-owned (this UI only calls the callbacks).
+Feed `activeInvestigation` with `entities`, `alerts`, `edges`, `events`, time window, and `filters`. Positions live on each entity/alert (`position: { x, y }`). Each entity, alert, and edge has `origin: 'agent' | 'analyst'`; the toolbar origin chips hide both nodes and links. Expand/collapse is host-owned (this UI only calls the callbacks).
