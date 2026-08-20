@@ -153,5 +153,5 @@ volumes:
 networks:
   som_selfrun:
     external: true
-    name: som-deploy_default
+    name: deploy_default
 

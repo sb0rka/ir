@@ -269,6 +269,14 @@ export async function runSomIssue(issueId: string, investigationId: string) {
   )
 }
 
+export async function getSomEnvironment(localEnvironmentId: string) {
+  return throwIfError(
+    await irClient.GET('/som/environments/{local_environment_id}', {
+      params: { path: { local_environment_id: localEnvironmentId } },
+    }),
+  )
+}
+
 export async function countProposedAgentEdges(investigationId: string): Promise<number> {
   const page = await throwIfError(
     await irClient.GET('/investigations/{investigation_id}/edges', {

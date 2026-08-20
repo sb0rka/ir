@@ -24,7 +24,7 @@ export function InvestigationHeader({ investigationId }: { investigationId: stri
   )
   const issues = useAppStore((s) => s.issues)
   const update = useAppStore((s) => s.updateInvestigation)
-  const runEnrichment = useAppStore((s) => s.runEnrichment)
+  const openAgentPanel = useAppStore((s) => s.openAgentPanel)
   const createChild = useAppStore((s) => s.createChildInvestigation)
   const setAgentPanelOpen = useAppStore((s) => s.setAgentPanelOpen)
   const agentPanelOpen = useAppStore((s) => s.agentPanelOpen)
@@ -105,7 +105,7 @@ export function InvestigationHeader({ investigationId }: { investigationId: stri
             </button>
           </div>
 
-          <Button size="sm" onClick={() => runEnrichment(investigationId)}>
+          <Button size="sm" onClick={() => void openAgentPanel()}>
             <Bot className="h-3.5 w-3.5" />
             Насыщение контекста
           </Button>

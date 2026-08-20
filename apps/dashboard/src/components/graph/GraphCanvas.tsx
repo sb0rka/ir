@@ -71,6 +71,13 @@ function GraphInner({ fitToken }: { fitToken: FitToken }) {
     })
   }, [session, selection, hoverEventId])
 
+  // Length alone misses “same count, new ids” after agent enrichment.
+  const graphSig = useMemo(() => {
+    const nodeIds = derivedNodes.map((n) => n.id).sort().join(',')
+    const edgeIds = derivedEdges.map((e) => e.id).sort().join(',')
+    return `${nodeIds}|${edgeIds}`
+  }, [derivedNodes, derivedEdges])
+
   const [nodes, setNodes, onNodesChange] = useNodesState(derivedNodes as Node[])
   const [rfEdges, setEdges, onEdgesChange] = useEdgesState(derivedEdges)
 
@@ -99,7 +106,7 @@ function GraphInner({ fitToken }: { fitToken: FitToken }) {
 
   useEffect(() => {
     if (!hasSize || !nodesMeasured || derivedNodes.length === 0) return
-    const key = `${fitToken}:${paneWidth}x${paneHeight}:${derivedNodes.length}`
+    const key = `${fitToken}:${paneWidth}x${paneHeight}:${graphSig}`
     if (fittedSizeKey.current === key) return
     const duration = fittedSizeKey.current === null ? 0 : 200
     fittedSizeKey.current = key
@@ -109,6 +116,7 @@ function GraphInner({ fitToken }: { fitToken: FitToken }) {
     paneWidth,
     paneHeight,
     fitView,
+    graphSig,
     derivedNodes.length,
     hasSize,
     nodesMeasured,

@@ -290,6 +290,35 @@ function patchFilters(
   return { ...inv, filters: { ...inv.filters, ...patch } }
 }
 
+/** Preserve chip filters/positions on refresh; expand time window unless user brushed. */
+export function mergeFiltersOnGraphRefresh(
+  prev: GraphInvestigation,
+  built: GraphInvestigation,
+): GraphSessionFilters {
+  const nextRange = built.filters.timeRange
+  const prevRange = prev.filters.timeRange
+  const prevWindowStart = new Date(prev.windowStart).getTime()
+  const prevWindowEnd = new Date(prev.windowEnd).getTime()
+  // Same check GraphToolbar uses for “full window” (no timeline brush).
+  const wasFullWindow =
+    !prevRange ||
+    (prevRange.start <= prevWindowStart && prevRange.end >= prevWindowEnd)
+
+  if (wasFullWindow) {
+    // Polling grew windowStart/End — timeline already shows new events; graph
+    // must follow or new nodes stay clipped by the stale brush range.
+    return { ...prev.filters, timeRange: nextRange }
+  }
+
+  const overlaps =
+    !prevRange ||
+    !nextRange ||
+    (prevRange.end >= nextRange.start && prevRange.start <= nextRange.end)
+  return overlaps
+    ? { ...prev.filters, timeRange: prevRange }
+    : { ...prev.filters, timeRange: nextRange }
+}
+
 export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   activeInvestigation: null,
   selection: null,
@@ -323,15 +352,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     // First bind is the list stub (no nodes); preserving its time window
     // would hide every node once the bundle arrives.
     if (hadGraph) {
-      const nextRange = built.filters.timeRange
-      const prevRange = prev.filters.timeRange
-      const overlaps =
-        !prevRange ||
-        !nextRange ||
-        (prevRange.end >= nextRange.start && prevRange.start <= nextRange.end)
-      built.filters = overlaps
-        ? prev.filters
-        : { ...prev.filters, timeRange: nextRange }
+      built.filters = mergeFiltersOnGraphRefresh(prev, built)
       const posById = new Map(prev.entities.map((e) => [e.id, e.position]))
       built.entities = built.entities.map((e) => ({
         ...e,

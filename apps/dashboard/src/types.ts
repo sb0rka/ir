@@ -142,6 +142,8 @@ export interface Issue {
   edgesFound: number
   findingsFound: number
   resultSummary?: string
+  /** Daemon environment id from runSomIssue — used to poll completion. */
+  localEnvironmentId?: string
   comments: IssueComment[]
   createdAt: string
 }

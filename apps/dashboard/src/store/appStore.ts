@@ -30,6 +30,7 @@ import {
   countProposedAgentEdges,
   createInvestigation,
   getEntityCard,
+  getSomEnvironment,
   listInvestigations,
   loadInvestigationBundle,
   patchInvestigation,
@@ -127,8 +128,10 @@ interface AppState {
   addEventsToContext: (investigationId: string, eventIds: string[]) => Promise<void>
   setAgentPanelOpen: (open: boolean) => void
   setDetailPanelOpen: (open: boolean) => void
+  loadSomCatalog: () => Promise<void>
+  openAgentPanel: () => Promise<void>
 
-  runEnrichment: (investigationId: string) => Promise<void>
+  runEnrichment: (investigationId: string, issueId: string) => Promise<void>
   createIssue: (
     investigationId: string,
     templateId: string,
@@ -426,8 +429,10 @@ export const useAppStore = create<AppState>((set, get) => ({
         activeTab: created.id,
         selectedAlertIds: [],
         inspectedQueueItem: null,
+        agentPanelOpen: true,
         investigationLoading: false,
       })
+      void get().loadSomCatalog()
       return created.id
     } catch (err) {
       set({ investigationLoading: false, lastError: errorMessage(err) })
@@ -643,9 +648,22 @@ export const useAppStore = create<AppState>((set, get) => ({
   setAgentPanelOpen: (agentPanelOpen) => set({ agentPanelOpen }),
   setDetailPanelOpen: (detailPanelOpen) => set({ detailPanelOpen }),
 
-  runEnrichment: async (investigationId) => {
+  loadSomCatalog: async () => {
+    try {
+      set({ somCatalog: await resolveSomCatalog() })
+    } catch (err) {
+      set({ lastError: errorMessage(err) })
+    }
+  },
+
+  openAgentPanel: async () => {
+    set({ agentPanelOpen: true })
+    if (!get().somCatalog) await get().loadSomCatalog()
+  },
+
+  runEnrichment: async (investigationId, issueId) => {
     const inv = get().investigations[investigationId]
-    if (!inv) return
+    if (!inv || !issueId) return
     set({ agentPanelOpen: true, lastError: null, somHint: null })
     try {
       let catalog = get().somCatalog
@@ -653,15 +671,12 @@ export const useAppStore = create<AppState>((set, get) => ({
         catalog = await resolveSomCatalog()
         set({ somCatalog: catalog })
       }
-      const issueDef =
-        catalog.issues.find((i) => i.simple_id.toLowerCase() === 'irw-2') ??
-        catalog.issues[0]
+      const issueDef = catalog.issues.find((i) => i.id === issueId)
       if (!issueDef) {
-        set({
-          somHint: 'В выбранной доске SOM нет issue — нечего запускать',
-        })
+        set({ lastError: 'Issue не найден' })
         return
       }
+      if (get().issues[issueDef.id]?.status === 'running') return
       const issue: Issue = {
         id: issueDef.id,
         investigationId,
@@ -689,44 +704,97 @@ export const useAppStore = create<AppState>((set, get) => ({
         },
       })
       const before = await countProposedAgentEdges(investigationId)
-      await runSomIssue(issueDef.id, investigationId)
-      const deadline = Date.now() + 60_000
+      const run = await runSomIssue(issueDef.id, investigationId)
+      const localEnvironmentId = run.local_environment_id
+      set({
+        issues: {
+          ...get().issues,
+          [issue.id]: { ...get().issues[issue.id]!, localEnvironmentId },
+        },
+      })
+
       const poll = async () => {
         const currentIssue = get().issues[issue.id]
         if (!currentIssue || currentIssue.status === 'cancelled') return
         try {
+          await get().loadInvestigation(investigationId)
           const now = await countProposedAgentEdges(investigationId)
-          if (now > before || Date.now() > deadline) {
-            await get().loadInvestigation(investigationId)
-            const latest = get().investigations[investigationId]
-            const proposed = latest
-              ? latest.edgeIds.filter(
-                  (eid) => (get().edgeReviews[eid] ?? get().graphEdges[eid]?.review) === 'proposed',
-                ).length
-              : now
+          const edgesFound = Math.max(0, now - before)
+          const env = await getSomEnvironment(localEnvironmentId)
+
+          if (env.status === 'running') {
+            const live = get().issues[issue.id]
+            if (live && live.status === 'running') {
+              set({
+                issues: {
+                  ...get().issues,
+                  [issue.id]: { ...live, edgesFound, localEnvironmentId },
+                },
+              })
+            }
+            window.setTimeout(() => void poll(), 2500)
+            return
+          }
+
+          const live = get().issues[issue.id]
+          if (!live || live.status === 'cancelled') return
+          const latest = get().investigations[investigationId]
+          const proposed = latest
+            ? latest.edgeIds.filter(
+                (eid) => (get().edgeReviews[eid] ?? get().graphEdges[eid]?.review) === 'proposed',
+              ).length
+            : now
+
+          if (env.status === 'failed') {
             set({
               issues: {
                 ...get().issues,
                 [issue.id]: {
-                  ...currentIssue,
-                  status: now > before ? 'completed' : 'completed',
-                  edgesFound: Math.max(0, now - before),
-                  resultSummary:
-                    now > before
-                      ? `Агент предложил ${proposed} связей. Нужно ревью.`
-                      : 'Запуск принят. Новых proposed-связей за минуту не появилось — проверьте SOM.',
+                  ...live,
+                  status: 'error',
+                  edgesFound,
+                  localEnvironmentId,
+                  resultSummary: 'Агент завершился с ошибкой.',
                 },
               },
             })
             return
           }
+
+          set({
+            issues: {
+              ...get().issues,
+              [issue.id]: {
+                ...live,
+                status: 'completed',
+                edgesFound,
+                localEnvironmentId,
+                resultSummary:
+                  proposed > 0
+                    ? `Агент предложил ${proposed} связей. Нужно ревью.`
+                    : 'Агент завершился. Новых proposed-связей нет.',
+              },
+            },
+          })
         } catch {
-          /* keep polling */
+          window.setTimeout(() => void poll(), 2500)
         }
-        window.setTimeout(() => void poll(), 2500)
       }
       window.setTimeout(() => void poll(), 2500)
     } catch (err) {
+      const failed = get().issues[issueId]
+      if (failed?.status === 'running') {
+        set({
+          issues: {
+            ...get().issues,
+            [issueId]: {
+              ...failed,
+              status: 'error',
+              resultSummary: errorMessage(err),
+            },
+          },
+        })
+      }
       set({
         lastError: errorMessage(err),
         somHint: isUnauthorized(err)
@@ -737,10 +805,10 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   createIssue: async (investigationId, templateId, entityIds, parentId) => {
-    const tpl = issueTemplates.find((t) => t.id === templateId) ?? issueTemplates[0]
-    await get().runEnrichment(investigationId)
+    await get().openAgentPanel()
     const inv = get().investigations[investigationId]
     if (!inv || !parentId) return
+    const tpl = issueTemplates.find((t) => t.id === templateId) ?? issueTemplates[0]
     const running = inv.issueIds
       .map((id) => get().issues[id])
       .find((i) => i?.status === 'running')
