@@ -58,6 +58,7 @@ export function Button({
   className,
   type = 'button',
   title,
+  tabIndex,
 }: {
   children: React.ReactNode
   onClick?: (e: React.MouseEvent) => void
@@ -67,6 +68,7 @@ export function Button({
   className?: string
   type?: 'button' | 'submit'
   title?: string
+  tabIndex?: number
 }) {
   const variants = {
     default: 'border-border bg-surface-2 text-fg hover:bg-surface-3',
@@ -83,6 +85,7 @@ export function Button({
       type={type}
       disabled={disabled}
       title={title}
+      tabIndex={tabIndex}
       onClick={onClick}
       className={clsx(
         'inline-flex items-center justify-center gap-1.5 rounded border font-medium transition-colors disabled:opacity-40',

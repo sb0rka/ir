@@ -1,5 +1,5 @@
 import { useAppStore } from '../store/appStore'
-import type { AlertEvent, CorrelationGroup, Entity } from '../types'
+import type { AlertEvent, CorrelationGroup, Entity, QueueItem } from '../types'
 import { Button, Chip, SeverityBadge } from './ui'
 import { clsx, formatTime, statusLabel } from '../lib/utils'
 import { fieldForEntityKind, matchesChips } from '../lib/filters'
@@ -32,7 +32,7 @@ function EntityChips({
             title="Найти связанные"
             onClick={(ev) => {
               ev.stopPropagation()
-              if (field) addChip(field, e.label.replace(/[\[\]]/g, ''))
+              if (field) addChip(field, e.label.replaceAll('[', '').replaceAll(']', ''))
             }}
           >
             <span className="text-fg-dim">{e.kind}:</span> {e.label}
@@ -42,6 +42,10 @@ function EntityChips({
       {rest > 0 && <span className="text-[11px] text-fg-dim">+{rest}</span>}
     </div>
   )
+}
+
+function isInspected(item: QueueItem | null, kind: QueueItem['kind'], id: string) {
+  return item?.kind === kind && item.id === id
 }
 
 function AlertRow({
@@ -55,21 +59,25 @@ function AlertRow({
 }) {
   const selected = useAppStore((s) => s.selectedAlertIds.includes(alert.id))
   const toggle = useAppStore((s) => s.toggleAlertSelect)
-  const start = useAppStore((s) => s.startInvestigation)
+  const inspect = useAppStore((s) => s.inspectQueueItem)
+  const inspected = useAppStore((s) => isInspected(s.inspectedQueueItem, 'alert', alert.id))
 
   return (
     <tr
       className={clsx(
-        'group border-b border-border/60 hover:bg-surface-2/60',
+        'cursor-pointer border-b border-border/60 hover:bg-surface-2/60',
         selected && 'bg-surface-2',
-        nested && 'bg-surface-0/40',
+        inspected && 'bg-surface-3/70',
+        nested && !inspected && 'bg-surface-0/40',
       )}
+      onClick={() => inspect({ kind: 'alert', id: alert.id })}
     >
       <td className="px-3 py-2">
         <input
           type="checkbox"
           checked={selected}
           onChange={() => toggle(alert.id)}
+          onClick={(ev) => ev.stopPropagation()}
           className="accent-fg"
         />
       </td>
@@ -92,17 +100,6 @@ function AlertRow({
         </span>
       </td>
       <td className="px-3 py-2 text-xs text-fg-muted">{statusLabel[alert.status]}</td>
-      <td className="px-3 py-2">
-        <Button
-          size="sm"
-          onClick={() => start([alert.id])}
-          title="Начать расследование"
-          className="opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100"
-        >
-          <Play className="h-3 w-3" />
-          Начать
-        </Button>
-      </td>
     </tr>
   )
 }
@@ -120,7 +117,8 @@ function CorrelationRow({
   const toggleExpand = useAppStore((s) => s.toggleCorrelationExpand)
   const selected = useAppStore((s) => s.selectedAlertIds.includes(group.id))
   const toggle = useAppStore((s) => s.toggleAlertSelect)
-  const start = useAppStore((s) => s.startInvestigation)
+  const inspect = useAppStore((s) => s.inspectQueueItem)
+  const inspected = useAppStore((s) => isInspected(s.inspectedQueueItem, 'correlation', group.id))
   const eventCount = group.eventIds.length
   const sourceCount = Object.keys(group.sourceCounts).length
 
@@ -128,15 +126,18 @@ function CorrelationRow({
     <>
       <tr
         className={clsx(
-          'border-b border-border bg-surface-2/40 hover:bg-surface-2',
+          'cursor-pointer border-b border-border bg-surface-2/40 hover:bg-surface-2',
           selected && 'bg-surface-3/50',
+          inspected && 'bg-surface-3/80',
         )}
+        onClick={() => inspect({ kind: 'correlation', id: group.id })}
       >
         <td className="px-3 py-2.5">
           <input
             type="checkbox"
             checked={selected}
             onChange={() => toggle(group.id)}
+            onClick={(ev) => ev.stopPropagation()}
             className="accent-fg"
           />
         </td>
@@ -147,16 +148,22 @@ function CorrelationRow({
           {formatTime(group.time)}
         </td>
         <td className="px-3 py-2.5">
-          <button
-            type="button"
-            className="flex items-start gap-2 text-left"
-            onClick={() => toggleExpand(group.id)}
-          >
-            {expanded ? (
-              <ChevronDown className="mt-0.5 h-4 w-4 shrink-0 text-fg-muted" />
-            ) : (
-              <ChevronRight className="mt-0.5 h-4 w-4 shrink-0 text-fg-muted" />
-            )}
+          <div className="flex items-start gap-2 text-left">
+            <button
+              type="button"
+              className="mt-0.5 shrink-0 text-fg-muted hover:text-fg"
+              title={expanded ? 'Свернуть' : 'Развернуть'}
+              onClick={(ev) => {
+                ev.stopPropagation()
+                toggleExpand(group.id)
+              }}
+            >
+              {expanded ? (
+                <ChevronDown className="h-4 w-4" />
+              ) : (
+                <ChevronRight className="h-4 w-4" />
+              )}
+            </button>
             <div>
               <div className="flex items-center gap-2 text-sm font-medium">
                 <Layers className="h-3.5 w-3.5 text-proposed" />
@@ -167,7 +174,7 @@ function CorrelationRow({
               </div>
               <div className="mt-0.5 text-xs text-fg-dim">{group.reason}</div>
             </div>
-          </button>
+          </div>
         </td>
         <td className="px-3 py-2.5">
           <EntityChips entityIds={group.entityIds} max={5} entities={entities} />
@@ -185,12 +192,6 @@ function CorrelationRow({
           </div>
         </td>
         <td className="px-3 py-2.5 text-xs text-fg-muted">{statusLabel[group.status]}</td>
-        <td className="px-3 py-2.5">
-          <Button size="sm" onClick={() => start([group.id])} title="Начать расследование">
-            <Play className="h-3 w-3" />
-            Начать
-          </Button>
-        </td>
       </tr>
       {expanded &&
         group.eventIds.map((eid) => {
@@ -268,7 +269,7 @@ export function AlertTable() {
         )}
       </div>
       <div className="flex-1 overflow-auto">
-        <table className="w-full min-w-[960px] border-collapse text-left">
+        <table className="w-full min-w-[880px] border-collapse text-left">
           <thead className="sticky top-0 z-10 bg-surface-1 text-[11px] uppercase tracking-wider text-fg-dim">
             <tr className="border-b border-border">
               <th className="w-10 px-3 py-2" />
@@ -278,7 +279,6 @@ export function AlertTable() {
               <th className="px-3 py-2">Сущности</th>
               <th className="px-3 py-2">Источник</th>
               <th className="px-3 py-2">Статус</th>
-              <th className="w-28 px-3 py-2" />
             </tr>
           </thead>
           <tbody>
@@ -296,7 +296,7 @@ export function AlertTable() {
             )}
             {rows.length === 0 && (
               <tr>
-                <td colSpan={8} className="px-4 py-12 text-center">
+                <td colSpan={7} className="px-4 py-12 text-center">
                   <div className="text-sm text-fg-muted">
                     Нет срабатываний по текущим фильтрам
                   </div>

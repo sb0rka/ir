@@ -58,6 +58,7 @@ interface AppState {
   queueQuery: string
   selectedAlertIds: string[]
   expandedCorrelationIds: string[]
+  inspectedQueueItem: QueueItem | null
 
   tabs: TabId[]
   activeTab: TabId
@@ -99,6 +100,7 @@ interface AppState {
   toggleAlertSelect: (id: string) => void
   clearAlertSelection: () => void
   toggleCorrelationExpand: (id: string) => void
+  inspectQueueItem: (item: QueueItem | null) => void
 
   setActiveTab: (tab: TabId) => void
   closeTab: (tab: TabId) => void
@@ -232,6 +234,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   queueQuery: 'impacket_smbexec',
   selectedAlertIds: [],
   expandedCorrelationIds: [],
+  inspectedQueueItem: null,
 
   tabs: ['queue'],
   activeTab: 'queue',
@@ -310,6 +313,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     })
   },
   clearAlertSelection: () => set({ selectedAlertIds: [] }),
+  inspectQueueItem: (item) => set({ inspectedQueueItem: item }),
   toggleCorrelationExpand: (id) => {
     const cur = get().expandedCorrelationIds
     set({
@@ -421,6 +425,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         tabs: [...get().tabs, created.id],
         activeTab: created.id,
         selectedAlertIds: [],
+        inspectedQueueItem: null,
         investigationLoading: false,
       })
       void get().runEnrichment(created.id)
