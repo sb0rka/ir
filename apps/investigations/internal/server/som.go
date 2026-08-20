@@ -283,3 +283,45 @@ func parseSomUUID(field, value string) (uuid.UUID, error) {
 	}
 	return parsed, nil
 }
+
+// GetSomEnvironment Status of a SOM agent environment
+// (GET /som/environments/{local_environment_id})
+func (s *Server) GetSomEnvironment(ctx context.Context, request som.GetSomEnvironmentRequestObject) (som.GetSomEnvironmentResponseObject, error) {
+	bearer, err := s.somBearer(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.som.RunConfigured(); err != nil {
+		return nil, somNotConfigured(err)
+	}
+
+	sessionID, err := s.som.CreateRelaySession(ctx, bearer)
+	if err != nil {
+		return nil, somError(err)
+	}
+	env, err := s.som.GetEnvironment(ctx, sessionID, request.LocalEnvironmentId.String())
+	if err != nil {
+		return nil, somError(err)
+	}
+
+	status := mapDaemonEnvironmentStatus(env.IsRunning, env.IsErrored)
+	isRunning := env.IsRunning
+	isErrored := env.IsErrored
+	return som.GetSomEnvironment200JSONResponse(som.SomEnvironmentStatus{
+		LocalEnvironmentId: request.LocalEnvironmentId,
+		Status:             status,
+		IsRunning:          &isRunning,
+		IsErrored:          &isErrored,
+	}), nil
+}
+
+// mapDaemonEnvironmentStatus: errored wins over running; idle+ok → completed.
+func mapDaemonEnvironmentStatus(isRunning, isErrored bool) som.SomEnvironmentStatusStatus {
+	if isErrored {
+		return som.Failed
+	}
+	if isRunning {
+		return som.Running
+	}
+	return som.Completed
+}

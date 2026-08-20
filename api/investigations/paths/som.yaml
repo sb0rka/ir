@@ -119,6 +119,34 @@ paths:
         '422': { $ref: '../shared/responses.yaml#/components/responses/ValidationError' }
         '502': { $ref: '../shared/responses.yaml#/components/responses/SourceUnavailable' }
 
+  /som/environments/{local_environment_id}:
+    parameters:
+      - name: local_environment_id
+        in: path
+        required: true
+        description: Daemon environment id returned by runSomIssue.
+        schema: { type: string, format: uuid }
+    get:
+      tags: [som]
+      summary: Status of a SOM agent environment
+      description: >-
+        Opens a relay session to the configured daemon host and reads
+        `POST /api/environments/summaries` (not `GET /api/environments/{id}`,
+        which omits run flags). Maps `latest_process_status` into a coarse
+        status for the IR UI to poll until the coding-agent process finishes.
+      operationId: getSomEnvironment
+      responses:
+        '200':
+          description: Current environment status
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SomEnvironmentStatus' }
+        '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '501': { $ref: '../shared/responses.yaml#/components/responses/NotImplemented' }
+        '500': { $ref: '../shared/responses.yaml#/components/responses/InternalError' }
+        '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
+        '502': { $ref: '../shared/responses.yaml#/components/responses/SourceUnavailable' }
+
 components:
   schemas:
     SomWorkspace:
@@ -264,3 +292,28 @@ components:
           type: string
           format: uuid
           description: Daemon repository the environment was started on.
+
+    SomEnvironmentStatus:
+      type: object
+      description: >-
+        Coarse agent-run status derived from the daemon environment summary
+        (`latest_process_status`).
+      required: [local_environment_id, status]
+      properties:
+        local_environment_id:
+          type: string
+          format: uuid
+          description: Daemon environment id being polled.
+        status:
+          type: string
+          enum: [running, completed, failed]
+          description: >-
+            `running` while the latest coding-agent/setup/cleanup process is
+            `running` or has not appeared yet; `failed` when it is `failed` or
+            `killed`; `completed` when it is `completed`.
+        is_running:
+          type: boolean
+          description: True while status is running.
+        is_errored:
+          type: boolean
+          description: True while status is failed.

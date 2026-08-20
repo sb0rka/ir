@@ -93,6 +93,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/som/environments/{local_environment_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Daemon environment id returned by runSomIssue. */
+                local_environment_id: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * Status of a SOM agent environment
+         * @description Opens a relay session to the configured daemon host and reads `POST /api/environments/summaries` (not `GET /api/environments/{id}`, which omits run flags). Maps `latest_process_status` into a coarse status for the IR UI to poll until the coding-agent process finishes.
+         */
+        get: operations["getSomEnvironment"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -203,6 +226,23 @@ export interface components {
              * @description Daemon repository the environment was started on.
              */
             repo_id?: string;
+        };
+        /** @description Coarse agent-run status derived from the daemon environment summary (`latest_process_status`). */
+        SomEnvironmentStatus: {
+            /**
+             * Format: uuid
+             * @description Daemon environment id being polled.
+             */
+            local_environment_id: string;
+            /**
+             * @description `running` while the latest coding-agent/setup/cleanup process is `running` or has not appeared yet; `failed` when it is `failed` or `killed`; `completed` when it is `completed`.
+             * @enum {string}
+             */
+            status: "running" | "completed" | "failed";
+            /** @description True while status is running. */
+            is_running?: boolean;
+            /** @description True while status is failed. */
+            is_errored?: boolean;
         };
         /** @description Body of every non-2xx response. Clients branch on `code`, not on the HTTP status: the status says what happened at the protocol level, the code says what happened in the domain. */
         ErrorResponse: {
@@ -393,6 +433,34 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
             422: components["responses"]["ValidationError"];
+            500: components["responses"]["InternalError"];
+            501: components["responses"]["NotImplemented"];
+            502: components["responses"]["SourceUnavailable"];
+        };
+    };
+    getSomEnvironment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Daemon environment id returned by runSomIssue. */
+                local_environment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current environment status */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SomEnvironmentStatus"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
             501: components["responses"]["NotImplemented"];
             502: components["responses"]["SourceUnavailable"];

@@ -31,6 +31,38 @@ func TestResolveExecutorConfig(t *testing.T) {
 	}
 }
 
+func TestStatusFromLatestProcess(t *testing.T) {
+	t.Parallel()
+
+	running := "running"
+	failed := "failed"
+	killed := "killed"
+	completed := "completed"
+	blank := "  "
+
+	cases := []struct {
+		name string
+		in   *string
+		want EnvironmentStatus
+	}{
+		{name: "nil means still starting", in: nil, want: EnvironmentStatus{IsRunning: true}},
+		{name: "blank means still starting", in: &blank, want: EnvironmentStatus{IsRunning: true}},
+		{name: "running", in: &running, want: EnvironmentStatus{IsRunning: true}},
+		{name: "failed", in: &failed, want: EnvironmentStatus{IsErrored: true}},
+		{name: "killed", in: &killed, want: EnvironmentStatus{IsErrored: true}},
+		{name: "completed", in: &completed, want: EnvironmentStatus{}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := statusFromLatestProcess(tc.in)
+			if got != tc.want {
+				t.Fatalf("got %+v, want %+v", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestExecutorConfigPayload(t *testing.T) {
 	t.Parallel()
 
