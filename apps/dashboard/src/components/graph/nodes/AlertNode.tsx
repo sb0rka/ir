@@ -1,10 +1,11 @@
 import {
   Handle,
+  NodeToolbar,
   Position,
   type Node,
   type NodeProps,
 } from '@xyflow/react'
-import { ShieldAlert } from 'lucide-react'
+import { Crosshair, ShieldAlert } from 'lucide-react'
 import { SEVERITY_COLOR } from '../constants'
 import type { GraphNodeData } from '../graph-adapters'
 
@@ -14,11 +15,13 @@ export function AlertNode({ data }: NodeProps<AlertFlowNode>) {
   const color = data.severity
     ? SEVERITY_COLOR[data.severity]
     : 'var(--text-muted)'
+  const Icon = data.isSeed ? Crosshair : ShieldAlert
 
   const classes = [
     'graph-node',
     'flex min-w-[160px] max-w-[220px] items-start gap-2 rounded-lg border px-2.5 py-2',
     'bg-[var(--bg-node)] text-[var(--text)]',
+    data.isSeed ? 'is-seed' : '',
     data.dimmed ? 'is-dimmed' : '',
     data.highlighted ? 'is-highlighted' : '',
     data.selected ? 'is-selected' : '',
@@ -28,6 +31,15 @@ export function AlertNode({ data }: NodeProps<AlertFlowNode>) {
 
   return (
     <div className={classes} style={{ borderColor: color }}>
+      {data.tooltip && (
+        <NodeToolbar
+          isVisible={data.highlighted ? true : undefined}
+          position={Position.Top}
+          className="rounded-md border border-[var(--border)] bg-[var(--bg-panel)] px-2 py-1 text-[10px] tabular-nums text-[var(--text)] shadow-md"
+        >
+          {data.tooltip}
+        </NodeToolbar>
+      )}
       <Handle
         type="target"
         position={Position.Left}
@@ -40,14 +52,14 @@ export function AlertNode({ data }: NodeProps<AlertFlowNode>) {
           color,
         }}
       >
-        <ShieldAlert size={14} />
+        <Icon size={14} />
       </div>
       <div className="min-w-0">
         <div
           className="text-[10px] font-semibold uppercase tracking-wide"
-          style={{ color }}
+          style={{ color: data.isSeed ? 'var(--text)' : color }}
         >
-          {data.sublabel}
+          {data.isSeed ? `исходный · ${data.sublabel}` : data.sublabel}
         </div>
         <div className="line-clamp-2 text-xs font-medium leading-snug">
           {data.label}

@@ -8,7 +8,7 @@ import type {
   EventRef,
   Severity,
 } from './types'
-import { toMs } from './time'
+import { formatEventTooltip, toMs } from './time'
 
 export type GraphNodeData = {
   kind: 'entity' | 'alert'
@@ -21,6 +21,8 @@ export type GraphNodeData = {
   selected: boolean
   entityId?: string
   alertId?: string
+  isSeed?: boolean
+  tooltip?: string
 }
 
 export type GraphFilters = {
@@ -37,9 +39,9 @@ export function buildVisibleGraph(args: {
   events: EventRef[]
   filters: GraphFilters
   selection: { kind: string; id: string } | null
-  hoverEntityIds: Set<string>
+  hoverEventId: string | null
 }): { nodes: RFNode<GraphNodeData>[]; edges: RFEdge[] } {
-  const { entities, alerts, edges, events, filters, selection, hoverEntityIds } =
+  const { entities, alerts, edges, events, filters, selection, hoverEventId } =
     args
 
   const range = filters.timeRange
@@ -66,49 +68,46 @@ export function buildVisibleGraph(args: {
     ...visibleAlerts.map((a) => a.id),
   ])
 
-  const hovering = hoverEntityIds.size > 0
+  const hovering = Boolean(hoverEventId)
   const selectedId = selection?.id ?? null
-
-  const relatedAlertIds = new Set<string>()
-  if (hovering) {
-    for (const ev of events) {
-      if (ev.entity_ids.some((id) => hoverEntityIds.has(id)) && ev.alert_id) {
-        relatedAlertIds.add(ev.alert_id)
-      }
-    }
+  const hoverEvent = hoverEventId
+    ? events.find((ev) => ev.id === hoverEventId)
+    : undefined
+  const hoverAlertIds = new Set<string>()
+  if (hoverEventId) {
+    hoverAlertIds.add(hoverEventId)
+    if (hoverEvent?.alert_id) hoverAlertIds.add(hoverEvent.alert_id)
   }
 
+  const isHoveredAlert = (a: AlertNode) =>
+    hovering &&
+    (hoverAlertIds.has(a.id) ||
+      (!!a.event_id && hoverAlertIds.has(a.event_id)))
+  const hoveredAlertNodeIds = new Set(
+    visibleAlerts.filter(isHoveredAlert).map((a) => a.id),
+  )
+
   const nodes: RFNode<GraphNodeData>[] = [
-    ...visibleEntities.map((e) => {
-      const highlighted =
-        hovering &&
-        (hoverEntityIds.has(e.id) ||
-          (!!e.entity_id && hoverEntityIds.has(e.entity_id)))
-      const dimmed = hovering && !highlighted
-      return {
-        id: e.id,
-        type: 'entity',
-        position: e.position,
-        data: {
-          kind: 'entity' as const,
-          label: e.display_name,
-          sublabel: e.type_code,
-          entityType: e.type_code,
-          dimmed,
-          highlighted,
-          selected:
-            selectedId === e.id ||
-            (!!e.entity_id && selectedId === e.entity_id),
-          entityId: e.entity_id ?? e.id,
-        },
-      }
-    }),
+    ...visibleEntities.map((e) => ({
+      id: e.id,
+      type: 'entity',
+      position: e.position,
+      data: {
+        kind: 'entity' as const,
+        label: e.display_name,
+        sublabel: e.type_code,
+        entityType: e.type_code,
+        dimmed: hovering,
+        highlighted: false,
+        selected:
+          selectedId === e.id ||
+          (!!e.entity_id && selectedId === e.entity_id),
+        entityId: e.entity_id ?? e.id,
+      },
+    })),
     ...visibleAlerts.map((a) => {
-      const linkedToHover =
-        hovering &&
-        (relatedAlertIds.has(a.id) ||
-          (!!a.event_id && relatedAlertIds.has(a.event_id)))
-      const dimmed = hovering && !linkedToHover
+      const highlighted = isHoveredAlert(a)
+      const dimmed = hovering && !highlighted
       return {
         id: a.id,
         type: 'alert',
@@ -119,12 +118,16 @@ export function buildVisibleGraph(args: {
           sublabel: a.severity,
           severity: a.severity,
           dimmed,
-          highlighted: linkedToHover,
+          highlighted,
           selected:
             selectedId === a.id ||
             (!!a.event_id &&
               (selectedId === a.event_id || selectedId === `alert-${a.event_id}`)),
           alertId: a.event_id ?? a.id,
+          isSeed: a.isSeed,
+          tooltip: `${a.isSeed ? 'исходный · ' : ''}${
+            a.event_ts ? formatEventTooltip(a.event_ts, a.title) : a.title
+          }`,
         },
       }
     }),
@@ -140,10 +143,8 @@ export function buildVisibleGraph(args: {
         e.status === 'proposed' ? 0.45 : e.status === 'rejected' ? 0.2 : 0.85
       const endpointsDimmed =
         hovering &&
-        !hoverEntityIds.has(e.source_id) &&
-        !hoverEntityIds.has(e.target_id) &&
-        !relatedAlertIds.has(e.source_id) &&
-        !relatedAlertIds.has(e.target_id)
+        !hoveredAlertNodeIds.has(e.source_id) &&
+        !hoveredAlertNodeIds.has(e.target_id)
       const curveIndex = curvatureByTarget.get(e.target_id) ?? 0
       curvatureByTarget.set(e.target_id, curveIndex + 1)
 

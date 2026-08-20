@@ -37,6 +37,8 @@
 }
 
 .react-flow__controls {
+  display: flex;
+  flex-direction: row;
   background: var(--bg-panel);
   border: 1px solid var(--border);
   border-radius: 6px;
@@ -46,13 +48,27 @@
 
 .react-flow__controls-button {
   background: var(--bg-panel);
-  border-bottom: 1px solid var(--border);
+  border-bottom: none;
+  border-right: 1px solid var(--border);
   fill: var(--text-muted);
+}
+
+.react-flow__controls-button:last-child {
+  border-right: none;
 }
 
 .react-flow__controls-button:hover {
   background: var(--bg-node);
   fill: var(--text);
+}
+
+.react-flow__controls-button svg.lucide {
+  fill: none;
+  stroke: var(--text-muted);
+}
+
+.react-flow__controls-button:hover svg.lucide {
+  stroke: var(--text);
 }
 
 .react-flow__minimap {
@@ -75,6 +91,19 @@
 .graph-node.is-highlighted {
   opacity: 1;
   box-shadow: 0 0 0 1px var(--accent);
+}
+
+.graph-node.is-seed {
+  box-shadow:
+    0 0 0 3px var(--bg),
+    0 0 0 6px var(--text);
+}
+
+.graph-node.is-seed.is-highlighted,
+.graph-node.is-seed.is-selected {
+  box-shadow:
+    0 0 0 3px var(--bg),
+    0 0 0 6px var(--text);
 }
 
 .graph-node.is-selected {

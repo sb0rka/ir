@@ -47,6 +47,7 @@ export interface AlertNode {
   source: string
   description: string
   position: { x: number; y: number }
+  isSeed?: boolean
 }
 
 export interface Edge {
@@ -71,6 +72,7 @@ export interface EventRef {
   summary?: string
   entity_ids: string[]
   alert_id?: string
+  isSeed?: boolean
 }
 
 /** Per-investigation graph filter state */

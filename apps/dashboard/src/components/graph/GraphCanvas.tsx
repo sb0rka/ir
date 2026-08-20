@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import {
   Background,
   BackgroundVariant,
+  ControlButton,
   Controls,
   MiniMap,
   ReactFlow,
@@ -14,6 +15,7 @@ import {
   type NodeMouseHandler,
   type OnNodeDrag,
 } from '@xyflow/react'
+import { LayoutGrid } from 'lucide-react'
 import { useWorkspaceStore } from '../../state/useWorkspaceStore'
 import { SEVERITY_COLOR } from './constants'
 import { buildVisibleGraph, type GraphNodeData } from './graph-adapters'
@@ -31,21 +33,25 @@ function GraphInner({ fitToken }: { fitToken: FitToken }) {
   const {
     activeInvestigation: session,
     selection,
-    hoverEntityIds,
+    hoverEventId,
     select,
     expandRelated,
     collapseRelated,
     canExpand,
     isExpanded,
     updateNodePosition,
+    arrangeNodes,
   } = useWorkspaceStore()
 
   const { fitView } = useReactFlow()
-  const hasSize = useStore((s) => s.width > 0 && s.height > 0)
+  const paneWidth = useStore((s) => s.width)
+  const paneHeight = useStore((s) => s.height)
+  const hasSize = paneWidth > 0 && paneHeight > 0
   const nodesMeasured = useStore((s) => {
     if (s.nodes.length === 0) return false
     return s.nodes.every((n) => (n.measured?.width ?? 0) > 0)
   })
+  const fittedSizeKey = useRef<string | null>(null)
 
   const { nodes: derivedNodes, edges: derivedEdges } = useMemo(() => {
     if (!session) return { nodes: [], edges: [] }
@@ -61,9 +67,9 @@ function GraphInner({ fitToken }: { fitToken: FitToken }) {
         timeRange: session.filters.timeRange,
       },
       selection,
-      hoverEntityIds,
+      hoverEventId,
     })
-  }, [session, selection, hoverEntityIds])
+  }, [session, selection, hoverEventId])
 
   const [nodes, setNodes, onNodesChange] = useNodesState(derivedNodes as Node[])
   const [rfEdges, setEdges, onEdgesChange] = useEdgesState(derivedEdges)
@@ -93,8 +99,20 @@ function GraphInner({ fitToken }: { fitToken: FitToken }) {
 
   useEffect(() => {
     if (!hasSize || !nodesMeasured || derivedNodes.length === 0) return
-    void fitView({ padding: 0.15, duration: 0 })
-  }, [fitToken, fitView, derivedNodes.length, hasSize, nodesMeasured])
+    const key = `${fitToken}:${paneWidth}x${paneHeight}:${derivedNodes.length}`
+    if (fittedSizeKey.current === key) return
+    const duration = fittedSizeKey.current === null ? 0 : 200
+    fittedSizeKey.current = key
+    void fitView({ padding: 0.15, duration })
+  }, [
+    fitToken,
+    paneWidth,
+    paneHeight,
+    fitView,
+    derivedNodes.length,
+    hasSize,
+    nodesMeasured,
+  ])
 
   const onNodeClick: NodeMouseHandler = useCallback(
     (_evt, node) => {
@@ -131,6 +149,27 @@ function GraphInner({ fitToken }: { fitToken: FitToken }) {
 
   const onPaneClick = useCallback(() => select(null), [select])
 
+  const onArrange = useCallback(() => {
+    arrangeNodes()
+    const next = useWorkspaceStore.getState().activeInvestigation
+    if (!next) return
+    const posById = new Map<string, { x: number; y: number }>([
+      ...next.entities.map((e) => [e.id, e.position] as const),
+      ...next.alerts.map((a) => [a.id, a.position] as const),
+    ])
+    setNodes((current) =>
+      current.map((n) => ({
+        ...n,
+        position: posById.get(n.id) ?? n.position,
+      })),
+    )
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        void fitView({ padding: 0.15, duration: 200 })
+      })
+    })
+  }, [arrangeNodes, fitView, setNodes])
+
   return (
     <ReactFlow
       nodes={nodes}
@@ -155,7 +194,15 @@ function GraphInner({ fitToken }: { fitToken: FitToken }) {
         size={1}
         color="var(--grid-dot)"
       />
-      <Controls showInteractive={false} position="bottom-left" />
+      <Controls
+        showInteractive={false}
+        position="top-right"
+        orientation="horizontal"
+      >
+        <ControlButton onClick={onArrange} title="Arrange nodes" aria-label="Arrange nodes">
+          <LayoutGrid size={16} />
+        </ControlButton>
+      </Controls>
       <MiniMap
         pannable
         zoomable
@@ -163,6 +210,7 @@ function GraphInner({ fitToken }: { fitToken: FitToken }) {
         style={{ width: 140, height: 92 }}
         nodeColor={(n) => {
           const d = n.data as GraphNodeData
+          if (d.kind === 'alert' && d.isSeed) return 'var(--accent)'
           if (d.kind === 'alert' && d.severity) return SEVERITY_COLOR[d.severity]
           return 'var(--border-strong)'
         }}
@@ -212,7 +260,7 @@ export function GraphCanvas({ fitToken }: { fitToken: FitToken }) {
           {session ? '' : 'Расследование не выбрано'}
         </div>
       )}
-      <div className="pointer-events-none absolute bottom-3 left-12 rounded-md border border-[var(--border)] bg-[var(--bg-panel)]/90 px-2 py-1 text-[10px] text-[var(--text-dim)]">
+      <div className="pointer-events-none absolute bottom-3 left-3 rounded-md border border-[var(--border)] bg-[var(--bg-panel)]/90 px-2 py-1 text-[10px] text-[var(--text-dim)]">
         Узлы можно перетаскивать · правый клик по сущности — развернуть или
         свернуть связанные
       </div>

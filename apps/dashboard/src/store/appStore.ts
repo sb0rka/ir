@@ -879,13 +879,27 @@ export function persistNodePosition(
   const nodes = useAppStore.getState().graphNodes
   const match = Object.values(nodes).find((n) => n.id === nodeId || n.refId === nodeId)
   if (!match) return
-  const next = { ...nodes, [match.id]: { ...match, x: position.x, y: position.y } }
+  persistGraphLayout(investigationId, [
+    { ...match, x: position.x, y: position.y },
+  ])
+}
+
+export function persistGraphLayout(investigationId: string, nodes: GraphNode[]) {
+  if (nodes.length === 0) return
+  const current = useAppStore.getState().graphNodes
+  const next = { ...current }
+  for (const node of nodes) {
+    const match = next[node.id] ?? Object.values(next).find((n) => n.refId === node.id)
+    if (!match) continue
+    next[match.id] = { ...match, x: node.x, y: node.y }
+  }
   useAppStore.setState({ graphNodes: next })
   const layout: Record<string, { x: number; y: number }> = {}
+  const invNodeIds = new Set(
+    useAppStore.getState().investigations[investigationId]?.nodeIds ?? [],
+  )
   for (const n of Object.values(next)) {
-    if (useAppStore.getState().investigations[investigationId]?.nodeIds.includes(n.id)) {
-      layout[n.id] = { x: n.x, y: n.y }
-    }
+    if (invNodeIds.has(n.id)) layout[n.id] = { x: n.x, y: n.y }
   }
   saveLayout(investigationId, layout)
 }

@@ -428,8 +428,9 @@ export function layoutGraph(
   investigationId: string,
   nodes: GraphNode[],
   edges: LayoutEdge[] = [],
+  options?: { ignoreSaved?: boolean },
 ): GraphNode[] {
-  const saved = loadLayout(investigationId)
+  const saved = options?.ignoreSaved ? {} : loadLayout(investigationId)
   const events = nodes
     .filter((n) => n.kind === 'event')
     .slice()

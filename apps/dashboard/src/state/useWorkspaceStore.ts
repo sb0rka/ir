@@ -16,7 +16,8 @@ import type {
   Selection,
   Severity,
 } from '../components/graph/types'
-import { persistNodePosition, useAppStore } from '../store/appStore'
+import { layoutGraph } from '../api/adapters'
+import { persistGraphLayout, persistNodePosition, useAppStore } from '../store/appStore'
 import type { Investigation } from '../types'
 
 function mapEntityType(kind: string): EntityTypeCode {
@@ -78,6 +79,20 @@ function collectTimes(values: Array<string | undefined>): number[] {
   return times
 }
 
+// TODO: IR Origin is analyst|rule|agent — opening events and later
+// addContext both attach as analyst, so a later manual add currently
+// looks like seed. Replace with a real seed mark once the API
+// distinguishes investigation-opening events.
+function isSeedEvent(
+  origin: string | undefined,
+  ids: Array<string | undefined>,
+  seedEventIds: string[],
+): boolean {
+  const seed = new Set(seedEventIds)
+  if (ids.some((id) => id && seed.has(id))) return true
+  return origin === 'seed' || origin === 'analyst'
+}
+
 function buildFromApp(inv: Investigation): GraphInvestigation {
   const app = useAppStore.getState()
   const reviews = app.nodeReviews
@@ -128,6 +143,7 @@ function buildFromApp(inv: Investigation): GraphInvestigation {
       source: ev?.source ?? '',
       description: ev?.description ?? n.label,
       position: { x: n.x, y: n.y },
+      isSeed: isSeedEvent(ev?.origin ?? n.origin, [n.refId, n.id, ev?.id], inv.seedEventIds),
     }
   })
 
@@ -193,6 +209,7 @@ function buildFromApp(inv: Investigation): GraphInvestigation {
         summary: ev.description,
         entity_ids: [...entityIds],
         alert_id: alertId,
+        isSeed: isSeedEvent(ev.origin, [ev.id], inv.seedEventIds),
       }
     })
 
@@ -230,7 +247,7 @@ function buildFromApp(inv: Investigation): GraphInvestigation {
 interface WorkspaceState {
   activeInvestigation: GraphInvestigation | null
   selection: Selection
-  hoverEntityIds: Set<string>
+  hoverEventId: string | null
   expandedEntityIds: Set<string>
   boundInvestigationId: string | null
 
@@ -240,7 +257,7 @@ interface WorkspaceState {
   refreshFromApp: () => void
 
   select: (selection: Selection) => void
-  setHoverTime: (ms: number | null, entityIds?: string[]) => void
+  setHoverEvent: (eventId: string | null) => void
   setTimeRange: (range: { start: number; end: number } | null) => void
   toggleEntityType: (type: EntityTypeCode) => void
   toggleSeverity: (sev: Severity) => void
@@ -251,6 +268,7 @@ interface WorkspaceState {
   canExpand: (entityId: string) => boolean
   isExpanded: (entityId: string) => boolean
   updateNodePosition: (nodeId: string, position: { x: number; y: number }) => void
+  arrangeNodes: () => void
 }
 
 function patchFilters(
@@ -263,7 +281,7 @@ function patchFilters(
 export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   activeInvestigation: null,
   selection: null,
-  hoverEntityIds: new Set(),
+  hoverEventId: null,
   expandedEntityIds: new Set(),
   boundInvestigationId: null,
 
@@ -273,7 +291,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
         activeInvestigation: null,
         boundInvestigationId: null,
         selection: null,
-        hoverEntityIds: new Set(),
+        hoverEventId: null,
         expandedEntityIds: new Set(),
       })
       return
@@ -379,8 +397,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     }
   },
 
-  setHoverTime: (_ms, entityIds) => {
-    set({ hoverEntityIds: new Set(entityIds ?? []) })
+  setHoverEvent: (eventId) => {
+    set({ hoverEventId: eventId })
   },
 
   setTimeRange: (range) => {
@@ -574,6 +592,35 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
         ),
       },
     })
+  },
+
+  arrangeNodes: () => {
+    const invId = get().boundInvestigationId
+    const workspaceInv = get().activeInvestigation
+    if (!invId || !workspaceInv) return
+    const appInv = useAppStore.getState().investigations[invId]
+    if (!appInv) return
+
+    const { graphNodes, graphEdges } = useAppStore.getState()
+    const nodes = appInv.nodeIds.map((id) => graphNodes[id]).filter(Boolean)
+    const edges = appInv.edgeIds.map((id) => graphEdges[id]).filter(Boolean)
+    const laidOut = layoutGraph(invId, nodes, edges, { ignoreSaved: true })
+    const posById = new Map(laidOut.map((n) => [n.id, { x: n.x, y: n.y }]))
+
+    set({
+      activeInvestigation: {
+        ...workspaceInv,
+        entities: workspaceInv.entities.map((e) => ({
+          ...e,
+          position: posById.get(e.id) ?? e.position,
+        })),
+        alerts: workspaceInv.alerts.map((a) => ({
+          ...a,
+          position: posById.get(a.id) ?? a.position,
+        })),
+      },
+    })
+    persistGraphLayout(invId, laidOut)
   },
 }))
 

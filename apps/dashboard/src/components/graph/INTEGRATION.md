@@ -38,11 +38,11 @@ import { useWorkspaceStore } from '../../state/useWorkspaceStore'
 Point that import at your store (or a thin adapter). Required surface:
 
 - `activeInvestigation` — see `GraphInvestigation` in `types.ts`
-- `selection`, `hoverEntityIds`
-- `select`, `setHoverTime`, `setTimeRange`
+- `selection`, `hoverEventId`
+- `select`, `setHoverEvent`, `setTimeRange`
 - `toggleEntityType`, `toggleSeverity`, `toggleEdgeOrigin`, `resetGraphFilters`
 - `expandRelated`, `collapseRelated`, `canExpand`, `isExpanded`
-- `updateNodePosition`
+- `updateNodePosition`, `arrangeNodes`
 
 3. Render:
 
