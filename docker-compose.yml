@@ -34,6 +34,7 @@ services:
       POSTGRES_DB: investigations
       POSTGRES_USER: ${DB_ADMIN_USER}
       POSTGRES_PASSWORD: ${DB_ADMIN_PASSWORD}
+      POSTGRES_PORT: "5432"
       DB_INV_SCHEMA_NAME: ${DB_INV_SCHEMA_NAME}
     command:
       - /app/migrations/investigations/007-extensions.sql
@@ -55,6 +56,7 @@ services:
       POSTGRES_DB: investigations
       POSTGRES_USER: ${DB_ADMIN_USER}
       POSTGRES_PASSWORD: ${DB_ADMIN_PASSWORD}
+      POSTGRES_PORT: "5432"
       DB_INV_SCHEMA_NAME: ${DB_INV_SCHEMA_NAME}
     command:
       - /app/migrations/investigations/009-version.sql
@@ -80,8 +82,7 @@ services:
       SERVER_CORS_WHITELIST: "${SERVER_CORS_WHITELIST:-http://localhost:5173,http://localhost:3000}"
       DATABASE_URI: "postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:5432/investigations?search_path=${DB_INV_SCHEMA_NAME}"
       LOG_FORMAT: "${LOG_FORMAT:-text}"
-      # Demo: без своей проверки токенов; Authorization пробрасывается в SOM.
-      AUTH_DISABLED: "${IR_AUTH_DISABLED:-true}"
+      SB0RKA_API_BASE_URL: "${SB0RKA_API_BASE_URL:-http://host.docker.internal:8080}"
       # Значения — из ir/.env (см. .env.sample). Пустой SOM_API_BASE_URL выключает som-роуты.
       SOM_API_BASE_URL: "${SOM_API_BASE_URL:-}"
       SOM_RELAY_BASE_URL: "${SOM_RELAY_BASE_URL:-}"
@@ -92,19 +93,25 @@ services:
       SOM_TARGET_BRANCH: "${SOM_TARGET_BRANCH:-main}"
       SOM_EXECUTOR: "${SOM_EXECUTOR:-OPENCODE}"
 
-      GATEWAY_BASE_URL: "${GATEWAY_BASE_URL:-http://gateway:8091}"
+      GATEWAY_BASE_URL: "${GATEWAY_BASE_URL:-http://host.docker.internal:8091}"
       IR_PUBLIC_BASE_URL: "${IR_PUBLIC_BASE_URL:-http://host.docker.internal:8090}"
       GATEWAY_PUBLIC_BASE_URL: "${GATEWAY_PUBLIC_BASE_URL:-http://host.docker.internal:8091}"
-      # Публичный ключ платформы. Без него сервис поднимется,
-      # но любой запрос с токеном получит 401 — конфиг стенда неполон.
-      ACCESS_TOKEN_PUBLIC_KEY_FILE_PATH: "${ACCESS_TOKEN_PUBLIC_KEY_FILE_PATH:-}"
+      # Приватный ключ общий с Auth/API; IR выводит из него публичную половину.
+      ACCESS_TOKEN_PRIVATE_KEY: "${ACCESS_TOKEN_PRIVATE_KEY:-}"
+      ACCESS_TOKEN_PRIVATE_KEY_FILE_PATH: "${ACCESS_TOKEN_PRIVATE_KEY_FILE_PATH:-}"
+      # Публичный ключ остаётся fallback для раздельной выдачи ключей.
+      ACCESS_TOKEN_PUBLIC_KEY: "${ACCESS_TOKEN_PUBLIC_KEY:-}"
+      ACCESS_TOKEN_PUBLIC_KEY_FILE_PATH: "${ACCESS_TOKEN_PUBLIC_KEY_FILE_PATH:-/keys/access_token_public_key.pem}"
       ACCESS_TOKEN_ISSUER: "${ACCESS_TOKEN_ISSUER:-auth.local}"
       ACCESS_TOKEN_AUDIENCE: "${ACCESS_TOKEN_AUDIENCE:-api.local}"
       ACCESS_TOKEN_KID: "${ACCESS_TOKEN_KID:-ed25519-v1}"
+      ACCESS_TOKEN_TYP: "${ACCESS_TOKEN_TYP:-access+jwt}"
     ports:
       - "${API_PORT:-8090}:8090"
     volumes:
       - ./keys:/keys:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     networks:
       - default
       - som_selfrun
@@ -116,34 +123,69 @@ services:
     profiles:
       - apps
 
+  openvpn:
+    build:
+      context: docker/openvpn-client
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun
+    volumes:
+      - ${OPENVPN_CONFIG_FILE:?set OPENVPN_CONFIG_FILE in .env}:/vpn/vpn.conf:ro
+    ports:
+      - "${GATEWAY_PORT:-8091}:8091"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD-SHELL", "ip link show tun0 >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 45s
+    profiles:
+      - apps
+
   gateway:
     build:
       context: .
       dockerfile: apps/gateway/Dockerfile
     restart: unless-stopped
+    # Shares openvpn network namespace so outbound SIEM traffic goes through the VPN tunnel.
+    network_mode: service:openvpn
+    depends_on:
+      openvpn:
+        condition: service_healthy
     env_file:
       - .env
     environment:
       SERVER_ADDR: "0.0.0.0"
-      SERVER_PORT: "8091"
+      SERVER_PORT: "${GATEWAY_PORT:-8091}"
       SERVER_CORS_WHITELIST: "${SERVER_CORS_WHITELIST:-http://localhost:5173,http://localhost:3000}"
-      AUTH_DISABLED: "true"
-      DATABASE_URI: "postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:5432/investigations?search_path=${DB_INV_SCHEMA_NAME}"
-      PROJECT_SOURCE_ALLOWLISTS: '{"abcdef1234":["maxpatrol-siem","pt-sandbox"]}'
+      SB0RKA_API_BASE_URL: "${SB0RKA_API_BASE_URL:-http://host.docker.internal:8080}"
+      ACCESS_TOKEN_PRIVATE_KEY: "${ACCESS_TOKEN_PRIVATE_KEY:-}"
+      ACCESS_TOKEN_PRIVATE_KEY_FILE_PATH: "${ACCESS_TOKEN_PRIVATE_KEY_FILE_PATH:-}"
+      ACCESS_TOKEN_PUBLIC_KEY: "${ACCESS_TOKEN_PUBLIC_KEY:-}"
+      ACCESS_TOKEN_PUBLIC_KEY_FILE_PATH: "${ACCESS_TOKEN_PUBLIC_KEY_FILE_PATH:-/keys/access_token_public_key.pem}"
+      ACCESS_TOKEN_ISSUER: "${ACCESS_TOKEN_ISSUER:-auth.local}"
+      ACCESS_TOKEN_AUDIENCE: "${ACCESS_TOKEN_AUDIENCE:-api.local}"
+      ACCESS_TOKEN_KID: "${ACCESS_TOKEN_KID:-ed25519-v1}"
+      ACCESS_TOKEN_TYP: "${ACCESS_TOKEN_TYP:-access+jwt}"
+      PROJECT_SOURCE_ALLOWLISTS: '${PROJECT_SOURCE_ALLOWLISTS:-{"abcdef1234":["maxpatrol-siem","pt-sandbox"]}}'
       LOG_FORMAT: "${LOG_FORMAT:-text}"
       MOCK_EVENT_COUNT: "${GATEWAY_MOCK_EVENT_COUNT:-50000}"
       MOCK_ENDPOINT_COUNT: "${GATEWAY_MOCK_ENDPOINT_COUNT:-5000}"
       MOCK_HISTORY_DAYS: "${GATEWAY_MOCK_HISTORY_DAYS:-90}"
-    ports:
-      - "${GATEWAY_PORT:-8091}:8091"
-    networks:
-      - default
-      - som_selfrun
+      GATEWAY_SKIP_TLS_VERIFY: "${GATEWAY_SKIP_TLS_VERIFY:-true}"
+    volumes:
+      - ./keys:/keys:ro
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8091/ping || exit 1"]
       interval: 10s
       timeout: 3s
       retries: 5
+      start_period: 15s
     profiles:
       - apps
 
@@ -151,7 +193,10 @@ volumes:
   pgdata:
 
 networks:
+  default:
+    ipam:
+      config:
+        - subnet: 172.25.0.0/16
   som_selfrun:
     external: true
     name: deploy_default
-

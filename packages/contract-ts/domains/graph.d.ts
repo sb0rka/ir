@@ -8,7 +8,7 @@ export interface paths {
         parameters: {
             query?: never;
             header: {
-                /** @description Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored. */
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
                 "X-Project-ID": components["parameters"]["ProjectId"];
             };
             path: {
@@ -34,7 +34,7 @@ export interface paths {
         parameters: {
             query?: never;
             header: {
-                /** @description Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored. */
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
                 "X-Project-ID": components["parameters"]["ProjectId"];
             };
             path: {
@@ -64,7 +64,7 @@ export interface paths {
         parameters: {
             query?: never;
             header: {
-                /** @description Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored. */
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
                 "X-Project-ID": components["parameters"]["ProjectId"];
             };
             path: {
@@ -96,7 +96,7 @@ export interface paths {
         parameters: {
             query?: never;
             header: {
-                /** @description Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored. */
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
                 "X-Project-ID": components["parameters"]["ProjectId"];
             };
             path: {
@@ -126,7 +126,7 @@ export interface paths {
         parameters: {
             query?: never;
             header: {
-                /** @description Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored. */
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
                 "X-Project-ID": components["parameters"]["ProjectId"];
             };
             path: {
@@ -162,7 +162,7 @@ export interface paths {
         parameters: {
             query?: never;
             header: {
-                /** @description Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored. */
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
                 "X-Project-ID": components["parameters"]["ProjectId"];
             };
             path: {
@@ -194,7 +194,7 @@ export interface paths {
         parameters: {
             query?: never;
             header: {
-                /** @description Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored. */
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
                 "X-Project-ID": components["parameters"]["ProjectId"];
             };
             path: {
@@ -224,7 +224,7 @@ export interface paths {
         parameters: {
             query?: never;
             header: {
-                /** @description Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored. */
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
                 "X-Project-ID": components["parameters"]["ProjectId"];
             };
             path: {
@@ -531,7 +531,7 @@ export interface components {
                 "application/json": components["schemas"]["ErrorResponse"];
             };
         };
-        /** @description Caller is authenticated but holds no role in the selected project, or the role does not grant this action (code=forbidden). */
+        /** @description Caller is authenticated but cannot access the selected project's platform-owned resource (code=forbidden). */
         Forbidden: {
             headers: {
                 [name: string]: unknown;
@@ -587,7 +587,7 @@ export interface components {
         };
     };
     parameters: {
-        /** @description Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored. */
+        /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
         ProjectId: string;
         /** @description Identifier of an investigation in the selected project. */
         InvestigationId: string;
@@ -619,7 +619,7 @@ export interface operations {
                 statuses?: components["schemas"]["GraphEdgeStatus"][];
             };
             header: {
-                /** @description Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored. */
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
                 "X-Project-ID": components["parameters"]["ProjectId"];
             };
             path: {
@@ -660,7 +660,7 @@ export interface operations {
                 cursor?: components["parameters"]["Cursor"];
             };
             header: {
-                /** @description Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored. */
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
                 "X-Project-ID": components["parameters"]["ProjectId"];
             };
             path: {
@@ -692,7 +692,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored. */
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
                 "X-Project-ID": components["parameters"]["ProjectId"];
             };
             path: {
@@ -728,7 +728,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored. */
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
                 "X-Project-ID": components["parameters"]["ProjectId"];
             };
             path: {
@@ -761,7 +761,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored. */
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
                 "X-Project-ID": components["parameters"]["ProjectId"];
             };
             path: {
@@ -807,7 +807,7 @@ export interface operations {
                 cursor?: components["parameters"]["Cursor"];
             };
             header: {
-                /** @description Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored. */
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
                 "X-Project-ID": components["parameters"]["ProjectId"];
             };
             path: {
@@ -839,7 +839,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored. */
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
                 "X-Project-ID": components["parameters"]["ProjectId"];
             };
             path: {
@@ -876,7 +876,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored. */
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
                 "X-Project-ID": components["parameters"]["ProjectId"];
             };
             path: {
@@ -909,7 +909,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored. */
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
                 "X-Project-ID": components["parameters"]["ProjectId"];
             };
             path: {
@@ -940,7 +940,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored. */
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
                 "X-Project-ID": components["parameters"]["ProjectId"];
             };
             path: {
@@ -979,7 +979,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored. */
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
                 "X-Project-ID": components["parameters"]["ProjectId"];
             };
             path: {
@@ -1012,7 +1012,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored. */
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
                 "X-Project-ID": components["parameters"]["ProjectId"];
             };
             path: {
@@ -1050,7 +1050,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored. */
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
                 "X-Project-ID": components["parameters"]["ProjectId"];
             };
             path: {
@@ -1084,7 +1084,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored. */
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
                 "X-Project-ID": components["parameters"]["ProjectId"];
             };
             path: {

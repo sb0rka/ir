@@ -23,7 +23,7 @@ Unauthorized:
       schema:
         $ref: './schemas.yaml#/ErrorEnvelope'
 Forbidden:
-  description: The caller has no role in the project or the source is not allowed there.
+  description: The project is not configured or the source is not allowed there.
   content:
     application/json:
       schema:
@@ -48,6 +48,12 @@ BadGateway:
         $ref: './schemas.yaml#/ErrorEnvelope'
 GatewayTimeout:
   description: The Gateway or selected source exceeded its deadline.
+  content:
+    application/json:
+      schema:
+        $ref: './schemas.yaml#/ErrorEnvelope'
+ServiceUnavailable:
+  description: The selected source has no usable project-scoped configuration.
   content:
     application/json:
       schema:

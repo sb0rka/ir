@@ -15,6 +15,7 @@ const (
 	CapabilityArtifactAnalysis Capability = "artifact_analysis"
 	CapabilityEndpoints        Capability = "endpoints"
 	CapabilityResponseCatalog  Capability = "response_catalog"
+	CapabilityAccountUserinfo  Capability = "account_userinfo"
 )
 
 type Source struct {
@@ -126,6 +127,11 @@ type SourceError struct {
 	Code      string
 	Message   string
 	Retryable bool
+}
+
+type AccountUserinfo struct {
+	SourceCode string
+	UserName   string
 }
 
 var idNamespace = uuid.MustParse("371be91f-7baf-5bb1-b576-9cd358848148")

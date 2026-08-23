@@ -1,7 +1,7 @@
 // Package somclient — HTTP-клиент демо-интеграции с SOM: kanban API самого
-// SOM, relay-сессии и daemon-хост за relay. Своих учётных данных у IR нет:
-// каждый вызов несёт bearer-токен вызывающего (pass-through), кроме
-// daemon-путей — там аутентификацией служит relay-сессия в самом URL.
+// SOM, relay-сессии и daemon-хост за relay. Bearer для SOM приходит из
+// project-scoped Secrets через server layer; daemon-пути аутентифицируются
+// relay-сессией в самом URL.
 package somclient
 
 import (

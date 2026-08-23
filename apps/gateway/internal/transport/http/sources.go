@@ -7,11 +7,14 @@ import (
 )
 
 func (server *Server) ListSources(w http.ResponseWriter, r *http.Request, _ api.ListSourcesParams) {
-	items := make([]api.Source, 0, len(server.service.ListSources()))
-	for _, source := range server.service.ListSources() {
-		if !server.sourceAllowed(r.Context(), source.Code) {
-			continue
-		}
+	allowed, err := server.allowedSources(r.Context())
+	if err != nil {
+		server.writeServiceError(w, err)
+		return
+	}
+	sources := server.service.ListSources(r.Context(), projectAccess(r), allowed)
+	items := make([]api.Source, 0, len(sources))
+	for _, source := range sources {
 		items = append(items, sourceToAPI(source))
 	}
 	respondJSON(w, http.StatusOK, map[string]any{"items": items})

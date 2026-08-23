@@ -446,49 +446,49 @@ type ListGraphEdgesParams struct {
 	// Cursor Opaque keyset cursor taken from `next_cursor` of the previous page. Encodes a position, not a query — do not build one by hand. Omit it to start from the beginning.
 	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
 
-	// XProjectID Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored.
+	// XProjectID Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets.
 	XProjectID ProjectId `json:"X-Project-ID"`
 }
 
 // CreateGraphEdgeParams defines parameters for CreateGraphEdge.
 type CreateGraphEdgeParams struct {
-	// XProjectID Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored.
+	// XProjectID Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets.
 	XProjectID ProjectId `json:"X-Project-ID"`
 }
 
 // DeleteGraphEdgeParams defines parameters for DeleteGraphEdge.
 type DeleteGraphEdgeParams struct {
-	// XProjectID Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored.
+	// XProjectID Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets.
 	XProjectID ProjectId `json:"X-Project-ID"`
 }
 
 // GetGraphEdgeParams defines parameters for GetGraphEdge.
 type GetGraphEdgeParams struct {
-	// XProjectID Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored.
+	// XProjectID Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets.
 	XProjectID ProjectId `json:"X-Project-ID"`
 }
 
 // UpdateGraphEdgeParams defines parameters for UpdateGraphEdge.
 type UpdateGraphEdgeParams struct {
-	// XProjectID Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored.
+	// XProjectID Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets.
 	XProjectID ProjectId `json:"X-Project-ID"`
 }
 
 // ListGraphEdgeEvidenceParams defines parameters for ListGraphEdgeEvidence.
 type ListGraphEdgeEvidenceParams struct {
-	// XProjectID Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored.
+	// XProjectID Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets.
 	XProjectID ProjectId `json:"X-Project-ID"`
 }
 
 // AddGraphEdgeEvidenceParams defines parameters for AddGraphEdgeEvidence.
 type AddGraphEdgeEvidenceParams struct {
-	// XProjectID Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored.
+	// XProjectID Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets.
 	XProjectID ProjectId `json:"X-Project-ID"`
 }
 
 // DeleteGraphEdgeEvidenceParams defines parameters for DeleteGraphEdgeEvidence.
 type DeleteGraphEdgeEvidenceParams struct {
-	// XProjectID Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored.
+	// XProjectID Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets.
 	XProjectID ProjectId `json:"X-Project-ID"`
 }
 
@@ -503,7 +503,7 @@ type GetGraphParams struct {
 	// Statuses Which edge states to include. Defaults to proposed and confirmed; pass rejected explicitly to see what was ruled out.
 	Statuses *[]GraphEdgeStatus `form:"statuses,omitempty" json:"statuses,omitempty"`
 
-	// XProjectID Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored.
+	// XProjectID Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets.
 	XProjectID ProjectId `json:"X-Project-ID"`
 }
 
@@ -521,31 +521,31 @@ type ListNodesParams struct {
 	// Cursor Opaque keyset cursor taken from `next_cursor` of the previous page. Encodes a position, not a query — do not build one by hand. Omit it to start from the beginning.
 	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
 
-	// XProjectID Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored.
+	// XProjectID Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets.
 	XProjectID ProjectId `json:"X-Project-ID"`
 }
 
 // CreateNodeParams defines parameters for CreateNode.
 type CreateNodeParams struct {
-	// XProjectID Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored.
+	// XProjectID Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets.
 	XProjectID ProjectId `json:"X-Project-ID"`
 }
 
 // DeleteNodeParams defines parameters for DeleteNode.
 type DeleteNodeParams struct {
-	// XProjectID Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored.
+	// XProjectID Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets.
 	XProjectID ProjectId `json:"X-Project-ID"`
 }
 
 // GetNodeParams defines parameters for GetNode.
 type GetNodeParams struct {
-	// XProjectID Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored.
+	// XProjectID Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets.
 	XProjectID ProjectId `json:"X-Project-ID"`
 }
 
 // ReviewGraphEdgesParams defines parameters for ReviewGraphEdges.
 type ReviewGraphEdgesParams struct {
-	// XProjectID Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored.
+	// XProjectID Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets.
 	XProjectID ProjectId `json:"X-Project-ID"`
 }
 

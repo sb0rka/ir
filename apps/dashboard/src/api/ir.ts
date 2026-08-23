@@ -1,7 +1,8 @@
 import type { components as Ir } from '@ir/contract'
-import { env } from './env'
+import { getProjectId } from './env'
 import { irClient } from './clients'
 import { unwrapError } from './error'
+import { getSomRunSettings, getSomSelectors } from './som-settings'
 import {
   layoutGraph,
   mapGraphEdge,
@@ -15,7 +16,11 @@ import type { ContextEvent, Entity, GraphEdge, GraphNode, Investigation } from '
 type EventSourceRef = Ir['schemas']['EventSourceRef']
 
 const FALLBACK_WORKSPACE = '00000000-0000-0000-0000-000000000001'
-const projectParams = { header: { 'X-Project-ID': env.projectId } }
+function projectParams() {
+  const projectId = getProjectId()
+  if (!projectId) throw new Error('Проект не выбран')
+  return { header: { 'X-Project-ID': projectId } }
+}
 
 export interface InvestigationBundle {
   investigation: Investigation
@@ -48,7 +53,7 @@ export async function listInvestigations(): Promise<Investigation[]> {
   for (let i = 0; i < 8; i++) {
     const page = await throwIfError(
       await irClient.GET('/investigations', {
-        params: { ...projectParams, query: { limit: 100, cursor } },
+        params: { ...projectParams(), query: { limit: 100, cursor } },
       }),
     )
     items.push(...page.investigations.map((inv) => mapIrInvestigation(inv)))
@@ -59,27 +64,41 @@ export async function listInvestigations(): Promise<Investigation[]> {
 }
 
 export async function resolveSomCatalog(): Promise<SomCatalog> {
-  const workspaces = await throwIfError(await irClient.GET('/som/workspaces'))
-  const selector = env.somWorkspaceSelector.toLowerCase()
+  const projectId = getProjectId()
+  if (!projectId) throw new Error('Проект не выбран')
+  const selectors = getSomSelectors(projectId)
+  const workspaces = await throwIfError(
+    await irClient.GET('/som/workspaces', { params: projectParams() }),
+  )
   const workspace =
-    workspaces.find(
-      (w) => w.name.toLowerCase() === selector || w.slug.toLowerCase() === selector,
-    ) ?? workspaces[0]
+    (selectors.workspace
+      ? workspaces.find(
+          (item) =>
+            item.id === selectors.workspace ||
+            item.name === selectors.workspace ||
+            item.slug === selectors.workspace,
+        )
+      : undefined) ?? workspaces[0]
   if (!workspace) {
     return { workspaceId: FALLBACK_WORKSPACE, boardId: null, issues: [] }
   }
   const boards = await throwIfError(
     await irClient.GET('/som/workspaces/{workspace_id}/boards', {
-      params: { path: { workspace_id: workspace.id } },
+      params: { ...projectParams(), path: { workspace_id: workspace.id } },
     }),
   )
-  const boardSelector = env.somBoardSelector.toLowerCase()
   const board =
-    boards.find((b) => b.name.toLowerCase() === boardSelector) ?? boards[0] ?? null
+    (selectors.board
+      ? boards.find(
+          (item) => item.id === selectors.board || item.name === selectors.board,
+        )
+      : undefined) ??
+    boards[0] ??
+    null
   if (!board) return { workspaceId: workspace.id, boardId: null, issues: [] }
   const listed = await throwIfError(
     await irClient.GET('/som/boards/{board_id}/issues', {
-      params: { path: { board_id: board.id } },
+      params: { ...projectParams(), path: { board_id: board.id } },
     }),
   )
   return { workspaceId: workspace.id, boardId: board.id, issues: listed.issues }
@@ -104,7 +123,7 @@ export async function createInvestigation(input: {
   const workspaceId = input.workspaceId ?? (await resolveWorkspaceId())
   const created = await throwIfError(
     await irClient.POST('/investigations', {
-      params: { ...projectParams },
+      params: { ...projectParams() },
       body: {
         title: input.title,
         description: input.description,
@@ -124,7 +143,7 @@ export async function addContext(
   if (events.length === 0) return undefined
   return throwIfError(
     await irClient.POST('/investigations/{investigation_id}/context', {
-      params: { ...projectParams, path: { investigation_id: investigationId } },
+      params: { ...projectParams(), path: { investigation_id: investigationId } },
       body: { events, entities: [] },
     }),
   )
@@ -137,7 +156,7 @@ export async function loadInvestigationBundle(
   const [inv, eventsPage, entitiesPage, graph] = await Promise.all([
     throwIfError(
       await irClient.GET('/investigations/{investigation_id}', {
-        params: { ...projectParams, path: { investigation_id: investigationId } },
+        params: { ...projectParams(), path: { investigation_id: investigationId } },
       }),
     ),
     loadAllEvents(investigationId),
@@ -145,7 +164,7 @@ export async function loadInvestigationBundle(
     throwIfError(
       await irClient.GET('/investigations/{investigation_id}/graph', {
         params: {
-          ...projectParams,
+          ...projectParams(),
           path: { investigation_id: investigationId },
           query: { statuses: ['proposed', 'confirmed', 'rejected'] as const },
         },
@@ -199,7 +218,7 @@ async function loadAllEvents(investigationId: string) {
     const page = await throwIfError(
       await irClient.GET('/investigations/{investigation_id}/events', {
         params: {
-          ...projectParams,
+          ...projectParams(),
           path: { investigation_id: investigationId },
           query: { limit: 100, cursor },
         },
@@ -219,7 +238,7 @@ async function loadAllEntities(investigationId: string) {
     const page = await throwIfError(
       await irClient.GET('/investigations/{investigation_id}/entities', {
         params: {
-          ...projectParams,
+          ...projectParams(),
           path: { investigation_id: investigationId },
           query: { limit: 100, cursor },
         },
@@ -238,7 +257,7 @@ export async function reviewEdges(
 ) {
   return throwIfError(
     await irClient.POST('/investigations/{investigation_id}/review', {
-      params: { ...projectParams, path: { investigation_id: investigationId } },
+      params: { ...projectParams(), path: { investigation_id: investigationId } },
       body,
     }),
   )
@@ -250,20 +269,23 @@ export async function patchInvestigation(
 ) {
   return throwIfError(
     await irClient.PATCH('/investigations/{investigation_id}', {
-      params: { ...projectParams, path: { investigation_id: investigationId } },
+      params: { ...projectParams(), path: { investigation_id: investigationId } },
       body,
     }),
   )
 }
 
 export async function runSomIssue(issueId: string, investigationId: string) {
+  const projectId = getProjectId()
+  if (!projectId) throw new Error('Проект не выбран')
+  const settings = getSomRunSettings(projectId)
   return throwIfError(
     await irClient.POST('/som/issues/{issue_id}/run', {
-      params: { path: { issue_id: issueId } },
+      params: { ...projectParams(), path: { issue_id: issueId } },
       body: {
         investigation_id: investigationId,
-        variant: env.somVariant,
-        model_id: env.somModelId,
+        variant: settings.variant,
+        model_id: settings.modelId,
       },
     }),
   )
@@ -272,7 +294,10 @@ export async function runSomIssue(issueId: string, investigationId: string) {
 export async function getSomEnvironment(localEnvironmentId: string) {
   return throwIfError(
     await irClient.GET('/som/environments/{local_environment_id}', {
-      params: { path: { local_environment_id: localEnvironmentId } },
+      params: {
+        ...projectParams(),
+        path: { local_environment_id: localEnvironmentId },
+      },
     }),
   )
 }
@@ -281,7 +306,7 @@ export async function countProposedAgentEdges(investigationId: string): Promise<
   const page = await throwIfError(
     await irClient.GET('/investigations/{investigation_id}/edges', {
       params: {
-        ...projectParams,
+        ...projectParams(),
         path: { investigation_id: investigationId },
         query: { statuses: ['proposed'] as const, origin: 'agent' as const, limit: 100 },
       },
@@ -293,7 +318,7 @@ export async function countProposedAgentEdges(investigationId: string): Promise<
 export async function getEntityCard(entityId: string): Promise<Ir['schemas']['EntityCard']> {
   return throwIfError(
     await irClient.GET('/entities/{entity_id}', {
-      params: { ...projectParams, path: { entity_id: entityId } },
+      params: { ...projectParams(), path: { entity_id: entityId } },
     }),
   )
 }

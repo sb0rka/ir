@@ -129,24 +129,23 @@ func corsMiddleware(cfg config.ServerConfig) middlewareChain {
 	}
 }
 
-func authMiddleware(cfg config.ServerConfig, log *slog.Logger, roles RoleResolver) middlewareChain {
+func authMiddleware(cfg config.ServerConfig, log *slog.Logger) middlewareChain {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			ctx := r.Context()
-			// Bearer уходит в контекст до всех проверок: som-домен пробрасывает
-			// его в SOM как есть, в том числе когда своя проверка выключена.
-			if token, err := coreauth.ParseBearerToken(r.Header.Get("Authorization")); err == nil {
-				ctx = socctx.WithBearer(ctx, token)
-			}
 
-			// Demo-режим: подпись не проверяется, role_bindings не читаются.
-			// X-Project-ID остаётся источником project scope для доменных
-			// ручек; без заголовка работают только som-роуты — доменные
-			// хендлеры сами откажут за отсутствием scope.
+			// Demo-режим сохраняет тот же project scope, но не проверяет подпись.
+			// Если bearer передан, он нужен только для project-scoped Sb0rka API.
 			if cfg.Auth.Disabled {
-				if projectID := strings.TrimSpace(r.Header.Get(projectIDHeader)); validProjectID(projectID) {
-					ctx = socctx.WithScope(ctx, socctx.Scope{ProjectID: projectID, Roles: []string{"admin"}})
+				projectID := strings.TrimSpace(r.Header.Get(projectIDHeader))
+				if !validProjectID(projectID) {
+					httperr.Write(w, log, httperr.BadRequest("X-Project-ID must be 10-12 lowercase hexadecimal characters"))
+					return
 				}
+				if token, err := coreauth.ParseBearerToken(r.Header.Get("Authorization")); err == nil {
+					ctx = socctx.WithBearer(ctx, token)
+				}
+				ctx = socctx.WithScope(ctx, socctx.Scope{ProjectID: projectID})
 				next.ServeHTTP(w, r.WithContext(ctx))
 				return
 			}
@@ -162,33 +161,15 @@ func authMiddleware(cfg config.ServerConfig, log *slog.Logger, roles RoleResolve
 				httperr.Write(w, log, err)
 				return
 			}
-
 			projectID := strings.TrimSpace(r.Header.Get(projectIDHeader))
 			if !validProjectID(projectID) {
 				httperr.Write(w, log, httperr.BadRequest("X-Project-ID must be 10-12 lowercase hexadecimal characters"))
 				return
 			}
 
-			var scope socctx.Scope
-			if roles != nil {
-				resolved, err := roles.Resolve(ctx, identity.SubjectID, projectID)
-				if err != nil {
-					httperr.Write(w, log, err)
-					return
-				}
-				scope.ProjectID = resolved.ProjectID
-				scope.Roles = resolved.Roles
-			}
-			// Deny-by-default: валидная подпись — ещё не право работать
-			// в продукте. Без единой роли доступа нет, иначе отзыв биндингов
-			// не отзывал бы доступ.
-			if len(scope.Roles) == 0 {
-				httperr.Write(w, log, httperr.ErrForbidden)
-				return
-			}
-
 			ctx = coreauthctx.WithIdentity(ctx, identity)
-			ctx = socctx.WithScope(ctx, scope)
+			ctx = socctx.WithBearer(ctx, raw)
+			ctx = socctx.WithScope(ctx, socctx.Scope{ProjectID: projectID})
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}

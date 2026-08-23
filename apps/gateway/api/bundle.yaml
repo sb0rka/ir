@@ -28,6 +28,48 @@ tags:
     description: Endpoint search and response capabilities.
     x-displayName: endpoints
 paths:
+  /api/v1/sources/{source}/account/userinfo:
+    get:
+      tags:
+        - sources
+      summary: Get source account userinfo
+      description: >
+        Reloads the selected project's current source credentials and returns
+        the normalized account identity reported by the source.
+      operationId: getSourceAccountUserinfo
+      parameters:
+        - name: source
+          in: path
+          required: true
+          description: Registered source code.
+          schema:
+            type: string
+        - $ref: '#/components/parameters/ProjectId'
+      responses:
+        '200':
+          description: Normalized source account identity.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountUserinfo'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '502':
+          $ref: '#/components/responses/BadGateway'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+        '504':
+          $ref: '#/components/responses/GatewayTimeout'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+      security:
+        - bearerAuth: []
   /api/v1/artifact-analyses:
     post:
       tags:
@@ -354,6 +396,9 @@ paths:
       tags:
         - sources
       summary: List registered sources
+      description: >-
+        Returns project-allowed sources and actively probes account-capable
+        connections.
       operationId: listSources
       parameters:
         - $ref: '#/components/parameters/ProjectId'
@@ -392,6 +437,38 @@ components:
       bearerFormat: JWT
       description: Sb0rka access token passed as `Bearer <token>`.
   schemas:
+    AccountUserinfo:
+      type: object
+      description: Canonical identity returned by a source account endpoint.
+      required:
+        - source_code
+        - user_name
+      properties:
+        source_code:
+          type: string
+          description: Source that supplied the identity.
+        user_name:
+          type: string
+          description: Login name reported by the source.
+    ErrorEnvelope:
+      type: object
+      description: Error returned when a request cannot be completed.
+      required:
+        - error
+      properties:
+        error:
+          type: object
+          description: Structured error details.
+          required:
+            - code
+            - message
+          properties:
+            code:
+              type: string
+              description: Stable machine-readable error code.
+            message:
+              type: string
+              description: Safe human-readable error summary.
     Hashes:
       type: object
       description: Cryptographic checksums available for an artifact.
@@ -499,25 +576,6 @@ components:
               description: Checksums known by the caller.
               allOf:
                 - $ref: '#/components/schemas/Hashes'
-    ErrorEnvelope:
-      type: object
-      description: Error returned when a request cannot be completed.
-      required:
-        - error
-      properties:
-        error:
-          type: object
-          description: Structured error details.
-          required:
-            - code
-            - message
-          properties:
-            code:
-              type: string
-              description: Stable machine-readable error code.
-            message:
-              type: string
-              description: Safe human-readable error summary.
     Verdict:
       type: object
       description: Normalized security assessment returned by a source.
@@ -1082,6 +1140,7 @@ components:
         - artifact_analysis
         - endpoints
         - response_catalog
+        - account_userinfo
     Source:
       type: object
       description: External security product registered in the Gateway.
@@ -1116,10 +1175,12 @@ components:
             - proxy
         status:
           type: string
-          description: Whether the source is available for requests.
+          description: >-
+            Result of the current connection probe, or mock availability for
+            mock-only sources.
           enum:
-            - available
-            - unavailable
+            - online
+            - offline
         capabilities:
           type: array
           description: Operations implemented by this source.
@@ -1141,12 +1202,6 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorEnvelope'
-    BadRequest:
-      description: The request is malformed or violates an input constraint.
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/ErrorEnvelope'
     Unauthorized:
       description: A valid bearer access token is required.
       content:
@@ -1154,9 +1209,7 @@ components:
           schema:
             $ref: '#/components/schemas/ErrorEnvelope'
     Forbidden:
-      description: >-
-        The caller has no role in the project or the source is not allowed
-        there.
+      description: The project is not configured or the source is not allowed there.
       content:
         application/json:
           schema:
@@ -1167,14 +1220,20 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorEnvelope'
-    ValidationError:
-      description: The selected source cannot perform the requested operation.
+    InternalError:
+      description: An unexpected internal failure occurred.
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorEnvelope'
-    InternalError:
-      description: An unexpected internal failure occurred.
+    BadGateway:
+      description: Every selected external source failed.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    ServiceUnavailable:
+      description: The selected source has no usable project-scoped configuration.
       content:
         application/json:
           schema:
@@ -1185,8 +1244,14 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorEnvelope'
-    BadGateway:
-      description: Every selected external source failed.
+    BadRequest:
+      description: The request is malformed or violates an input constraint.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    ValidationError:
+      description: The selected source cannot perform the requested operation.
       content:
         application/json:
           schema:

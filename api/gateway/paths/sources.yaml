@@ -12,6 +12,7 @@ paths:
     get:
       tags: [sources]
       summary: List registered sources
+      description: Returns project-allowed sources and actively probes account-capable connections.
       operationId: listSources
       parameters:
         - $ref: '../shared/parameters.yaml#/ProjectId'
@@ -40,7 +41,7 @@ components:
     Capability:
       type: string
       description: Operation that a source can perform through the Gateway.
-      enum: [events, entity_lookup, artifact_analysis, endpoints, response_catalog]
+      enum: [events, entity_lookup, artifact_analysis, endpoints, response_catalog, account_userinfo]
 
     Source:
       type: object
@@ -63,8 +64,8 @@ components:
           enum: [mock, proxy]
         status:
           type: string
-          description: Whether the source is available for requests.
-          enum: [available, unavailable]
+          description: Result of the current connection probe, or mock availability for mock-only sources.
+          enum: [online, offline]
         capabilities:
           type: array
           description: Operations implemented by this source.

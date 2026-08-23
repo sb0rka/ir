@@ -6,22 +6,50 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/sb0rka/ir/apps/gateway/internal/domain"
 	"github.com/sb0rka/ir/apps/gateway/internal/registry"
 )
 
-type Service struct {
-	registry       *registry.Registry
-	requestTimeout time.Duration
-	sourceTimeout  time.Duration
+type SecretResolver interface {
+	Resolve(ctx context.Context, bearer, projectID string, names ...string) (map[string]string, error)
 }
 
-func New(registry *registry.Registry, requestTimeout, sourceTimeout time.Duration) *Service {
-	return &Service{registry: registry, requestTimeout: requestTimeout, sourceTimeout: sourceTimeout}
+type ProjectAccess struct {
+	ProjectID string
+	Bearer    string
+}
+
+type credentialSnapshot struct {
+	projectID  string
+	sourceCode string
+	baseURL    string
+	credential string
+}
+
+type Service struct {
+	registry       *registry.Registry
+	secrets        SecretResolver
+	requestTimeout time.Duration
+	sourceTimeout  time.Duration
+	skipTLSVerify    bool
+	cacheMu        sync.Mutex
+	credentials    credentialSnapshot
+}
+
+func New(registry *registry.Registry, secrets SecretResolver, requestTimeout, sourceTimeout time.Duration, skipTLSVerify bool) *Service {
+	return &Service{
+		registry:       registry,
+		secrets:        secrets,
+		requestTimeout: requestTimeout,
+		sourceTimeout:  sourceTimeout,
+		skipTLSVerify:    skipTLSVerify,
+	}
 }
 
 type AllSourcesError struct {
@@ -98,4 +126,76 @@ func appendPendingErrors(items *[]domain.SourceError, pending map[string]struct{
 	for source := range pending {
 		*items = append(*items, sourceError(source, err))
 	}
+}
+
+func (service *Service) loadCredentials(ctx context.Context, access ProjectAccess, provider registry.Provider, force bool) (credentialSnapshot, error) {
+	service.cacheMu.Lock()
+	defer service.cacheMu.Unlock()
+
+	if !force && service.credentials.projectID == access.ProjectID && service.credentials.sourceCode == provider.Source.Code &&
+		service.credentials.baseURL != "" && service.credentials.credential != "" {
+		return service.credentials, nil
+	}
+	if service.secrets == nil || strings.TrimSpace(access.Bearer) == "" {
+		return credentialSnapshot{}, sourceUnavailable()
+	}
+	secretNames := provider.AccountUserinfo.SecretNames()
+	if strings.TrimSpace(secretNames.BaseURL) == "" || strings.TrimSpace(secretNames.Credential) == "" {
+		return credentialSnapshot{}, sourceUnavailable()
+	}
+	values, err := service.secrets.Resolve(ctx, access.Bearer, access.ProjectID, secretNames.BaseURL, secretNames.Credential)
+	if err != nil {
+		return credentialSnapshot{}, sourceUnavailable()
+	}
+	snapshot := credentialSnapshot{
+		projectID:  access.ProjectID,
+		sourceCode: provider.Source.Code,
+		baseURL:    strings.TrimSpace(values[secretNames.BaseURL]),
+		credential: strings.TrimSpace(values[secretNames.Credential]),
+	}
+	if snapshot.projectID == "" || snapshot.baseURL == "" || snapshot.credential == "" {
+		return credentialSnapshot{}, sourceUnavailable()
+	}
+	service.credentials = snapshot
+	return snapshot, nil
+}
+
+func sourceUnavailable() error {
+	return &domain.RequestError{
+		Code:    "source_unavailable",
+		Message: "source credentials are not configured for this project",
+	}
+}
+
+func retryableAccountError(ctx context.Context, err error) bool {
+	if ctx.Err() != nil {
+		return false
+	}
+	var upstream *domain.UpstreamError
+	if errors.As(err, &upstream) {
+		return upstream.StatusCode == 401 || upstream.StatusCode == 403 || upstream.StatusCode >= 500
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+	var networkErr net.Error
+	return errors.As(err, &networkErr)
+}
+
+func accountError(err error) error {
+	var requestErr *domain.RequestError
+	if errors.As(err, &requestErr) {
+		return requestErr
+	}
+	var upstream *domain.UpstreamError
+	if errors.As(err, &upstream) {
+		if upstream.StatusCode == 401 || upstream.StatusCode == 403 {
+			return &domain.RequestError{Code: "source_auth_failed", Message: "source authentication failed"}
+		}
+		return &domain.RequestError{Code: "provider_error", Message: "source account request failed"}
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return context.DeadlineExceeded
+	}
+	return &domain.RequestError{Code: "provider_error", Message: "source account request failed"}
 }

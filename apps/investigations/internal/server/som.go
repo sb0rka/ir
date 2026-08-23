@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"sync"
 
 	"github.com/google/uuid"
 
@@ -12,18 +13,45 @@ import (
 	"github.com/sb0rka/ir/apps/investigations/internal/somprompt"
 	"github.com/sb0rka/ir/apps/investigations/internal/transport/httperr"
 	"github.com/sb0rka/ir/apps/investigations/internal/transport/socctx"
+	"github.com/sb0rka/ir/packages/common"
 	"github.com/sb0rka/ir/packages/contract/som"
 )
+
+const somAccessTokenSecretName = "DEMO_SOM_ACCESS_TOKEN"
+
+type somTokenCache struct {
+	mu        sync.RWMutex
+	projectID string
+	token     string
+}
+
+func (c *somTokenCache) get(projectID string) (string, bool) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	if c.projectID != projectID || c.token == "" {
+		return "", false
+	}
+	return c.token, true
+}
+
+func (c *somTokenCache) replace(projectID, token string) {
+	c.mu.Lock()
+	c.projectID = projectID
+	c.token = token
+	c.mu.Unlock()
+}
 
 // ListSomWorkspaces SOM workspaces of the caller
 // (GET /som/workspaces)
 func (s *Server) ListSomWorkspaces(ctx context.Context, request som.ListSomWorkspacesRequestObject) (som.ListSomWorkspacesResponseObject, error) {
-	bearer, err := s.somBearer(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	workspaces, err := s.som.ListWorkspaces(ctx, bearer)
+	// This endpoint is also the explicit activation probe used after the
+	// dashboard creates a new secret version.
+	var workspaces []somclient.Workspace
+	err := s.withSOMBearer(ctx, true, func(bearer string) error {
+		var callErr error
+		workspaces, callErr = s.som.ListWorkspaces(ctx, bearer)
+		return callErr
+	})
 	if err != nil {
 		return nil, somError(err)
 	}
@@ -49,12 +77,12 @@ func (s *Server) ListSomWorkspaces(ctx context.Context, request som.ListSomWorks
 // ListSomBoards Boards of a SOM workspace
 // (GET /som/workspaces/{workspace_id}/boards)
 func (s *Server) ListSomBoards(ctx context.Context, request som.ListSomBoardsRequestObject) (som.ListSomBoardsResponseObject, error) {
-	bearer, err := s.somBearer(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	boards, err := s.som.ListBoards(ctx, bearer, request.WorkspaceId.String())
+	var boards []somclient.Board
+	err := s.withSOMBearer(ctx, false, func(bearer string) error {
+		var callErr error
+		boards, callErr = s.som.ListBoards(ctx, bearer, request.WorkspaceId.String())
+		return callErr
+	})
 	if err != nil {
 		return nil, somError(err)
 	}
@@ -81,12 +109,13 @@ func (s *Server) ListSomBoards(ctx context.Context, request som.ListSomBoardsReq
 // ListSomIssues Issues of a SOM board
 // (GET /som/boards/{board_id}/issues)
 func (s *Server) ListSomIssues(ctx context.Context, request som.ListSomIssuesRequestObject) (som.ListSomIssuesResponseObject, error) {
-	bearer, err := s.somBearer(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	issues, total, err := s.som.ListIssues(ctx, bearer, request.BoardId.String())
+	var issues []somclient.Issue
+	var total int
+	err := s.withSOMBearer(ctx, false, func(bearer string) error {
+		var callErr error
+		issues, total, callErr = s.som.ListIssues(ctx, bearer, request.BoardId.String())
+		return callErr
+	})
 	if err != nil {
 		return nil, somError(err)
 	}
@@ -113,10 +142,6 @@ func (s *Server) RunSomIssue(ctx context.Context, request som.RunSomIssueRequest
 			"investigation_id must be a non-zero UUID")
 	}
 
-	bearer, err := s.somBearer(ctx)
-	if err != nil {
-		return nil, err
-	}
 	if err := s.som.RunConfigured(); err != nil {
 		return nil, somNotConfigured(err)
 	}
@@ -129,7 +154,12 @@ func (s *Server) RunSomIssue(ctx context.Context, request som.RunSomIssueRequest
 	}
 
 	issueID := request.IssueId.String()
-	issue, err := s.som.GetIssue(ctx, bearer, issueID)
+	var issue somclient.Issue
+	err = s.withSOMBearer(ctx, false, func(bearer string) error {
+		var callErr error
+		issue, callErr = s.som.GetIssue(ctx, bearer, issueID)
+		return callErr
+	})
 	if err != nil {
 		return nil, somError(err)
 	}
@@ -153,7 +183,12 @@ func (s *Server) RunSomIssue(ctx context.Context, request som.RunSomIssueRequest
 	name := runName(issue)
 	exec := somclient.ResolveExecutorConfig(request.Body.Variant, request.Body.ModelId)
 
-	sessionID, err := s.som.CreateRelaySession(ctx, bearer)
+	var sessionID string
+	err = s.withSOMBearer(ctx, false, func(bearer string) error {
+		var callErr error
+		sessionID, callErr = s.som.CreateRelaySession(ctx, bearer)
+		return callErr
+	})
 	if err != nil {
 		return nil, somError(err)
 	}
@@ -165,7 +200,13 @@ func (s *Server) RunSomIssue(ctx context.Context, request som.RunSomIssueRequest
 	if err != nil {
 		return nil, somError(err)
 	}
-	somEnvironmentID, err := s.som.LinkEnvironment(ctx, bearer, issue.BoardID, issueID, localEnvironmentID, name)
+	var somEnvironmentID string
+	err = s.withSOMBearer(ctx, false, func(bearer string) error {
+		var callErr error
+		somEnvironmentID, callErr = s.som.LinkEnvironment(
+			ctx, bearer, issue.BoardID, issueID, localEnvironmentID, name)
+		return callErr
+	})
 	if err != nil {
 		return nil, somError(err)
 	}
@@ -236,18 +277,76 @@ func convertSomIssue(issue somclient.Issue) (som.SomIssue, error) {
 	return out, nil
 }
 
-// somBearer достаёт pass-through токен вызывающего. Без токена в SOM идти
-// не с чем — 401 честнее, чем 502 от самого SOM.
-func (s *Server) somBearer(ctx context.Context) (string, error) {
+// somBearer returns the project-scoped SOM token. The caller's verified JWT is
+// used only to reveal the secret from Sb0rka API and is never cached.
+func (s *Server) somBearer(ctx context.Context, forceReload bool) (string, error) {
 	if !s.som.Configured() {
 		return "", somNotConfigured(errors.New("SOM_API_BASE_URL is not set"))
 	}
-	bearer, ok := socctx.BearerFromContext(ctx)
-	if !ok {
-		return "", httperr.New(http.StatusUnauthorized, httperr.CodeUnauthorized,
-			"SOM access token is required: pass it as Authorization: Bearer")
+	scope, err := s.scope(ctx)
+	if err != nil {
+		return "", err
 	}
-	return bearer, nil
+	if !forceReload {
+		if token, ok := s.somAuth.get(scope.ProjectID); ok {
+			return token, nil
+		}
+	}
+	if s.secrets == nil {
+		return "", somNotConfigured(errors.New("SB0RKA_API_BASE_URL is not set"))
+	}
+	platformBearer, ok := socctx.BearerFromContext(ctx)
+	if !ok {
+		return "", somNotConfigured(errors.New("platform access token is required to read Secrets"))
+	}
+	snapshot, err := s.secrets.ResolveSnapshot(ctx, platformBearer, scope.ProjectID, somAccessTokenSecretName)
+	if err != nil {
+		return "", somSecretError(err)
+	}
+	token, ok := snapshot.Value(somAccessTokenSecretName)
+	token = strings.TrimSpace(token)
+	if !ok || token == "" {
+		return "", somNotConfigured(errors.New("DEMO_SOM_ACCESS_TOKEN is empty"))
+	}
+	s.somAuth.replace(scope.ProjectID, token)
+	return token, nil
+}
+
+// withSOMBearer retries only authentication denials. A rejected request has
+// not executed the upstream operation; timeouts and 5xx responses are not
+// retried because mutating SOM calls could otherwise be duplicated.
+func (s *Server) withSOMBearer(ctx context.Context, forceFirstReload bool, call func(string) error) error {
+	bearer, err := s.somBearer(ctx, forceFirstReload)
+	if err != nil {
+		return err
+	}
+	err = call(bearer)
+	if !isSOMAuthError(err) {
+		return err
+	}
+	bearer, err = s.somBearer(ctx, true)
+	if err != nil {
+		return err
+	}
+	return call(bearer)
+}
+
+func isSOMAuthError(err error) bool {
+	var upstream *somclient.UpstreamError
+	return errors.As(err, &upstream) &&
+		(upstream.Status == http.StatusUnauthorized || upstream.Status == http.StatusForbidden)
+}
+
+func somSecretError(err error) error {
+	switch {
+	case errors.Is(err, common.ErrForbidden):
+		return httperr.ErrForbidden
+	case errors.Is(err, common.ErrSecretNotFound):
+		return somNotConfigured(errors.New("DEMO_SOM_ACCESS_TOKEN is not configured"))
+	default:
+		return httperr.New(http.StatusBadGateway, httperr.CodeSourceUnavailable,
+			"cannot load SOM access token from Sb0rka Secrets")
+	}
 }
 
 func somNotConfigured(err error) error {
@@ -255,18 +354,12 @@ func somNotConfigured(err error) error {
 		"SOM integration is not configured: "+err.Error())
 }
 
-// somError переводит ошибки клиента в конверт httperr. 401/403/404 от SOM
-// пробрасываются как есть — это ответ про токен и права вызывающего, а не
-// про доступность SOM.
+// SOM authentication failures describe the configured integration credential,
+// not the dashboard JWT. They must not look like an expired user session.
 func somError(err error) error {
 	var upstream *somclient.UpstreamError
 	if errors.As(err, &upstream) {
 		switch upstream.Status {
-		case http.StatusUnauthorized:
-			return httperr.New(http.StatusUnauthorized, httperr.CodeUnauthorized,
-				"SOM rejected the token: "+upstream.Body)
-		case http.StatusForbidden:
-			return httperr.ErrForbidden
 		case http.StatusNotFound:
 			return httperr.ErrNotFound
 		}
@@ -287,15 +380,16 @@ func parseSomUUID(field, value string) (uuid.UUID, error) {
 // GetSomEnvironment Status of a SOM agent environment
 // (GET /som/environments/{local_environment_id})
 func (s *Server) GetSomEnvironment(ctx context.Context, request som.GetSomEnvironmentRequestObject) (som.GetSomEnvironmentResponseObject, error) {
-	bearer, err := s.somBearer(ctx)
-	if err != nil {
-		return nil, err
-	}
 	if err := s.som.RunConfigured(); err != nil {
 		return nil, somNotConfigured(err)
 	}
 
-	sessionID, err := s.som.CreateRelaySession(ctx, bearer)
+	var sessionID string
+	err := s.withSOMBearer(ctx, false, func(bearer string) error {
+		var callErr error
+		sessionID, callErr = s.som.CreateRelaySession(ctx, bearer)
+		return callErr
+	})
 	if err != nil {
 		return nil, somError(err)
 	}

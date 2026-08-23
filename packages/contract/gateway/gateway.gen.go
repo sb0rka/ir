@@ -35,25 +35,28 @@ func (e AnalysisStatus) Valid() bool {
 
 // Defines values for Capability.
 const (
-	ArtifactAnalysis Capability = "artifact_analysis"
-	Endpoints        Capability = "endpoints"
-	EntityLookup     Capability = "entity_lookup"
-	Events           Capability = "events"
-	ResponseCatalog  Capability = "response_catalog"
+	CapabilityAccountUserinfo  Capability = "account_userinfo"
+	CapabilityArtifactAnalysis Capability = "artifact_analysis"
+	CapabilityEndpoints        Capability = "endpoints"
+	CapabilityEntityLookup     Capability = "entity_lookup"
+	CapabilityEvents           Capability = "events"
+	CapabilityResponseCatalog  Capability = "response_catalog"
 )
 
 // Valid indicates whether the value is a known member of the Capability enum.
 func (e Capability) Valid() bool {
 	switch e {
-	case ArtifactAnalysis:
+	case CapabilityAccountUserinfo:
 		return true
-	case Endpoints:
+	case CapabilityArtifactAnalysis:
 		return true
-	case EntityLookup:
+	case CapabilityEndpoints:
 		return true
-	case Events:
+	case CapabilityEntityLookup:
 		return true
-	case ResponseCatalog:
+	case CapabilityEvents:
+		return true
+	case CapabilityResponseCatalog:
 		return true
 	default:
 		return false
@@ -173,16 +176,16 @@ func (e SourceMode) Valid() bool {
 
 // Defines values for SourceStatus.
 const (
-	Available   SourceStatus = "available"
-	Unavailable SourceStatus = "unavailable"
+	SourceStatusOffline SourceStatus = "offline"
+	SourceStatusOnline  SourceStatus = "online"
 )
 
 // Valid indicates whether the value is a known member of the SourceStatus enum.
 func (e SourceStatus) Valid() bool {
 	switch e {
-	case Available:
+	case SourceStatusOffline:
 		return true
-	case Unavailable:
+	case SourceStatusOnline:
 		return true
 	default:
 		return false
@@ -211,6 +214,15 @@ func (e VerdictValue) Valid() bool {
 	default:
 		return false
 	}
+}
+
+// AccountUserinfo Canonical identity returned by a source account endpoint.
+type AccountUserinfo struct {
+	// SourceCode Source that supplied the identity.
+	SourceCode string `json:"source_code"`
+
+	// UserName Login name reported by the source.
+	UserName string `json:"user_name"`
 }
 
 // Analysis Normalized result of an artifact analysis.
@@ -600,7 +612,7 @@ type Source struct {
 	// Name Human-readable product name.
 	Name string `json:"name"`
 
-	// Status Whether the source is available for requests.
+	// Status Result of the current connection probe, or mock availability for mock-only sources.
 	Status SourceStatus `json:"status"`
 }
 
@@ -610,7 +622,7 @@ type SourceKind string
 // SourceMode Adapter mode currently backing the source.
 type SourceMode string
 
-// SourceStatus Whether the source is available for requests.
+// SourceStatus Result of the current connection probe, or mock availability for mock-only sources.
 type SourceStatus string
 
 // SourceError Failure reported by one source during a multi-source request.
@@ -682,6 +694,9 @@ type InternalError = ErrorEnvelope
 // NotFound Error returned when a request cannot be completed.
 type NotFound = ErrorEnvelope
 
+// ServiceUnavailable Error returned when a request cannot be completed.
+type ServiceUnavailable = ErrorEnvelope
+
 // Unauthorized Error returned when a request cannot be completed.
 type Unauthorized = ErrorEnvelope
 
@@ -726,6 +741,12 @@ type SearchEventsParams struct {
 
 // ListSourcesParams defines parameters for ListSources.
 type ListSourcesParams struct {
+	// XProjectID Sb0rka project whose integration allowlist is used.
+	XProjectID ProjectId `json:"X-Project-ID"`
+}
+
+// GetSourceAccountUserinfoParams defines parameters for GetSourceAccountUserinfo.
+type GetSourceAccountUserinfoParams struct {
 	// XProjectID Sb0rka project whose integration allowlist is used.
 	XProjectID ProjectId `json:"X-Project-ID"`
 }
@@ -902,8 +923,17 @@ type ClientInterface interface {
 
 	// ListSources List registered sources
 	//
+	// Returns project-allowed sources and actively probes account-capable connections.
+	//
 	// Corresponds with GET /api/v1/sources (the `ListSources` operationId).
 	ListSources(ctx context.Context, params *ListSourcesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetSourceAccountUserinfo Get source account userinfo
+	//
+	// Reloads the selected project's current source credentials and returns the normalized account identity reported by the source.
+	//
+	// Corresponds with GET /api/v1/sources/{source}/account/userinfo (the `GetSourceAccountUserinfo` operationId).
+	GetSourceAccountUserinfo(ctx context.Context, source string, params *GetSourceAccountUserinfoParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ListResponseActions List endpoint response actions
 	//
@@ -1108,9 +1138,28 @@ func (c *Client) SearchEvents(ctx context.Context, params *SearchEventsParams, b
 
 // ListSources List registered sources
 //
+// Returns project-allowed sources and actively probes account-capable connections.
+//
 // Corresponds with GET /api/v1/sources (the `ListSources` operationId).
 func (c *Client) ListSources(ctx context.Context, params *ListSourcesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewListSourcesRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetSourceAccountUserinfo Get source account userinfo
+//
+// Reloads the selected project's current source credentials and returns the normalized account identity reported by the source.
+//
+// Corresponds with GET /api/v1/sources/{source}/account/userinfo (the `GetSourceAccountUserinfo` operationId).
+func (c *Client) GetSourceAccountUserinfo(ctx context.Context, source string, params *GetSourceAccountUserinfoParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetSourceAccountUserinfoRequest(c.Server, source, params)
 	if err != nil {
 		return nil, err
 	}
@@ -1518,6 +1567,53 @@ func NewListSourcesRequest(server string, params *ListSourcesParams) (*http.Requ
 	return req, nil
 }
 
+// NewGetSourceAccountUserinfoRequest constructs an http.Request for the GetSourceAccountUserinfo method
+func NewGetSourceAccountUserinfoRequest(server string, source string, params *GetSourceAccountUserinfoParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "source", source, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/sources/%s/account/userinfo", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "X-Project-ID", params.XProjectID, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("X-Project-ID", headerParam0)
+
+	}
+
+	return req, nil
+}
+
 // NewListResponseActionsRequest constructs an http.Request for the ListResponseActions method
 func NewListResponseActionsRequest(server string, source string, externalId string, params *ListResponseActionsParams) (*http.Request, error) {
 	var err error
@@ -1749,10 +1845,21 @@ type ClientWithResponsesInterface interface {
 
 	// ListSourcesWithResponse List registered sources
 	//
+	// Returns project-allowed sources and actively probes account-capable connections.
+	//
 	// Returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with GET /api/v1/sources (the `ListSources` operationId).
 	ListSourcesWithResponse(ctx context.Context, params *ListSourcesParams, reqEditors ...RequestEditorFn) (*ListSourcesClientResponse, error)
+
+	// GetSourceAccountUserinfoWithResponse Get source account userinfo
+	//
+	// Reloads the selected project's current source credentials and returns the normalized account identity reported by the source.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /api/v1/sources/{source}/account/userinfo (the `GetSourceAccountUserinfo` operationId).
+	GetSourceAccountUserinfoWithResponse(ctx context.Context, source string, params *GetSourceAccountUserinfoParams, reqEditors ...RequestEditorFn) (*GetSourceAccountUserinfoClientResponse, error)
 
 	// ListResponseActionsWithResponse List endpoint response actions
 	//
@@ -2461,6 +2568,103 @@ func (r ListSourcesClientResponse) ContentType() string {
 	return ""
 }
 
+type GetSourceAccountUserinfoClientResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *AccountUserinfo
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Unauthorized
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Forbidden
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *NotFound
+	// JSON500 the response for an HTTP 500 `application/json` response
+	JSON500 *InternalError
+	// JSON502 the response for an HTTP 502 `application/json` response
+	JSON502 *BadGateway
+	// JSON503 the response for an HTTP 503 `application/json` response
+	JSON503 *ServiceUnavailable
+	// JSON504 the response for an HTTP 504 `application/json` response
+	JSON504 *GatewayTimeout
+	// JSONDefault the response for an HTTP default `application/json` response
+	JSONDefault *ErrorResponse
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetSourceAccountUserinfoClientResponse) GetJSON200() *AccountUserinfo {
+	return r.JSON200
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r GetSourceAccountUserinfoClientResponse) GetJSON401() *Unauthorized {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r GetSourceAccountUserinfoClientResponse) GetJSON403() *Forbidden {
+	return r.JSON403
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r GetSourceAccountUserinfoClientResponse) GetJSON404() *NotFound {
+	return r.JSON404
+}
+
+// GetJSON500 returns the response for an HTTP 500 `application/json` response
+func (r GetSourceAccountUserinfoClientResponse) GetJSON500() *InternalError {
+	return r.JSON500
+}
+
+// GetJSON502 returns the response for an HTTP 502 `application/json` response
+func (r GetSourceAccountUserinfoClientResponse) GetJSON502() *BadGateway {
+	return r.JSON502
+}
+
+// GetJSON503 returns the response for an HTTP 503 `application/json` response
+func (r GetSourceAccountUserinfoClientResponse) GetJSON503() *ServiceUnavailable {
+	return r.JSON503
+}
+
+// GetJSON504 returns the response for an HTTP 504 `application/json` response
+func (r GetSourceAccountUserinfoClientResponse) GetJSON504() *GatewayTimeout {
+	return r.JSON504
+}
+
+// GetJSONDefault returns the response for an HTTP default `application/json` response
+func (r GetSourceAccountUserinfoClientResponse) GetJSONDefault() *ErrorResponse {
+	return r.JSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r GetSourceAccountUserinfoClientResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetSourceAccountUserinfoClientResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetSourceAccountUserinfoClientResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetSourceAccountUserinfoClientResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type ListResponseActionsClientResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -2777,6 +2981,8 @@ func (c *ClientWithResponses) SearchEventsWithResponse(ctx context.Context, para
 
 // ListSourcesWithResponse List registered sources
 //
+// Returns project-allowed sources and actively probes account-capable connections.
+//
 // Returns a wrapper object for the known response body format(s).
 //
 // Corresponds with GET /api/v1/sources (the `ListSources` operationId).
@@ -2786,6 +2992,21 @@ func (c *ClientWithResponses) ListSourcesWithResponse(ctx context.Context, param
 		return nil, err
 	}
 	return ParseListSourcesClientResponse(rsp)
+}
+
+// GetSourceAccountUserinfoWithResponse Get source account userinfo
+//
+// Reloads the selected project's current source credentials and returns the normalized account identity reported by the source.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /api/v1/sources/{source}/account/userinfo (the `GetSourceAccountUserinfo` operationId).
+func (c *ClientWithResponses) GetSourceAccountUserinfoWithResponse(ctx context.Context, source string, params *GetSourceAccountUserinfoParams, reqEditors ...RequestEditorFn) (*GetSourceAccountUserinfoClientResponse, error) {
+	rsp, err := c.GetSourceAccountUserinfo(ctx, source, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetSourceAccountUserinfoClientResponse(rsp)
 }
 
 // ListResponseActionsWithResponse List endpoint response actions
@@ -3391,6 +3612,88 @@ func ParseListSourcesClientResponse(rsp *http.Response) (*ListSourcesClientRespo
 			return nil, err
 		}
 		response.JSON500 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetSourceAccountUserinfoClientResponse parses an HTTP response from a GetSourceAccountUserinfoWithResponse call
+func ParseGetSourceAccountUserinfoClientResponse(rsp *http.Response) (*GetSourceAccountUserinfoClientResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetSourceAccountUserinfoClientResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest AccountUserinfo
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest InternalError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON500 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 502:
+		var dest BadGateway
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON502 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 504:
+		var dest GatewayTimeout
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON504 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
 		var dest ErrorResponse

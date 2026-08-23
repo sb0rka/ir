@@ -2,6 +2,7 @@ FROM golang:1.25-alpine AS build
 
 WORKDIR /src
 
+COPY packages/common ./packages/common
 COPY apps/gateway/go.mod apps/gateway/go.sum* ./apps/gateway/
 WORKDIR /src/apps/gateway
 RUN GOWORK=off go mod download

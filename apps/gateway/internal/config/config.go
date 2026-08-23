@@ -28,13 +28,14 @@ const (
 var SourceCodes = []string{"maxpatrol-siem", "pt-sandbox"}
 
 type Config struct {
-	Server         ServerConfig
-	Auth           AuthConfig
-	Database       coreconfig.DatabaseConfig
-	Log            coreconfig.LoggerConfig
-	Mock           MockConfig
-	Sources        map[string]SourceConfig
-	ProjectSources map[string]map[string]bool
+	Server           ServerConfig
+	Auth             AuthConfig
+	Log              coreconfig.LoggerConfig
+	Mock             MockConfig
+	Sb0rkaAPIBaseURL string
+	SkipTLSVerify     bool
+	Sources          map[string]SourceConfig
+	ProjectSources   map[string]map[string]bool
 }
 
 type MockConfig struct {
@@ -84,12 +85,6 @@ func Load() (Config, error) {
 			Kid:      coreconfig.GetStringEnv("ACCESS_TOKEN_KID", ""),
 			Typ:      coreconfig.GetStringEnv("ACCESS_TOKEN_TYP", "access+jwt"),
 		},
-		Database: coreconfig.DatabaseConfig{
-			URI:      coreconfig.GetStringEnv("DATABASE_URI", ""),
-			MaxConns: coreconfig.GetIntEnv("DATABASE_MAX_CONNS", coreconfig.DefaultDatabaseMaxConns),
-			ConnMaxLifetime: coreconfig.GetDurationEnv(
-				"DATABASE_CONN_MAX_LIFETIME_SEC", coreconfig.DefaultDatabaseConnMaxLifetime, time.Second),
-		},
 		Log: coreconfig.LoggerConfig{
 			Level:  coreconfig.GetStringEnv("LOG_LEVEL", "info"),
 			Format: coreconfig.GetStringEnv("LOG_FORMAT", "json"),
@@ -99,7 +94,9 @@ func Load() (Config, error) {
 			EndpointCount: coreconfig.GetIntEnv("MOCK_ENDPOINT_COUNT", DefaultMockEndpoints),
 			HistoryDays:   coreconfig.GetIntEnv("MOCK_HISTORY_DAYS", DefaultMockHistory),
 		},
-		Sources: make(map[string]SourceConfig, len(SourceCodes)),
+		Sb0rkaAPIBaseURL: coreconfig.GetStringEnv("SB0RKA_API_BASE_URL", ""),
+		SkipTLSVerify:    coreconfig.GetBoolEnv("GATEWAY_SKIP_TLS_VERIFY", true),
+		Sources:          make(map[string]SourceConfig, len(SourceCodes)),
 	}
 	projectSources, err := parseProjectSources(coreconfig.GetStringEnv("PROJECT_SOURCE_ALLOWLISTS", ""))
 	if err != nil {
@@ -131,10 +128,6 @@ func Load() (Config, error) {
 	if !cfg.Auth.Disabled && len(key) == 0 {
 		return Config{}, fmt.Errorf("access token public key is required when auth is enabled")
 	}
-	if !cfg.Auth.Disabled && strings.TrimSpace(cfg.Database.URI) == "" {
-		return Config{}, fmt.Errorf("DATABASE_URI is required when auth is enabled")
-	}
-
 	for _, code := range SourceCodes {
 		prefix := "SOURCE_" + strings.ToUpper(strings.ReplaceAll(code, "-", "_")) + "_"
 		source := SourceConfig{
@@ -202,6 +195,10 @@ func validProjectID(value string) bool {
 }
 
 func loadPublicKey() (ed25519.PublicKey, error) {
+	if key, err := loadPrivateKey(); err != nil || key != nil {
+		return key, err
+	}
+
 	raw := []byte(coreconfig.GetStringEnv("ACCESS_TOKEN_PUBLIC_KEY", ""))
 	if path := coreconfig.GetStringEnv("ACCESS_TOKEN_PUBLIC_KEY_FILE_PATH", ""); path != "" {
 		data, err := os.ReadFile(path)
@@ -233,4 +230,62 @@ func loadPublicKey() (ed25519.PublicKey, error) {
 		return nil, fmt.Errorf("public key is not ed25519")
 	}
 	return key, nil
+}
+
+// loadPrivateKey returns the public half of a configured Ed25519 signing key.
+// Auth and API use the same private key in the demo environment, so verifier
+// services can derive the public key instead of requiring a duplicate file.
+//
+// ACCESS_TOKEN_PRIVATE_KEY follows sb0rka Auth: base64(PKCS#8 PEM). PEM files,
+// plain base64(DER), and base64(DER) files remain supported.
+func loadPrivateKey() (ed25519.PublicKey, error) {
+	raw := []byte(coreconfig.GetStringEnv("ACCESS_TOKEN_PRIVATE_KEY", ""))
+	if path := coreconfig.GetStringEnv("ACCESS_TOKEN_PRIVATE_KEY_FILE_PATH", ""); path != "" {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return nil, fmt.Errorf("read private key: %w", err)
+		}
+		raw = data
+	}
+	if len(raw) == 0 {
+		return nil, nil
+	}
+
+	der, err := decodePrivateKeyDER(raw)
+	if err != nil {
+		return nil, err
+	}
+
+	parsed, err := x509.ParsePKCS8PrivateKey(der)
+	if err != nil {
+		return nil, fmt.Errorf("parse private key: %w", err)
+	}
+	key, ok := parsed.(ed25519.PrivateKey)
+	if !ok {
+		return nil, fmt.Errorf("private key is not ed25519")
+	}
+	public, ok := key.Public().(ed25519.PublicKey)
+	if !ok {
+		return nil, fmt.Errorf("cannot derive public key")
+	}
+	return public, nil
+}
+
+func decodePrivateKeyDER(raw []byte) ([]byte, error) {
+	block, _ := pem.Decode(raw)
+	if block != nil {
+		return block.Bytes, nil
+	}
+
+	decoded, err := base64.StdEncoding.DecodeString(strings.TrimSpace(string(raw)))
+	if err != nil {
+		return nil, fmt.Errorf("private key is neither PEM nor base64: %w", err)
+	}
+
+	block, _ = pem.Decode(decoded)
+	if block != nil {
+		return block.Bytes, nil
+	}
+
+	return decoded, nil
 }

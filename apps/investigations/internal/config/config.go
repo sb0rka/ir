@@ -37,6 +37,9 @@ func Load() (Config, error) {
 			Level:  coreconfig.GetStringEnv("LOG_LEVEL", "info"),
 			Format: coreconfig.GetStringEnv("LOG_FORMAT", "json"),
 		},
+		Platform: PlatformConfig{
+			APIBaseURL: strings.TrimRight(coreconfig.GetStringEnv("SB0RKA_API_BASE_URL", ""), "/"),
+		},
 		SOM: SOMConfig{
 			APIBaseURL:     strings.TrimRight(coreconfig.GetStringEnv("SOM_API_BASE_URL", ""), "/"),
 			RelayBaseURL:   strings.TrimRight(coreconfig.GetStringEnv("SOM_RELAY_BASE_URL", ""), "/"),
@@ -120,6 +123,9 @@ func loadPublicKey() (ed25519.PublicKey, error) {
 
 // loadPrivateKey возвращает публичную половину пары, если задан приватный ключ.
 // nil без ошибки означает «не задан» — дальше ищется публичный.
+//
+// Формат как у sb0rka Auth: ACCESS_TOKEN_PRIVATE_KEY — base64(PKCS#8 PEM).
+// Дополнительно принимаются PEM/plain base64(DER) в env и файле.
 func loadPrivateKey() (ed25519.PublicKey, error) {
 	raw := []byte(coreconfig.GetStringEnv("ACCESS_TOKEN_PRIVATE_KEY", ""))
 	if path := coreconfig.GetStringEnv("ACCESS_TOKEN_PRIVATE_KEY_FILE_PATH", ""); path != "" {
@@ -133,18 +139,12 @@ func loadPrivateKey() (ed25519.PublicKey, error) {
 		return nil, nil
 	}
 
-	block, _ := pem.Decode(raw)
-	if block == nil {
-		decoded, err := base64.StdEncoding.DecodeString(strings.TrimSpace(string(raw)))
-		if err != nil {
-			return nil, fmt.Errorf("private key is neither PEM nor base64: %w", err)
-		}
-		raw = decoded
-	} else {
-		raw = block.Bytes
+	der, err := decodePrivateKeyDER(raw)
+	if err != nil {
+		return nil, err
 	}
 
-	parsed, err := x509.ParsePKCS8PrivateKey(raw)
+	parsed, err := x509.ParsePKCS8PrivateKey(der)
 	if err != nil {
 		return nil, fmt.Errorf("parse private key: %w", err)
 	}
@@ -157,4 +157,23 @@ func loadPrivateKey() (ed25519.PublicKey, error) {
 		return nil, fmt.Errorf("cannot derive public key")
 	}
 	return public, nil
+}
+
+func decodePrivateKeyDER(raw []byte) ([]byte, error) {
+	block, _ := pem.Decode(raw)
+	if block != nil {
+		return block.Bytes, nil
+	}
+
+	decoded, err := base64.StdEncoding.DecodeString(strings.TrimSpace(string(raw)))
+	if err != nil {
+		return nil, fmt.Errorf("private key is neither PEM nor base64: %w", err)
+	}
+
+	block, _ = pem.Decode(decoded)
+	if block != nil {
+		return block.Bytes, nil
+	}
+
+	return decoded, nil
 }

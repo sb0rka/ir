@@ -31,25 +31,28 @@ func (e AnalysisStatus) Valid() bool {
 
 // Defines values for Capability.
 const (
-	ArtifactAnalysis Capability = "artifact_analysis"
-	Endpoints        Capability = "endpoints"
-	EntityLookup     Capability = "entity_lookup"
-	Events           Capability = "events"
-	ResponseCatalog  Capability = "response_catalog"
+	CapabilityAccountUserinfo  Capability = "account_userinfo"
+	CapabilityArtifactAnalysis Capability = "artifact_analysis"
+	CapabilityEndpoints        Capability = "endpoints"
+	CapabilityEntityLookup     Capability = "entity_lookup"
+	CapabilityEvents           Capability = "events"
+	CapabilityResponseCatalog  Capability = "response_catalog"
 )
 
 // Valid indicates whether the value is a known member of the Capability enum.
 func (e Capability) Valid() bool {
 	switch e {
-	case ArtifactAnalysis:
+	case CapabilityAccountUserinfo:
 		return true
-	case Endpoints:
+	case CapabilityArtifactAnalysis:
 		return true
-	case EntityLookup:
+	case CapabilityEndpoints:
 		return true
-	case Events:
+	case CapabilityEntityLookup:
 		return true
-	case ResponseCatalog:
+	case CapabilityEvents:
+		return true
+	case CapabilityResponseCatalog:
 		return true
 	default:
 		return false
@@ -169,16 +172,16 @@ func (e SourceMode) Valid() bool {
 
 // Defines values for SourceStatus.
 const (
-	Available   SourceStatus = "available"
-	Unavailable SourceStatus = "unavailable"
+	SourceStatusOffline SourceStatus = "offline"
+	SourceStatusOnline  SourceStatus = "online"
 )
 
 // Valid indicates whether the value is a known member of the SourceStatus enum.
 func (e SourceStatus) Valid() bool {
 	switch e {
-	case Available:
+	case SourceStatusOffline:
 		return true
-	case Unavailable:
+	case SourceStatusOnline:
 		return true
 	default:
 		return false
@@ -207,6 +210,15 @@ func (e VerdictValue) Valid() bool {
 	default:
 		return false
 	}
+}
+
+// AccountUserinfo Canonical identity returned by a source account endpoint.
+type AccountUserinfo struct {
+	// SourceCode Source that supplied the identity.
+	SourceCode string `json:"source_code"`
+
+	// UserName Login name reported by the source.
+	UserName string `json:"user_name"`
 }
 
 // Analysis Normalized result of an artifact analysis.
@@ -596,7 +608,7 @@ type Source struct {
 	// Name Human-readable product name.
 	Name string `json:"name"`
 
-	// Status Whether the source is available for requests.
+	// Status Result of the current connection probe, or mock availability for mock-only sources.
 	Status SourceStatus `json:"status"`
 }
 
@@ -606,7 +618,7 @@ type SourceKind string
 // SourceMode Adapter mode currently backing the source.
 type SourceMode string
 
-// SourceStatus Whether the source is available for requests.
+// SourceStatus Result of the current connection probe, or mock availability for mock-only sources.
 type SourceStatus string
 
 // SourceError Failure reported by one source during a multi-source request.
@@ -678,6 +690,9 @@ type InternalError = ErrorEnvelope
 // NotFound Error returned when a request cannot be completed.
 type NotFound = ErrorEnvelope
 
+// ServiceUnavailable Error returned when a request cannot be completed.
+type ServiceUnavailable = ErrorEnvelope
+
 // Unauthorized Error returned when a request cannot be completed.
 type Unauthorized = ErrorEnvelope
 
@@ -726,6 +741,12 @@ type ListSourcesParams struct {
 	XProjectID ProjectId `json:"X-Project-ID"`
 }
 
+// GetSourceAccountUserinfoParams defines parameters for GetSourceAccountUserinfo.
+type GetSourceAccountUserinfoParams struct {
+	// XProjectID Sb0rka project whose integration allowlist is used.
+	XProjectID ProjectId `json:"X-Project-ID"`
+}
+
 // ListResponseActionsParams defines parameters for ListResponseActions.
 type ListResponseActionsParams struct {
 	// XProjectID Sb0rka project whose integration allowlist is used.
@@ -770,6 +791,9 @@ type ServerInterface interface {
 	// ListSources List registered sources
 	// (GET /api/v1/sources)
 	ListSources(w http.ResponseWriter, r *http.Request, params ListSourcesParams)
+	// GetSourceAccountUserinfo Get source account userinfo
+	// (GET /api/v1/sources/{source}/account/userinfo)
+	GetSourceAccountUserinfo(w http.ResponseWriter, r *http.Request, source string, params GetSourceAccountUserinfoParams)
 	// ListResponseActions List endpoint response actions
 	// (GET /api/v1/sources/{source}/endpoints/{external_id}/response-actions)
 	ListResponseActions(w http.ResponseWriter, r *http.Request, source string, externalId string, params ListResponseActionsParams)
@@ -1114,6 +1138,60 @@ func (siw *ServerInterfaceWrapper) ListSources(w http.ResponseWriter, r *http.Re
 	handler.ServeHTTP(w, r)
 }
 
+// GetSourceAccountUserinfo operation middleware
+func (siw *ServerInterfaceWrapper) GetSourceAccountUserinfo(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "source" -------------
+	var source string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "source", r.PathValue("source"), &source, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "source", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetSourceAccountUserinfoParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "X-Project-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Project-ID")]; found {
+		var XProjectID ProjectId
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Project-ID", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Project-ID", valueList[0], &XProjectID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Project-ID", Err: err})
+			return
+		}
+
+		params.XProjectID = XProjectID
+
+	} else {
+		err := fmt.Errorf("Header parameter X-Project-ID is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Project-ID", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetSourceAccountUserinfo(w, r, source, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListResponseActions operation middleware
 func (siw *ServerInterfaceWrapper) ListResponseActions(w http.ResponseWriter, r *http.Request) {
 
@@ -1325,6 +1403,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 		ErrorHandlerFunc:   options.ErrorHandlerFunc,
 	}
 
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/sources/{source}/account/userinfo", wrapper.GetSourceAccountUserinfo)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/artifact-analyses", wrapper.CreateArtifactAnalysis)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/artifact-analyses/{analysis_id}", wrapper.GetArtifactAnalysis)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/endpoints/search", wrapper.SearchEndpoints)

@@ -2,7 +2,7 @@
 
 ## Boundary
 
-Gateway is a stateless adapter service for external security products. It owns no investigations, does not call Investigations API, does not execute EDR response actions, and has no MCP transport in `0.0.1`.
+Gateway is an adapter service for external security products. It owns no investigations, does not call Investigations API, does not execute EDR response actions, and has no MCP transport in `0.0.1`. Its only state is an ephemeral in-memory credential snapshot; it has no database.
 
 ```text
 HTTP client
@@ -25,7 +25,9 @@ A real client belongs under `internal/adapters/proxy/<provider>` and implements 
 
 Requests without `sources` fan out to all registered providers with the requested capability. Calls run concurrently with a 10-second source timeout inside a 15-second request timeout. Successful data is returned with `source_errors` when only part of the fan-out fails; failure of every selected source returns `502`.
 
-`X-Project-ID` is validated before dispatch, checked against the authenticated subject's `role_bindings`, included in request logs, and selects the process-owned source allowlist. Unknown projects and explicitly denied sources return `403`; an omitted `sources` field expands only to configured sources.
+`X-Project-ID` is validated before dispatch, included in request logs, selects the process-owned source allowlist, and identifies the Sb0rka Secrets namespace. JWT validation happens before project scoping. Unknown projects and explicitly denied sources return `403`; an omitted `sources` field expands only to configured sources. Gateway does not maintain a separate role database.
+
+The service keeps one mutex-protected `{project_id, base_url, credential}` snapshot. The caller's raw, already validated bearer is forwarded only when resolving project Secrets and is never cached. An explicit account request reloads the snapshot first. A source request that fails with a network/timeout error, `401/403`, or `5xx` reloads Secrets and retries once; local validation and other `4xx` failures are not retried.
 
 Event cursors are base64url-encoded, stateless state. They contain a request fingerprint and one opaque continuation per source. A cursor cannot be reused with different filters.
 
@@ -37,6 +39,6 @@ Entity identity is `type + canonical value`; its source records are addressed by
 
 ## Real proxy mode
 
-Provider configuration is process-owned. User requests never accept credentials or vendor URLs. The shared HTTP factory enforces HTTP(S), rejects URL userinfo/query/fragment, requires positive timeouts, supports a credential file and custom CA, and sets TLS 1.2 as the minimum.
+Provider registration, mode, allowlists, timeouts, and trust settings are process-owned. Project-specific vendor URLs and credentials come only from Sb0rka Secrets; user requests never contain them. The shared HTTP factory enforces HTTP(S), rejects URL userinfo/query/fragment, requires positive timeouts, supports a credential file and custom CA, and sets TLS 1.2 as the minimum.
 
 `proxy` mode intentionally fails during startup until that provider has a real client. A vendor client must translate canonical requests, add authentication, call the vendor, normalize the response, and return a structured source error.

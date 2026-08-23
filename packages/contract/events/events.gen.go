@@ -233,13 +233,13 @@ type ValidationError = ErrorResponse
 
 // DeleteEventParams defines parameters for DeleteEvent.
 type DeleteEventParams struct {
-	// XProjectID Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored.
+	// XProjectID Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets.
 	XProjectID ProjectId `json:"X-Project-ID"`
 }
 
 // GetEventParams defines parameters for GetEvent.
 type GetEventParams struct {
-	// XProjectID Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored.
+	// XProjectID Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets.
 	XProjectID ProjectId `json:"X-Project-ID"`
 }
 
@@ -269,13 +269,13 @@ type ListEventsParams struct {
 	// Cursor Opaque keyset cursor taken from `next_cursor` of the previous page. Encodes a position, not a query — do not build one by hand. Omit it to start from the beginning.
 	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
 
-	// XProjectID Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored.
+	// XProjectID Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets.
 	XProjectID ProjectId `json:"X-Project-ID"`
 }
 
 // DetachEventParams defines parameters for DetachEvent.
 type DetachEventParams struct {
-	// XProjectID Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored.
+	// XProjectID Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets.
 	XProjectID ProjectId `json:"X-Project-ID"`
 }
 

@@ -1,0 +1,56 @@
+openapi: 3.0.3
+info:
+  title: Sb0rka Gateway - account
+  version: 0.0.1
+servers:
+  - url: .
+security:
+  - bearerAuth: []
+
+paths:
+  /api/v1/sources/{source}/account/userinfo:
+    get:
+      tags: [sources]
+      summary: Get source account userinfo
+      description: >
+        Reloads the selected project's current source credentials and returns
+        the normalized account identity reported by the source.
+      operationId: getSourceAccountUserinfo
+      parameters:
+        - name: source
+          in: path
+          required: true
+          description: Registered source code.
+          schema:
+            type: string
+        - $ref: '../shared/parameters.yaml#/ProjectId'
+      responses:
+        '200':
+          description: Normalized source account identity.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountUserinfo'
+        '401': { $ref: '../shared/responses.yaml#/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/NotFound' }
+        '502': { $ref: '../shared/responses.yaml#/BadGateway' }
+        '503': { $ref: '../shared/responses.yaml#/ServiceUnavailable' }
+        '504': { $ref: '../shared/responses.yaml#/GatewayTimeout' }
+        '500': { $ref: '../shared/responses.yaml#/InternalError' }
+        default:
+          $ref: '../shared/responses.yaml#/ErrorResponse'
+
+components:
+  schemas:
+    AccountUserinfo:
+      type: object
+      description: Canonical identity returned by a source account endpoint.
+      required: [source_code, user_name]
+      properties:
+        source_code:
+          type: string
+          description: Source that supplied the identity.
+        user_name:
+          type: string
+          description: Login name reported by the source.

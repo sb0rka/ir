@@ -19,6 +19,7 @@ import (
 	"github.com/sb0rka/ir/apps/investigations/internal/somclient"
 	"github.com/sb0rka/ir/apps/investigations/internal/store/psql"
 	"github.com/sb0rka/ir/apps/investigations/internal/transport"
+	"github.com/sb0rka/ir/packages/common"
 )
 
 const serviceName = "ir-api"
@@ -53,6 +54,14 @@ func run() error {
 		return err
 	}
 
+	var secrets *common.SecretsClient
+	if cfg.Platform.APIBaseURL != "" {
+		secrets, err = common.NewSecretsClient(common.SecretsConfig{BaseURL: cfg.Platform.APIBaseURL})
+		if err != nil {
+			return err
+		}
+	}
+
 	api := server.New(db, log,
 		somclient.New(somclient.Config{
 			APIBaseURL:     cfg.SOM.APIBaseURL,
@@ -64,6 +73,7 @@ func run() error {
 			TargetBranch:   cfg.SOM.TargetBranch,
 			Executor:       cfg.SOM.Executor,
 		}),
+		secrets,
 		gatewayclient.New(gatewayclient.Config{BaseURL: cfg.Gateway.BaseURL}),
 		cfg.Prompt,
 	)
@@ -71,7 +81,6 @@ func run() error {
 		Cfg:    cfg.Server,
 		Log:    log,
 		Server: api,
-		Roles:  api,
 	})
 
 	srv := &http.Server{

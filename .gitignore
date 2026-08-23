@@ -8,11 +8,13 @@
 coverage.out
 
 # Local configuration and data
-.env
-.env.*
+*.env
+*.env.*
 !.env.sample
 /keys/
 /pgdata/
+.secrets/
+*.ovpn
 
 # Dependencies and language caches
 node_modules/

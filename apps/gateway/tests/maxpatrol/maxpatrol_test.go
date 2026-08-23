@@ -25,7 +25,8 @@ func TestMockUsesMappedVendorPage(t *testing.T) {
 		t.Fatal(err)
 	}
 	provider := mockmaxpatrol.NewMock(value)
-	if len(provider.Source.Capabilities) != 1 || provider.Source.Capabilities[0] != domain.CapabilityEvents || provider.EntityLookup != nil {
+	if !reflect.DeepEqual(provider.Source.Capabilities, []domain.Capability{domain.CapabilityEvents, domain.CapabilityAccountUserinfo}) ||
+		provider.EntityLookup != nil || provider.AccountUserinfo == nil {
 		t.Fatalf("provider claims an unverified capability: %#v", provider.Source.Capabilities)
 	}
 	request := capability.SearchEventsRequest{Limit: 1}

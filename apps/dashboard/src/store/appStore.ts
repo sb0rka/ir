@@ -83,6 +83,7 @@ interface AppState {
   graphEdges: Record<string, GraphEdge>
   findings: Record<string, Finding>
   filterValueOptions: Record<string, string[]>
+  mockSources: string[]
 
   queueLoading: boolean
   investigationLoading: boolean
@@ -261,6 +262,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   graphEdges: {},
   findings: {},
   filterValueOptions: defaultFilterValueOptions,
+  mockSources: [],
 
   queueLoading: false,
   investigationLoading: false,
@@ -354,7 +356,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   loadQueue: async () => {
-    set({ queueLoading: true, lastError: null })
+    set({ queueLoading: true, lastError: null, mockSources: [] })
     try {
       const result = await searchQueue(get().chips, get().timePreset, get().queueQuery)
       const hosts = new Set(get().filterValueOptions.host ?? [])
@@ -377,12 +379,14 @@ export const useAppStore = create<AppState>((set, get) => ({
           ...get().filterValueOptions,
           host: [...hosts],
           ip: [...ips],
+          source: result.availableSources,
         },
+        mockSources: result.mockSources,
         queueLoading: false,
         lastError: result.sourceErrors.length ? result.sourceErrors.join('; ') : null,
       })
     } catch (err) {
-      set({ queueLoading: false, lastError: errorMessage(err) })
+      set({ queueLoading: false, lastError: errorMessage(err), mockSources: [] })
     }
   },
 
@@ -798,7 +802,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       set({
         lastError: errorMessage(err),
         somHint: isUnauthorized(err)
-          ? 'Обновите SOM-токен в шапке — он живёт около часа'
+          ? 'Обновите SOM-токен в шапке — он живет около часа'
           : null,
       })
     }

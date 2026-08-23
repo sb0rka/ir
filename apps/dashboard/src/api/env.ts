@@ -1,47 +1,42 @@
-const SOM_TOKEN_KEY = 'ir.somToken'
+const PROJECT_ID_KEY = 'ir.projectId'
 
 function stripSlash(value: string): string {
   return value.replace(/\/+$/, '')
 }
 
+function readStorage(key: string): string | null {
+  try {
+    return localStorage.getItem(key)
+  } catch {
+    return null
+  }
+}
+
 export const env = {
+  authUrl: stripSlash(import.meta.env.VITE_AUTH_BASE_URL || 'http://localhost:8020'),
+  platformUrl: stripSlash(import.meta.env.VITE_PLATFORM_API_BASE_URL || 'http://localhost:8080'),
   irUrl: stripSlash(import.meta.env.VITE_IR_URL || 'http://localhost:8090'),
   gatewayUrl: stripSlash(import.meta.env.VITE_GATEWAY_URL || 'http://localhost:8091'),
-  projectId: import.meta.env.VITE_PROJECT_ID || 'abcdef1234',
-  token: import.meta.env.VITE_TOKEN || '',
-  somWorkspaceSelector: import.meta.env.VITE_SOM_WORKSPACE_SELECTOR || 'IR Workspace',
-  somBoardSelector: import.meta.env.VITE_SOM_BOARD_SELECTOR || 'Playbook board',
-  somVariant: import.meta.env.VITE_SOM_VARIANT || 'DEFAULT',
-  somModelId: import.meta.env.VITE_SOM_MODEL_ID || 'openrouter/deepseek/deepseek-v4-flash',
 }
+
+let activeProjectId = readStorage(PROJECT_ID_KEY)?.trim() || null
 
 export function irBaseUrl(): string {
   return `${env.irUrl}/api/v1`
 }
 
-export function getSomToken(): string | null {
-  try {
-    const stored = localStorage.getItem(SOM_TOKEN_KEY)
-    if (stored) return stored
-  } catch {
-    /* ignore */
-  }
-  const seeded = import.meta.env.VITE_SOM_TOKEN
-  return seeded ? seeded : null
+export function getProjectId(): string | null {
+  return activeProjectId
 }
 
-export function setSomToken(token: string | null): void {
+export function setProjectId(projectId: string | null): void {
+  activeProjectId = projectId
   try {
-    if (!token) localStorage.removeItem(SOM_TOKEN_KEY)
-    else localStorage.setItem(SOM_TOKEN_KEY, token)
+    if (projectId) localStorage.setItem(PROJECT_ID_KEY, projectId)
+    else localStorage.removeItem(PROJECT_ID_KEY)
   } catch {
-    /* ignore */
+    /* Storage is an optimization; the authenticated shell still owns the live value. */
   }
-}
-
-/** SOM token is preferred: ir-api forwards it to /som/*, and AUTH_DISABLED accepts it on the rest. */
-export function getIrToken(): string | null {
-  return getSomToken() || env.token || null
 }
 
 export function timeRangeForPreset(preset: string): { from: string; to: string } {
@@ -62,6 +57,9 @@ export function timeRangeForPreset(preset: string): { from: string; to: string }
       break
     case '30d':
       from.setDate(from.getDate() - 30)
+      break
+    case '90d':
+      from.setDate(from.getDate() - 90)
       break
     default:
       from.setDate(from.getDate() - 30)

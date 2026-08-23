@@ -432,49 +432,49 @@ type ListInvestigationsParams struct {
 	// Cursor Opaque keyset cursor taken from `next_cursor` of the previous page. Encodes a position, not a query — do not build one by hand. Omit it to start from the beginning.
 	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
 
-	// XProjectID Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored.
+	// XProjectID Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets.
 	XProjectID ProjectId `json:"X-Project-ID"`
 }
 
 // CreateInvestigationParams defines parameters for CreateInvestigation.
 type CreateInvestigationParams struct {
-	// XProjectID Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored.
+	// XProjectID Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets.
 	XProjectID ProjectId `json:"X-Project-ID"`
 }
 
 // DeleteInvestigationParams defines parameters for DeleteInvestigation.
 type DeleteInvestigationParams struct {
-	// XProjectID Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored.
+	// XProjectID Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets.
 	XProjectID ProjectId `json:"X-Project-ID"`
 }
 
 // GetInvestigationParams defines parameters for GetInvestigation.
 type GetInvestigationParams struct {
-	// XProjectID Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored.
+	// XProjectID Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets.
 	XProjectID ProjectId `json:"X-Project-ID"`
 }
 
 // UpdateInvestigationParams defines parameters for UpdateInvestigation.
 type UpdateInvestigationParams struct {
-	// XProjectID Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored.
+	// XProjectID Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets.
 	XProjectID ProjectId `json:"X-Project-ID"`
 }
 
 // AddAgentResultsParams defines parameters for AddAgentResults.
 type AddAgentResultsParams struct {
-	// XProjectID Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored.
+	// XProjectID Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets.
 	XProjectID ProjectId `json:"X-Project-ID"`
 }
 
 // AddInvestigationContextParams defines parameters for AddInvestigationContext.
 type AddInvestigationContextParams struct {
-	// XProjectID Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored.
+	// XProjectID Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets.
 	XProjectID ProjectId `json:"X-Project-ID"`
 }
 
 // GetInvestigationTreeParams defines parameters for GetInvestigationTree.
 type GetInvestigationTreeParams struct {
-	// XProjectID Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored.
+	// XProjectID Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets.
 	XProjectID ProjectId `json:"X-Project-ID"`
 }
 

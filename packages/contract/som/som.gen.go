@@ -186,7 +186,7 @@ type SomIssueRunResult struct {
 	SomEnvironmentId openapi_types.UUID `json:"som_environment_id"`
 }
 
-// SomWorkspace A SOM workspace as the caller sees it.
+// SomWorkspace A SOM workspace visible to the configured project account.
 type SomWorkspace struct {
 	// Id Identifier of the workspace in SOM.
 	Id openapi_types.UUID `json:"id"`
@@ -203,9 +203,15 @@ type SomWorkspace struct {
 	// Slug URL slug of the workspace.
 	Slug string `json:"slug"`
 
-	// UserRole Caller's role in the workspace — ADMIN or MEMBER.
+	// UserRole Configured SOM account's workspace role — ADMIN or MEMBER.
 	UserRole string `json:"user_role"`
 }
+
+// ProjectId defines model for ProjectId.
+type ProjectId = string
+
+// Forbidden Body of every non-2xx response. Clients branch on `code`, not on the HTTP status: the status says what happened at the protocol level, the code says what happened in the domain.
+type Forbidden = ErrorResponse
 
 // InternalError Body of every non-2xx response. Clients branch on `code`, not on the HTTP status: the status says what happened at the protocol level, the code says what happened in the domain.
 type InternalError = ErrorResponse
@@ -225,6 +231,36 @@ type Unauthorized = ErrorResponse
 // ValidationError Body of every non-2xx response. Clients branch on `code`, not on the HTTP status: the status says what happened at the protocol level, the code says what happened in the domain.
 type ValidationError = ErrorResponse
 
+// ListSomIssuesParams defines parameters for ListSomIssues.
+type ListSomIssuesParams struct {
+	// XProjectID Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets.
+	XProjectID ProjectId `json:"X-Project-ID"`
+}
+
+// GetSomEnvironmentParams defines parameters for GetSomEnvironment.
+type GetSomEnvironmentParams struct {
+	// XProjectID Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets.
+	XProjectID ProjectId `json:"X-Project-ID"`
+}
+
+// RunSomIssueParams defines parameters for RunSomIssue.
+type RunSomIssueParams struct {
+	// XProjectID Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets.
+	XProjectID ProjectId `json:"X-Project-ID"`
+}
+
+// ListSomWorkspacesParams defines parameters for ListSomWorkspaces.
+type ListSomWorkspacesParams struct {
+	// XProjectID Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets.
+	XProjectID ProjectId `json:"X-Project-ID"`
+}
+
+// ListSomBoardsParams defines parameters for ListSomBoards.
+type ListSomBoardsParams struct {
+	// XProjectID Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets.
+	XProjectID ProjectId `json:"X-Project-ID"`
+}
+
 // RunSomIssueJSONRequestBody defines body for RunSomIssue for application/json ContentType.
 type RunSomIssueJSONRequestBody = SomIssueRunRequest
 
@@ -232,19 +268,19 @@ type RunSomIssueJSONRequestBody = SomIssueRunRequest
 type ServerInterface interface {
 	// ListSomIssues Issues of a SOM board
 	// (GET /som/boards/{board_id}/issues)
-	ListSomIssues(w http.ResponseWriter, r *http.Request, boardId openapi_types.UUID)
+	ListSomIssues(w http.ResponseWriter, r *http.Request, boardId openapi_types.UUID, params ListSomIssuesParams)
 	// GetSomEnvironment Status of a SOM agent environment
 	// (GET /som/environments/{local_environment_id})
-	GetSomEnvironment(w http.ResponseWriter, r *http.Request, localEnvironmentId openapi_types.UUID)
+	GetSomEnvironment(w http.ResponseWriter, r *http.Request, localEnvironmentId openapi_types.UUID, params GetSomEnvironmentParams)
 	// RunSomIssue Run an agent on a SOM issue
 	// (POST /som/issues/{issue_id}/run)
-	RunSomIssue(w http.ResponseWriter, r *http.Request, issueId openapi_types.UUID)
-	// ListSomWorkspaces SOM workspaces of the caller
+	RunSomIssue(w http.ResponseWriter, r *http.Request, issueId openapi_types.UUID, params RunSomIssueParams)
+	// ListSomWorkspaces SOM workspaces of the configured project account
 	// (GET /som/workspaces)
-	ListSomWorkspaces(w http.ResponseWriter, r *http.Request)
+	ListSomWorkspaces(w http.ResponseWriter, r *http.Request, params ListSomWorkspacesParams)
 	// ListSomBoards Boards of a SOM workspace
 	// (GET /som/workspaces/{workspace_id}/boards)
-	ListSomBoards(w http.ResponseWriter, r *http.Request, workspaceId openapi_types.UUID)
+	ListSomBoards(w http.ResponseWriter, r *http.Request, workspaceId openapi_types.UUID, params ListSomBoardsParams)
 }
 
 // ServerInterfaceWrapper converts contexts to parameters.
@@ -271,8 +307,36 @@ func (siw *ServerInterfaceWrapper) ListSomIssues(w http.ResponseWriter, r *http.
 		return
 	}
 
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListSomIssuesParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "X-Project-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Project-ID")]; found {
+		var XProjectID ProjectId
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Project-ID", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Project-ID", valueList[0], &XProjectID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Project-ID", Err: err})
+			return
+		}
+
+		params.XProjectID = XProjectID
+
+	} else {
+		err := fmt.Errorf("Header parameter X-Project-ID is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Project-ID", Err: err})
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListSomIssues(w, r, boardId)
+		siw.Handler.ListSomIssues(w, r, boardId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -297,8 +361,36 @@ func (siw *ServerInterfaceWrapper) GetSomEnvironment(w http.ResponseWriter, r *h
 		return
 	}
 
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetSomEnvironmentParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "X-Project-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Project-ID")]; found {
+		var XProjectID ProjectId
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Project-ID", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Project-ID", valueList[0], &XProjectID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Project-ID", Err: err})
+			return
+		}
+
+		params.XProjectID = XProjectID
+
+	} else {
+		err := fmt.Errorf("Header parameter X-Project-ID is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Project-ID", Err: err})
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetSomEnvironment(w, r, localEnvironmentId)
+		siw.Handler.GetSomEnvironment(w, r, localEnvironmentId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -323,8 +415,36 @@ func (siw *ServerInterfaceWrapper) RunSomIssue(w http.ResponseWriter, r *http.Re
 		return
 	}
 
+	// Parameter object where we will unmarshal all parameters from the context
+	var params RunSomIssueParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "X-Project-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Project-ID")]; found {
+		var XProjectID ProjectId
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Project-ID", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Project-ID", valueList[0], &XProjectID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Project-ID", Err: err})
+			return
+		}
+
+		params.XProjectID = XProjectID
+
+	} else {
+		err := fmt.Errorf("Header parameter X-Project-ID is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Project-ID", Err: err})
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.RunSomIssue(w, r, issueId)
+		siw.Handler.RunSomIssue(w, r, issueId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -337,8 +457,39 @@ func (siw *ServerInterfaceWrapper) RunSomIssue(w http.ResponseWriter, r *http.Re
 // ListSomWorkspaces operation middleware
 func (siw *ServerInterfaceWrapper) ListSomWorkspaces(w http.ResponseWriter, r *http.Request) {
 
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListSomWorkspacesParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "X-Project-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Project-ID")]; found {
+		var XProjectID ProjectId
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Project-ID", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Project-ID", valueList[0], &XProjectID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Project-ID", Err: err})
+			return
+		}
+
+		params.XProjectID = XProjectID
+
+	} else {
+		err := fmt.Errorf("Header parameter X-Project-ID is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Project-ID", Err: err})
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListSomWorkspaces(w, r)
+		siw.Handler.ListSomWorkspaces(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -363,8 +514,36 @@ func (siw *ServerInterfaceWrapper) ListSomBoards(w http.ResponseWriter, r *http.
 		return
 	}
 
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListSomBoardsParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "X-Project-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Project-ID")]; found {
+		var XProjectID ProjectId
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Project-ID", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Project-ID", valueList[0], &XProjectID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Project-ID", Err: err})
+			return
+		}
+
+		params.XProjectID = XProjectID
+
+	} else {
+		err := fmt.Errorf("Header parameter X-Project-ID is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Project-ID", Err: err})
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListSomBoards(w, r, workspaceId)
+		siw.Handler.ListSomBoards(w, r, workspaceId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -503,6 +682,8 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	return m
 }
 
+type ForbiddenJSONResponse ErrorResponse
+
 type InternalErrorJSONResponse ErrorResponse
 
 type NotFoundJSONResponse ErrorResponse
@@ -517,6 +698,7 @@ type ValidationErrorJSONResponse ErrorResponse
 
 type ListSomIssuesRequestObject struct {
 	BoardId openapi_types.UUID `json:"board_id"`
+	Params  ListSomIssuesParams
 }
 
 type ListSomIssuesResponseObject interface {
@@ -547,6 +729,20 @@ func (response ListSomIssues401JSONResponse) VisitListSomIssuesResponse(w http.R
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListSomIssues403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response ListSomIssues403JSONResponse) VisitListSomIssuesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -609,6 +805,7 @@ func (response ListSomIssues502JSONResponse) VisitListSomIssuesResponse(w http.R
 
 type GetSomEnvironmentRequestObject struct {
 	LocalEnvironmentId openapi_types.UUID `json:"local_environment_id"`
+	Params             GetSomEnvironmentParams
 }
 
 type GetSomEnvironmentResponseObject interface {
@@ -639,6 +836,20 @@ func (response GetSomEnvironment401JSONResponse) VisitGetSomEnvironmentResponse(
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetSomEnvironment403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response GetSomEnvironment403JSONResponse) VisitGetSomEnvironmentResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -701,6 +912,7 @@ func (response GetSomEnvironment502JSONResponse) VisitGetSomEnvironmentResponse(
 
 type RunSomIssueRequestObject struct {
 	IssueId openapi_types.UUID `json:"issue_id"`
+	Params  RunSomIssueParams
 	Body    *RunSomIssueJSONRequestBody
 }
 
@@ -732,6 +944,20 @@ func (response RunSomIssue401JSONResponse) VisitRunSomIssueResponse(w http.Respo
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RunSomIssue403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response RunSomIssue403JSONResponse) VisitRunSomIssueResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -807,6 +1033,7 @@ func (response RunSomIssue502JSONResponse) VisitRunSomIssueResponse(w http.Respo
 }
 
 type ListSomWorkspacesRequestObject struct {
+	Params ListSomWorkspacesParams
 }
 
 type ListSomWorkspacesResponseObject interface {
@@ -837,6 +1064,20 @@ func (response ListSomWorkspaces401JSONResponse) VisitListSomWorkspacesResponse(
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListSomWorkspaces403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response ListSomWorkspaces403JSONResponse) VisitListSomWorkspacesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -885,6 +1126,7 @@ func (response ListSomWorkspaces502JSONResponse) VisitListSomWorkspacesResponse(
 
 type ListSomBoardsRequestObject struct {
 	WorkspaceId openapi_types.UUID `json:"workspace_id"`
+	Params      ListSomBoardsParams
 }
 
 type ListSomBoardsResponseObject interface {
@@ -915,6 +1157,20 @@ func (response ListSomBoards401JSONResponse) VisitListSomBoardsResponse(w http.R
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListSomBoards403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response ListSomBoards403JSONResponse) VisitListSomBoardsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -986,7 +1242,7 @@ type StrictServerInterface interface {
 	// RunSomIssue Run an agent on a SOM issue
 	// (POST /som/issues/{issue_id}/run)
 	RunSomIssue(ctx context.Context, request RunSomIssueRequestObject) (RunSomIssueResponseObject, error)
-	// ListSomWorkspaces SOM workspaces of the caller
+	// ListSomWorkspaces SOM workspaces of the configured project account
 	// (GET /som/workspaces)
 	ListSomWorkspaces(ctx context.Context, request ListSomWorkspacesRequestObject) (ListSomWorkspacesResponseObject, error)
 	// ListSomBoards Boards of a SOM workspace
@@ -1034,10 +1290,11 @@ type strictHandler struct {
 }
 
 // ListSomIssues operation middleware
-func (sh *strictHandler) ListSomIssues(w http.ResponseWriter, r *http.Request, boardId openapi_types.UUID) {
+func (sh *strictHandler) ListSomIssues(w http.ResponseWriter, r *http.Request, boardId openapi_types.UUID, params ListSomIssuesParams) {
 	var request ListSomIssuesRequestObject
 
 	request.BoardId = boardId
+	request.Params = params
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
 		return sh.ssi.ListSomIssues(ctx, request.(ListSomIssuesRequestObject))
@@ -1060,10 +1317,11 @@ func (sh *strictHandler) ListSomIssues(w http.ResponseWriter, r *http.Request, b
 }
 
 // GetSomEnvironment operation middleware
-func (sh *strictHandler) GetSomEnvironment(w http.ResponseWriter, r *http.Request, localEnvironmentId openapi_types.UUID) {
+func (sh *strictHandler) GetSomEnvironment(w http.ResponseWriter, r *http.Request, localEnvironmentId openapi_types.UUID, params GetSomEnvironmentParams) {
 	var request GetSomEnvironmentRequestObject
 
 	request.LocalEnvironmentId = localEnvironmentId
+	request.Params = params
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
 		return sh.ssi.GetSomEnvironment(ctx, request.(GetSomEnvironmentRequestObject))
@@ -1086,10 +1344,11 @@ func (sh *strictHandler) GetSomEnvironment(w http.ResponseWriter, r *http.Reques
 }
 
 // RunSomIssue operation middleware
-func (sh *strictHandler) RunSomIssue(w http.ResponseWriter, r *http.Request, issueId openapi_types.UUID) {
+func (sh *strictHandler) RunSomIssue(w http.ResponseWriter, r *http.Request, issueId openapi_types.UUID, params RunSomIssueParams) {
 	var request RunSomIssueRequestObject
 
 	request.IssueId = issueId
+	request.Params = params
 
 	var body RunSomIssueJSONRequestBody
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -1119,8 +1378,10 @@ func (sh *strictHandler) RunSomIssue(w http.ResponseWriter, r *http.Request, iss
 }
 
 // ListSomWorkspaces operation middleware
-func (sh *strictHandler) ListSomWorkspaces(w http.ResponseWriter, r *http.Request) {
+func (sh *strictHandler) ListSomWorkspaces(w http.ResponseWriter, r *http.Request, params ListSomWorkspacesParams) {
 	var request ListSomWorkspacesRequestObject
+
+	request.Params = params
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
 		return sh.ssi.ListSomWorkspaces(ctx, request.(ListSomWorkspacesRequestObject))
@@ -1143,10 +1404,11 @@ func (sh *strictHandler) ListSomWorkspaces(w http.ResponseWriter, r *http.Reques
 }
 
 // ListSomBoards operation middleware
-func (sh *strictHandler) ListSomBoards(w http.ResponseWriter, r *http.Request, workspaceId openapi_types.UUID) {
+func (sh *strictHandler) ListSomBoards(w http.ResponseWriter, r *http.Request, workspaceId openapi_types.UUID, params ListSomBoardsParams) {
 	var request ListSomBoardsRequestObject
 
 	request.WorkspaceId = workspaceId
+	request.Params = params
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
 		return sh.ssi.ListSomBoards(ctx, request.(ListSomBoardsRequestObject))

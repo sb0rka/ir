@@ -32,5 +32,6 @@ components:
       scheme: bearer
       bearerFormat: JWT
       description: >-
-        Access token issued by sb0rka auth. X-Project-ID selects the project;
-        the subject must have an IR role in it.
+        Access token issued by sb0rka auth and validated with the issuer,
+        audience, key id, and token type configured in the environment.
+        X-Project-ID selects the mandatory project scope.

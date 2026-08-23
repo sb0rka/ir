@@ -22,8 +22,6 @@ type Database interface {
 	Ping(ctx context.Context) error
 	Close()
 
-	RoleBindings(ctx context.Context, subjectID, projectID string) (model.SubjectRoles, error)
-
 	CreateInvestigation(ctx context.Context, inv model.InvestigationNew) (model.Investigation, error)
 	ListInvestigations(ctx context.Context, projectID string, filter model.InvestigationFilter) ([]model.Investigation, error)
 	GetInvestigation(ctx context.Context, projectID, investigationID string) (model.Investigation, error)

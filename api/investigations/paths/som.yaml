@@ -11,12 +11,15 @@ security:
 
 paths:
   /som/workspaces:
+    parameters:
+      - $ref: '../shared/parameters.yaml#/components/parameters/ProjectId'
     get:
       tags: [som]
-      summary: SOM workspaces of the caller
+      summary: SOM workspaces of the configured project account
       description: >-
-        Proxies SOM `GET /v1/workspaces` with the caller's bearer token. The
-        list is exactly what the token's owner sees in SOM.
+        Reloads `DEMO_SOM_ACCESS_TOKEN` from the selected project's Secrets,
+        activates it in the in-memory cache, and proxies SOM
+        `GET /v1/workspaces`.
       operationId: listSomWorkspaces
       responses:
         '200':
@@ -27,12 +30,14 @@ paths:
                 type: array
                 items: { $ref: '#/components/schemas/SomWorkspace' }
         '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
         '501': { $ref: '../shared/responses.yaml#/components/responses/NotImplemented' }
         '500': { $ref: '../shared/responses.yaml#/components/responses/InternalError' }
         '502': { $ref: '../shared/responses.yaml#/components/responses/SourceUnavailable' }
 
   /som/workspaces/{workspace_id}/boards:
     parameters:
+      - $ref: '../shared/parameters.yaml#/components/parameters/ProjectId'
       - name: workspace_id
         in: path
         required: true
@@ -41,7 +46,9 @@ paths:
     get:
       tags: [som]
       summary: Boards of a SOM workspace
-      description: Proxies SOM `GET /v1/boards?workspace_id=...`.
+      description: >-
+        Proxies SOM `GET /v1/boards?workspace_id=...` with the selected
+        project's cached `DEMO_SOM_ACCESS_TOKEN`.
       operationId: listSomBoards
       responses:
         '200':
@@ -52,6 +59,7 @@ paths:
                 type: array
                 items: { $ref: '#/components/schemas/SomBoard' }
         '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
         '501': { $ref: '../shared/responses.yaml#/components/responses/NotImplemented' }
         '500': { $ref: '../shared/responses.yaml#/components/responses/InternalError' }
         '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
@@ -59,6 +67,7 @@ paths:
 
   /som/boards/{board_id}/issues:
     parameters:
+      - $ref: '../shared/parameters.yaml#/components/parameters/ProjectId'
       - name: board_id
         in: path
         required: true
@@ -78,6 +87,7 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/SomIssueList' }
         '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
         '501': { $ref: '../shared/responses.yaml#/components/responses/NotImplemented' }
         '500': { $ref: '../shared/responses.yaml#/components/responses/InternalError' }
         '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
@@ -85,6 +95,7 @@ paths:
 
   /som/issues/{issue_id}/run:
     parameters:
+      - $ref: '../shared/parameters.yaml#/components/parameters/ProjectId'
       - name: issue_id
         in: path
         required: true
@@ -97,6 +108,7 @@ paths:
         Orchestrates a run: reads the issue from SOM, opens a relay session to
         the configured daemon host, starts an environment with the issue text
         as the prompt, then links the environment back to the issue in SOM.
+        SOM requests use the selected project's cached access-token secret.
         `variant` and `model_id` are forwarded as daemon `executor_config`.
         Stateless — nothing is persisted in IR; the ids in the response are the
         only handle on the run.
@@ -113,6 +125,7 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/SomIssueRunResult' }
         '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
         '501': { $ref: '../shared/responses.yaml#/components/responses/NotImplemented' }
         '500': { $ref: '../shared/responses.yaml#/components/responses/InternalError' }
         '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
@@ -121,6 +134,7 @@ paths:
 
   /som/environments/{local_environment_id}:
     parameters:
+      - $ref: '../shared/parameters.yaml#/components/parameters/ProjectId'
       - name: local_environment_id
         in: path
         required: true
@@ -142,6 +156,7 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/SomEnvironmentStatus' }
         '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
         '501': { $ref: '../shared/responses.yaml#/components/responses/NotImplemented' }
         '500': { $ref: '../shared/responses.yaml#/components/responses/InternalError' }
         '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
@@ -151,7 +166,7 @@ components:
   schemas:
     SomWorkspace:
       type: object
-      description: A SOM workspace as the caller sees it.
+      description: A SOM workspace visible to the configured project account.
       required: [id, name, slug, is_personal, issue_prefix, user_role]
       properties:
         id:
@@ -172,7 +187,7 @@ components:
           description: Prefix used in issue simple ids, e.g. "IR".
         user_role:
           type: string
-          description: Caller's role in the workspace — ADMIN or MEMBER.
+          description: Configured SOM account's workspace role — ADMIN or MEMBER.
 
     SomBoard:
       type: object

@@ -248,19 +248,19 @@ type ValidationError = ErrorResponse
 
 // DeleteEntityParams defines parameters for DeleteEntity.
 type DeleteEntityParams struct {
-	// XProjectID Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored.
+	// XProjectID Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets.
 	XProjectID ProjectId `json:"X-Project-ID"`
 }
 
 // GetEntityCardParams defines parameters for GetEntityCard.
 type GetEntityCardParams struct {
-	// XProjectID Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored.
+	// XProjectID Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets.
 	XProjectID ProjectId `json:"X-Project-ID"`
 }
 
 // UpdateEntityParams defines parameters for UpdateEntity.
 type UpdateEntityParams struct {
-	// XProjectID Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored.
+	// XProjectID Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets.
 	XProjectID ProjectId `json:"X-Project-ID"`
 }
 
@@ -278,19 +278,19 @@ type ListEntitiesParams struct {
 	// Cursor Opaque keyset cursor taken from `next_cursor` of the previous page. Encodes a position, not a query — do not build one by hand. Omit it to start from the beginning.
 	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
 
-	// XProjectID Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored.
+	// XProjectID Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets.
 	XProjectID ProjectId `json:"X-Project-ID"`
 }
 
 // CreateEntityParams defines parameters for CreateEntity.
 type CreateEntityParams struct {
-	// XProjectID Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored.
+	// XProjectID Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets.
 	XProjectID ProjectId `json:"X-Project-ID"`
 }
 
 // DetachEntityParams defines parameters for DetachEntity.
 type DetachEntityParams struct {
-	// XProjectID Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored.
+	// XProjectID Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets.
 	XProjectID ProjectId `json:"X-Project-ID"`
 }
 

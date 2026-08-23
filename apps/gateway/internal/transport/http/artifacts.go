@@ -40,7 +40,7 @@ func (server *Server) CreateArtifactAnalysis(w http.ResponseWriter, r *http.Requ
 }
 
 func (server *Server) GetArtifactAnalysis(w http.ResponseWriter, r *http.Request, analysisID uuid.UUID, _ api.GetArtifactAnalysisParams) {
-	sources, err := server.constrainSources(r.Context(), nil)
+	sources, err := server.constrainSources(r.Context(), nil, domain.CapabilityArtifactAnalysis)
 	if err != nil {
 		server.writeServiceError(w, err)
 		return

@@ -25,16 +25,18 @@ type mock struct {
 }
 
 func NewMock(value scenario.Scenario) registry.Provider {
+	events := &mock{scenario: value}
 	return registry.Provider{
 		Source: domain.Source{
 			Code:         SourceCode,
 			Name:         "MaxPatrol SIEM",
 			Kind:         "siem",
 			Mode:         "mock",
-			Status:       "available",
-			Capabilities: []domain.Capability{domain.CapabilityEvents},
+			Status:       "offline",
+			Capabilities: []domain.Capability{domain.CapabilityEvents, domain.CapabilityAccountUserinfo},
 		},
-		Events: &mock{scenario: value},
+		Events:          events,
+		AccountUserinfo: maxpatrolapi.AccountAdapter{},
 	}
 }
 

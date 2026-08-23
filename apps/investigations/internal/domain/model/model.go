@@ -3,11 +3,6 @@ package model
 
 import "time"
 
-type SubjectRoles struct {
-	ProjectID string
-	Roles     []string
-}
-
 type PageCursor struct {
 	Time time.Time
 	ID   string

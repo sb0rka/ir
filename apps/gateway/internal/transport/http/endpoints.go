@@ -5,6 +5,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/sb0rka/ir/apps/gateway/api"
+	"github.com/sb0rka/ir/apps/gateway/internal/domain"
 	"github.com/sb0rka/ir/apps/gateway/internal/service"
 )
 
@@ -22,7 +23,7 @@ func (server *Server) SearchEndpoints(w http.ResponseWriter, r *http.Request, _ 
 		respondError(w, http.StatusBadRequest, "bad_request", "query must not exceed 1000 characters")
 		return
 	}
-	sources, err := server.constrainSources(r.Context(), valueOrEmpty(body.Sources))
+	sources, err := server.constrainSources(r.Context(), valueOrEmpty(body.Sources), domain.CapabilityEndpoints)
 	if err != nil {
 		server.writeServiceError(w, err)
 		return

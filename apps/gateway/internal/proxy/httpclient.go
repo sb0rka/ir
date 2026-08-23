@@ -16,6 +16,7 @@ type HTTPClientConfig struct {
 	CredentialFile string
 	Timeout        time.Duration
 	TLSCAFile      string
+	SkipTLSVerify  bool
 }
 
 type HTTPClient struct {
@@ -50,8 +51,8 @@ func NewHTTPClient(cfg HTTPClientConfig) (*HTTPClient, error) {
 
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.Proxy = http.ProxyFromEnvironment
-	transport.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12}
-	if cfg.TLSCAFile != "" {
+	transport.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12, InsecureSkipVerify: cfg.SkipTLSVerify}
+	if cfg.TLSCAFile != "" && !cfg.SkipTLSVerify {
 		raw, readErr := os.ReadFile(cfg.TLSCAFile)
 		if readErr != nil {
 			return nil, fmt.Errorf("read TLS CA file: %w", readErr)

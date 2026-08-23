@@ -1,6 +1,6 @@
 ## Investigations API
 
-Go API сервис `ir-api` и утилита `irctl` расследований Sb0rka.
+Go API сервис `ir-api` расследований Sb0rka.
 
 `ir-api` не является хранилищем потока событий. Страница первичного разбора и SOM-агенты
 читают нормализованные events/entities/relations напрямую из Gateway, а сюда
@@ -17,8 +17,9 @@ Go API сервис `ir-api` и утилита `irctl` расследовани�
 
 Нормализованный event хранится в `normalized_data`, provenance и source URL —
 отдельно, vendor raw payload не сохраняется. Все investigation endpoints требуют
-`X-Project-ID`; в локальном compose используется `AUTH_DISABLED=true`, при этом
-Bearer по-прежнему пробрасывается в SOM.
+`X-Project-ID`. SOM access token берётся из секрета
+`DEMO_SOM_ACCESS_TOKEN` выбранного проекта и кэшируется в памяти; входящий
+Bearer используется для чтения Sb0rka Secrets, но не передаётся в SOM.
 
 Событие в Gateway и `ir-api` находится по паре `source_code + source_event_id`.
 Сущность объединяется по `type_code + canonical_key`, а её исходные записи — по
