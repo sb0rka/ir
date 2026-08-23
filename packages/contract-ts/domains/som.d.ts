@@ -7,13 +7,16 @@ export interface paths {
     "/som/workspaces": {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
             path?: never;
             cookie?: never;
         };
         /**
-         * SOM workspaces of the caller
-         * @description Proxies SOM `GET /v1/workspaces` with the caller's bearer token. The list is exactly what the token's owner sees in SOM.
+         * SOM workspaces of the configured project account
+         * @description Reloads `DEMO_SOM_ACCESS_TOKEN` from the selected project's Secrets, activates it in the in-memory cache, and proxies SOM `GET /v1/workspaces`.
          */
         get: operations["listSomWorkspaces"];
         put?: never;
@@ -27,7 +30,10 @@ export interface paths {
     "/som/workspaces/{workspace_id}/boards": {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
             path: {
                 /** @description SOM workspace whose boards are listed. */
                 workspace_id: string;
@@ -36,7 +42,7 @@ export interface paths {
         };
         /**
          * Boards of a SOM workspace
-         * @description Proxies SOM `GET /v1/boards?workspace_id=...`.
+         * @description Proxies SOM `GET /v1/boards?workspace_id=...` with the selected project's cached `DEMO_SOM_ACCESS_TOKEN`.
          */
         get: operations["listSomBoards"];
         put?: never;
@@ -50,7 +56,10 @@ export interface paths {
     "/som/boards/{board_id}/issues": {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
             path: {
                 /** @description SOM board whose issues are listed. */
                 board_id: string;
@@ -73,7 +82,10 @@ export interface paths {
     "/som/issues/{issue_id}/run": {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
             path: {
                 /** @description SOM issue to run an agent on. */
                 issue_id: string;
@@ -84,7 +96,7 @@ export interface paths {
         put?: never;
         /**
          * Run an agent on a SOM issue
-         * @description Orchestrates a run: reads the issue from SOM, opens a relay session to the configured daemon host, starts an environment with the issue text as the prompt, then links the environment back to the issue in SOM. `variant` and `model_id` are forwarded as daemon `executor_config`. Stateless — nothing is persisted in IR; the ids in the response are the only handle on the run.
+         * @description Orchestrates a run: reads the issue from SOM, opens a relay session to the configured daemon host, starts an environment with the issue text as the prompt, then links the environment back to the issue in SOM. SOM requests use the selected project's cached access-token secret. `variant` and `model_id` are forwarded as daemon `executor_config`. Stateless — nothing is persisted in IR; the ids in the response are the only handle on the run.
          */
         post: operations["runSomIssue"];
         delete?: never;
@@ -96,7 +108,10 @@ export interface paths {
     "/som/environments/{local_environment_id}": {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
             path: {
                 /** @description Daemon environment id returned by runSomIssue. */
                 local_environment_id: string;
@@ -120,7 +135,7 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        /** @description A SOM workspace as the caller sees it. */
+        /** @description A SOM workspace visible to the configured project account. */
         SomWorkspace: {
             /**
              * Format: uuid
@@ -135,7 +150,7 @@ export interface components {
             is_personal: boolean;
             /** @description Prefix used in issue simple ids, e.g. "IR". */
             issue_prefix: string;
-            /** @description Caller's role in the workspace — ADMIN or MEMBER. */
+            /** @description Configured SOM account's workspace role — ADMIN or MEMBER. */
             user_role: string;
         };
         /** @description A kanban board inside a SOM workspace. */
@@ -272,6 +287,15 @@ export interface components {
                 "application/json": components["schemas"]["ErrorResponse"];
             };
         };
+        /** @description Caller is authenticated but cannot access the selected project's platform-owned resource (code=forbidden). */
+        Forbidden: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
         /** @description Unhandled failure or a panic. The service answers with the same error envelope as everything else, so a client has one shape to parse; the message is deliberately generic and the real cause goes to the log (code=internal). */
         InternalError: {
             headers: {
@@ -290,7 +314,7 @@ export interface components {
                 "application/json": components["schemas"]["ErrorResponse"];
             };
         };
-        /** @description An upstream security tool did not answer. The investigation itself is intact — retry, or narrow the query (code=source_unavailable). */
+        /** @description An upstream integration or its project-scoped configuration is unavailable. The investigation itself is intact (code=source_unavailable). */
         SourceUnavailable: {
             headers: {
                 [name: string]: unknown;
@@ -318,7 +342,10 @@ export interface components {
             };
         };
     };
-    parameters: never;
+    parameters: {
+        /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
+        ProjectId: string;
+    };
     requestBodies: never;
     headers: never;
     pathItems: never;
@@ -328,7 +355,10 @@ export interface operations {
     listSomWorkspaces: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -344,6 +374,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             500: components["responses"]["InternalError"];
             501: components["responses"]["NotImplemented"];
             502: components["responses"]["SourceUnavailable"];
@@ -352,7 +383,10 @@ export interface operations {
     listSomBoards: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
             path: {
                 /** @description SOM workspace whose boards are listed. */
                 workspace_id: string;
@@ -371,6 +405,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
             501: components["responses"]["NotImplemented"];
@@ -380,7 +415,10 @@ export interface operations {
     listSomIssues: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
             path: {
                 /** @description SOM board whose issues are listed. */
                 board_id: string;
@@ -399,6 +437,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
             501: components["responses"]["NotImplemented"];
@@ -408,7 +447,10 @@ export interface operations {
     runSomIssue: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
             path: {
                 /** @description SOM issue to run an agent on. */
                 issue_id: string;
@@ -431,6 +473,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             422: components["responses"]["ValidationError"];
             500: components["responses"]["InternalError"];
@@ -441,7 +484,10 @@ export interface operations {
     getSomEnvironment: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
             path: {
                 /** @description Daemon environment id returned by runSomIssue. */
                 local_environment_id: string;
@@ -460,6 +506,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
             501: components["responses"]["NotImplemented"];

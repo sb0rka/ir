@@ -70,7 +70,7 @@ tasks:
         if(f.endsWith('.d.ts')&&!exists(f.slice(0,-5)))
         fs.rmSync('packages/contract-ts/domains/'+f,{force:true});
         for(const f of fs.readdirSync('{{.SERVER_DIR}}'))
-        if(f.endsWith('.go')&&f!=='server.go'&&!exists(f.slice(0,-3)))
+        if(f.endsWith('.go')&&!f.endsWith('_test.go')&&f!=='server.go'&&!exists(f.slice(0,-3)))
         fs.rmSync('{{.SERVER_DIR}}/'+f,{force:true});"
 
   spec:
@@ -187,7 +187,6 @@ tasks:
     cmds:
       - go build -o bin/gateway ./apps/gateway/cmd/gateway
       - go build -o bin/ir-api ./apps/investigations/cmd/ir-api
-      - go build -o bin/irctl ./apps/investigations/cmd/irctl
 
   fmt:
     desc: gofmt по всем модулям
@@ -199,6 +198,7 @@ tasks:
     cmds:
       - cd apps/gateway && go vet ./...
       - cd apps/investigations && go vet ./...
+      - cd packages/common && go vet ./...
       - cd packages/contract && go vet ./...
 
   test:
@@ -206,6 +206,7 @@ tasks:
     cmds:
       - cd apps/gateway && go test ./...
       - cd apps/investigations && go test ./...
+      - cd packages/common && go test ./...
       - cd packages/contract && go test ./...
 
   typecheck:
@@ -213,11 +214,18 @@ tasks:
     cmds:
       - npm --prefix packages/contract-ts run typecheck
 
+  dashboard-check:
+    desc: Проверить Dashboard
+    cmds:
+      - npm --prefix apps/dashboard run lint
+      - npm --prefix apps/dashboard run build
+
   tidy:
     desc: go mod tidy в каждом модуле
     cmds:
       - cd apps/gateway && go mod tidy
       - cd apps/investigations && go mod tidy
+      - cd packages/common && go mod tidy
       - cd packages/contract && go mod tidy
 
   check:
@@ -228,6 +236,7 @@ tasks:
       - task: vet
       - task: test
       - task: typecheck
+      - task: dashboard-check
 
   db:up:
     desc: Start local Postgres

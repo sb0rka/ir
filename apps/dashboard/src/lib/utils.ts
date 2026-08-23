@@ -77,7 +77,7 @@ export const kindLabel: Record<string, string> = {
   ip: 'IP',
   domain: 'домен',
   email: 'email',
-  account: 'учётная запись',
+  account: 'учетная запись',
   url: 'URL',
   event: 'событие',
   rule: 'правило',

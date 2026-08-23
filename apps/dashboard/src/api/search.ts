@@ -1,5 +1,5 @@
 import type { FilterChip } from '../types'
-import { env, timeRangeForPreset } from './env'
+import { getProjectId, timeRangeForPreset } from './env'
 import { gatewayClient } from './clients'
 import { unwrapError } from './error'
 import {
@@ -13,7 +13,11 @@ import type { components as Gw } from '@ir/contract/gateway'
 
 type SearchBody = Gw['schemas']['SearchEventsRequest']
 
-const projectHeader = { header: { 'X-Project-ID': env.projectId } } as const
+function projectHeader() {
+  const projectId = getProjectId()
+  if (!projectId) throw new Error('Проект не выбран')
+  return { header: { 'X-Project-ID': projectId } } as const
+}
 
 export interface QueueSearchResult {
   alerts: Record<string, AlertEvent>
@@ -22,6 +26,8 @@ export interface QueueSearchResult {
   entities: Record<string, Entity>
   contextEvents: Record<string, ContextEvent>
   sourceErrors: string[]
+  availableSources: string[]
+  mockSources: string[]
 }
 
 function chipsToSearch(chips: FilterChip[], timePreset: string, query?: string): SearchBody {
@@ -61,14 +67,26 @@ function chipsToSearch(chips: FilterChip[], timePreset: string, query?: string):
   return body
 }
 
-async function defaultEventSources(): Promise<string[]> {
+async function eventSources(): Promise<{
+  defaults: string[]
+  available: string[]
+  activeMocks: Set<string>
+}> {
   const { data, error, response } = await gatewayClient.GET('/api/v1/sources', {
-    params: projectHeader,
+    params: projectHeader(),
   })
   if (error || !data) throw unwrapError(error, response.status)
-  return (data.items ?? [])
-    .filter((item) => item.capabilities?.includes('events'))
-    .map((item) => item.code)
+  const eventCapable = (data.items ?? []).filter((item) =>
+    item.capabilities?.includes('events'),
+  )
+  const online = eventCapable.filter((item) => item.status === 'online')
+  return {
+    defaults: online.map((item) => item.code),
+    available: eventCapable.map((item) => item.code),
+    activeMocks: new Set(
+      online.filter((item) => item.mode === 'mock').map((item) => item.code),
+    ),
+  }
 }
 
 async function searchPages(body: SearchBody) {
@@ -78,7 +96,7 @@ async function searchPages(body: SearchBody) {
   let cursor: string | undefined
   for (let i = 0; i < 8; i++) {
     const { data, error, response } = await gatewayClient.POST('/api/v1/events/search', {
-      params: projectHeader,
+      params: projectHeader(),
       body: { ...body, cursor },
     })
     if (error || !data) throw unwrapError(error, response.status)
@@ -99,7 +117,25 @@ export async function searchQueue(
   query?: string,
 ): Promise<QueueSearchResult> {
   const body = chipsToSearch(chips, timePreset, query)
-  if (!body.sources?.length) body.sources = await defaultEventSources()
+  const sources = await eventSources()
+  if (!body.sources?.length) {
+    if (!sources.defaults.length) {
+      return {
+        alerts: {},
+        correlations: {},
+        queueOrder: [],
+        entities: {},
+        contextEvents: {},
+        sourceErrors: ['Нет доступных online-источников событий'],
+        availableSources: sources.available,
+        mockSources: [],
+      }
+    }
+    body.sources = sources.defaults
+  }
+  const mockSources = [
+    ...new Set(body.sources.filter((source) => sources.activeMocks.has(source))),
+  ]
   const { events, entities: gwEntities, sourceErrors } = await searchPages(body)
   const entities: Record<string, Entity> = {}
   for (const entity of gwEntities) {
@@ -129,12 +165,21 @@ export async function searchQueue(
     contextEvents[ctx.id] = ctx
   }
   const { correlations, queueOrder } = groupQueue(alertList, entities)
-  return { alerts, correlations, queueOrder, entities, contextEvents, sourceErrors }
+  return {
+    alerts,
+    correlations,
+    queueOrder,
+    entities,
+    contextEvents,
+    sourceErrors,
+    availableSources: sources.available,
+    mockSources,
+  }
 }
 
 export async function lookupEntity(type: string, value: string): Promise<string> {
   const { data, error, response } = await gatewayClient.POST('/api/v1/entities/lookup', {
-    params: projectHeader,
+    params: projectHeader(),
     body: { entity: { type, value } },
   })
   if (error || !data) throw unwrapError(error, response.status)
@@ -154,7 +199,7 @@ export async function lookupEntity(type: string, value: string): Promise<string>
 
 export async function analyzeArtifact(name: string, sha256?: string): Promise<string> {
   const { data, error, response } = await gatewayClient.POST('/api/v1/artifact-analyses', {
-    params: projectHeader,
+    params: projectHeader(),
     body: {
       source: 'pt-sandbox',
       artifact: {
@@ -166,4 +211,3 @@ export async function analyzeArtifact(name: string, sha256?: string): Promise<st
   if (error || !data) throw unwrapError(error, response.status)
   return `Песочница ${data.status}: ${data.verdict.value} (${data.verdict.provider}, ${data.verdict.confidence}) · ${data.artifact.name}`
 }
-

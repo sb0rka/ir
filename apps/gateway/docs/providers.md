@@ -7,6 +7,7 @@ Vendor DTOs live in `internal/adapters/proxy/<provider>/schema.go` and never ent
 | Provider | Gateway capability | Vendor operation | Product version | Contract status |
 | --- | --- | --- | --- | --- |
 | MaxPatrol SIEM | events | `POST /api/events/v2/events` | SIEM 8.1 | Verified documentation and success JSON |
+| MaxPatrol SIEM | account userinfo | `GET /api/account/userinfo` | SIEM 8.1 | Verified implementation and success JSON |
 | MaxPatrol SIEM | entity lookup | — | — | Blocked: no reviewed operation or event predicate |
 | PT Sandbox | artifact analysis | `POST /api/v1/analysis/createScanTask` | Sandbox 5.18 | Verified documentation and synchronous success JSON |
 | PT NAD | events, entity lookup | — | — | Blocked: available Elasticsearch mapping is not a REST contract |
@@ -15,11 +16,21 @@ Vendor DTOs live in `internal/adapters/proxy/<provider>/schema.go` and never ent
 
 ## MaxPatrol SIEM (`maxpatrol-siem`)
 
-Registered capability: event search, including exact resolution of records
-previously returned by that search. Raw and correlated records become canonical
+Registered capabilities: event search and account userinfo. Event search includes
+exact resolution of records previously returned by that search. Raw and correlated records become canonical
 events through `proxy/maxpatrol.ToEventPage`; correlation metadata and selected
 dynamic fields stay in bounded attributes. Entity lookup is not registered until
 its contract blocker is resolved. Reference: [MaxPatrol SIEM event list API](https://help.ptsecurity.com/ru-RU/projects/siem/8.1/help/10836123659).
+
+Account userinfo uses the project-scoped `DEMO_PT_SIEM_BASE_URL` and
+`DEMO_PT_COOKIE` Secrets. The public Gateway response retains only
+`source_code` and `user_name`; roles, identifiers, and the raw vendor response
+remain inside the adapter boundary.
+
+In `mock` mode, missing credentials or a failed PT account probe does not take
+the mock event capability offline: `/sources` keeps the source `online` with
+`mode=mock`. The explicit account `userinfo` endpoint still calls the real PT
+operation and returns its configuration or upstream error.
 
 The deterministic mock uses a Gateway-only `token:offset` continuation to exercise canonical pagination. It is not claimed as the SIEM continuation protocol; a proxy implementation must confirm the vendor token exchange separately.
 

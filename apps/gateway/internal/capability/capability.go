@@ -78,3 +78,22 @@ type EndpointSource interface {
 type ResponseCatalog interface {
 	ListResponseActions(context.Context, string) ([]domain.ResponseAction, error)
 }
+
+// AccountUserinfoRequest is populated server-side from project-scoped Secrets.
+// It is never constructed from a public API body.
+type AccountUserinfoRequest struct {
+	BaseURL     string
+	Credential  string
+	Timeout     time.Duration
+	SkipTLSVerify bool
+}
+
+type AccountSecretNames struct {
+	BaseURL    string
+	Credential string
+}
+
+type AccountUserinfoSource interface {
+	SecretNames() AccountSecretNames
+	GetAccountUserinfo(context.Context, AccountUserinfoRequest) (domain.AccountUserinfo, error)
+}

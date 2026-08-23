@@ -1,7 +1,6 @@
 package transport
 
 import (
-	"context"
 	"log/slog"
 	"net/http"
 
@@ -17,16 +16,6 @@ import (
 
 const baseURL = "/api/v1"
 
-// RoleResolver держит транспорт независимым от стора.
-type RoleResolver interface {
-	Resolve(ctx context.Context, subjectID, projectID string) (Roles, error)
-}
-
-type Roles struct {
-	ProjectID string
-	Roles     []string
-}
-
 // API — интерфейс на домен, а не один общий: забытый домен виден сразу.
 type API interface {
 	entities.StrictServerInterface
@@ -41,7 +30,6 @@ type Dependencies struct {
 	Cfg    config.ServerConfig
 	Log    *slog.Logger
 	Server API
-	Roles  RoleResolver
 }
 
 func NewHandler(deps Dependencies) http.Handler {
@@ -59,7 +47,7 @@ func NewHandler(deps Dependencies) http.Handler {
 	// валидации вместо 401.
 	api := http.NewServeMux()
 	registerDomains(api, deps)
-	public.Handle(baseURL+"/", authMiddleware(deps.Cfg, deps.Log, deps.Roles)(api))
+	public.Handle(baseURL+"/", authMiddleware(deps.Cfg, deps.Log)(api))
 
 	// Логгер снаружи recover: он оборачивает ResponseWriter, а recover по этой
 	// обёртке понимает, была ли уже запись в ответ.

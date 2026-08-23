@@ -6,14 +6,19 @@ import (
 	coreconfig "github.com/sb0rka/sb0rka/packages/core/config"
 )
 
-// Своего только то, чего нет у соседей: проверка токена и роли SOC.
+// Config combines shared infrastructure settings with IR integrations.
 type Config struct {
 	Server   ServerConfig
 	Database coreconfig.DatabaseConfig
 	Log      coreconfig.LoggerConfig
+	Platform PlatformConfig
 	SOM      SOMConfig
 	Gateway  GatewayConfig
 	Prompt   PromptConfig
+}
+
+type PlatformConfig struct {
+	APIBaseURL string
 }
 
 // GatewayConfig — внутренний адрес для получения выбранных записей по их
@@ -56,9 +61,7 @@ type ServerConfig struct {
 }
 
 type AuthConfig struct {
-	// Demo-режим: подпись токена не проверяется и роли не читаются.
-	// Authorization при этом всё равно кладётся в контекст — som-домен
-	// пробрасывает его в SOM как есть.
+	// Demo-режим не проверяет подпись, но сохраняет обязательный project scope.
 	Disabled bool
 
 	// Сервис только проверяет токены платформы, поэтому держит публичный ключ.

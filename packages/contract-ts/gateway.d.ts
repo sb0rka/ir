@@ -4,6 +4,26 @@
  */
 
 export interface paths {
+    "/api/v1/sources/{source}/account/userinfo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get source account userinfo
+         * @description Reloads the selected project's current source credentials and returns the normalized account identity reported by the source.
+         */
+        get: operations["getSourceAccountUserinfo"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/artifact-analyses": {
         parameters: {
             query?: never;
@@ -164,7 +184,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List registered sources */
+        /**
+         * List registered sources
+         * @description Returns project-allowed sources and actively probes account-capable connections.
+         */
         get: operations["listSources"];
         put?: never;
         post?: never;
@@ -178,6 +201,23 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** @description Canonical identity returned by a source account endpoint. */
+        AccountUserinfo: {
+            /** @description Source that supplied the identity. */
+            source_code: string;
+            /** @description Login name reported by the source. */
+            user_name: string;
+        };
+        /** @description Error returned when a request cannot be completed. */
+        ErrorEnvelope: {
+            /** @description Structured error details. */
+            error: {
+                /** @description Stable machine-readable error code. */
+                code: string;
+                /** @description Safe human-readable error summary. */
+                message: string;
+            };
+        };
         /** @description Cryptographic checksums available for an artifact. */
         Hashes: {
             /** @description MD5 checksum in hexadecimal form. */
@@ -243,16 +283,6 @@ export interface components {
                 mime?: string;
                 /** @description Checksums known by the caller. */
                 hashes?: components["schemas"]["Hashes"];
-            };
-        };
-        /** @description Error returned when a request cannot be completed. */
-        ErrorEnvelope: {
-            /** @description Structured error details. */
-            error: {
-                /** @description Stable machine-readable error code. */
-                code: string;
-                /** @description Safe human-readable error summary. */
-                message: string;
             };
         };
         /** @description Normalized security assessment returned by a source. */
@@ -547,7 +577,7 @@ export interface components {
          * @description Operation that a source can perform through the Gateway.
          * @enum {string}
          */
-        Capability: "events" | "entity_lookup" | "artifact_analysis" | "endpoints" | "response_catalog";
+        Capability: "events" | "entity_lookup" | "artifact_analysis" | "endpoints" | "response_catalog" | "account_userinfo";
         /** @description External security product registered in the Gateway. */
         Source: {
             /** @description Stable source identifier used in requests and provenance. */
@@ -565,10 +595,10 @@ export interface components {
              */
             mode: "mock" | "proxy";
             /**
-             * @description Whether the source is available for requests.
+             * @description Result of the current connection probe, or mock availability for mock-only sources.
              * @enum {string}
              */
-            status: "available" | "unavailable";
+            status: "online" | "offline";
             /** @description Operations implemented by this source. */
             capabilities: components["schemas"]["Capability"][];
         };
@@ -576,15 +606,6 @@ export interface components {
     responses: {
         /** @description Error response. */
         ErrorResponse: {
-            headers: {
-                [name: string]: unknown;
-            };
-            content: {
-                "application/json": components["schemas"]["ErrorEnvelope"];
-            };
-        };
-        /** @description The request is malformed or violates an input constraint. */
-        BadRequest: {
             headers: {
                 [name: string]: unknown;
             };
@@ -601,7 +622,7 @@ export interface components {
                 "application/json": components["schemas"]["ErrorEnvelope"];
             };
         };
-        /** @description The caller has no role in the project or the source is not allowed there. */
+        /** @description The project is not configured or the source is not allowed there. */
         Forbidden: {
             headers: {
                 [name: string]: unknown;
@@ -619,8 +640,8 @@ export interface components {
                 "application/json": components["schemas"]["ErrorEnvelope"];
             };
         };
-        /** @description The selected source cannot perform the requested operation. */
-        ValidationError: {
+        /** @description An unexpected internal failure occurred. */
+        InternalError: {
             headers: {
                 [name: string]: unknown;
             };
@@ -628,8 +649,17 @@ export interface components {
                 "application/json": components["schemas"]["ErrorEnvelope"];
             };
         };
-        /** @description An unexpected internal failure occurred. */
-        InternalError: {
+        /** @description Every selected external source failed. */
+        BadGateway: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorEnvelope"];
+            };
+        };
+        /** @description The selected source has no usable project-scoped configuration. */
+        ServiceUnavailable: {
             headers: {
                 [name: string]: unknown;
             };
@@ -646,8 +676,17 @@ export interface components {
                 "application/json": components["schemas"]["ErrorEnvelope"];
             };
         };
-        /** @description Every selected external source failed. */
-        BadGateway: {
+        /** @description The request is malformed or violates an input constraint. */
+        BadRequest: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorEnvelope"];
+            };
+        };
+        /** @description The selected source cannot perform the requested operation. */
+        ValidationError: {
             headers: {
                 [name: string]: unknown;
             };
@@ -675,6 +714,40 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    getSourceAccountUserinfo: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Sb0rka project whose integration allowlist is used. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
+            path: {
+                /** @description Registered source code. */
+                source: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Normalized source account identity. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountUserinfo"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+            502: components["responses"]["BadGateway"];
+            503: components["responses"]["ServiceUnavailable"];
+            504: components["responses"]["GatewayTimeout"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
     createArtifactAnalysis: {
         parameters: {
             query?: never;

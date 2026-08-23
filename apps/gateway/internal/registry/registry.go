@@ -16,6 +16,7 @@ type Provider struct {
 	ArtifactAnalyzer capability.ArtifactAnalyzer
 	Endpoints        capability.EndpointSource
 	ResponseCatalog  capability.ResponseCatalog
+	AccountUserinfo  capability.AccountUserinfoSource
 }
 
 type Registry struct {
@@ -120,6 +121,14 @@ func validateCapabilities(provider Provider) error {
 		case domain.CapabilityResponseCatalog:
 			if provider.ResponseCatalog == nil {
 				return fmt.Errorf("response catalog capability has no implementation")
+			}
+		case domain.CapabilityAccountUserinfo:
+			if provider.AccountUserinfo == nil {
+				return fmt.Errorf("account userinfo capability has no implementation")
+			}
+			secretNames := provider.AccountUserinfo.SecretNames()
+			if strings.TrimSpace(secretNames.BaseURL) == "" || strings.TrimSpace(secretNames.Credential) == "" {
+				return fmt.Errorf("account userinfo capability has no secret mapping")
 			}
 		default:
 			return fmt.Errorf("unknown capability %q", item)

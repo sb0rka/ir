@@ -108,9 +108,9 @@ export const entities: Record<string, Entity> = {
   'ent-file-invoice': {
     id: 'ent-file-invoice',
     kind: 'file_hash',
-    label: 'Счёт_август.docm',
+    label: 'Счет_август.docm',
     attributes: {
-      path: 'C:\\Users\\i.petrov\\Downloads\\Счёт_август.docm',
+      path: 'C:\\Users\\i.petrov\\Downloads\\Счет_август.docm',
       hash: 'e7b3a1c9d4f2806e5a7b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0',
       size: '245760',
       macros: 'true',
@@ -162,7 +162,7 @@ export const entities: Record<string, Entity> = {
     kind: 'email',
     label: 'invoice@secure-docs-portal.com',
     attributes: {
-      subject: 'Счёт на оплату — август 2026',
+      subject: 'Счет на оплату — август 2026',
       to: 'i.petrov@corp.local',
       received: '2026-08-12T13:55:00Z',
     },
@@ -352,7 +352,7 @@ export const contextEvents: Record<string, ContextEvent> = {
     entityIds: ['ent-email-phish', 'ent-user-petrov', 'ent-file-invoice'],
     origin: 'seed',
     review: 'confirmed',
-    description: 'Письмо «Счёт на оплату — август 2026» от invoice@secure-docs-portal.com',
+    description: 'Письмо «Счет на оплату — август 2026» от invoice@secure-docs-portal.com',
   },
   'cev-002': {
     id: 'cev-002',
@@ -364,7 +364,7 @@ export const contextEvents: Record<string, ContextEvent> = {
     entityIds: ['ent-file-invoice', 'ent-proc-outlook', 'ent-host-ws1042'],
     origin: 'seed',
     review: 'confirmed',
-    description: 'OUTLOOK.EXE открыл Счёт_август.docm с макросами',
+    description: 'OUTLOOK.EXE открыл Счет_август.docm с макросами',
   },
   'cev-003': {
     id: 'cev-003',
@@ -437,7 +437,7 @@ export const contextEvents: Record<string, ContextEvent> = {
     entityIds: ['ent-user-admin', 'ent-host-ws1042', 'ent-host-dc01'],
     origin: 'agent',
     review: 'proposed',
-    description: 'Агент: svc_backup вошёл на SRV-DC01 с WS-1042 (тот же NTLM-хеш после LSASS)',
+    description: 'Агент: svc_backup вошел на SRV-DC01 с WS-1042 (тот же NTLM-хеш после LSASS)',
   },
   'cev-009': {
     id: 'cev-009',
@@ -595,7 +595,7 @@ export const graphNodes: Record<string, GraphNode> = {
     id: 'node-file-invoice',
     kind: 'file_hash',
     refId: 'ent-file-invoice',
-    label: 'Счёт_август.docm',
+    label: 'Счет_август.docm',
     review: 'confirmed',
     x: 80,
     y: 360,
@@ -760,9 +760,9 @@ export const graphEdges: Record<string, GraphEdge> = {
     id: 'edge-011',
     source: 'node-proc-mimi',
     target: 'node-user-admin',
-    relation: 'извлёк учётные данные',
+    relation: 'извлек учетные данные',
     review: 'proposed',
-    rationale: 'Тот же хост, доступ к LSASS → учётная запись svc_backup',
+    rationale: 'Тот же хост, доступ к LSASS → учетная запись svc_backup',
   },
   'edge-012': {
     id: 'edge-012',
@@ -814,7 +814,7 @@ export const findings: Record<string, Finding> = {
     title: 'Латеральное перемещение на DC (гипотеза)',
     severity: 'critical',
     entityIds: ['ent-host-dc01', 'ent-user-admin'],
-    description: 'Возможен PtH с украденными учётными данными svc_backup',
+    description: 'Возможен PtH с украденными учетными данными svc_backup',
     review: 'proposed',
     origin: 'agent',
   },

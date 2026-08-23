@@ -13,6 +13,7 @@ const TIME_PRESETS = [
   { id: '24h', label: '24ч' },
   { id: '7d', label: '7д' },
   { id: '30d', label: '30д' },
+  { id: '90d', label: '90д' },
 ]
 
 export interface FilterBarProps {

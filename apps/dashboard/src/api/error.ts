@@ -5,6 +5,7 @@ export type ApiErrorCode =
   | 'conflict'
   | 'validation'
   | 'source_unavailable'
+  | 'source_auth_failed'
   | 'not_implemented'
   | 'internal'
   | 'bad_request'
@@ -58,6 +59,7 @@ function asCode(value: string | undefined): ApiErrorCode {
     case 'conflict':
     case 'validation':
     case 'source_unavailable':
+    case 'source_auth_failed':
     case 'not_implemented':
     case 'internal':
     case 'bad_request':
@@ -78,10 +80,10 @@ export function unwrapError(error: unknown, status = 0): ApiError {
 
 export function errorMessage(err: unknown): string {
   if (isNotImplemented(err)) {
-    return 'Операция есть в контракте, но сервер ещё отвечает 501 — действие не применено'
+    return 'Операция есть в контракте, но сервер еще отвечает 501 — действие не применено'
   }
   if (isUnauthorized(err)) {
-    return 'SOM отклонил токен. Обновите VITE_SOM_TOKEN или вставьте новый в шапке'
+    return 'Сессия истекла или токен был отклонен. Войдите снова'
   }
   if (isApiError(err)) return err.message
   if (err instanceof Error) return err.message

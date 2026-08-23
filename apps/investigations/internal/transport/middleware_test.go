@@ -1,7 +1,6 @@
 package transport
 
 import (
-	"context"
 	"crypto/ed25519"
 	"crypto/rand"
 	"io"
@@ -46,7 +45,7 @@ func TestVerifyAccessToken(t *testing.T) {
 	cfg := config.AuthConfig{
 		AccessTokenPublicKey: publicKey,
 		AccessTokenIssuer:    "auth.local",
-		AccessTokenAudience:  "api.local",
+		AccessTokenAudience:  "deployment-specific-audience",
 		AccessTokenKid:       "ed25519-v1",
 		AccessTokenTyp:       "access+jwt",
 	}
@@ -106,36 +105,34 @@ func TestAuthMiddleware(t *testing.T) {
 	cfg := config.ServerConfig{Auth: config.AuthConfig{
 		AccessTokenPublicKey: publicKey,
 		AccessTokenIssuer:    "auth.local",
-		AccessTokenAudience:  "api.local",
+		AccessTokenAudience:  "deployment-specific-audience",
 		AccessTokenKid:       "ed25519-v1",
 		AccessTokenTyp:       "access+jwt",
 	}}
 	token := signAccessToken(t, privateKey, cfg.Auth, nil)
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 
-	t.Run("deny without roles", func(t *testing.T) {
+	t.Run("jwt is checked before project header", func(t *testing.T) {
 		nextCalled := false
-		handler := authMiddleware(cfg, log, staticRoles{})(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		handler := authMiddleware(cfg, log)(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
 			nextCalled = true
 		}))
-		request := httptest.NewRequest(http.MethodGet, "/api/v1/investigations", nil)
-		request.Header.Set("Authorization", "Bearer "+token)
-		request.Header.Set(projectIDHeader, "aabbccddee")
 		response := httptest.NewRecorder()
-		handler.ServeHTTP(response, request)
-
-		if response.Code != http.StatusForbidden || nextCalled {
+		handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/v1/investigations", nil))
+		if response.Code != http.StatusUnauthorized || nextCalled {
 			t.Fatalf("status=%d nextCalled=%v", response.Code, nextCalled)
 		}
 	})
 
 	t.Run("scope reaches handler", func(t *testing.T) {
-		handler := authMiddleware(cfg, log, staticRoles{roles: []string{"l2"}})(
+		handler := authMiddleware(cfg, log)(
 			http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				identity, identityOK := coreauthctx.IdentityFromContext(r.Context())
 				scope, scopeOK := socctx.ScopeFromContext(r.Context())
+				bearer, bearerOK := socctx.BearerFromContext(r.Context())
 				if !identityOK || !scopeOK || identity.SubjectID != "subject" ||
-					identity.ClientID != "som" || scope.ProjectID != "aabbccddee" {
+					identity.ClientID != "som" || scope.ProjectID != "aabbccddee" ||
+					!bearerOK || bearer != token {
 					t.Fatalf("missing auth context: identity=%#v scope=%#v", identity, scope)
 				}
 				w.WriteHeader(http.StatusNoContent)
@@ -154,7 +151,7 @@ func TestAuthMiddleware(t *testing.T) {
 	for _, projectID := range []string{"", "ABCDEF1234", "short", "aabbccddee/other"} {
 		t.Run("reject project "+projectID, func(t *testing.T) {
 			nextCalled := false
-			handler := authMiddleware(cfg, log, staticRoles{roles: []string{"l2"}})(
+			handler := authMiddleware(cfg, log)(
 				http.HandlerFunc(func(http.ResponseWriter, *http.Request) { nextCalled = true }))
 			request := httptest.NewRequest(http.MethodGet, "/api/v1/investigations", nil)
 			request.Header.Set("Authorization", "Bearer "+token)
@@ -167,6 +164,25 @@ func TestAuthMiddleware(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("disabled auth keeps project scope", func(t *testing.T) {
+		disabled := cfg
+		disabled.Auth.Disabled = true
+		handler := authMiddleware(disabled, log)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			scope, ok := socctx.ScopeFromContext(r.Context())
+			if !ok || scope.ProjectID != "aabbccddee" {
+				t.Fatalf("scope=%#v ok=%v", scope, ok)
+			}
+			w.WriteHeader(http.StatusNoContent)
+		}))
+		request := httptest.NewRequest(http.MethodGet, "/api/v1/investigations", nil)
+		request.Header.Set(projectIDHeader, "aabbccddee")
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, request)
+		if response.Code != http.StatusNoContent {
+			t.Fatalf("status=%d", response.Code)
+		}
+	})
 }
 
 func TestCORSAllowsAuthorizationForConfiguredOrigin(t *testing.T) {
@@ -187,14 +203,6 @@ func TestCORSAllowsAuthorizationForConfiguredOrigin(t *testing.T) {
 	if got := response.Header().Get("Access-Control-Allow-Headers"); got != "Content-Type, Authorization, X-Project-ID" {
 		t.Fatalf("allow headers=%q", got)
 	}
-}
-
-type staticRoles struct {
-	roles []string
-}
-
-func (s staticRoles) Resolve(_ context.Context, _, projectID string) (Roles, error) {
-	return Roles{ProjectID: projectID, Roles: s.roles}, nil
 }
 
 func signAccessToken(

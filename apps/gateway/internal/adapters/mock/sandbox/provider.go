@@ -27,7 +27,7 @@ func NewMock() registry.Provider {
 			Name:         "PT Sandbox",
 			Kind:         "sandbox",
 			Mode:         "mock",
-			Status:       "available",
+			Status:       "online",
 			Capabilities: []domain.Capability{domain.CapabilityArtifactAnalysis},
 		},
 		ArtifactAnalyzer: adapter,

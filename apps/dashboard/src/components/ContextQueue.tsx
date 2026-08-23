@@ -17,8 +17,8 @@ const ORIGIN_FILTERS: Array<{ id: EventOrigin | 'all'; label: string }> = [
 const REVIEW_FILTERS: Array<{ id: ReviewState | 'all'; label: string }> = [
   { id: 'all', label: 'все' },
   { id: 'proposed', label: 'предложенные' },
-  { id: 'confirmed', label: 'подтверждённые' },
-  { id: 'rejected', label: 'отклонённые' },
+  { id: 'confirmed', label: 'подтвержденные' },
+  { id: 'rejected', label: 'отклоненные' },
 ]
 
 /** Filter/bulk-review toolbar shown above the context table view. */

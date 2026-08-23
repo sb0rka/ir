@@ -20,7 +20,7 @@ export const defaultFilterValueOptions: Record<FilterField, string[]> = {
   ip: ['192.0.2.44', '192.0.2.62'],
   domain: ['corp.example'],
   severity: ['critical', 'high', 'medium', 'low', 'info'],
-  source: ['maxpatrol-siem', 'pt-sandbox', 'edr', 'ndr', 'siem'],
+  source: [],
   status: ['new', 'investigating', 'closed'],
 }
 

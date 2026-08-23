@@ -22,7 +22,7 @@ func (server *Server) SearchEvents(w http.ResponseWriter, r *http.Request, _ api
 		respondError(w, http.StatusBadRequest, "bad_request", err.Error())
 		return
 	}
-	request.Sources, err = server.constrainSources(r.Context(), request.Sources)
+	request.Sources, err = server.constrainSources(r.Context(), request.Sources, domain.CapabilityEvents)
 	if err != nil {
 		server.writeServiceError(w, err)
 		return
@@ -55,7 +55,7 @@ func (server *Server) ResolveContext(w http.ResponseWriter, r *http.Request, _ a
 		respondError(w, http.StatusBadRequest, "bad_request", err.Error())
 		return
 	}
-	if _, err = server.constrainSources(r.Context(), sources); err != nil {
+	if _, err = server.constrainSources(r.Context(), sources, domain.CapabilityEvents); err != nil {
 		server.writeServiceError(w, err)
 		return
 	}

@@ -20,6 +20,7 @@ import (
 	"github.com/sb0rka/ir/apps/investigations/internal/transport"
 	"github.com/sb0rka/ir/apps/investigations/internal/transport/httperr"
 	"github.com/sb0rka/ir/apps/investigations/internal/transport/socctx"
+	"github.com/sb0rka/ir/packages/common"
 )
 
 type Server struct {
@@ -27,6 +28,8 @@ type Server struct {
 	log *slog.Logger
 
 	som     *somclient.Client
+	secrets *common.SecretsClient
+	somAuth somTokenCache
 	gateway *gatewayclient.Client
 	prompt  config.PromptConfig
 }
@@ -61,19 +64,16 @@ func encodeCursor(at time.Time, id string) string {
 
 var _ transport.API = (*Server)(nil)
 
-func New(db store.Database, log *slog.Logger, som *somclient.Client, gateway *gatewayclient.Client, prompt config.PromptConfig) *Server {
-	return &Server{db: db, log: log, som: som, gateway: gateway, prompt: prompt}
+func New(
+	db store.Database,
+	log *slog.Logger,
+	som *somclient.Client,
+	secrets *common.SecretsClient,
+	gateway *gatewayclient.Client,
+	prompt config.PromptConfig,
+) *Server {
+	return &Server{db: db, log: log, som: som, secrets: secrets, gateway: gateway, prompt: prompt}
 }
-
-func (s *Server) Resolve(ctx context.Context, subjectID, projectID string) (transport.Roles, error) {
-	roles, err := s.db.RoleBindings(ctx, subjectID, projectID)
-	if err != nil {
-		return transport.Roles{}, err
-	}
-	return transport.Roles{ProjectID: roles.ProjectID, Roles: roles.Roles}, nil
-}
-
-var _ transport.RoleResolver = (*Server)(nil)
 
 // Хелперы живут здесь, а не в отдельном файле: gen-prune удаляет из пакета
 // любой файл, не названный по домену из api/investigations/paths.

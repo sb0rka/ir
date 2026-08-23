@@ -5,6 +5,7 @@ ARG BINARY=ir-api
 WORKDIR /src
 
 COPY packages/contract/go.mod packages/contract/go.sum* ./packages/contract/
+COPY packages/common/go.mod ./packages/common/
 COPY apps/investigations/go.mod apps/investigations/go.sum* ./apps/investigations/
 WORKDIR /src/apps/investigations
 RUN GOWORK=off go mod download

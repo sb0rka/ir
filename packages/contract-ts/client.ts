@@ -5,18 +5,23 @@ import type { paths } from "./api.d.ts";
 /** Creates a typed Investigations API client. */
 export function createIrClient(options: {
   baseUrl: string;
-  projectId: string;
+  projectId: () => string | null;
   token: () => string | null;
+  fetch?: typeof globalThis.fetch;
 }) {
   // Match OpenAPI form+explode:false (e.g. statuses=proposed,confirmed).
   const client = createClient<paths>({
     baseUrl: options.baseUrl,
+    fetch: options.fetch,
     querySerializer: { array: { explode: false, style: "form" } },
   });
 
   client.use({
     onRequest({ request }) {
-      request.headers.set("X-Project-ID", options.projectId);
+      const projectId = options.projectId();
+      if (projectId) {
+        request.headers.set("X-Project-ID", projectId);
+      }
 
       const token = options.token();
       if (token) {

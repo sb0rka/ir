@@ -75,6 +75,16 @@ func (record *EventRecord) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// AccountUserinfo is returned by GET /api/account/userinfo.
+type AccountUserinfo struct {
+	UserID          string   `json:"userId"`
+	UserName        string   `json:"userName"`
+	FirstName       *string  `json:"firstName"`
+	LastName        *string  `json:"lastName"`
+	Roles           []string `json:"roles"`
+	PasswordExpired bool     `json:"passwordExpired"`
+}
+
 // OAuthTokenResponse is returned by the MaxPatrol OAuth token endpoint.
 type OAuthTokenResponse struct {
 	AccessToken  string `json:"access_token"`

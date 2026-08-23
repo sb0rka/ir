@@ -227,7 +227,7 @@ type Unauthorized = ErrorResponse
 
 // GetReferenceParams defines parameters for GetReference.
 type GetReferenceParams struct {
-	// XProjectID Sb0rka project selected for this request. The caller must have an IR role binding in this project; roles from other projects are ignored.
+	// XProjectID Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets.
 	XProjectID ProjectId `json:"X-Project-ID"`
 }
 

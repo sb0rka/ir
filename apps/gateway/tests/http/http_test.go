@@ -6,6 +6,7 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -37,16 +38,14 @@ func TestProjectAccessIsDenyByDefault(t *testing.T) {
 
 	for _, test := range []struct {
 		name      string
-		roles     staticRoles
 		projectID string
 		status    int
 	}{
-		{name: "missing role", roles: staticRoles{}, projectID: projectID, status: http.StatusForbidden},
-		{name: "unconfigured project", roles: staticRoles{allowed: true}, projectID: "aabbccddee", status: http.StatusForbidden},
-		{name: "configured project", roles: staticRoles{allowed: true}, projectID: projectID, status: http.StatusOK},
+		{name: "unconfigured project", projectID: "aabbccddee", status: http.StatusForbidden},
+		{name: "configured project", projectID: projectID, status: http.StatusOK},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			handler := newHandler(t, cfg, test.roles)
+			handler := newHandler(t, cfg)
 			request := httptest.NewRequest(http.MethodGet, "/api/v1/sources", nil)
 			request.Header.Set("Authorization", "Bearer "+token)
 			request.Header.Set("X-Project-ID", test.projectID)
@@ -59,8 +58,41 @@ func TestProjectAccessIsDenyByDefault(t *testing.T) {
 	}
 }
 
+func TestAuthUsesConfiguredAudience(t *testing.T) {
+	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := testConfig(false)
+	cfg.Auth.PublicKey = publicKey
+	cfg.Auth.Audience = "custom-audience.local"
+	handler := newHandler(t, cfg)
+
+	for _, test := range []struct {
+		name     string
+		audience string
+		status   int
+	}{
+		{name: "configured audience", audience: cfg.Auth.Audience, status: http.StatusOK},
+		{name: "different audience", audience: "other.local", status: http.StatusUnauthorized},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			tokenConfig := cfg.Auth
+			tokenConfig.Audience = test.audience
+			request := httptest.NewRequest(http.MethodGet, "/api/v1/sources", nil)
+			request.Header.Set("Authorization", "Bearer "+signToken(t, privateKey, tokenConfig))
+			request.Header.Set("X-Project-ID", projectID)
+			response := httptest.NewRecorder()
+			handler.ServeHTTP(response, request)
+			if response.Code != test.status {
+				t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+			}
+		})
+	}
+}
+
 func TestEventSearchEnforcesOpenAPIInputLimits(t *testing.T) {
-	handler := newHandler(t, testConfig(true), nil)
+	handler := newHandler(t, testConfig(true))
 	requests := []string{
 		`{"query":"` + strings.Repeat("x", 1001) + `"}`,
 		`{"entities":[` + strings.Repeat(`{"type":"ip","value":"192.0.2.1"},`, 100) + `{"type":"ip","value":"192.0.2.2"}]}`,
@@ -77,8 +109,128 @@ func TestEventSearchEnforcesOpenAPIInputLimits(t *testing.T) {
 	}
 }
 
+func TestOmittedSourcesUseAllowedCapabilityIntersection(t *testing.T) {
+	handler := newHandler(t, testConfig(true))
+	result := gatewayJSON(t, handler, "/api/v1/events/search", `{}`)
+	if len(result["events"].([]any)) == 0 {
+		t.Fatalf("event search returned no events: %v", result)
+	}
+}
+
+func TestListSourcesUsesProjectAllowlistAndLiveStatus(t *testing.T) {
+	cfg := testConfig(true)
+	cfg.ProjectSources[projectID] = map[string]bool{"pt-sandbox": true}
+	handler := newHandler(t, cfg)
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/sources", nil)
+	request.Header.Set("X-Project-ID", projectID)
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+	}
+	var result struct {
+		Items []struct {
+			Code   string `json:"code"`
+			Status string `json:"status"`
+		} `json:"items"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Items) != 1 || result.Items[0].Code != "pt-sandbox" || result.Items[0].Status != "online" {
+		t.Fatalf("items=%+v", result.Items)
+	}
+}
+
+func TestListSourcesKeepsMockAccountSourceOnlineWithoutSecrets(t *testing.T) {
+	handler := newHandler(t, testConfig(true))
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/sources", nil)
+	request.Header.Set("X-Project-ID", projectID)
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+	}
+	var result struct {
+		Items []struct {
+			Code   string `json:"code"`
+			Mode   string `json:"mode"`
+			Status string `json:"status"`
+		} `json:"items"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil {
+		t.Fatal(err)
+	}
+	for _, item := range result.Items {
+		if item.Code != "maxpatrol-siem" {
+			continue
+		}
+		if item.Mode != "mock" || item.Status != "online" {
+			t.Fatalf("maxpatrol source=%+v", item)
+		}
+
+		userinfoRequest := httptest.NewRequest(http.MethodGet, "/api/v1/sources/maxpatrol-siem/account/userinfo", nil)
+		userinfoRequest.Header.Set("X-Project-ID", projectID)
+		userinfoResponse := httptest.NewRecorder()
+		handler.ServeHTTP(userinfoResponse, userinfoRequest)
+		if userinfoResponse.Code != http.StatusServiceUnavailable {
+			t.Fatalf("userinfo status=%d body=%s", userinfoResponse.Code, userinfoResponse.Body.String())
+		}
+
+		search := gatewayJSON(t, handler, "/api/v1/events/search", `{"sources":["maxpatrol-siem"]}`)
+		if len(search["events"].([]any)) == 0 {
+			t.Fatal("mock MaxPatrol event provider returned no events")
+		}
+		return
+	}
+	t.Fatalf("maxpatrol-siem missing from sources: %+v", result.Items)
+}
+
+func TestMaxPatrolAccountUserinfoRequiresConfiguration(t *testing.T) {
+	handler := newHandler(t, testConfig(true))
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/sources/maxpatrol-siem/account/userinfo", nil)
+	request.Header.Set("X-Project-ID", projectID)
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+	}
+}
+
+func TestSourceAuthenticationFailureIsBadGateway(t *testing.T) {
+	upstreamCalls := 0
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		upstreamCalls++
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer upstream.Close()
+
+	resolver := &staticSecrets{values: map[string]string{
+		"DEMO_PT_SIEM_BASE_URL": upstream.URL,
+		"DEMO_PT_COOKIE":        "expired=1",
+	}}
+	providers, _, err := adaptermock.NewRegistry(adaptermock.Options{EventCount: 1, EndpointCount: 1, HistoryDays: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	handler := httptransport.NewHandler(testConfig(true), log, service.New(providers, resolver, time.Second, time.Second, false))
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/sources/maxpatrol-siem/account/userinfo", nil)
+	request.Header.Set("Authorization", "Bearer platform-token")
+	request.Header.Set("X-Project-ID", projectID)
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+
+	if response.Code != http.StatusBadGateway || !strings.Contains(response.Body.String(), `"code":"source_auth_failed"`) {
+		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+	}
+	if resolver.calls != 2 || upstreamCalls != 2 {
+		t.Fatalf("resolver_calls=%d upstream_calls=%d", resolver.calls, upstreamCalls)
+	}
+}
+
 func TestEventsExposeSourceOwnedIdentityAndResolveContext(t *testing.T) {
-	handler := newHandler(t, testConfig(true), nil)
+	handler := newHandler(t, testConfig(true))
 
 	search := gatewayJSON(t, handler, "/api/v1/events/search", `{"sources":["maxpatrol-siem"]}`)
 	events := search["events"].([]any)
@@ -136,7 +288,7 @@ func TestEventsExposeSourceOwnedIdentityAndResolveContext(t *testing.T) {
 }
 
 func TestEventSearchPivotsByCanonicalDestinationIP(t *testing.T) {
-	handler := newHandler(t, testConfig(true), nil)
+	handler := newHandler(t, testConfig(true))
 	search := gatewayJSON(t, handler, "/api/v1/events/search", `{
 		"sources":["maxpatrol-siem"],
 		"entities":[{"type":"ip","value":"192.0.2.62"}],
@@ -179,20 +331,31 @@ func gatewayJSON(t *testing.T, handler http.Handler, path, body string) map[stri
 	return result
 }
 
-type staticRoles struct{ allowed bool }
-
-func (roles staticRoles) HasRoleBinding(context.Context, string, string) (bool, error) {
-	return roles.allowed, nil
-}
-
-func newHandler(t *testing.T, cfg config.Config, roles httptransport.RoleResolver) http.Handler {
+func newHandler(t *testing.T, cfg config.Config) http.Handler {
 	t.Helper()
 	providers, _, err := adaptermock.NewRegistry(adaptermock.Options{EventCount: 1, EndpointCount: 1, HistoryDays: 1})
 	if err != nil {
 		t.Fatal(err)
 	}
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
-	return httptransport.NewHandler(cfg, log, service.New(providers, time.Second, time.Second), roles)
+	return httptransport.NewHandler(cfg, log, service.New(providers, nil, time.Second, time.Second, false))
+}
+
+type staticSecrets struct {
+	values map[string]string
+	calls  int
+}
+
+func (resolver *staticSecrets) Resolve(_ context.Context, bearer, projectID string, names ...string) (map[string]string, error) {
+	resolver.calls++
+	if bearer == "" || projectID == "" {
+		return nil, errors.New("missing project access")
+	}
+	values := make(map[string]string, len(names))
+	for _, name := range names {
+		values[name] = resolver.values[name]
+	}
+	return values, nil
 }
 
 func testConfig(authDisabled bool) config.Config {

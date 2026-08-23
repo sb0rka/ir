@@ -12,8 +12,8 @@ components:
 
     Forbidden:
       description: >-
-        Caller is authenticated but holds no role in the selected project, or the role
-        does not grant this action (code=forbidden).
+        Caller is authenticated but cannot access the selected project's
+        platform-owned resource (code=forbidden).
       content:
         application/json:
           schema: { $ref: './errors.yaml#/components/schemas/ErrorResponse' }
@@ -68,8 +68,8 @@ components:
 
     SourceUnavailable:
       description: >-
-        An upstream security tool did not answer. The investigation itself is
-        intact — retry, or narrow the query (code=source_unavailable).
+        An upstream integration or its project-scoped configuration is
+        unavailable. The investigation itself is intact (code=source_unavailable).
       content:
         application/json:
           schema: { $ref: './errors.yaml#/components/schemas/ErrorResponse' }

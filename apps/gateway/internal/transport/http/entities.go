@@ -19,7 +19,7 @@ func (server *Server) LookupEntity(w http.ResponseWriter, r *http.Request, _ api
 		respondError(w, http.StatusBadRequest, "bad_request", "entity type and value are required")
 		return
 	}
-	sources, err := server.constrainSources(r.Context(), valueOrEmpty(body.Sources))
+	sources, err := server.constrainSources(r.Context(), valueOrEmpty(body.Sources), domain.CapabilityEntityLookup)
 	if err != nil {
 		server.writeServiceError(w, err)
 		return
