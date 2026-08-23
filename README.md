@@ -12,10 +12,11 @@ Incident Response — Единая картина инцидента и AI-ав�
 
 - `api/`: OpenAPI-контракты по сервисам
 - `apps/gateway/`: Gateway внешних инструментов безопасности
-- `apps/investigations/`: Go API сервис `ir-api` и утилита `irctl`
+- `apps/investigations/`: Go API сервис `ir-api`
 - `db/migrations/`: схема `inv` и справочники
 - `packages/contract/`: сгенерированный Go-контракт
 - `packages/contract-ts/`: сгенерированный TypeScript-контракт и клиент
+- `packages/common/`: общий клиент project-scoped секретов Sb0rka
 
 ## Команды
 
@@ -24,7 +25,7 @@ Incident Response — Единая картина инцидента и AI-ав�
 ```bash
 task spec       # Собрать и проверить OpenAPI
 task gen        # Обновить Go/TypeScript-контракты и заглушки
-task build      # Собрать bin/ir-api и bin/irctl
+task build      # Собрать bin/ir-api и bin/gateway
 task check      # Генерация, сборка и go vet
 task db:up      # Локальный Postgres
 task db:migrate # Миграции
@@ -55,9 +56,10 @@ task apps:down
 task db:down
 ```
 
-Для защищённых ручек нужен access-токен платформы с audience `api.local`,
-заголовок `X-Project-ID` и роль в этом проекте в `inv.role_bindings`. Роли
-выдаются через `irctl`; доступа по умолчанию нет.
+Для защищённых ручек нужен access-токен платформы и заголовок `X-Project-ID`.
+Ожидаемый audience задаётся через `ACCESS_TOKEN_AUDIENCE` одинаково для Auth,
+Platform API, ir-api и Gateway. Gateway дополнительно ограничивает источники
+проекта через `PROJECT_SOURCE_ALLOWLISTS`.
 
 Состояние покрытия требований и реализации — в [api/investigations/COVERAGE.md](api/investigations/COVERAGE.md).
 Правила разработки — в [AGENTS.md](AGENTS.md).
