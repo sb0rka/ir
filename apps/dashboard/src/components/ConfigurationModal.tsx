@@ -496,6 +496,10 @@ export function ConfigurationModal({
               onChange={(value) => setDraft(PT_URL_SECRET, value)}
             />
             <div className="space-y-2">
+              <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wider text-fg-dim">
+                {PT_COOKIE_SECRET}
+                <FieldStatus state={states[PT_COOKIE_SECRET]} />
+              </div>
               <CookiePartInput
                 placeholder={PT_COOKIE_FIELD_IDSRV_SESSION}
                 value={drafts[PT_COOKIE_FIELD_IDSRV_SESSION]}
@@ -514,13 +518,8 @@ export function ConfigurationModal({
                 state={states[PT_COOKIE_SECRET]}
                 onChange={(value) => setDraft(PT_COOKIE_FIELD_PORTAL, value)}
               />
-              {(errors[PT_COOKIE_SECRET] || states[PT_COOKIE_SECRET] !== 'idle') && (
-                <div className="flex items-center gap-2">
-                  <FieldStatus state={states[PT_COOKIE_SECRET]} />
-                  {errors[PT_COOKIE_SECRET] && (
-                    <p className="text-[11px] text-critical">{errors[PT_COOKIE_SECRET]}</p>
-                  )}
-                </div>
+              {errors[PT_COOKIE_SECRET] && (
+                <p className="text-[11px] text-critical">{errors[PT_COOKIE_SECRET]}</p>
               )}
             </div>
 
