@@ -1,4 +1,4 @@
-![Sb0rka Incident Response](docs/imgs/ir-background-op.png)
+![Sb0rka Incident Response](docs/imgs/ir-background.png)
 
 Incident Response — Единая картина инцидента и AI-автоматизация расследований.
 
@@ -55,11 +55,6 @@ task apps:logs
 task apps:down
 task db:down
 ```
-
-Для защищённых ручек нужен access-токен платформы и заголовок `X-Project-ID`.
-Ожидаемый audience задаётся через `ACCESS_TOKEN_AUDIENCE` одинаково для Auth,
-Platform API, ir-api и Gateway. Gateway дополнительно ограничивает источники
-проекта через `PROJECT_SOURCE_ALLOWLISTS`.
 
 Состояние покрытия требований и реализации — в [api/investigations/COVERAGE.md](api/investigations/COVERAGE.md).
 Правила разработки — в [AGENTS.md](AGENTS.md).
