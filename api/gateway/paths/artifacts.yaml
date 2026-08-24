@@ -23,7 +23,7 @@ paths:
               $ref: '#/components/schemas/CreateArtifactAnalysisRequest'
       responses:
         '202':
-          description: Completed mock analysis.
+          description: Accepted artifact analysis.
           content:
             application/json:
               schema:

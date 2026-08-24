@@ -9,7 +9,7 @@ import (
 	"github.com/sb0rka/ir/apps/gateway/internal/domain"
 )
 
-func (service *Service) AnalyzeArtifact(ctx context.Context, source string, request capability.AnalyzeArtifactRequest) (domain.Analysis, error) {
+func (service *Service) AnalyzeArtifact(ctx context.Context, access ProjectAccess, source string, request capability.AnalyzeArtifactRequest) (domain.Analysis, error) {
 	provider, ok := service.registry.Provider(source)
 	if !ok {
 		return domain.Analysis{}, &domain.RequestError{Code: "source_not_found", Message: fmt.Sprintf("source %q is not registered", source)}
@@ -17,12 +17,18 @@ func (service *Service) AnalyzeArtifact(ctx context.Context, source string, requ
 	if provider.ArtifactAnalyzer == nil {
 		return domain.Analysis{}, fmt.Errorf("%w: source %q does not support artifact analysis", domain.ErrUnsupportedCapability, source)
 	}
-	requestCtx, cancel := context.WithTimeout(ctx, service.sourceTimeout)
+	requestCtx, cancel := context.WithTimeout(ctx, service.requestTimeout)
 	defer cancel()
-	return provider.ArtifactAnalyzer.AnalyzeArtifact(requestCtx, request)
+	var analysis domain.Analysis
+	err := service.callProvider(requestCtx, access, provider, func(attemptCtx context.Context, providerAccess capability.Access) error {
+		var innerErr error
+		analysis, innerErr = provider.ArtifactAnalyzer.AnalyzeArtifact(attemptCtx, providerAccess, request)
+		return innerErr
+	})
+	return analysis, err
 }
 
-func (service *Service) GetAnalysis(ctx context.Context, sources []string, analysisID string) (domain.Analysis, error) {
+func (service *Service) GetAnalysis(ctx context.Context, access ProjectAccess, sources []string, analysisID string) (domain.Analysis, error) {
 	providers, err := service.registry.Select(sources, domain.CapabilityArtifactAnalysis)
 	if err != nil {
 		return domain.Analysis{}, err
@@ -30,9 +36,12 @@ func (service *Service) GetAnalysis(ctx context.Context, sources []string, analy
 	requestCtx, cancel := context.WithTimeout(ctx, service.requestTimeout)
 	defer cancel()
 	for _, provider := range providers {
-		sourceCtx, sourceCancel := context.WithTimeout(requestCtx, service.sourceTimeout)
-		analysis, callErr := provider.ArtifactAnalyzer.GetAnalysis(sourceCtx, analysisID)
-		sourceCancel()
+		var analysis domain.Analysis
+		callErr := service.callProvider(requestCtx, access, provider, func(attemptCtx context.Context, providerAccess capability.Access) error {
+			var innerErr error
+			analysis, innerErr = provider.ArtifactAnalyzer.GetAnalysis(attemptCtx, providerAccess, analysisID)
+			return innerErr
+		})
 		if callErr == nil {
 			return analysis, nil
 		}

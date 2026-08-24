@@ -39,6 +39,7 @@ type HTTPError struct {
 
 type EventSourceRef = gatewaycontract.EventSourceRef
 type EntitySourceRef = gatewaycontract.EntitySourceRef
+type SourceObjectRef = gatewaycontract.SourceObjectRef
 type ResolveContextRequest = gatewaycontract.ResolveContextRequest
 type ResolveContextResponse = gatewaycontract.ResolveContextResponse
 

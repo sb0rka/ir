@@ -30,6 +30,82 @@ EntityRef:
       type: string
       description: Entity value to normalize and look up.
 
+EntityMention:
+  type: object
+  description: Canonical entity mentioned by an event or a source object, with its observed roles.
+  required: [type, value, roles]
+  properties:
+    type:
+      type: string
+      description: Canonical entity kind.
+    value:
+      type: string
+      description: Canonical entity value.
+    roles:
+      type: array
+      minItems: 1
+      uniqueItems: true
+      description: Roles observed in this record; vendor direction and attacker semantics remain distinct.
+      items:
+        type: string
+        enum: [mentions, src, dst, actor, object, attacker, victim, account, file]
+
+TimeRange:
+  type: object
+  description: Inclusive source-record occurrence-time interval.
+  required: [from, to]
+  properties:
+    from:
+      type: string
+      format: date-time
+    to:
+      type: string
+      format: date-time
+
+SourceObjectRef:
+  type: object
+  description: Stable source-owned object identity plus the bounded time window needed to resolve it again.
+  required: [source_code, record_type, external_id, time_range]
+  properties:
+    source_code:
+      type: string
+    source_instance:
+      type: string
+      description: Provider instance, such as a PT NAD numeric store id. Empty for SIEM.
+    record_type:
+      type: string
+      enum: [siem_incident, siem_correlation, nad_attack, nad_session]
+    external_id:
+      type: string
+      description: Identifier assigned by the source. The time window is not part of identity.
+    time_range:
+      $ref: '#/TimeRange'
+
+RuleRef:
+  type: object
+  description: Bounded rule metadata observed on a finding.
+  required: [name]
+  properties:
+    id:
+      type: string
+    name:
+      type: string
+    revision:
+      type: integer
+
+SourceState:
+  type: object
+  description: Completeness of one source stream in a search response.
+  required: [source, status]
+  properties:
+    source:
+      type: string
+    status:
+      type: string
+      enum: [complete, truncated, failed]
+    reason:
+      type: string
+
 EventSourceRef:
   type: object
   description: Stable reference to an event in its source system.

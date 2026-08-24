@@ -29,7 +29,7 @@ func (server *Server) CreateArtifactAnalysis(w http.ResponseWriter, r *http.Requ
 	if body.Artifact.Hashes != nil {
 		hashes = hashesFromAPI(*body.Artifact.Hashes)
 	}
-	analysis, err := server.service.AnalyzeArtifact(r.Context(), body.Source, capability.AnalyzeArtifactRequest{
+	analysis, err := server.service.AnalyzeArtifact(r.Context(), projectAccess(r), body.Source, capability.AnalyzeArtifactRequest{
 		Name: body.Artifact.Name, MIME: stringValue(body.Artifact.Mime), Hashes: hashes,
 	})
 	if err != nil {
@@ -45,7 +45,7 @@ func (server *Server) GetArtifactAnalysis(w http.ResponseWriter, r *http.Request
 		server.writeServiceError(w, err)
 		return
 	}
-	analysis, err := server.service.GetAnalysis(r.Context(), sources, analysisID.String())
+	analysis, err := server.service.GetAnalysis(r.Context(), projectAccess(r), sources, analysisID.String())
 	if err != nil {
 		server.writeServiceError(w, err)
 		return

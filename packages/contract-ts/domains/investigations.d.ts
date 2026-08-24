@@ -187,6 +187,10 @@ export interface components {
             counters: {
                 /** @description Direct child investigations — the open hypotheses under this one. */
                 children: number;
+                /** @description First-class incidents, correlations and attacks attached here. */
+                findings: number;
+                /** @description First-class network sessions attached here. */
+                sessions: number;
                 /** @description Events pulled into this investigation. */
                 events: number;
                 /** @description Distinct entities extracted from those events. */
@@ -211,19 +215,21 @@ export interface components {
             closed_at?: string | null;
         };
         EventSourceRef: {
-            /** @description Gateway source code, for example maxpatrol-siem. */
+            /** @description Gateway source code, for example pt-maxpatrol-siem. */
             source_code: string;
             /** @description Original event identifier assigned by the source. */
             source_event_id: string;
         };
         EntitySourceRef: {
-            /** @description Gateway source code, for example maxpatrol-siem. */
+            /** @description Gateway source code, for example pt-maxpatrol-siem. */
             source_code: string;
             /** @description Original entity record identifier assigned by the source. */
             source_entity_id: string;
         };
-        /** @description Source-owned identifiers selected in the Gateway event list. */
+        /** @description Source-owned identifiers selected in Gateway. At least one item across all four arrays is required; the server validates that aggregate rule. */
         ContextSelection: {
+            findings: components["schemas"]["SourceObjectRef"][];
+            sessions: components["schemas"]["SourceObjectRef"][];
             events: components["schemas"]["EventSourceRef"][];
             entities: components["schemas"]["EntitySourceRef"][];
         };
@@ -265,10 +271,14 @@ export interface components {
             evidence_event_refs: string[];
         };
         ContextImportResult: {
+            findings: number;
+            sessions: number;
             events: number;
             entities: number;
             nodes: number;
             edges: number;
+            /** @description Safe summaries for objects whose available context is partial. */
+            warnings: string[];
         };
         /** @description A new case, or a new hypothesis inside an existing one. */
         InvestigationCreate: {
@@ -350,6 +360,21 @@ export interface components {
                     [key: string]: unknown;
                 };
             };
+        };
+        TimeRange: {
+            /** Format: date-time */
+            from: string;
+            /** Format: date-time */
+            to: string;
+        };
+        /** @description Stable source identity and the bounded replay window; time is not identity. */
+        SourceObjectRef: {
+            source_code: string;
+            source_instance?: string;
+            /** @enum {string} */
+            record_type: "siem_incident" | "siem_correlation" | "nad_attack" | "nad_session";
+            external_id: string;
+            time_range: components["schemas"]["TimeRange"];
         };
     };
     responses: {

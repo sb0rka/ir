@@ -329,11 +329,17 @@ components:
           description: >-
             Size of the case at a glance, so the list does not need a query per
             row.
-          required: [children, events, entities, proposed_edges]
+          required: [children, findings, sessions, events, entities, proposed_edges]
           properties:
             children:
               type: integer
               description: Direct child investigations — the open hypotheses under this one.
+            findings:
+              type: integer
+              description: First-class incidents, correlations and attacks attached here.
+            sessions:
+              type: integer
+              description: First-class network sessions attached here.
             events:
               type: integer
               description: Events pulled into this investigation.
@@ -364,7 +370,7 @@ components:
         source_code:
           type: string
           minLength: 1
-          description: Gateway source code, for example maxpatrol-siem.
+          description: Gateway source code, for example pt-maxpatrol-siem.
         source_event_id:
           type: string
           minLength: 1
@@ -377,7 +383,7 @@ components:
         source_code:
           type: string
           minLength: 1
-          description: Gateway source code, for example maxpatrol-siem.
+          description: Gateway source code, for example pt-maxpatrol-siem.
         source_entity_id:
           type: string
           minLength: 1
@@ -385,9 +391,21 @@ components:
 
     ContextSelection:
       type: object
-      description: Source-owned identifiers selected in the Gateway event list.
-      required: [events, entities]
+      description: >-
+        Source-owned identifiers selected in Gateway. At least one item across
+        all four arrays is required; the server validates that aggregate rule.
+      required: [findings, sessions, events, entities]
       properties:
+        findings:
+          type: array
+          maxItems: 100
+          uniqueItems: true
+          items: { $ref: './findings.yaml#/components/schemas/SourceObjectRef' }
+        sessions:
+          type: array
+          maxItems: 100
+          uniqueItems: true
+          items: { $ref: './findings.yaml#/components/schemas/SourceObjectRef' }
         events:
           type: array
           maxItems: 500
@@ -480,12 +498,18 @@ components:
 
     ContextImportResult:
       type: object
-      required: [events, entities, nodes, edges]
+      required: [findings, sessions, events, entities, nodes, edges, warnings]
       properties:
+        findings: { type: integer, minimum: 0 }
+        sessions: { type: integer, minimum: 0 }
         events: { type: integer, minimum: 0 }
         entities: { type: integer, minimum: 0 }
         nodes: { type: integer, minimum: 0 }
         edges: { type: integer, minimum: 0 }
+        warnings:
+          type: array
+          description: Safe summaries for objects whose available context is partial.
+          items: { type: string }
 
     InvestigationCreate:
       type: object

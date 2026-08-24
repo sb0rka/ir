@@ -1,0 +1,188 @@
+openapi: 3.0.3
+info:
+  title: Sb0rka Gateway - findings
+  version: 0.0.1
+servers:
+  - url: .
+security:
+  - bearerAuth: []
+
+paths:
+  /api/v1/findings/search:
+    post:
+      tags: [findings]
+      summary: Search source-native security findings
+      operationId: searchFindings
+      parameters:
+        - $ref: '../shared/parameters.yaml#/ProjectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SearchFindingsRequest'
+      responses:
+        '200':
+          description: Merged findings from the selected project sources.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchFindingsResponse'
+        '400': { $ref: '../shared/responses.yaml#/BadRequest' }
+        '401': { $ref: '../shared/responses.yaml#/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/Forbidden' }
+        '422': { $ref: '../shared/responses.yaml#/ValidationError' }
+        '502': { $ref: '../shared/responses.yaml#/BadGateway' }
+        '504': { $ref: '../shared/responses.yaml#/GatewayTimeout' }
+        default: { $ref: '../shared/responses.yaml#/ErrorResponse' }
+
+  /api/v1/sources/{source}/findings/{kind}/{external_id}:
+    get:
+      tags: [findings]
+      summary: Resolve one source-native finding
+      operationId: getFinding
+      parameters:
+        - $ref: '../shared/parameters.yaml#/ProjectId'
+        - name: source
+          in: path
+          required: true
+          schema: { type: string }
+        - name: kind
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [siem_incident, siem_correlation, nad_attack]
+        - name: external_id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: source_instance
+          in: query
+          schema: { type: string }
+        - name: from
+          in: query
+          required: true
+          schema: { type: string, format: date-time }
+        - name: to
+          in: query
+          required: true
+          schema: { type: string, format: date-time }
+      responses:
+        '200':
+          description: Finding and the context currently available from its source.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [finding, resolution]
+                properties:
+                  finding: { $ref: '#/components/schemas/Finding' }
+                  resolution: { $ref: './events.yaml#/components/schemas/ObjectResolution' }
+        '400': { $ref: '../shared/responses.yaml#/BadRequest' }
+        '401': { $ref: '../shared/responses.yaml#/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/NotFound' }
+        '502': { $ref: '../shared/responses.yaml#/BadGateway' }
+        '504': { $ref: '../shared/responses.yaml#/GatewayTimeout' }
+        default: { $ref: '../shared/responses.yaml#/ErrorResponse' }
+
+components:
+  schemas:
+    FindingKind:
+      type: string
+      enum: [siem_incident, siem_correlation, nad_attack]
+
+    Finding:
+      type: object
+      description: A source-native coarse security object; never a renamed raw event.
+      required: [ref, kind, title, severity, occurred_at, entities, fetched_at]
+      properties:
+        ref: { $ref: '../shared/schemas.yaml#/SourceObjectRef' }
+        kind: { $ref: '#/components/schemas/FindingKind' }
+        title: { type: string }
+        description: { type: string }
+        severity:
+          type: string
+          enum: [info, low, medium, high, critical, unknown]
+        occurred_at: { type: string, format: date-time }
+        status: { type: string }
+        rule: { $ref: '../shared/schemas.yaml#/RuleRef' }
+        entities:
+          type: array
+          items: { $ref: '../shared/schemas.yaml#/EntityMention' }
+        related_findings:
+          type: array
+          items: { $ref: '../shared/schemas.yaml#/SourceObjectRef' }
+        related_sessions:
+          type: array
+          items: { $ref: '../shared/schemas.yaml#/SourceObjectRef' }
+        incident: { $ref: '#/components/schemas/IncidentDetails' }
+        correlation: { $ref: '#/components/schemas/CorrelationDetails' }
+        nad_attack: { $ref: '#/components/schemas/NADAttackDetails' }
+        source_ref: { type: string, format: uri }
+        fetched_at: { type: string, format: date-time }
+
+    IncidentDetails:
+      type: object
+      properties:
+        key: { type: string }
+        external_key: { type: string }
+        verdict: { type: string }
+        damage: { type: string }
+        recommendation: { type: string }
+        assigned_to: { type: string }
+        changed_at: { type: string, format: date-time }
+        archived: { type: boolean }
+        removed: { type: boolean }
+
+    CorrelationDetails:
+      type: object
+      properties:
+        correlation_type: { type: string }
+        subevent_count: { type: integer, minimum: 0 }
+
+    NADAttackDetails:
+      type: object
+      properties:
+        class: { type: string }
+        gid: { type: integer }
+        sid: { type: integer }
+        revision: { type: integer }
+        raw_priority: { type: integer }
+        false_positive: { type: boolean, nullable: true }
+
+    SearchFindingsRequest:
+      type: object
+      required: [time_range]
+      properties:
+        sources:
+          type: array
+          uniqueItems: true
+          items: { type: string }
+        kinds:
+          type: array
+          uniqueItems: true
+          items: { $ref: '#/components/schemas/FindingKind' }
+        time_range: { $ref: '../shared/schemas.yaml#/TimeRange' }
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 50
+        cursor: { type: string }
+
+    SearchFindingsResponse:
+      type: object
+      required: [findings, source_states, source_errors]
+      properties:
+        findings:
+          type: array
+          items: { $ref: '#/components/schemas/Finding' }
+        next_cursor: { type: string }
+        source_states:
+          type: array
+          items: { $ref: '../shared/schemas.yaml#/SourceState' }
+        source_errors:
+          type: array
+          items: { $ref: '../shared/schemas.yaml#/SourceError' }

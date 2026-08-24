@@ -2,43 +2,27 @@
 
 ## Boundary
 
-Gateway is an adapter service for external security products. It owns no investigations, does not call Investigations API, does not execute EDR response actions, and has no MCP transport in `0.0.1`. Its only state is an ephemeral in-memory credential snapshot; it has no database.
-
 ```text
 HTTP client
-  -> transport/http (auth, ProjectID, CORS, OpenAPI)
-  -> service (fan-out, timeouts, pagination)
+  -> transport/http (auth, project allowlist, OpenAPI validation)
+  -> service (credential cache, retry, fan-out, completeness)
   -> registry (provider selection by capability)
-  -> adapter (mock or vendor implementation)
+  -> provider adapter (typed vendor DTOs and fixed queries)
   -> normalization (canonical values, merge, sort)
 ```
 
-The domain and service packages do not depend on HTTP. A future `transport/mcp` must call the same service.
+Gateway owns no database, investigation, vendor URL, or credential supplied by a public request. Process configuration fixes URLs, TLS policy, and NAD store IDs. Project Secrets supply one cookie per project/source. The domain and service packages do not depend on HTTP, so a future MCP transport must use the same service boundary.
 
-## Provider contract
+Providers register only implemented capabilities. The composition root constructs real `pt-maxpatrol-siem` and `pt-nad` adapters; an empty allowlist produces an empty registry. Mock and Sandbox providers are not registered and there is no generic proxy fallback.
 
-Providers register a descriptor and only the capability interfaces they implement. Adding another provider for an existing capability changes the provider package and registry construction, not the router or OpenAPI.
+Search calls fan out concurrently to the selected allowed providers. Each response carries `complete`, `truncated`, or `failed` source state. Gateway emits a cursor only when the provider confirmed a real continuation mechanism; it never invents a SIEM token or NAD continuation.
 
-Capability interfaces in `internal/capability` are the boundary between the Gateway and provider implementations. All temporary data, scenario generation, fixtures, and mock providers live under `internal/adapters/mock`. The composition root imports only `mock.NewRegistry`; domain, service, registry, normalization, and HTTP transport do not import the mock package.
+The bounded credential cache is keyed by `{project_id, source_code}` and serializes concurrent loads. A retryable network/timeout, `401/403`, or `5xx` failure invalidates only that entry, resolves its Secret again, and repeats the provider operation once. Redirects are rejected before credentials can move to another request.
 
-A real client belongs under `internal/adapters/proxy/<provider>` and implements the same capability interfaces. Replacing the temporary implementation requires changing the composition root and deleting `internal/adapters/mock`; it does not change the service or public API.
+## Object identity and context
 
-Requests without `sources` fan out to all registered providers with the requested capability. Calls run concurrently with a 10-second source timeout inside a 15-second request timeout. Successful data is returned with `source_errors` when only part of the fan-out fails; failure of every selected source returns `502`.
+Finding and session identity is `{source_code, source_instance, record_type, external_id}`. The required time range is replay provenance and is not part of identity. SIEM uses an empty source instance; NAD uses a configured store ID.
 
-`X-Project-ID` is validated before dispatch, included in request logs, selects the process-owned source allowlist, and identifies the Sb0rka Secrets namespace. JWT validation happens before project scoping. Unknown projects and explicitly denied sources return `403`; an omitted `sources` field expands only to configured sources. Gateway does not maintain a separate role database.
+`Finding` and `Session` are first-class coarse objects. `Event`, `Entity`, and entity `Relation` remain granular evidence. Resolve retains a found root even when child context fails and marks that object `partial`; a missing root is not synthesized. Incident resolution includes correlation findings. Attack resolution includes its parent network session. Payloads, cookies, password/NTLM material, PCAP, downloaded files, and full vendor JSON stay behind the adapter boundary.
 
-The service keeps one mutex-protected `{project_id, base_url, credential}` snapshot. The caller's raw, already validated bearer is forwarded only when resolving project Secrets and is never cached. An explicit account request reloads the snapshot first. A source request that fails with a network/timeout error, `401/403`, or `5xx` reloads Secrets and retries once; local validation and other `4xx` failures are not retried.
-
-Event cursors are base64url-encoded, stateless state. They contain a request fingerprint and one opaque continuation per source. A cursor cannot be reused with different filters.
-
-## Data boundary
-
-Adapters translate vendor data into `Event`, `Entity`, `Relation`, `Artifact`, `Analysis`, `Endpoint`, `Verdict`, and `Provenance`. `attributes` contains only mapped fields needed by consumers. Full vendor responses, credentials, base URLs, graph UI layout, and executable response actions are not exposed.
-
-Entity identity is `type + canonical value`; its source records are addressed by `source_code + source_entity_id`. Event identity is `source_code + source_event_id`, and relation identity is `source_code + source_relation_id`. Gateway exposes these source-owned identifiers directly and does not derive UUIDs for events, entities, or relations. Results are sorted by event time and source-owned identity.
-
-## Real proxy mode
-
-Provider registration, mode, allowlists, timeouts, and trust settings are process-owned. Project-specific vendor URLs and credentials come only from Sb0rka Secrets; user requests never contain them. The shared HTTP factory enforces HTTP(S), rejects URL userinfo/query/fragment, requires positive timeouts, supports a credential file and custom CA, and sets TLS 1.2 as the minimum.
-
-`proxy` mode intentionally fails during startup until that provider has a real client. A vendor client must translate canonical requests, add authentication, call the vendor, normalize the response, and return a structured source error.
+Canonical normalization covers IP, MAC, host, account, and hashes. Event entity mentions retain roles such as `src`, `dst`, `attacker`, and `victim`; flow direction never substitutes for attacker semantics.

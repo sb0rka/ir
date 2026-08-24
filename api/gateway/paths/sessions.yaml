@@ -1,0 +1,199 @@
+openapi: 3.0.3
+info:
+  title: Sb0rka Gateway - sessions
+  version: 0.0.1
+servers:
+  - url: .
+security:
+  - bearerAuth: []
+
+paths:
+  /api/v1/sessions/search:
+    post:
+      tags: [sessions]
+      summary: Search source-native network sessions
+      operationId: searchSessions
+      parameters:
+        - $ref: '../shared/parameters.yaml#/ProjectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SearchSessionsRequest' }
+      responses:
+        '200':
+          description: Network sessions from the selected project sources.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SearchSessionsResponse' }
+        '400': { $ref: '../shared/responses.yaml#/BadRequest' }
+        '401': { $ref: '../shared/responses.yaml#/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/Forbidden' }
+        '422': { $ref: '../shared/responses.yaml#/ValidationError' }
+        '502': { $ref: '../shared/responses.yaml#/BadGateway' }
+        '504': { $ref: '../shared/responses.yaml#/GatewayTimeout' }
+        default: { $ref: '../shared/responses.yaml#/ErrorResponse' }
+
+  /api/v1/sources/{source}/sessions/{external_id}:
+    get:
+      tags: [sessions]
+      summary: Resolve one source-native network session
+      operationId: getSession
+      parameters:
+        - $ref: '../shared/parameters.yaml#/ProjectId'
+        - name: source
+          in: path
+          required: true
+          schema: { type: string }
+        - name: external_id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: source_instance
+          in: query
+          required: true
+          schema: { type: string }
+        - name: from
+          in: query
+          required: true
+          schema: { type: string, format: date-time }
+        - name: to
+          in: query
+          required: true
+          schema: { type: string, format: date-time }
+      responses:
+        '200':
+          description: Session and its current resolution state.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [session, resolution]
+                properties:
+                  session: { $ref: '#/components/schemas/Session' }
+                  resolution: { $ref: './events.yaml#/components/schemas/ObjectResolution' }
+        '400': { $ref: '../shared/responses.yaml#/BadRequest' }
+        '401': { $ref: '../shared/responses.yaml#/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/NotFound' }
+        '502': { $ref: '../shared/responses.yaml#/BadGateway' }
+        '504': { $ref: '../shared/responses.yaml#/GatewayTimeout' }
+        default: { $ref: '../shared/responses.yaml#/ErrorResponse' }
+
+components:
+  schemas:
+    NetworkEndpoint:
+      type: object
+      required: [port]
+      properties:
+        ip: { type: string }
+        mac: { type: string }
+        host: { type: string }
+        port: { type: integer, minimum: 0, maximum: 65535 }
+
+    TrafficCounters:
+      type: object
+      properties:
+        sent: { type: integer, format: int64, minimum: 0 }
+        received: { type: integer, format: int64, minimum: 0 }
+        total: { type: integer, format: int64, minimum: 0 }
+
+    SessionFileHint:
+      type: object
+      description: Safe metadata for a file observed in the session; file content and full vendor records are never returned.
+      required: [external_id, size]
+      properties:
+        external_id: { type: string }
+        name: { type: string }
+        mime: { type: string }
+        size: { type: integer, format: int64, minimum: 0 }
+        md5: { type: string }
+        sha256: { type: string }
+        state: { type: string }
+        direction: { type: string }
+
+    SessionAuthenticationHint:
+      type: object
+      description: Non-secret authentication metadata; proofs, session keys, passwords, and protocol payloads are excluded.
+      required: [protocol]
+      properties:
+        protocol: { type: string }
+        method: { type: string }
+        account: { type: string }
+        valid: { type: boolean, nullable: true }
+        failed_attempts: { type: integer, format: int64, minimum: 0 }
+        client_host: { type: string }
+        server_host: { type: string }
+
+    Session:
+      type: object
+      required: [ref, title, severity, started_at, source_endpoint, destination_endpoint, transport_protocol, state, file_hints, authentication_hints, entities, related_findings, fetched_at]
+      properties:
+        ref: { $ref: '../shared/schemas.yaml#/SourceObjectRef' }
+        title: { type: string }
+        severity:
+          type: string
+          enum: [info, low, medium, high, critical, unknown]
+        raw_criticality: { type: integer }
+        started_at: { type: string, format: date-time }
+        ended_at: { type: string, format: date-time }
+        duration_seconds: { type: number, format: double, minimum: 0 }
+        source_endpoint: { $ref: '#/components/schemas/NetworkEndpoint' }
+        destination_endpoint: { $ref: '#/components/schemas/NetworkEndpoint' }
+        transport_protocol: { type: string }
+        application_protocol: { type: string }
+        bytes: { $ref: '#/components/schemas/TrafficCounters' }
+        packets: { $ref: '#/components/schemas/TrafficCounters' }
+        state:
+          type: array
+          items: { type: string }
+        false_positive: { type: boolean, nullable: true }
+        has_files: { type: boolean }
+        file_hints:
+          type: array
+          items: { $ref: '#/components/schemas/SessionFileHint' }
+        authentication_hints:
+          type: array
+          items: { $ref: '#/components/schemas/SessionAuthenticationHint' }
+        tcp_flags:
+          type: array
+          items: { type: string }
+        entities:
+          type: array
+          items: { $ref: '../shared/schemas.yaml#/EntityMention' }
+        related_findings:
+          type: array
+          items: { $ref: '../shared/schemas.yaml#/SourceObjectRef' }
+        source_ref: { type: string, format: uri }
+        fetched_at: { type: string, format: date-time }
+
+    SearchSessionsRequest:
+      type: object
+      required: [time_range]
+      properties:
+        sources:
+          type: array
+          uniqueItems: true
+          items: { type: string }
+        time_range: { $ref: '../shared/schemas.yaml#/TimeRange' }
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 50
+        cursor: { type: string }
+
+    SearchSessionsResponse:
+      type: object
+      required: [sessions, source_states, source_errors]
+      properties:
+        sessions:
+          type: array
+          items: { $ref: '#/components/schemas/Session' }
+        next_cursor: { type: string }
+        source_states:
+          type: array
+          items: { $ref: '../shared/schemas.yaml#/SourceState' }
+        source_errors:
+          type: array
+          items: { $ref: '../shared/schemas.yaml#/SourceError' }

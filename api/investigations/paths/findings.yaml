@@ -1,0 +1,189 @@
+openapi: 3.0.3
+info:
+  title: IR — findings
+  version: 0.0.1
+servers:
+  - url: /api/v1
+security:
+  - bearerAuth: []
+
+paths:
+  /investigations/{investigation_id}/findings:
+    parameters:
+      - { $ref: '../shared/parameters.yaml#/components/parameters/ProjectId' }
+      - { $ref: '../shared/parameters.yaml#/components/parameters/InvestigationId' }
+    get:
+      tags: [findings]
+      summary: List findings attached to an investigation
+      operationId: listFindings
+      parameters:
+        - name: record_type
+          in: query
+          schema: { $ref: '#/components/schemas/FindingKind' }
+        - name: severity
+          in: query
+          schema: { $ref: '#/components/schemas/ObjectSeverity' }
+        - name: context_status
+          in: query
+          schema: { $ref: '#/components/schemas/ContextStatus' }
+        - { $ref: '../shared/parameters.yaml#/components/parameters/Limit' }
+        - { $ref: '../shared/parameters.yaml#/components/parameters/Cursor' }
+      responses:
+        '200':
+          description: One page of source findings.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FindingPage' }
+        '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
+        '422': { $ref: '../shared/responses.yaml#/components/responses/ValidationError' }
+        '500': { $ref: '../shared/responses.yaml#/components/responses/InternalError' }
+
+  /findings/{finding_id}:
+    parameters:
+      - { $ref: '../shared/parameters.yaml#/components/parameters/ProjectId' }
+      - name: finding_id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [findings]
+      summary: Get one project finding
+      operationId: getFinding
+      responses:
+        '200':
+          description: The current normalized finding snapshot.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Finding' }
+        '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
+        '500': { $ref: '../shared/responses.yaml#/components/responses/InternalError' }
+
+  /investigations/{investigation_id}/findings/{finding_id}:
+    parameters:
+      - { $ref: '../shared/parameters.yaml#/components/parameters/ProjectId' }
+      - { $ref: '../shared/parameters.yaml#/components/parameters/InvestigationId' }
+      - name: finding_id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    delete:
+      tags: [findings]
+      summary: Detach a finding and its exclusively derived context
+      description: >-
+        Keeps directly added evidence, evidence owned by another attached
+        finding/session, and evidence used by confirmed graph edges.
+      operationId: detachFinding
+      responses:
+        '204': { description: Detached }
+        '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
+        '500': { $ref: '../shared/responses.yaml#/components/responses/InternalError' }
+
+components:
+  schemas:
+    TimeRange:
+      type: object
+      required: [from, to]
+      properties:
+        from: { type: string, format: date-time }
+        to: { type: string, format: date-time }
+
+    SourceObjectRef:
+      type: object
+      description: Stable source identity and the bounded replay window; time is not identity.
+      required: [source_code, record_type, external_id, time_range]
+      properties:
+        source_code: { type: string, minLength: 1 }
+        source_instance: { type: string }
+        record_type:
+          type: string
+          enum: [siem_incident, siem_correlation, nad_attack, nad_session]
+        external_id: { type: string, minLength: 1 }
+        time_range: { $ref: '#/components/schemas/TimeRange' }
+
+    FindingKind:
+      type: string
+      enum: [siem_incident, siem_correlation, nad_attack]
+
+    ObjectSeverity:
+      type: string
+      enum: [info, low, medium, high, critical, unknown]
+
+    ContextStatus:
+      type: string
+      enum: [complete, partial]
+
+    ContextError:
+      type: object
+      required: [source, code, message, retryable]
+      properties:
+        source: { type: string }
+        code: { type: string }
+        message:
+          type: string
+          description: Safe summary without credentials, queries, or vendor payloads.
+        retryable: { type: boolean }
+
+    Finding:
+      type: object
+      required:
+        - id
+        - ref
+        - kind
+        - title
+        - severity
+        - occurred_at
+        - fetched_at
+        - normalized_snapshot
+        - provenance
+        - context_status
+        - context_errors
+        - created_at
+        - updated_at
+      properties:
+        id: { type: string, format: uuid }
+        investigation_ids:
+          type: array
+          items: { type: string, format: uuid }
+        ref: { $ref: '#/components/schemas/SourceObjectRef' }
+        kind: { $ref: '#/components/schemas/FindingKind' }
+        title: { type: string }
+        description: { type: string, nullable: true }
+        severity: { $ref: '#/components/schemas/ObjectSeverity' }
+        occurred_at: { type: string, format: date-time }
+        status: { type: string, nullable: true }
+        source_ref: { type: string, format: uri, nullable: true }
+        fetched_at: { type: string, format: date-time }
+        normalized_snapshot:
+          type: object
+          additionalProperties: true
+        provenance:
+          type: object
+          additionalProperties: true
+        context_status: { $ref: '#/components/schemas/ContextStatus' }
+        context_errors:
+          type: array
+          items: { $ref: '#/components/schemas/ContextError' }
+        directly_added:
+          type: boolean
+          description: Present and meaningful when listed through an investigation.
+        derived:
+          type: boolean
+          description: The finding was discovered while resolving another selected object.
+        attached_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    FindingPage:
+      type: object
+      required: [findings]
+      properties:
+        findings:
+          type: array
+          items: { $ref: '#/components/schemas/Finding' }
+        next_cursor: { type: string, nullable: true }

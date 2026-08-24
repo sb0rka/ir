@@ -40,6 +40,8 @@ type Investigation struct {
 
 type InvestigationCounters struct {
 	Children      int
+	Findings      int
+	Sessions      int
 	Events        int
 	Entities      int
 	ProposedEdges int
@@ -63,18 +65,25 @@ type GatewayProvenance struct {
 }
 
 type GatewayEvent struct {
-	SnapshotID        string
-	Title             string
-	EventType         string
-	Severity          string
-	OccurredAt        time.Time
-	EntitySnapshotIDs []string
-	Attributes        map[string]any
-	Provenance        GatewayProvenance
+	SnapshotID string
+	Direct     bool
+	Title      string
+	EventType  string
+	Severity   string
+	OccurredAt time.Time
+	Entities   []GatewayEventEntity
+	Attributes map[string]any
+	Provenance GatewayProvenance
+}
+
+type GatewayEventEntity struct {
+	SnapshotID string
+	Roles      []string
 }
 
 type GatewayEntity struct {
 	SnapshotID string
+	Direct     bool
 	TypeCode   string
 	Value      string
 	Attributes map[string]any
@@ -90,7 +99,70 @@ type GatewayRelation struct {
 	Provenance             GatewayProvenance
 }
 
+type GatewayTimeRange struct {
+	From time.Time `json:"from"`
+	To   time.Time `json:"to"`
+}
+
+type GatewayObjectRef struct {
+	SourceCode     string           `json:"source_code"`
+	SourceInstance string           `json:"source_instance,omitempty"`
+	RecordType     string           `json:"record_type"`
+	ExternalID     string           `json:"external_id"`
+	TimeRange      GatewayTimeRange `json:"time_range"`
+}
+
+type GatewayContextError struct {
+	Source    string `json:"source"`
+	Code      string `json:"code"`
+	Message   string `json:"message"`
+	Retryable bool   `json:"retryable"`
+}
+
+type GatewayFinding struct {
+	SnapshotID        string
+	Ref               GatewayObjectRef
+	Kind              string
+	Title             string
+	Description       *string
+	Severity          string
+	OccurredAt        time.Time
+	Status            *string
+	SourceRef         *string
+	FetchedAt         time.Time
+	Normalized        []byte
+	Provenance        []byte
+	ContextStatus     string
+	ContextErrors     []GatewayContextError
+	Direct            bool
+	EventSnapshotIDs  []string
+	EntitySnapshotIDs []string
+	RelatedFindings   []GatewayObjectRef
+	RelatedSessions   []GatewayObjectRef
+}
+
+type GatewaySession struct {
+	SnapshotID        string
+	Ref               GatewayObjectRef
+	Title             string
+	Severity          string
+	StartedAt         time.Time
+	EndedAt           *time.Time
+	SourceRef         *string
+	FetchedAt         time.Time
+	Normalized        []byte
+	Provenance        []byte
+	ContextStatus     string
+	ContextErrors     []GatewayContextError
+	Direct            bool
+	EventSnapshotIDs  []string
+	EntitySnapshotIDs []string
+	RelatedFindings   []GatewayObjectRef
+}
+
 type GatewaySelection struct {
+	Findings  []GatewayFinding
+	Sessions  []GatewaySession
 	Events    []GatewayEvent
 	Entities  []GatewayEntity
 	Relations []GatewayRelation
@@ -120,13 +192,71 @@ type ImportRequest struct {
 	SomIssueIDs     []string
 	Nodes           []AgentNode
 	Edges           []AgentEdge
+	Warnings        []string
 }
 
 type ImportStats struct {
+	Findings int
+	Sessions int
 	Events   int
 	Entities int
 	Nodes    int
 	Edges    int
+	Warnings []string
+}
+
+type ObjectFilter struct {
+	RecordType    *string
+	Severity      *string
+	ContextStatus *string
+	Cursor        *PageCursor
+	Limit         int
+}
+
+type Finding struct {
+	ID               string
+	ProjectID        string
+	Ref              GatewayObjectRef
+	Kind             string
+	Title            string
+	Description      *string
+	Severity         string
+	OccurredAt       time.Time
+	Status           *string
+	SourceRef        *string
+	FetchedAt        time.Time
+	Normalized       []byte
+	Provenance       []byte
+	ContextStatus    string
+	ContextErrors    []byte
+	InvestigationIDs []string
+	Direct           bool
+	Derived          bool
+	AttachedAt       time.Time
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
+}
+
+type NetworkSession struct {
+	ID               string
+	ProjectID        string
+	Ref              GatewayObjectRef
+	Title            string
+	Severity         string
+	StartedAt        time.Time
+	EndedAt          *time.Time
+	SourceRef        *string
+	FetchedAt        time.Time
+	Normalized       []byte
+	Provenance       []byte
+	ContextStatus    string
+	ContextErrors    []byte
+	InvestigationIDs []string
+	Direct           bool
+	Derived          bool
+	AttachedAt       time.Time
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
 }
 
 type EventFilter struct {

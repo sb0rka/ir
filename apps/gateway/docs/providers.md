@@ -1,51 +1,27 @@
 # Provider mappings
 
-Only providers backed by a reviewed vendor operation are registered by the mock composition root. Their deterministic scenario data is first expressed as vendor DTOs and then passed through the same mapper intended for a real proxy. UI-only `position`, `style`, and `animated` fields from the source fixture are not part of any response.
+Vendor DTOs and fixed query builders live in `internal/adapters/proxy/<provider>`. Provider contract tests replay sanitized `docs-internal/pt-cases` captures through local HTTP servers and assert method, path, query, body, Cookie handling, timestamps, nested objects, deduplication, and redaction.
 
-Vendor DTOs live in `internal/adapters/proxy/<provider>/schema.go` and never enter the public Gateway contract. Black-box tests, contract samples, and provenance live under `tests/<provider>/`.
+## MaxPatrol SIEM (`pt-maxpatrol-siem`)
 
-| Provider | Gateway capability | Vendor operation | Product version | Contract status |
-| --- | --- | --- | --- | --- |
-| MaxPatrol SIEM | events | `POST /api/events/v2/events` | SIEM 8.1 | Verified documentation and success JSON |
-| MaxPatrol SIEM | account userinfo | `GET /api/account/userinfo` | SIEM 8.1 | Verified implementation and success JSON |
-| MaxPatrol SIEM | entity lookup | — | — | Blocked: no reviewed operation or event predicate |
-| PT Sandbox | artifact analysis | `POST /api/v1/analysis/createScanTask` | Sandbox 5.18 | Verified documentation and synchronous success JSON |
-| PT NAD | events, entity lookup | — | — | Blocked: available Elasticsearch mapping is not a REST contract |
-| MaxPatrol EDR | endpoints, response catalog | — | — | Blocked: customer API/OpenAPI response samples required |
-| PT Fusion | entity lookup | — | — | Blocked: vendor states that OpenAPI exists, but the specification is not available in this repository |
+- Incident search/detail uses the Incident Read Model backend and follows only confirmed offset pagination for child events, accounts, files, links, and asset groups.
+- Correlations are firing events from `POST /api/events/v3/events` (PDQL filter with `correlation_name != null`). Exact resolution retrieves the UUID and then each listed subevent.
+- Incident resolution emits child correlation firings as first-class findings. Correlation and subevents also become granular events; subevents carry bounded `parent_source_event_id` and `relation_type=subevent_of` metadata for graph decomposition.
+- `/api/siem/v2/rules/correlation` is intentionally excluded because no reviewed response capture defines rule objects.
+- Account userinfo and health probes use the same per-call project cookie without storing it in the client.
 
-## MaxPatrol SIEM (`maxpatrol-siem`)
-
-Registered capabilities: event search and account userinfo. Event search includes
-exact resolution of records previously returned by that search. Raw and correlated records become canonical
-events through `proxy/maxpatrol.ToEventPage`; correlation metadata and selected
-dynamic fields stay in bounded attributes. Entity lookup is not registered until
-its contract blocker is resolved. Reference: [MaxPatrol SIEM event list API](https://help.ptsecurity.com/ru-RU/projects/siem/8.1/help/10836123659).
-
-Account userinfo uses the project-scoped `DEMO_PT_SIEM_BASE_URL` and
-`DEMO_PT_COOKIE` Secrets. The public Gateway response retains only
-`source_code` and `user_name`; roles, identifiers, and the raw vendor response
-remain inside the adapter boundary.
-
-In `mock` mode, missing credentials or a failed PT account probe does not take
-the mock event capability offline: `/sources` keeps the source `online` with
-`mode=mock`. The explicit account `userinfo` endpoint still calls the real PT
-operation and returns its configuration or upstream error.
-
-The deterministic mock uses a Gateway-only `token:offset` continuation to exercise canonical pagination. It is not claimed as the SIEM continuation protocol; a proxy implementation must confirm the vendor token exchange separately.
+SIEM object identity is `pt-maxpatrol-siem + empty source_instance + kind + UUID`.
 
 ## PT NAD (`pt-nad`)
 
-Not registered. The current `SessionDocument` draft is a selected subset of an Elasticsearch mapping, not a REST request or response schema. An OpenAPI document or anonymized HTTP JSON exchange is required before mapper or mock work continues. Reference: [PT NAD REST API entry point](https://help.ptsecurity.com/en-US/projects/nad/12.0/help/4750761739).
+- Session and attack search fan out only across process-configured store IDs using fixed BQL templates.
+- Session resolution calls `/api/v2/flow/{id}` with the original store and time window.
+- Attack resolution uses an exact escaped alert ID, resolves its parent session, and obtains the complete safe flow detail. The related session is first-class.
+- Session criticality uses the reviewed normalized scale. Conflicting alert priority semantics yield `severity=unknown` while preserving `raw_priority`.
+- Flow metadata is reduced to safe protocol, endpoint, traffic, state, file, and authentication hints. Payloads, cookies, credentials, NTLM material, PCAP, and file contents are discarded.
 
-## MaxPatrol EDR (`maxpatrol-edr`)
+NAD object identity is `pt-nad + store_id + kind + vendor_id`; identical vendor IDs in different stores do not collapse.
 
-Not registered. Endpoint inventory and response-action DTOs remain undefined until customer API/OpenAPI response samples are available. Gateway still has no action-execution route. Reference: [MaxPatrol EDR public API entry point](https://help.ptsecurity.com/ru-RU/projects/edr/9.1/help/7404729995).
+## Unregistered canonical capabilities
 
-## PT Sandbox (`pt-sandbox`)
-
-Registered capability: artifact analysis. Known documents, scripts, executables, and extracted artifacts are expressed as the documented Sandbox 5.18 synchronous scan response and mapped through `proxy/sandbox.ToAnalysis`. The mock retains that response for Gateway `GetAnalysis`; it does not claim an undocumented vendor get-by-ID route. Reference: [Sandbox 5.18 scan](https://help.ptsecurity.com/ru-RU/projects/sb/5.18/developer/5040429451).
-
-## PT Fusion (`pt-fusion`)
-
-Not registered. The public documentation states that an OpenAPI specification exists, but a reviewed copy is required before defining the search DTO or mapper. Reference: [PT Fusion API](https://fusion.ptsecurity.com/docs/api/).
+Artifact analysis, endpoint inventory, response catalog, and account contracts remain in the canonical API, but no mock, dummy, or `pt-sandbox` provider backs them. A future source must add a reviewed real client before it can be allowlisted.

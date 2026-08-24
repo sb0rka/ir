@@ -103,9 +103,9 @@ components:
           description: Time when the event occurred in the source system.
         entities:
           type: array
-          description: Canonical entities mentioned by the event.
+          description: Canonical entities and their observed roles in this event.
           items:
-            $ref: '../shared/schemas.yaml#/EntityRef'
+            $ref: '../shared/schemas.yaml#/EntityMention'
         attributes:
           type: object
           description: Selected event fields that have no canonical top-level property.
@@ -118,8 +118,19 @@ components:
     ResolveContextRequest:
       type: object
       description: Source records selected by a client for persistence in an investigation.
-      required: [events, entities]
       properties:
+        findings:
+          type: array
+          maxItems: 100
+          uniqueItems: true
+          items:
+            $ref: '../shared/schemas.yaml#/SourceObjectRef'
+        sessions:
+          type: array
+          maxItems: 100
+          uniqueItems: true
+          items:
+            $ref: '../shared/schemas.yaml#/SourceObjectRef'
         events:
           type: array
           maxItems: 500
@@ -136,8 +147,16 @@ components:
     ResolveContextResponse:
       type: object
       description: Normalized records and relationships resolved from source-owned identifiers.
-      required: [events, entities, relations, source_errors]
+      required: [findings, sessions, events, entities, relations, resolutions, source_errors]
       properties:
+        findings:
+          type: array
+          items:
+            $ref: './findings.yaml#/components/schemas/Finding'
+        sessions:
+          type: array
+          items:
+            $ref: './sessions.yaml#/components/schemas/Session'
         events:
           type: array
           items:
@@ -150,28 +169,20 @@ components:
           type: array
           items:
             $ref: '../shared/schemas.yaml#/Relation'
+        resolutions:
+          type: array
+          description: Per-selected-object completeness. Missing root records are not represented as resolved objects.
+          items:
+            $ref: '#/components/schemas/ObjectResolution'
         source_errors:
           type: array
           items:
             $ref: '../shared/schemas.yaml#/SourceError'
 
-    TimeRange:
-      type: object
-      description: Inclusive event occurrence-time interval.
-      required: [from, to]
-      properties:
-        from:
-          type: string
-          format: date-time
-          description: Inclusive lower boundary of event occurrence time.
-        to:
-          type: string
-          format: date-time
-          description: Inclusive upper boundary of event occurrence time.
-
     SearchEventsRequest:
       type: object
       description: Filters for a normalized multi-source event search.
+      required: [time_range]
       properties:
         sources:
           type: array
@@ -180,13 +191,9 @@ components:
           items:
             type: string
         time_range:
-          description: Optional occurrence-time interval.
+          description: Required occurrence-time interval.
           allOf:
-            - $ref: '#/components/schemas/TimeRange'
-        query:
-          type: string
-          maxLength: 1000
-          description: Free-text query interpreted by each selected source.
+            - $ref: '../shared/schemas.yaml#/TimeRange'
         entities:
           type: array
           maxItems: 100
@@ -206,7 +213,7 @@ components:
     SearchEventsResponse:
       type: object
       description: Merged event page with the entities and relations needed to interpret it.
-      required: [events, entities, relations, source_errors]
+      required: [events, entities, relations, source_states, source_errors]
       properties:
         events:
           type: array
@@ -226,8 +233,26 @@ components:
         next_cursor:
           type: string
           description: Opaque cursor for the next page; absent when the search is exhausted.
+        source_states:
+          type: array
+          items:
+            $ref: '../shared/schemas.yaml#/SourceState'
         source_errors:
           type: array
           description: Per-source failures when at least one selected source succeeded.
+          items:
+            $ref: '../shared/schemas.yaml#/SourceError'
+
+    ObjectResolution:
+      type: object
+      required: [ref, status, errors]
+      properties:
+        ref:
+          $ref: '../shared/schemas.yaml#/SourceObjectRef'
+        status:
+          type: string
+          enum: [complete, partial]
+        errors:
+          type: array
           items:
             $ref: '../shared/schemas.yaml#/SourceError'

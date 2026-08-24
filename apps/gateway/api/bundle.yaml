@@ -18,6 +18,12 @@ tags:
   - name: events
     description: Normalized event search.
     x-displayName: events
+  - name: findings
+    description: Source-native incidents, correlation firings and network attacks.
+    x-displayName: findings
+  - name: sessions
+    description: Source-native network sessions.
+    x-displayName: sessions
   - name: entities
     description: Entity lookup across security products.
     x-displayName: entities
@@ -86,7 +92,7 @@ paths:
               $ref: '#/components/schemas/CreateArtifactAnalysisRequest'
       responses:
         '202':
-          description: Completed mock analysis.
+          description: Accepted artifact analysis.
           content:
             application/json:
               schema:
@@ -365,6 +371,117 @@ paths:
           $ref: '#/components/responses/ErrorResponse'
       security:
         - bearerAuth: []
+  /api/v1/findings/search:
+    post:
+      tags:
+        - findings
+      summary: Search source-native security findings
+      operationId: searchFindings
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SearchFindingsRequest'
+      responses:
+        '200':
+          description: Merged findings from the selected project sources.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchFindingsResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '502':
+          $ref: '#/components/responses/BadGateway'
+        '504':
+          $ref: '#/components/responses/GatewayTimeout'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+      security:
+        - bearerAuth: []
+  /api/v1/sources/{source}/findings/{kind}/{external_id}:
+    get:
+      tags:
+        - findings
+      summary: Resolve one source-native finding
+      operationId: getFinding
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - name: source
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: kind
+          in: path
+          required: true
+          schema:
+            type: string
+            enum:
+              - siem_incident
+              - siem_correlation
+              - nad_attack
+        - name: external_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: source_instance
+          in: query
+          schema:
+            type: string
+        - name: from
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: Finding and the context currently available from its source.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - finding
+                  - resolution
+                properties:
+                  finding:
+                    $ref: '#/components/schemas/Finding'
+                  resolution:
+                    $ref: '#/components/schemas/ObjectResolution'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '502':
+          $ref: '#/components/responses/BadGateway'
+        '504':
+          $ref: '#/components/responses/GatewayTimeout'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+      security:
+        - bearerAuth: []
   /healthz:
     get:
       tags:
@@ -391,14 +508,117 @@ paths:
                 type: string
                 example: pong
               example: pong
+  /api/v1/sessions/search:
+    post:
+      tags:
+        - sessions
+      summary: Search source-native network sessions
+      operationId: searchSessions
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SearchSessionsRequest'
+      responses:
+        '200':
+          description: Network sessions from the selected project sources.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchSessionsResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '502':
+          $ref: '#/components/responses/BadGateway'
+        '504':
+          $ref: '#/components/responses/GatewayTimeout'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+      security:
+        - bearerAuth: []
+  /api/v1/sources/{source}/sessions/{external_id}:
+    get:
+      tags:
+        - sessions
+      summary: Resolve one source-native network session
+      operationId: getSession
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - name: source
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: external_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: source_instance
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: from
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: Session and its current resolution state.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - session
+                  - resolution
+                properties:
+                  session:
+                    $ref: '#/components/schemas/Session'
+                  resolution:
+                    $ref: '#/components/schemas/ObjectResolution'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '502':
+          $ref: '#/components/responses/BadGateway'
+        '504':
+          $ref: '#/components/responses/GatewayTimeout'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+      security:
+        - bearerAuth: []
   /api/v1/sources:
     get:
       tags:
         - sources
       summary: List registered sources
       description: >-
-        Returns project-allowed sources and actively probes account-capable
-        connections.
+        Returns project-allowed sources and probes every configured backend or
+        store through a short cache.
       operationId: listSources
       parameters:
         - $ref: '#/components/parameters/ProjectId'
@@ -697,7 +917,7 @@ components:
           description: Whether the source currently allows the action for the endpoint.
     SearchEndpointsRequest:
       type: object
-      description: Filters for endpoint inventory search.
+      description: Bounded endpoint inventory page request.
       properties:
         sources:
           type: array
@@ -705,10 +925,6 @@ components:
           description: Source codes to query; omit to use every allowed endpoint source.
           items:
             type: string
-        query:
-          type: string
-          maxLength: 1000
-          description: Free-text query matched against endpoint inventory fields.
         limit:
           type: integer
           minimum: 1
@@ -768,6 +984,7 @@ components:
       description: Request to enrich one entity from one or more sources.
       required:
         - entity
+        - time_range
       properties:
         sources:
           type: array
@@ -781,6 +998,8 @@ components:
           description: Entity to normalize and enrich.
           allOf:
             - $ref: '#/components/schemas/EntityRef'
+        time_range:
+          $ref: '#/components/schemas/TimeRange'
     LookupEntityResponse:
       type: object
       description: Entity enrichment merged from the selected sources.
@@ -823,6 +1042,19 @@ components:
         value:
           type: string
           description: Entity value to normalize and look up.
+    TimeRange:
+      type: object
+      description: Inclusive source-record occurrence-time interval.
+      required:
+        - from
+        - to
+      properties:
+        from:
+          type: string
+          format: date-time
+        to:
+          type: string
+          format: date-time
     EntitySource:
       type: object
       description: Source record in which a canonical entity was observed.
@@ -949,9 +1181,9 @@ components:
           description: Time when the event occurred in the source system.
         entities:
           type: array
-          description: Canonical entities mentioned by the event.
+          description: Canonical entities and their observed roles in this event.
           items:
-            $ref: '#/components/schemas/EntityRef'
+            $ref: '#/components/schemas/EntityMention'
         attributes:
           type: object
           description: Selected event fields that have no canonical top-level property.
@@ -963,10 +1195,19 @@ components:
     ResolveContextRequest:
       type: object
       description: Source records selected by a client for persistence in an investigation.
-      required:
-        - events
-        - entities
       properties:
+        findings:
+          type: array
+          maxItems: 100
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/SourceObjectRef'
+        sessions:
+          type: array
+          maxItems: 100
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/SourceObjectRef'
         events:
           type: array
           maxItems: 500
@@ -985,11 +1226,22 @@ components:
         Normalized records and relationships resolved from source-owned
         identifiers.
       required:
+        - findings
+        - sessions
         - events
         - entities
         - relations
+        - resolutions
         - source_errors
       properties:
+        findings:
+          type: array
+          items:
+            $ref: '#/components/schemas/Finding'
+        sessions:
+          type: array
+          items:
+            $ref: '#/components/schemas/Session'
         events:
           type: array
           items:
@@ -1002,28 +1254,22 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Relation'
+        resolutions:
+          type: array
+          description: >-
+            Per-selected-object completeness. Missing root records are not
+            represented as resolved objects.
+          items:
+            $ref: '#/components/schemas/ObjectResolution'
         source_errors:
           type: array
           items:
             $ref: '#/components/schemas/SourceError'
-    TimeRange:
-      type: object
-      description: Inclusive event occurrence-time interval.
-      required:
-        - from
-        - to
-      properties:
-        from:
-          type: string
-          format: date-time
-          description: Inclusive lower boundary of event occurrence time.
-        to:
-          type: string
-          format: date-time
-          description: Inclusive upper boundary of event occurrence time.
     SearchEventsRequest:
       type: object
       description: Filters for a normalized multi-source event search.
+      required:
+        - time_range
       properties:
         sources:
           type: array
@@ -1034,13 +1280,9 @@ components:
           items:
             type: string
         time_range:
-          description: Optional occurrence-time interval.
+          description: Required occurrence-time interval.
           allOf:
             - $ref: '#/components/schemas/TimeRange'
-        query:
-          type: string
-          maxLength: 1000
-          description: Free-text query interpreted by each selected source.
         entities:
           type: array
           maxItems: 100
@@ -1067,6 +1309,7 @@ components:
         - events
         - entities
         - relations
+        - source_states
         - source_errors
       properties:
         events:
@@ -1089,11 +1332,117 @@ components:
           description: >-
             Opaque cursor for the next page; absent when the search is
             exhausted.
+        source_states:
+          type: array
+          items:
+            $ref: '#/components/schemas/SourceState'
         source_errors:
           type: array
           description: Per-source failures when at least one selected source succeeded.
           items:
             $ref: '#/components/schemas/SourceError'
+    ObjectResolution:
+      type: object
+      required:
+        - ref
+        - status
+        - errors
+      properties:
+        ref:
+          $ref: '#/components/schemas/SourceObjectRef'
+        status:
+          type: string
+          enum:
+            - complete
+            - partial
+        errors:
+          type: array
+          items:
+            $ref: '#/components/schemas/SourceError'
+    EntityMention:
+      type: object
+      description: >-
+        Canonical entity mentioned by an event or a source object, with its
+        observed roles.
+      required:
+        - type
+        - value
+        - roles
+      properties:
+        type:
+          type: string
+          description: Canonical entity kind.
+        value:
+          type: string
+          description: Canonical entity value.
+        roles:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          description: >-
+            Roles observed in this record; vendor direction and attacker
+            semantics remain distinct.
+          items:
+            type: string
+            enum:
+              - mentions
+              - src
+              - dst
+              - actor
+              - object
+              - attacker
+              - victim
+              - account
+              - file
+    SourceState:
+      type: object
+      description: Completeness of one source stream in a search response.
+      required:
+        - source
+        - status
+      properties:
+        source:
+          type: string
+        status:
+          type: string
+          enum:
+            - complete
+            - truncated
+            - failed
+        reason:
+          type: string
+    SourceObjectRef:
+      type: object
+      description: >-
+        Stable source-owned object identity plus the bounded time window needed
+        to resolve it again.
+      required:
+        - source_code
+        - record_type
+        - external_id
+        - time_range
+      properties:
+        source_code:
+          type: string
+        source_instance:
+          type: string
+          description: >-
+            Provider instance, such as a PT NAD numeric store id. Empty for
+            SIEM.
+        record_type:
+          type: string
+          enum:
+            - siem_incident
+            - siem_correlation
+            - nad_attack
+            - nad_session
+        external_id:
+          type: string
+          description: >-
+            Identifier assigned by the source. The time window is not part of
+            identity.
+        time_range:
+          $ref: '#/components/schemas/TimeRange'
     EventSourceRef:
       type: object
       description: Stable reference to an event in its source system.
@@ -1120,6 +1469,346 @@ components:
         source_entity_id:
           type: string
           description: Original entity identifier assigned by that source.
+    FindingKind:
+      type: string
+      enum:
+        - siem_incident
+        - siem_correlation
+        - nad_attack
+    RuleRef:
+      type: object
+      description: Bounded rule metadata observed on a finding.
+      required:
+        - name
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        revision:
+          type: integer
+    IncidentDetails:
+      type: object
+      properties:
+        key:
+          type: string
+        external_key:
+          type: string
+        verdict:
+          type: string
+        damage:
+          type: string
+        recommendation:
+          type: string
+        assigned_to:
+          type: string
+        changed_at:
+          type: string
+          format: date-time
+        archived:
+          type: boolean
+        removed:
+          type: boolean
+    CorrelationDetails:
+      type: object
+      properties:
+        correlation_type:
+          type: string
+        subevent_count:
+          type: integer
+          minimum: 0
+    NADAttackDetails:
+      type: object
+      properties:
+        class:
+          type: string
+        gid:
+          type: integer
+        sid:
+          type: integer
+        revision:
+          type: integer
+        raw_priority:
+          type: integer
+        false_positive:
+          type: boolean
+          nullable: true
+    Finding:
+      type: object
+      description: A source-native coarse security object; never a renamed raw event.
+      required:
+        - ref
+        - kind
+        - title
+        - severity
+        - occurred_at
+        - entities
+        - fetched_at
+      properties:
+        ref:
+          $ref: '#/components/schemas/SourceObjectRef'
+        kind:
+          $ref: '#/components/schemas/FindingKind'
+        title:
+          type: string
+        description:
+          type: string
+        severity:
+          type: string
+          enum:
+            - info
+            - low
+            - medium
+            - high
+            - critical
+            - unknown
+        occurred_at:
+          type: string
+          format: date-time
+        status:
+          type: string
+        rule:
+          $ref: '#/components/schemas/RuleRef'
+        entities:
+          type: array
+          items:
+            $ref: '#/components/schemas/EntityMention'
+        related_findings:
+          type: array
+          items:
+            $ref: '#/components/schemas/SourceObjectRef'
+        related_sessions:
+          type: array
+          items:
+            $ref: '#/components/schemas/SourceObjectRef'
+        incident:
+          $ref: '#/components/schemas/IncidentDetails'
+        correlation:
+          $ref: '#/components/schemas/CorrelationDetails'
+        nad_attack:
+          $ref: '#/components/schemas/NADAttackDetails'
+        source_ref:
+          type: string
+          format: uri
+        fetched_at:
+          type: string
+          format: date-time
+    NetworkEndpoint:
+      type: object
+      required:
+        - port
+      properties:
+        ip:
+          type: string
+        mac:
+          type: string
+        host:
+          type: string
+        port:
+          type: integer
+          minimum: 0
+          maximum: 65535
+    TrafficCounters:
+      type: object
+      properties:
+        sent:
+          type: integer
+          format: int64
+          minimum: 0
+        received:
+          type: integer
+          format: int64
+          minimum: 0
+        total:
+          type: integer
+          format: int64
+          minimum: 0
+    SessionFileHint:
+      type: object
+      description: >-
+        Safe metadata for a file observed in the session; file content and full
+        vendor records are never returned.
+      required:
+        - external_id
+        - size
+      properties:
+        external_id:
+          type: string
+        name:
+          type: string
+        mime:
+          type: string
+        size:
+          type: integer
+          format: int64
+          minimum: 0
+        md5:
+          type: string
+        sha256:
+          type: string
+        state:
+          type: string
+        direction:
+          type: string
+    SessionAuthenticationHint:
+      type: object
+      description: >-
+        Non-secret authentication metadata; proofs, session keys, passwords, and
+        protocol payloads are excluded.
+      required:
+        - protocol
+      properties:
+        protocol:
+          type: string
+        method:
+          type: string
+        account:
+          type: string
+        valid:
+          type: boolean
+          nullable: true
+        failed_attempts:
+          type: integer
+          format: int64
+          minimum: 0
+        client_host:
+          type: string
+        server_host:
+          type: string
+    Session:
+      type: object
+      required:
+        - ref
+        - title
+        - severity
+        - started_at
+        - source_endpoint
+        - destination_endpoint
+        - transport_protocol
+        - state
+        - file_hints
+        - authentication_hints
+        - entities
+        - related_findings
+        - fetched_at
+      properties:
+        ref:
+          $ref: '#/components/schemas/SourceObjectRef'
+        title:
+          type: string
+        severity:
+          type: string
+          enum:
+            - info
+            - low
+            - medium
+            - high
+            - critical
+            - unknown
+        raw_criticality:
+          type: integer
+        started_at:
+          type: string
+          format: date-time
+        ended_at:
+          type: string
+          format: date-time
+        duration_seconds:
+          type: number
+          format: double
+          minimum: 0
+        source_endpoint:
+          $ref: '#/components/schemas/NetworkEndpoint'
+        destination_endpoint:
+          $ref: '#/components/schemas/NetworkEndpoint'
+        transport_protocol:
+          type: string
+        application_protocol:
+          type: string
+        bytes:
+          $ref: '#/components/schemas/TrafficCounters'
+        packets:
+          $ref: '#/components/schemas/TrafficCounters'
+        state:
+          type: array
+          items:
+            type: string
+        false_positive:
+          type: boolean
+          nullable: true
+        has_files:
+          type: boolean
+        file_hints:
+          type: array
+          items:
+            $ref: '#/components/schemas/SessionFileHint'
+        authentication_hints:
+          type: array
+          items:
+            $ref: '#/components/schemas/SessionAuthenticationHint'
+        tcp_flags:
+          type: array
+          items:
+            type: string
+        entities:
+          type: array
+          items:
+            $ref: '#/components/schemas/EntityMention'
+        related_findings:
+          type: array
+          items:
+            $ref: '#/components/schemas/SourceObjectRef'
+        source_ref:
+          type: string
+          format: uri
+        fetched_at:
+          type: string
+          format: date-time
+    SearchFindingsRequest:
+      type: object
+      required:
+        - time_range
+      properties:
+        sources:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+        kinds:
+          type: array
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/FindingKind'
+        time_range:
+          $ref: '#/components/schemas/TimeRange'
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 50
+        cursor:
+          type: string
+    SearchFindingsResponse:
+      type: object
+      required:
+        - findings
+        - source_states
+        - source_errors
+      properties:
+        findings:
+          type: array
+          items:
+            $ref: '#/components/schemas/Finding'
+        next_cursor:
+          type: string
+        source_states:
+          type: array
+          items:
+            $ref: '#/components/schemas/SourceState'
+        source_errors:
+          type: array
+          items:
+            $ref: '#/components/schemas/SourceError'
     Health:
       type: object
       description: Service health response.
@@ -1131,10 +1820,52 @@ components:
           description: Current health state of the checked component.
           enum:
             - ok
+    SearchSessionsRequest:
+      type: object
+      required:
+        - time_range
+      properties:
+        sources:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+        time_range:
+          $ref: '#/components/schemas/TimeRange'
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 50
+        cursor:
+          type: string
+    SearchSessionsResponse:
+      type: object
+      required:
+        - sessions
+        - source_states
+        - source_errors
+      properties:
+        sessions:
+          type: array
+          items:
+            $ref: '#/components/schemas/Session'
+        next_cursor:
+          type: string
+        source_states:
+          type: array
+          items:
+            $ref: '#/components/schemas/SourceState'
+        source_errors:
+          type: array
+          items:
+            $ref: '#/components/schemas/SourceError'
     Capability:
       type: string
       description: Operation that a source can perform through the Gateway.
       enum:
+        - findings
+        - sessions
         - events
         - entity_lookup
         - artifact_analysis
@@ -1171,15 +1902,13 @@ components:
           type: string
           description: Adapter mode currently backing the source.
           enum:
-            - mock
             - proxy
         status:
           type: string
-          description: >-
-            Result of the current connection probe, or mock availability for
-            mock-only sources.
+          description: Result of the current connection probe.
           enum:
             - online
+            - degraded
             - offline
         capabilities:
           type: array

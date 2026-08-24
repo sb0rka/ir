@@ -1,5 +1,4 @@
--- Ядро типов сущностей и базовые типы связей — без них не построить граф.
--- Источники засеяны четырьмя классами: SIEM, EDR, NDR, инфраструктурные логи.
+-- Ядро типов сущностей, связей и два реально поддержанных PT-источника.
 
 BEGIN;
 
@@ -12,18 +11,25 @@ INSERT INTO entity_types (code, title, category) VALUES
     ('email',     'Email',          'identity'),
     ('process',   'Процесс',        'execution'),
     ('ip',        'IP-адрес',       'network'),
+    ('mac',       'MAC-адрес',      'network'),
+    ('hostname',  'Имя узла',       'asset'),
     ('domain',    'Домен',          'network'),
     ('url',       'URL',            'network'),
-    ('file_hash', 'Файл / хеш',     'execution')
+    ('file_hash', 'Файл / хеш',     'execution'),
+    ('hash',      'Хеш',            'execution')
 ON CONFLICT (code) DO NOTHING;
 
 -- Роли сущности в событии
 INSERT INTO relation_types (code, title, source_kind, target_kind, directed) VALUES
     ('mentions', 'Упоминает',       'event',  'entity', true),
-    ('actor',   'Инициатор',      'entity', 'event',  true),
-    ('object',  'Объект',         'entity', 'event',  true),
-    ('src',     'Источник',       'entity', 'event',  true),
-    ('dst',     'Назначение',     'entity', 'event',  true)
+    ('actor',    'Инициатор',       'event',  'entity', true),
+    ('object',   'Объект',          'event',  'entity', true),
+    ('src',      'Источник',        'event',  'entity', true),
+    ('dst',      'Назначение',      'event',  'entity', true),
+    ('attacker', 'Атакующий',       'event',  'entity', true),
+    ('victim',   'Жертва',          'event',  'entity', true),
+    ('account',  'Учетная запись',  'event',  'entity', true),
+    ('file',     'Файл',             'event',  'entity', true)
 ON CONFLICT (code) DO NOTHING;
 
 -- Связи между сущностями
@@ -31,6 +37,9 @@ INSERT INTO relation_types (code, title, source_kind, target_kind, directed) VAL
     ('parent_process', 'Родительский процесс', 'entity', 'entity', true),
     ('logged_in',      'Вход на узел',         'entity', 'entity', true),
     ('connected_to',   'Сетевое соединение',   'entity', 'entity', true),
+    ('has_interface',  'Сетевой интерфейс',    'entity', 'entity', true),
+    ('authenticated_to','Аутентификация',       'entity', 'entity', true),
+    ('transferred_to', 'Передача данных',       'entity', 'entity', true),
     ('executed',       'Запуск файла',         'entity', 'entity', true),
     ('resolved_to',    'Резолв домена',        'entity', 'entity', true),
     ('same_host',      'Тот же узел',          'entity', 'entity', false)
@@ -43,17 +52,8 @@ INSERT INTO relation_types (code, title, source_kind, target_kind, directed) VAL
 ON CONFLICT (code) DO NOTHING;
 
 INSERT INTO sources (code, kind, title) VALUES
-    ('siem',  'siem',  'SIEM (демо-датасет)'),
-    ('edr',   'edr',   'EDR (демо-датасет)'),
-    ('ndr',   'ndr',   'NDR (демо-датасет)'),
-    ('infra_logs', 'infra', 'Инфраструктурные логи (демо-датасет)')
-ON CONFLICT (code) DO NOTHING;
-
--- Источники, которые отдаёт Gateway: ingest событий (attachEvents) пишет их
--- code в events.source_code, и без записи здесь упадёт FK.
-INSERT INTO sources (code, kind, title) VALUES
-    ('maxpatrol-siem', 'siem',    'MaxPatrol SIEM (Gateway)'),
-    ('pt-sandbox',     'sandbox', 'PT Sandbox (Gateway)')
+    ('pt-maxpatrol-siem', 'siem', 'MaxPatrol SIEM'),
+    ('pt-nad',            'ndr',  'PT Network Attack Discovery')
 ON CONFLICT (code) DO NOTHING;
 
 COMMIT;

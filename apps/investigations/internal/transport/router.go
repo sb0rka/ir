@@ -8,9 +8,11 @@ import (
 	"github.com/sb0rka/ir/apps/investigations/internal/transport/httperr"
 	"github.com/sb0rka/ir/packages/contract/entities"
 	"github.com/sb0rka/ir/packages/contract/events"
+	"github.com/sb0rka/ir/packages/contract/findings"
 	"github.com/sb0rka/ir/packages/contract/graph"
 	"github.com/sb0rka/ir/packages/contract/investigations"
 	"github.com/sb0rka/ir/packages/contract/reference"
+	"github.com/sb0rka/ir/packages/contract/sessions"
 	"github.com/sb0rka/ir/packages/contract/som"
 )
 
@@ -20,9 +22,11 @@ const baseURL = "/api/v1"
 type API interface {
 	entities.StrictServerInterface
 	events.StrictServerInterface
+	findings.StrictServerInterface
 	graph.StrictServerInterface
 	investigations.StrictServerInterface
 	reference.StrictServerInterface
+	sessions.StrictServerInterface
 	som.StrictServerInterface
 }
 
@@ -84,6 +88,15 @@ func registerDomains(mux *http.ServeMux, deps Dependencies) {
 			BaseURL: baseURL, BaseRouter: mux, ErrorHandlerFunc: onRequestError,
 		})
 
+	findings.HandlerWithOptions(
+		findings.NewStrictHandlerWithOptions(deps.Server, nil, findings.StrictHTTPServerOptions{
+			RequestErrorHandlerFunc:  onRequestError,
+			ResponseErrorHandlerFunc: onResponseError,
+		}),
+		findings.StdHTTPServerOptions{
+			BaseURL: baseURL, BaseRouter: mux, ErrorHandlerFunc: onRequestError,
+		})
+
 	graph.HandlerWithOptions(
 		graph.NewStrictHandlerWithOptions(deps.Server, nil, graph.StrictHTTPServerOptions{
 			RequestErrorHandlerFunc:  onRequestError,
@@ -108,6 +121,15 @@ func registerDomains(mux *http.ServeMux, deps Dependencies) {
 			ResponseErrorHandlerFunc: onResponseError,
 		}),
 		reference.StdHTTPServerOptions{
+			BaseURL: baseURL, BaseRouter: mux, ErrorHandlerFunc: onRequestError,
+		})
+
+	sessions.HandlerWithOptions(
+		sessions.NewStrictHandlerWithOptions(deps.Server, nil, sessions.StrictHTTPServerOptions{
+			RequestErrorHandlerFunc:  onRequestError,
+			ResponseErrorHandlerFunc: onResponseError,
+		}),
+		sessions.StdHTTPServerOptions{
 			BaseURL: baseURL, BaseRouter: mux, ErrorHandlerFunc: onRequestError,
 		})
 

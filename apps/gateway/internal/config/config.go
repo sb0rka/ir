@@ -7,7 +7,10 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
+	"net/url"
 	"os"
+	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -17,31 +20,22 @@ import (
 const (
 	DefaultRequestTimeout = 15 * time.Second
 	DefaultSourceTimeout  = 10 * time.Second
-	DefaultMockEvents     = 50_000
-	DefaultMockEndpoints  = 5_000
-	DefaultMockHistory    = 90
-	MaxMockEvents         = 1_000_000
-	MaxMockEndpoints      = 100_000
-	MaxMockHistory        = 3_650
+	PTMaxPatrolSIEM       = "pt-maxpatrol-siem"
+	PTNAD                 = "pt-nad"
+	PTMaxPatrolCookie     = "DEMO_PT_SIEM_COOKIE"
+	PTNADCookie           = "DEMO_PT_NAD_COOKIE"
 )
 
-var SourceCodes = []string{"maxpatrol-siem", "pt-sandbox"}
+var SourceCodes = []string{PTMaxPatrolSIEM, PTNAD}
 
 type Config struct {
 	Server           ServerConfig
 	Auth             AuthConfig
 	Log              coreconfig.LoggerConfig
-	Mock             MockConfig
 	Sb0rkaAPIBaseURL string
-	SkipTLSVerify     bool
+	SkipTLSVerify    bool
 	Sources          map[string]SourceConfig
 	ProjectSources   map[string]map[string]bool
-}
-
-type MockConfig struct {
-	EventCount    int
-	EndpointCount int
-	HistoryDays   int
 }
 
 type ServerConfig struct {
@@ -62,11 +56,12 @@ type AuthConfig struct {
 }
 
 type SourceConfig struct {
-	Mode           string
-	BaseURL        string
-	CredentialFile string
-	Timeout        time.Duration
-	TLSCAFile      string
+	BaseURL          string
+	IncidentsBaseURL string
+	StoreIDs         []string
+	Timeout          time.Duration
+	TLSCAFile        string
+	CredentialSecret string
 }
 
 func Load() (Config, error) {
@@ -89,16 +84,11 @@ func Load() (Config, error) {
 			Level:  coreconfig.GetStringEnv("LOG_LEVEL", "info"),
 			Format: coreconfig.GetStringEnv("LOG_FORMAT", "json"),
 		},
-		Mock: MockConfig{
-			EventCount:    coreconfig.GetIntEnv("MOCK_EVENT_COUNT", DefaultMockEvents),
-			EndpointCount: coreconfig.GetIntEnv("MOCK_ENDPOINT_COUNT", DefaultMockEndpoints),
-			HistoryDays:   coreconfig.GetIntEnv("MOCK_HISTORY_DAYS", DefaultMockHistory),
-		},
 		Sb0rkaAPIBaseURL: coreconfig.GetStringEnv("SB0RKA_API_BASE_URL", ""),
-		SkipTLSVerify:    coreconfig.GetBoolEnv("GATEWAY_SKIP_TLS_VERIFY", true),
+		SkipTLSVerify:    coreconfig.GetBoolEnv("GATEWAY_SKIP_TLS_VERIFY", false),
 		Sources:          make(map[string]SourceConfig, len(SourceCodes)),
 	}
-	projectSources, err := parseProjectSources(coreconfig.GetStringEnv("PROJECT_SOURCE_ALLOWLISTS", ""))
+	projectSources, err := parseProjectSources(coreconfig.GetStringEnv("PROJECT_SOURCE_ALLOWLISTS", "{}"))
 	if err != nil {
 		return Config{}, err
 	}
@@ -110,16 +100,6 @@ func Load() (Config, error) {
 	if cfg.Server.SourceTimeout > cfg.Server.RequestTimeout {
 		return Config{}, fmt.Errorf("source timeout must not exceed request timeout")
 	}
-	if cfg.Mock.EventCount < 1 || cfg.Mock.EventCount > MaxMockEvents {
-		return Config{}, fmt.Errorf("MOCK_EVENT_COUNT must be between 1 and %d", MaxMockEvents)
-	}
-	if cfg.Mock.EndpointCount < 1 || cfg.Mock.EndpointCount > MaxMockEndpoints {
-		return Config{}, fmt.Errorf("MOCK_ENDPOINT_COUNT must be between 1 and %d", MaxMockEndpoints)
-	}
-	if cfg.Mock.HistoryDays < 1 || cfg.Mock.HistoryDays > MaxMockHistory {
-		return Config{}, fmt.Errorf("MOCK_HISTORY_DAYS must be between 1 and %d", MaxMockHistory)
-	}
-
 	key, err := loadPublicKey()
 	if err != nil {
 		return Config{}, err
@@ -128,25 +108,91 @@ func Load() (Config, error) {
 	if !cfg.Auth.Disabled && len(key) == 0 {
 		return Config{}, fmt.Errorf("access token public key is required when auth is enabled")
 	}
-	for _, code := range SourceCodes {
-		prefix := "SOURCE_" + strings.ToUpper(strings.ReplaceAll(code, "-", "_")) + "_"
-		source := SourceConfig{
-			Mode:           strings.ToLower(coreconfig.GetStringEnv(prefix+"MODE", "mock")),
-			BaseURL:        coreconfig.GetStringEnv(prefix+"BASE_URL", ""),
-			CredentialFile: coreconfig.GetStringEnv(prefix+"CREDENTIAL_FILE", ""),
-			Timeout:        coreconfig.GetDurationEnv(prefix+"TIMEOUT_SEC", cfg.Server.SourceTimeout, time.Second),
-			TLSCAFile:      coreconfig.GetStringEnv(prefix+"TLS_CA_FILE", ""),
+	cfg.Sources[PTMaxPatrolSIEM] = SourceConfig{
+		BaseURL:          coreconfig.GetStringEnv("SOURCE_PT_MAXPATROL_SIEM_BASE_URL", ""),
+		IncidentsBaseURL: coreconfig.GetStringEnv("SOURCE_PT_MAXPATROL_SIEM_INCIDENTS_BASE_URL", ""),
+		Timeout:          coreconfig.GetDurationEnv("SOURCE_PT_MAXPATROL_SIEM_TIMEOUT_SEC", cfg.Server.SourceTimeout, time.Second),
+		TLSCAFile:        coreconfig.GetStringEnv("SOURCE_PT_MAXPATROL_SIEM_TLS_CA_FILE", ""),
+		CredentialSecret: PTMaxPatrolCookie,
+	}
+	storeIDs, storeErr := parseStoreIDs(coreconfig.GetStringEnv("SOURCE_PT_NAD_STORE_IDS", ""))
+	if storeErr != nil {
+		return Config{}, storeErr
+	}
+	cfg.Sources[PTNAD] = SourceConfig{
+		BaseURL:          coreconfig.GetStringEnv("SOURCE_PT_NAD_BASE_URL", ""),
+		StoreIDs:         storeIDs,
+		Timeout:          coreconfig.GetDurationEnv("SOURCE_PT_NAD_TIMEOUT_SEC", cfg.Server.SourceTimeout, time.Second),
+		TLSCAFile:        coreconfig.GetStringEnv("SOURCE_PT_NAD_TLS_CA_FILE", ""),
+		CredentialSecret: PTNADCookie,
+	}
+
+	for code := range configuredSources(cfg.ProjectSources) {
+		source := cfg.Sources[code]
+		if source.Timeout <= 0 {
+			return Config{}, fmt.Errorf("source %s timeout must be positive", code)
 		}
-		if source.Mode != "mock" && source.Mode != "proxy" {
-			return Config{}, fmt.Errorf("source %s has invalid mode %q", code, source.Mode)
+		if err := validateSourceURL(code, "base URL", source.BaseURL); err != nil {
+			return Config{}, err
 		}
-		if source.Mode == "proxy" {
-			return Config{}, fmt.Errorf("proxy mode is not implemented for source %s", code)
+		switch code {
+		case PTMaxPatrolSIEM:
+			if err := validateSourceURL(code, "incidents base URL", source.IncidentsBaseURL); err != nil {
+				return Config{}, err
+			}
+		case PTNAD:
+			if len(source.StoreIDs) == 0 {
+				return Config{}, fmt.Errorf("source %s requires SOURCE_PT_NAD_STORE_IDS", code)
+			}
 		}
-		cfg.Sources[code] = source
 	}
 
 	return cfg, nil
+}
+
+func configuredSources(projects map[string]map[string]bool) map[string]struct{} {
+	result := make(map[string]struct{})
+	for _, sources := range projects {
+		for source := range sources {
+			result[source] = struct{}{}
+		}
+	}
+	return result
+}
+
+func validateSourceURL(source, label, raw string) error {
+	value, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || value.Scheme != "https" || value.Host == "" || value.User != nil || value.RawQuery != "" || value.Fragment != "" {
+		return fmt.Errorf("source %s %s must be an absolute HTTPS URL without credentials, query, or fragment", source, label)
+	}
+	return nil
+}
+
+func parseStoreIDs(raw string) ([]string, error) {
+	if strings.TrimSpace(raw) == "" {
+		return nil, nil
+	}
+	seen := make(map[int]struct{})
+	for _, part := range strings.Split(raw, ",") {
+		value, err := strconv.Atoi(strings.TrimSpace(part))
+		if err != nil || value <= 0 {
+			return nil, fmt.Errorf("SOURCE_PT_NAD_STORE_IDS must contain unique positive integers")
+		}
+		if _, duplicate := seen[value]; duplicate {
+			return nil, fmt.Errorf("SOURCE_PT_NAD_STORE_IDS must contain unique positive integers")
+		}
+		seen[value] = struct{}{}
+	}
+	values := make([]int, 0, len(seen))
+	for value := range seen {
+		values = append(values, value)
+	}
+	sort.Ints(values)
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		result = append(result, strconv.Itoa(value))
+	}
+	return result, nil
 }
 
 func parseProjectSources(raw string) (map[string]map[string]bool, error) {

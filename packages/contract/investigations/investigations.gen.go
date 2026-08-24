@@ -117,6 +117,30 @@ func (e Severity) Valid() bool {
 	}
 }
 
+// Defines values for SourceObjectRefRecordType.
+const (
+	NadAttack       SourceObjectRefRecordType = "nad_attack"
+	NadSession      SourceObjectRefRecordType = "nad_session"
+	SiemCorrelation SourceObjectRefRecordType = "siem_correlation"
+	SiemIncident    SourceObjectRefRecordType = "siem_incident"
+)
+
+// Valid indicates whether the value is a known member of the SourceObjectRefRecordType enum.
+func (e SourceObjectRefRecordType) Valid() bool {
+	switch e {
+	case NadAttack:
+		return true
+	case NadSession:
+		return true
+	case SiemCorrelation:
+		return true
+	case SiemIncident:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for Verdict.
 const (
 	Confirmed     Verdict = "confirmed"
@@ -196,18 +220,25 @@ type ContextImportResult struct {
 	Edges    int `json:"edges"`
 	Entities int `json:"entities"`
 	Events   int `json:"events"`
+	Findings int `json:"findings"`
 	Nodes    int `json:"nodes"`
+	Sessions int `json:"sessions"`
+
+	// Warnings Safe summaries for objects whose available context is partial.
+	Warnings []string `json:"warnings"`
 }
 
-// ContextSelection Source-owned identifiers selected in the Gateway event list.
+// ContextSelection Source-owned identifiers selected in Gateway. At least one item across all four arrays is required; the server validates that aggregate rule.
 type ContextSelection struct {
 	Entities []EntitySourceRef `json:"entities"`
 	Events   []EventSourceRef  `json:"events"`
+	Findings []SourceObjectRef `json:"findings"`
+	Sessions []SourceObjectRef `json:"sessions"`
 }
 
 // EntitySourceRef defines model for EntitySourceRef.
 type EntitySourceRef struct {
-	// SourceCode Gateway source code, for example maxpatrol-siem.
+	// SourceCode Gateway source code, for example pt-maxpatrol-siem.
 	SourceCode string `json:"source_code"`
 
 	// SourceEntityId Original entity record identifier assigned by the source.
@@ -234,7 +265,7 @@ type ErrorResponseErrorCode string
 
 // EventSourceRef defines model for EventSourceRef.
 type EventSourceRef struct {
-	// SourceCode Gateway source code, for example maxpatrol-siem.
+	// SourceCode Gateway source code, for example pt-maxpatrol-siem.
 	SourceCode string `json:"source_code"`
 
 	// SourceEventId Original event identifier assigned by the source.
@@ -260,8 +291,14 @@ type Investigation struct {
 		// Events Events pulled into this investigation.
 		Events int `json:"events"`
 
+		// Findings First-class incidents, correlations and attacks attached here.
+		Findings int `json:"findings"`
+
 		// ProposedEdges Edges waiting for review.
 		ProposedEdges int `json:"proposed_edges"`
+
+		// Sessions First-class network sessions attached here.
+		Sessions int `json:"sessions"`
 	} `json:"counters"`
 
 	// CreatedAt When the investigation was opened.
@@ -375,6 +412,24 @@ type Origin string
 
 // Severity How much damage the case could cause. Set on triage and adjusted as evidence accumulates.
 type Severity string
+
+// SourceObjectRef Stable source identity and the bounded replay window; time is not identity.
+type SourceObjectRef struct {
+	ExternalId     string                    `json:"external_id"`
+	RecordType     SourceObjectRefRecordType `json:"record_type"`
+	SourceCode     string                    `json:"source_code"`
+	SourceInstance *string                   `json:"source_instance,omitempty"`
+	TimeRange      TimeRange                 `json:"time_range"`
+}
+
+// SourceObjectRefRecordType defines model for SourceObjectRef.RecordType.
+type SourceObjectRefRecordType string
+
+// TimeRange defines model for TimeRange.
+type TimeRange struct {
+	From time.Time `json:"from"`
+	To   time.Time `json:"to"`
+}
 
 // Verdict The conclusion, drawn from two vocabularies that share one field. A root case ends as incident, false_positive, not_affected or inconclusive. A hypothesis ends as confirmed, rejected or inconclusive. The server checks the value against the investigation's position in the tree, so a hypothesis cannot be closed as an incident.
 type Verdict string
@@ -1881,8 +1936,14 @@ type GetInvestigationTree200JSONResponse []struct {
 		// Events Events pulled into this investigation.
 		Events int `json:"events"`
 
+		// Findings First-class incidents, correlations and attacks attached here.
+		Findings int `json:"findings"`
+
 		// ProposedEdges Edges waiting for review.
 		ProposedEdges int `json:"proposed_edges"`
+
+		// Sessions First-class network sessions attached here.
+		Sessions int `json:"sessions"`
 	} `json:"counters"`
 
 	// CreatedAt When the investigation was opened.

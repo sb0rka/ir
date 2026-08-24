@@ -140,6 +140,7 @@ tasks:
 
   gen-ts:
     desc: TypeScript — по домену плюс общий api.d.ts для клиента
+    deps: [gateway-spec]
     sources: ['{{.INVESTIGATIONS_API}}/build/*.yaml']
     method: none
     cmds:

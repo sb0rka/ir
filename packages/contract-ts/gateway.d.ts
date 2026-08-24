@@ -143,6 +143,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/findings/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Search source-native security findings */
+        post: operations["searchFindings"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sources/{source}/findings/{kind}/{external_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Resolve one source-native finding */
+        get: operations["getFinding"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/healthz": {
         parameters: {
             query?: never;
@@ -177,6 +211,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sessions/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Search source-native network sessions */
+        post: operations["searchSessions"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sources/{source}/sessions/{external_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Resolve one source-native network session */
+        get: operations["getSession"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sources": {
         parameters: {
             query?: never;
@@ -186,7 +254,7 @@ export interface paths {
         };
         /**
          * List registered sources
-         * @description Returns project-allowed sources and actively probes account-capable connections.
+         * @description Returns project-allowed sources and probes every configured backend or store through a short cache.
          */
         get: operations["listSources"];
         put?: never;
@@ -355,12 +423,10 @@ export interface components {
             /** @description Whether the source currently allows the action for the endpoint. */
             enabled: boolean;
         };
-        /** @description Filters for endpoint inventory search. */
+        /** @description Bounded endpoint inventory page request. */
         SearchEndpointsRequest: {
             /** @description Source codes to query; omit to use every allowed endpoint source. */
             sources?: string[];
-            /** @description Free-text query matched against endpoint inventory fields. */
-            query?: string;
             /**
              * @description Maximum number of endpoints returned after merging all sources.
              * @default 50
@@ -395,6 +461,7 @@ export interface components {
             sources?: string[];
             /** @description Entity to normalize and enrich. */
             entity: components["schemas"]["EntityRef"];
+            time_range: components["schemas"]["TimeRange"];
         };
         /** @description Entity enrichment merged from the selected sources. */
         LookupEntityResponse: {
@@ -413,6 +480,13 @@ export interface components {
             type: string;
             /** @description Entity value to normalize and look up. */
             value: string;
+        };
+        /** @description Inclusive source-record occurrence-time interval. */
+        TimeRange: {
+            /** Format: date-time */
+            from: string;
+            /** Format: date-time */
+            to: string;
         };
         /** @description Source record in which a canonical entity was observed. */
         EntitySource: {
@@ -483,8 +557,8 @@ export interface components {
              * @description Time when the event occurred in the source system.
              */
             occurred_at: string;
-            /** @description Canonical entities mentioned by the event. */
-            entities: components["schemas"]["EntityRef"][];
+            /** @description Canonical entities and their observed roles in this event. */
+            entities: components["schemas"]["EntityMention"][];
             /** @description Selected event fields that have no canonical top-level property. */
             attributes: {
                 [key: string]: unknown;
@@ -497,37 +571,28 @@ export interface components {
         };
         /** @description Source records selected by a client for persistence in an investigation. */
         ResolveContextRequest: {
-            events: components["schemas"]["EventSourceRef"][];
-            entities: components["schemas"]["EntitySourceRef"][];
+            findings?: components["schemas"]["SourceObjectRef"][];
+            sessions?: components["schemas"]["SourceObjectRef"][];
+            events?: components["schemas"]["EventSourceRef"][];
+            entities?: components["schemas"]["EntitySourceRef"][];
         };
         /** @description Normalized records and relationships resolved from source-owned identifiers. */
         ResolveContextResponse: {
+            findings: components["schemas"]["Finding"][];
+            sessions: components["schemas"]["Session"][];
             events: components["schemas"]["Event"][];
             entities: components["schemas"]["Entity"][];
             relations: components["schemas"]["Relation"][];
+            /** @description Per-selected-object completeness. Missing root records are not represented as resolved objects. */
+            resolutions: components["schemas"]["ObjectResolution"][];
             source_errors: components["schemas"]["SourceError"][];
-        };
-        /** @description Inclusive event occurrence-time interval. */
-        TimeRange: {
-            /**
-             * Format: date-time
-             * @description Inclusive lower boundary of event occurrence time.
-             */
-            from: string;
-            /**
-             * Format: date-time
-             * @description Inclusive upper boundary of event occurrence time.
-             */
-            to: string;
         };
         /** @description Filters for a normalized multi-source event search. */
         SearchEventsRequest: {
             /** @description Source codes to query; omit to use every allowed source with event search. */
             sources?: string[];
-            /** @description Optional occurrence-time interval. */
-            time_range?: components["schemas"]["TimeRange"];
-            /** @description Free-text query interpreted by each selected source. */
-            query?: string;
+            /** @description Required occurrence-time interval. */
+            time_range: components["schemas"]["TimeRange"];
             /** @description Entity conditions; an event matches when it contains at least one listed entity. */
             entities?: components["schemas"]["EntityRef"][];
             /**
@@ -548,8 +613,42 @@ export interface components {
             relations: components["schemas"]["Relation"][];
             /** @description Opaque cursor for the next page; absent when the search is exhausted. */
             next_cursor?: string;
+            source_states: components["schemas"]["SourceState"][];
             /** @description Per-source failures when at least one selected source succeeded. */
             source_errors: components["schemas"]["SourceError"][];
+        };
+        ObjectResolution: {
+            ref: components["schemas"]["SourceObjectRef"];
+            /** @enum {string} */
+            status: "complete" | "partial";
+            errors: components["schemas"]["SourceError"][];
+        };
+        /** @description Canonical entity mentioned by an event or a source object, with its observed roles. */
+        EntityMention: {
+            /** @description Canonical entity kind. */
+            type: string;
+            /** @description Canonical entity value. */
+            value: string;
+            /** @description Roles observed in this record; vendor direction and attacker semantics remain distinct. */
+            roles: ("mentions" | "src" | "dst" | "actor" | "object" | "attacker" | "victim" | "account" | "file")[];
+        };
+        /** @description Completeness of one source stream in a search response. */
+        SourceState: {
+            source: string;
+            /** @enum {string} */
+            status: "complete" | "truncated" | "failed";
+            reason?: string;
+        };
+        /** @description Stable source-owned object identity plus the bounded time window needed to resolve it again. */
+        SourceObjectRef: {
+            source_code: string;
+            /** @description Provider instance, such as a PT NAD numeric store id. Empty for SIEM. */
+            source_instance?: string;
+            /** @enum {string} */
+            record_type: "siem_incident" | "siem_correlation" | "nad_attack" | "nad_session";
+            /** @description Identifier assigned by the source. The time window is not part of identity. */
+            external_id: string;
+            time_range: components["schemas"]["TimeRange"];
         };
         /** @description Stable reference to an event in its source system. */
         EventSourceRef: {
@@ -565,6 +664,143 @@ export interface components {
             /** @description Original entity identifier assigned by that source. */
             source_entity_id: string;
         };
+        /** @enum {string} */
+        FindingKind: "siem_incident" | "siem_correlation" | "nad_attack";
+        /** @description Bounded rule metadata observed on a finding. */
+        RuleRef: {
+            id?: string;
+            name: string;
+            revision?: number;
+        };
+        IncidentDetails: {
+            key?: string;
+            external_key?: string;
+            verdict?: string;
+            damage?: string;
+            recommendation?: string;
+            assigned_to?: string;
+            /** Format: date-time */
+            changed_at?: string;
+            archived?: boolean;
+            removed?: boolean;
+        };
+        CorrelationDetails: {
+            correlation_type?: string;
+            subevent_count?: number;
+        };
+        NADAttackDetails: {
+            class?: string;
+            gid?: number;
+            sid?: number;
+            revision?: number;
+            raw_priority?: number;
+            false_positive?: boolean | null;
+        };
+        /** @description A source-native coarse security object; never a renamed raw event. */
+        Finding: {
+            ref: components["schemas"]["SourceObjectRef"];
+            kind: components["schemas"]["FindingKind"];
+            title: string;
+            description?: string;
+            /** @enum {string} */
+            severity: "info" | "low" | "medium" | "high" | "critical" | "unknown";
+            /** Format: date-time */
+            occurred_at: string;
+            status?: string;
+            rule?: components["schemas"]["RuleRef"];
+            entities: components["schemas"]["EntityMention"][];
+            related_findings?: components["schemas"]["SourceObjectRef"][];
+            related_sessions?: components["schemas"]["SourceObjectRef"][];
+            incident?: components["schemas"]["IncidentDetails"];
+            correlation?: components["schemas"]["CorrelationDetails"];
+            nad_attack?: components["schemas"]["NADAttackDetails"];
+            /** Format: uri */
+            source_ref?: string;
+            /** Format: date-time */
+            fetched_at: string;
+        };
+        NetworkEndpoint: {
+            ip?: string;
+            mac?: string;
+            host?: string;
+            port: number;
+        };
+        TrafficCounters: {
+            /** Format: int64 */
+            sent?: number;
+            /** Format: int64 */
+            received?: number;
+            /** Format: int64 */
+            total?: number;
+        };
+        /** @description Safe metadata for a file observed in the session; file content and full vendor records are never returned. */
+        SessionFileHint: {
+            external_id: string;
+            name?: string;
+            mime?: string;
+            /** Format: int64 */
+            size: number;
+            md5?: string;
+            sha256?: string;
+            state?: string;
+            direction?: string;
+        };
+        /** @description Non-secret authentication metadata; proofs, session keys, passwords, and protocol payloads are excluded. */
+        SessionAuthenticationHint: {
+            protocol: string;
+            method?: string;
+            account?: string;
+            valid?: boolean | null;
+            /** Format: int64 */
+            failed_attempts?: number;
+            client_host?: string;
+            server_host?: string;
+        };
+        Session: {
+            ref: components["schemas"]["SourceObjectRef"];
+            title: string;
+            /** @enum {string} */
+            severity: "info" | "low" | "medium" | "high" | "critical" | "unknown";
+            raw_criticality?: number;
+            /** Format: date-time */
+            started_at: string;
+            /** Format: date-time */
+            ended_at?: string;
+            /** Format: double */
+            duration_seconds?: number;
+            source_endpoint: components["schemas"]["NetworkEndpoint"];
+            destination_endpoint: components["schemas"]["NetworkEndpoint"];
+            transport_protocol: string;
+            application_protocol?: string;
+            bytes?: components["schemas"]["TrafficCounters"];
+            packets?: components["schemas"]["TrafficCounters"];
+            state: string[];
+            false_positive?: boolean | null;
+            has_files?: boolean;
+            file_hints: components["schemas"]["SessionFileHint"][];
+            authentication_hints: components["schemas"]["SessionAuthenticationHint"][];
+            tcp_flags?: string[];
+            entities: components["schemas"]["EntityMention"][];
+            related_findings: components["schemas"]["SourceObjectRef"][];
+            /** Format: uri */
+            source_ref?: string;
+            /** Format: date-time */
+            fetched_at: string;
+        };
+        SearchFindingsRequest: {
+            sources?: string[];
+            kinds?: components["schemas"]["FindingKind"][];
+            time_range: components["schemas"]["TimeRange"];
+            /** @default 50 */
+            limit: number;
+            cursor?: string;
+        };
+        SearchFindingsResponse: {
+            findings: components["schemas"]["Finding"][];
+            next_cursor?: string;
+            source_states: components["schemas"]["SourceState"][];
+            source_errors: components["schemas"]["SourceError"][];
+        };
         /** @description Service health response. */
         Health: {
             /**
@@ -573,11 +809,24 @@ export interface components {
              */
             status: "ok";
         };
+        SearchSessionsRequest: {
+            sources?: string[];
+            time_range: components["schemas"]["TimeRange"];
+            /** @default 50 */
+            limit: number;
+            cursor?: string;
+        };
+        SearchSessionsResponse: {
+            sessions: components["schemas"]["Session"][];
+            next_cursor?: string;
+            source_states: components["schemas"]["SourceState"][];
+            source_errors: components["schemas"]["SourceError"][];
+        };
         /**
          * @description Operation that a source can perform through the Gateway.
          * @enum {string}
          */
-        Capability: "events" | "entity_lookup" | "artifact_analysis" | "endpoints" | "response_catalog" | "account_userinfo";
+        Capability: "findings" | "sessions" | "events" | "entity_lookup" | "artifact_analysis" | "endpoints" | "response_catalog" | "account_userinfo";
         /** @description External security product registered in the Gateway. */
         Source: {
             /** @description Stable source identifier used in requests and provenance. */
@@ -593,12 +842,12 @@ export interface components {
              * @description Adapter mode currently backing the source.
              * @enum {string}
              */
-            mode: "mock" | "proxy";
+            mode: "proxy";
             /**
-             * @description Result of the current connection probe, or mock availability for mock-only sources.
+             * @description Result of the current connection probe.
              * @enum {string}
              */
-            status: "online" | "offline";
+            status: "online" | "degraded" | "offline";
             /** @description Operations implemented by this source. */
             capabilities: components["schemas"]["Capability"][];
         };
@@ -764,7 +1013,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Completed mock analysis. */
+            /** @description Accepted artifact analysis. */
             202: {
                 headers: {
                     [name: string]: unknown;
@@ -999,6 +1248,81 @@ export interface operations {
             default: components["responses"]["ErrorResponse"];
         };
     };
+    searchFindings: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Sb0rka project whose integration allowlist is used. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SearchFindingsRequest"];
+            };
+        };
+        responses: {
+            /** @description Merged findings from the selected project sources. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SearchFindingsResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            422: components["responses"]["ValidationError"];
+            502: components["responses"]["BadGateway"];
+            504: components["responses"]["GatewayTimeout"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    getFinding: {
+        parameters: {
+            query: {
+                source_instance?: string;
+                from: string;
+                to: string;
+            };
+            header: {
+                /** @description Sb0rka project whose integration allowlist is used. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
+            path: {
+                source: string;
+                kind: "siem_incident" | "siem_correlation" | "nad_attack";
+                external_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Finding and the context currently available from its source. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        finding: components["schemas"]["Finding"];
+                        resolution: components["schemas"]["ObjectResolution"];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            502: components["responses"]["BadGateway"];
+            504: components["responses"]["GatewayTimeout"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
     healthz: {
         parameters: {
             query?: never;
@@ -1030,6 +1354,80 @@ export interface operations {
                     "text/plain": string;
                 };
             };
+        };
+    };
+    searchSessions: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Sb0rka project whose integration allowlist is used. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SearchSessionsRequest"];
+            };
+        };
+        responses: {
+            /** @description Network sessions from the selected project sources. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SearchSessionsResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            422: components["responses"]["ValidationError"];
+            502: components["responses"]["BadGateway"];
+            504: components["responses"]["GatewayTimeout"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    getSession: {
+        parameters: {
+            query: {
+                source_instance: string;
+                from: string;
+                to: string;
+            };
+            header: {
+                /** @description Sb0rka project whose integration allowlist is used. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
+            path: {
+                source: string;
+                external_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Session and its current resolution state. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        session: components["schemas"]["Session"];
+                        resolution: components["schemas"]["ObjectResolution"];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            502: components["responses"]["BadGateway"];
+            504: components["responses"]["GatewayTimeout"];
+            default: components["responses"]["ErrorResponse"];
         };
     };
     listSources: {

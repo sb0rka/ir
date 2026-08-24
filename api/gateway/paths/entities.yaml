@@ -44,7 +44,7 @@ components:
     LookupEntityRequest:
       type: object
       description: Request to enrich one entity from one or more sources.
-      required: [entity]
+      required: [entity, time_range]
       properties:
         sources:
           type: array
@@ -56,6 +56,8 @@ components:
           description: Entity to normalize and enrich.
           allOf:
             - $ref: '../shared/schemas.yaml#/EntityRef'
+        time_range:
+          $ref: '../shared/schemas.yaml#/TimeRange'
 
     LookupEntityResponse:
       type: object

@@ -12,17 +12,15 @@ import (
 )
 
 type HTTPClientConfig struct {
-	BaseURL        string
-	CredentialFile string
-	Timeout        time.Duration
-	TLSCAFile      string
-	SkipTLSVerify  bool
+	BaseURL       string
+	Timeout       time.Duration
+	TLSCAFile     string
+	SkipTLSVerify bool
 }
 
 type HTTPClient struct {
-	BaseURL    *url.URL
-	Credential string
-	Client     *http.Client
+	BaseURL *url.URL
+	Client  *http.Client
 }
 
 func NewHTTPClient(cfg HTTPClientConfig) (*HTTPClient, error) {
@@ -35,18 +33,6 @@ func NewHTTPClient(cfg HTTPClientConfig) (*HTTPClient, error) {
 	}
 	if cfg.Timeout <= 0 {
 		return nil, fmt.Errorf("timeout must be positive")
-	}
-
-	credential := ""
-	if cfg.CredentialFile != "" {
-		raw, readErr := os.ReadFile(cfg.CredentialFile)
-		if readErr != nil {
-			return nil, fmt.Errorf("read credential file: %w", readErr)
-		}
-		credential = strings.TrimSpace(string(raw))
-		if credential == "" {
-			return nil, fmt.Errorf("credential file is empty")
-		}
 	}
 
 	transport := http.DefaultTransport.(*http.Transport).Clone()
@@ -69,8 +55,13 @@ func NewHTTPClient(cfg HTTPClientConfig) (*HTTPClient, error) {
 
 	baseURL.Path = strings.TrimRight(baseURL.Path, "/") + "/"
 	return &HTTPClient{
-		BaseURL:    baseURL,
-		Credential: credential,
-		Client:     &http.Client{Transport: transport, Timeout: cfg.Timeout},
+		BaseURL: baseURL,
+		Client: &http.Client{
+			Transport: transport,
+			Timeout:   cfg.Timeout,
+			CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
+		},
 	}, nil
 }

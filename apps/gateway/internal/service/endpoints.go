@@ -15,7 +15,6 @@ import (
 
 type SearchEndpointsRequest struct {
 	Sources []string
-	Query   string
 	Limit   int
 	Cursor  string
 }
@@ -26,17 +25,19 @@ type SearchEndpointsResult struct {
 	SourceErrors []domain.SourceError
 }
 
-func (service *Service) SearchEndpoints(ctx context.Context, request SearchEndpointsRequest) (SearchEndpointsResult, error) {
+func (service *Service) SearchEndpoints(ctx context.Context, access ProjectAccess, request SearchEndpointsRequest) (SearchEndpointsResult, error) {
 	providers, err := service.registry.Select(request.Sources, domain.CapabilityEndpoints)
 	if err != nil {
 		return SearchEndpointsResult{}, err
 	}
 	limit := normalizeLimit(request.Limit)
-	fingerprint := endpointFingerprint(request.Sources, request.Query)
+	fingerprint := endpointFingerprint(request.Sources)
 	state, err := decodeCursor(request.Cursor, fingerprint)
 	if err != nil {
 		return SearchEndpointsResult{}, err
 	}
+	positions := state.Positions
+	state.Positions = make(map[string]string)
 	type providerResult struct {
 		source string
 		page   capability.EndpointPage
@@ -48,18 +49,19 @@ func (service *Service) SearchEndpoints(ctx context.Context, request SearchEndpo
 	for _, provider := range providers {
 		provider := provider
 		go func() {
-			sourceCtx, sourceCancel := context.WithTimeout(requestCtx, service.sourceTimeout)
-			defer sourceCancel()
-			page, callErr := provider.Endpoints.SearchEndpoints(sourceCtx, capability.SearchEndpointsRequest{
-				Query: request.Query, Limit: limit, Cursor: state.Positions[provider.Source.Code],
+			var page capability.EndpointPage
+			callErr := service.callProvider(requestCtx, access, provider, func(attemptCtx context.Context, providerAccess capability.Access) error {
+				var innerErr error
+				page, innerErr = provider.Endpoints.SearchEndpoints(attemptCtx, providerAccess, capability.SearchEndpointsRequest{
+					Limit: limit, Cursor: positions[provider.Source.Code],
+				})
+				return innerErr
 			})
 			results <- providerResult{source: provider.Source.Code, page: page, err: callErr}
 		}()
 	}
 
 	result := SearchEndpointsResult{}
-	continuations := make(map[string]string)
-	providerHasMore := false
 	pending := providerCodes(providers)
 	for len(pending) > 0 {
 		select {
@@ -69,12 +71,9 @@ func (service *Service) SearchEndpoints(ctx context.Context, request SearchEndpo
 				result.SourceErrors = append(result.SourceErrors, sourceError(item.source, item.err))
 				continue
 			}
-			providerHasMore = providerHasMore || item.page.HasMore
 			result.Items = append(result.Items, item.page.Items...)
-			for index, endpoint := range item.page.Items {
-				if index < len(item.page.Continuations) {
-					continuations[endpointKey(endpoint)] = item.page.Continuations[index]
-				}
+			if item.page.NextCursor != "" {
+				state.Positions[item.source] = item.page.NextCursor
 			}
 		case <-requestCtx.Done():
 			appendPendingErrors(&result.SourceErrors, pending, requestCtx.Err())
@@ -85,16 +84,10 @@ func (service *Service) SearchEndpoints(ctx context.Context, request SearchEndpo
 		return SearchEndpointsResult{}, &AllSourcesError{Items: result.SourceErrors}
 	}
 	result.Items = normalization.Endpoints(result.Items)
-	moreMerged := len(result.Items) > limit
-	if moreMerged {
+	if len(result.Items) > limit {
 		result.Items = result.Items[:limit]
 	}
-	for _, endpoint := range result.Items {
-		if continuation := continuations[endpointKey(endpoint)]; continuation != "" {
-			state.Positions[endpoint.Provenance.Source] = continuation
-		}
-	}
-	if moreMerged || providerHasMore {
+	if len(state.Positions) > 0 {
 		state.Fingerprint = fingerprint
 		result.NextCursor, err = encodeCursor(state)
 		if err != nil {
@@ -105,7 +98,7 @@ func (service *Service) SearchEndpoints(ctx context.Context, request SearchEndpo
 	return result, nil
 }
 
-func (service *Service) ListResponseActions(ctx context.Context, source, externalID string) ([]domain.ResponseAction, error) {
+func (service *Service) ListResponseActions(ctx context.Context, access ProjectAccess, source, externalID string) ([]domain.ResponseAction, error) {
 	provider, ok := service.registry.Provider(source)
 	if !ok {
 		return nil, &domain.RequestError{Code: "source_not_found", Message: fmt.Sprintf("source %q is not registered", source)}
@@ -113,18 +106,20 @@ func (service *Service) ListResponseActions(ctx context.Context, source, externa
 	if provider.ResponseCatalog == nil {
 		return nil, fmt.Errorf("%w: source %q does not support response catalog", domain.ErrUnsupportedCapability, source)
 	}
-	requestCtx, cancel := context.WithTimeout(ctx, service.sourceTimeout)
+	requestCtx, cancel := context.WithTimeout(ctx, service.requestTimeout)
 	defer cancel()
-	return provider.ResponseCatalog.ListResponseActions(requestCtx, externalID)
+	var items []domain.ResponseAction
+	err := service.callProvider(requestCtx, access, provider, func(attemptCtx context.Context, providerAccess capability.Access) error {
+		var innerErr error
+		items, innerErr = provider.ResponseCatalog.ListResponseActions(attemptCtx, providerAccess, externalID)
+		return innerErr
+	})
+	return items, err
 }
 
-func endpointKey(endpoint domain.Endpoint) string {
-	return endpoint.Provenance.Source + "\x00" + endpoint.ExternalID
-}
-
-func endpointFingerprint(sources []string, query string) string {
+func endpointFingerprint(sources []string) string {
 	sources = append([]string(nil), sources...)
 	sort.Strings(sources)
-	sum := sha256.Sum256([]byte(strings.Join(sources, ",") + "\x00" + strings.TrimSpace(query)))
+	sum := sha256.Sum256([]byte(strings.Join(sources, ",")))
 	return hex.EncodeToString(sum[:])
 }

@@ -1,0 +1,140 @@
+openapi: 3.0.3
+info:
+  title: IR — network sessions
+  version: 0.0.1
+servers:
+  - url: /api/v1
+security:
+  - bearerAuth: []
+
+paths:
+  /investigations/{investigation_id}/sessions:
+    parameters:
+      - { $ref: '../shared/parameters.yaml#/components/parameters/ProjectId' }
+      - { $ref: '../shared/parameters.yaml#/components/parameters/InvestigationId' }
+    get:
+      tags: [sessions]
+      summary: List network sessions attached to an investigation
+      operationId: listSessions
+      parameters:
+        - name: severity
+          in: query
+          schema: { $ref: './findings.yaml#/components/schemas/ObjectSeverity' }
+        - name: context_status
+          in: query
+          schema: { $ref: './findings.yaml#/components/schemas/ContextStatus' }
+        - { $ref: '../shared/parameters.yaml#/components/parameters/Limit' }
+        - { $ref: '../shared/parameters.yaml#/components/parameters/Cursor' }
+      responses:
+        '200':
+          description: One page of attached sessions.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SessionPage' }
+        '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
+        '422': { $ref: '../shared/responses.yaml#/components/responses/ValidationError' }
+        '500': { $ref: '../shared/responses.yaml#/components/responses/InternalError' }
+
+  /sessions/{session_id}:
+    parameters:
+      - { $ref: '../shared/parameters.yaml#/components/parameters/ProjectId' }
+      - name: session_id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [sessions]
+      summary: Get one project network session
+      operationId: getSession
+      responses:
+        '200':
+          description: The current normalized network-session snapshot.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NetworkSession' }
+        '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
+        '500': { $ref: '../shared/responses.yaml#/components/responses/InternalError' }
+
+  /investigations/{investigation_id}/sessions/{session_id}:
+    parameters:
+      - { $ref: '../shared/parameters.yaml#/components/parameters/ProjectId' }
+      - { $ref: '../shared/parameters.yaml#/components/parameters/InvestigationId' }
+      - name: session_id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    delete:
+      tags: [sessions]
+      summary: Detach a session and its exclusively derived context
+      description: >-
+        Keeps directly added evidence, evidence owned by another attached
+        finding/session, and evidence used by confirmed graph edges.
+      operationId: detachSession
+      responses:
+        '204': { description: Detached }
+        '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
+        '500': { $ref: '../shared/responses.yaml#/components/responses/InternalError' }
+
+components:
+  schemas:
+    NetworkSession:
+      type: object
+      required:
+        - id
+        - ref
+        - title
+        - severity
+        - started_at
+        - fetched_at
+        - normalized_snapshot
+        - provenance
+        - context_status
+        - context_errors
+        - created_at
+        - updated_at
+      properties:
+        id: { type: string, format: uuid }
+        investigation_ids:
+          type: array
+          items: { type: string, format: uuid }
+        ref: { $ref: './findings.yaml#/components/schemas/SourceObjectRef' }
+        title: { type: string }
+        severity: { $ref: './findings.yaml#/components/schemas/ObjectSeverity' }
+        started_at: { type: string, format: date-time }
+        ended_at: { type: string, format: date-time, nullable: true }
+        source_ref: { type: string, format: uri, nullable: true }
+        fetched_at: { type: string, format: date-time }
+        normalized_snapshot:
+          type: object
+          additionalProperties: true
+        provenance:
+          type: object
+          additionalProperties: true
+        context_status: { $ref: './findings.yaml#/components/schemas/ContextStatus' }
+        context_errors:
+          type: array
+          items: { $ref: './findings.yaml#/components/schemas/ContextError' }
+        directly_added:
+          type: boolean
+          description: Present and meaningful when listed through an investigation.
+        derived:
+          type: boolean
+          description: The session was discovered while resolving a selected object.
+        attached_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    SessionPage:
+      type: object
+      required: [sessions]
+      properties:
+        sessions:
+          type: array
+          items: { $ref: '#/components/schemas/NetworkSession' }
+        next_cursor: { type: string, nullable: true }
