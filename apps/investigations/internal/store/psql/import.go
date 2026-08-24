@@ -469,19 +469,28 @@ func importSelectionTx(ctx context.Context, tx pgx.Tx, request model.ImportReque
 	if request.Origin == "analyst" {
 		analystConfidence := float32(1)
 		eventNodes := make(map[string]model.GraphNode, len(eventIDs))
-		entityNodes := make(map[string]model.GraphNode, len(entityIDs))
-		for snapshotID, eventID := range eventIDs {
+		graphEntityIDs := graphEntitySnapshotIDs(request.Selection)
+		entityNodes := make(map[string]model.GraphNode, len(graphEntityIDs))
+		for _, event := range request.Selection.Events {
+			if !shouldPromoteEventToGraph(event) {
+				continue
+			}
+			eventID := eventIDs[event.SnapshotID]
 			node, inserted, err := upsertNodeTx(ctx, tx, request.InvestigationID, "event", nil, &eventID, "analyst", nil)
 			if err != nil {
 				return stats, err
 			}
-			eventNodes[snapshotID] = node
+			eventNodes[event.SnapshotID] = node
 			refs.addNode(node.ID)
 			if inserted {
 				stats.Nodes++
 			}
 		}
-		for snapshotID, entityID := range entityIDs {
+		for snapshotID := range graphEntityIDs {
+			entityID, ok := entityIDs[snapshotID]
+			if !ok {
+				return stats, store.ErrUnknownReference
+			}
 			node, inserted, err := upsertNodeTx(ctx, tx, request.InvestigationID, "entity", &entityID, nil, "analyst", nil)
 			if err != nil {
 				return stats, err
@@ -493,9 +502,17 @@ func importSelectionTx(ctx context.Context, tx pgx.Tx, request model.ImportReque
 			}
 		}
 		for _, event := range request.Selection.Events {
+			eventNode, promoted := eventNodes[event.SnapshotID]
+			if !promoted {
+				continue
+			}
 			for _, mention := range event.Entities {
+				entityNode, ok := entityNodes[mention.SnapshotID]
+				if !ok {
+					return stats, store.ErrUnknownReference
+				}
 				for _, role := range mention.Roles {
-					edgeID, inserted, err := insertEdgeTx(ctx, tx, request.InvestigationID, eventNodes[event.SnapshotID], entityNodes[mention.SnapshotID], role, "confirmed", "analyst", nil, &analystConfidence, nil, nil)
+					edgeID, inserted, err := insertEdgeTx(ctx, tx, request.InvestigationID, eventNode, entityNode, role, "confirmed", "analyst", nil, &analystConfidence, nil, nil)
 					if err != nil {
 						return stats, err
 					}
@@ -510,8 +527,13 @@ func importSelectionTx(ctx context.Context, tx pgx.Tx, request model.ImportReque
 			}
 		}
 		for _, relation := range request.Selection.Relations {
+			sourceNode, sourceVisible := entityNodes[relation.SourceEntitySnapshotID]
+			targetNode, targetVisible := entityNodes[relation.TargetEntitySnapshotID]
+			if !sourceVisible || !targetVisible {
+				continue
+			}
 			metadata, _ := json.Marshal(map[string]any{"source_code": relation.Provenance.Source, "source_relation_id": relation.Provenance.ExternalID, "source_ref": relation.Provenance.SourceURL})
-			edgeID, inserted, err := insertEdgeTx(ctx, tx, request.InvestigationID, entityNodes[relation.SourceEntitySnapshotID], entityNodes[relation.TargetEntitySnapshotID], relation.RelationCode, "confirmed", "analyst", nil, &analystConfidence, nil, metadata)
+			edgeID, inserted, err := insertEdgeTx(ctx, tx, request.InvestigationID, sourceNode, targetNode, relation.RelationCode, "confirmed", "analyst", nil, &analystConfidence, nil, metadata)
 			if err != nil {
 				return stats, err
 			}
@@ -647,10 +669,13 @@ func linkSourceSubeventEdgesTx(ctx context.Context, tx pgx.Tx, request model.Imp
 	insertedEdges := 0
 	warnings := make([]string, 0)
 	confidence := float32(1)
-	if err := ensureRelationTypeTx(ctx, tx, "subevent_of", "event", "event"); err != nil {
+	if err := ensureRelationTypeTx(ctx, tx, "observed_in", "event", "event"); err != nil {
 		return 0, 0, nil, err
 	}
 	for _, child := range request.Selection.Events {
+		if !shouldPromoteEventToGraph(child) {
+			continue
+		}
 		parentSourceEventID, ok := sourceSubeventParent(child)
 		if !ok {
 			continue
@@ -698,7 +723,7 @@ func linkSourceSubeventEdgesTx(ctx context.Context, tx pgx.Tx, request model.Imp
 			"parent_source_event_id": parentSourceEventID,
 		})
 		edgeID, inserted, err := insertEdgeTx(ctx, tx, request.InvestigationID, childNode, parentNode,
-			"subevent_of", "confirmed", "rule", child.Provenance.SourceURL, &confidence, nil, metadata)
+			"observed_in", "confirmed", "rule", child.Provenance.SourceURL, &confidence, nil, metadata)
 		if err != nil {
 			return 0, 0, nil, err
 		}
@@ -712,6 +737,36 @@ func linkSourceSubeventEdgesTx(ctx context.Context, tx pgx.Tx, request model.Imp
 		}
 	}
 	return insertedNodes, insertedEdges, warnings, nil
+}
+
+func shouldPromoteEventToGraph(event model.GatewayEvent) bool {
+	if event.Direct {
+		return true
+	}
+	switch event.EventType {
+	case "network.http", "network.file", "network.authentication", "network.smb", "network.dcerpc":
+		return false
+	default:
+		return true
+	}
+}
+
+func graphEntitySnapshotIDs(selection model.GatewaySelection) map[string]struct{} {
+	promoted := make(map[string]struct{}, len(selection.Entities))
+	for _, entity := range selection.Entities {
+		if entity.Direct {
+			promoted[entity.SnapshotID] = struct{}{}
+		}
+	}
+	for _, event := range selection.Events {
+		if !shouldPromoteEventToGraph(event) {
+			continue
+		}
+		for _, mention := range event.Entities {
+			promoted[mention.SnapshotID] = struct{}{}
+		}
+	}
+	return promoted
 }
 
 func sourceSubeventParent(event model.GatewayEvent) (string, bool) {

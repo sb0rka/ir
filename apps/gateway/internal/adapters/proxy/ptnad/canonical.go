@@ -2,6 +2,7 @@ package ptnad
 
 import (
 	"fmt"
+	"net"
 	"sort"
 	"strconv"
 	"strings"
@@ -15,8 +16,8 @@ import (
 func canonicalFinding(value Attack) domain.Finding {
 	ref := canonicalRef(value.SourceRef)
 	mentions := make([]domain.EntityMention, 0, 6)
-	mentions = append(mentions, endpointMentions(value.Attacker, "attacker")...)
-	mentions = append(mentions, endpointMentions(value.Victim, "victim")...)
+	mentions = append(mentions, endpointMentions(value.Attacker, "suspected_source", value.SourceRef.SourceInstance)...)
+	mentions = append(mentions, endpointMentions(value.Victim, "suspected_target", value.SourceRef.SourceInstance)...)
 	mentions = normalizeMentions(mentions)
 	details := &domain.NADAttackDetails{
 		Class: value.Class, GID: int(value.GID), SID: int(value.SID), Revision: int(value.Revision),
@@ -49,8 +50,8 @@ func canonicalSession(value Session) domain.Session {
 	duration := value.DurationSeconds
 	hasFiles := value.HasFiles
 	mentions := make([]domain.EntityMention, 0, 6)
-	mentions = append(mentions, endpointMentions(source, "src")...)
-	mentions = append(mentions, endpointMentions(destination, "dst")...)
+	mentions = append(mentions, endpointMentions(source, "src", value.SourceRef.SourceInstance)...)
+	mentions = append(mentions, endpointMentions(destination, "dst", value.SourceRef.SourceInstance)...)
 	item := domain.Session{
 		Ref: ref, Title: sessionTitle(value, source, destination), Severity: value.Severity,
 		StartedAt: value.Start, EndedAt: &end, DurationSeconds: &duration,
@@ -141,6 +142,9 @@ func appendAttackContext(page *capability.ContextPage, value Attack) {
 	event := attackEvent(value)
 	page.Events = append(page.Events, event)
 	page.Entities = append(page.Entities, entitiesForEvent(event, value.SourceRef.SourceInstance)...)
+	provenance := objectProvenance(value.SourceRef, value.FetchedAt)
+	page.Relations = append(page.Relations, endpointIdentifierRelations(value.Attacker, value.SourceRef.SourceInstance, value.OccurredAt, provenance)...)
+	page.Relations = append(page.Relations, endpointIdentifierRelations(value.Victim, value.SourceRef.SourceInstance, value.OccurredAt, provenance)...)
 }
 
 func decomposeSession(value Session) ([]domain.Event, []domain.Entity, []domain.Relation) {
@@ -150,42 +154,42 @@ func decomposeSession(value Session) ([]domain.Event, []domain.Entity, []domain.
 	relations := sessionRelations(value)
 
 	for _, attack := range value.RelatedAttacks {
-		event := attackEvent(attack)
+		event := sessionChildEvent(value, attackEvent(attack))
 		events = append(events, event)
 		entities = append(entities, entitiesForEvent(event, value.SourceRef.SourceInstance)...)
 	}
 	for _, file := range value.Files {
-		event := fileEvent(value, file)
+		event := sessionChildEvent(value, fileEvent(value, file))
 		events = append(events, event)
 		entities = append(entities, entitiesForEvent(event, value.SourceRef.SourceInstance)...)
 	}
 	for index, authentication := range value.Authentication {
-		event := authenticationEvent(value, authentication, index)
+		event := sessionChildEvent(value, authenticationEvent(value, authentication, index))
 		events = append(events, event)
 		entities = append(entities, entitiesForEvent(event, value.SourceRef.SourceInstance)...)
 	}
 	for _, hint := range value.SSH {
-		event := sshEvent(value, hint)
+		event := sessionChildEvent(value, sshEvent(value, hint))
 		events = append(events, event)
 		entities = append(entities, entitiesForEvent(event, value.SourceRef.SourceInstance)...)
 	}
 	for _, hint := range value.HTTP {
-		event := httpEvent(value, hint)
+		event := sessionChildEvent(value, httpEvent(value, hint))
 		events = append(events, event)
 		entities = append(entities, entitiesForEvent(event, value.SourceRef.SourceInstance)...)
 	}
 	for _, hint := range value.SMB {
-		event := smbEvent(value, hint)
+		event := sessionChildEvent(value, smbEvent(value, hint))
 		events = append(events, event)
 		entities = append(entities, entitiesForEvent(event, value.SourceRef.SourceInstance)...)
 	}
 	for _, hint := range value.DCERPC {
-		event := dcerpcEvent(value, hint)
+		event := sessionChildEvent(value, dcerpcEvent(value, hint))
 		events = append(events, event)
 		entities = append(entities, entitiesForEvent(event, value.SourceRef.SourceInstance)...)
 	}
 	for _, hint := range value.NTLM {
-		event := ntlmEvent(value, hint)
+		event := sessionChildEvent(value, ntlmEvent(value, hint))
 		events = append(events, event)
 		entities = append(entities, entitiesForEvent(event, value.SourceRef.SourceInstance)...)
 	}
@@ -363,7 +367,11 @@ func sshEvent(session Session, hint SSHHint) domain.Event {
 func httpEvent(session Session, hint HTTPHint) domain.Event {
 	mentions := append([]domain.EntityMention(nil), sessionEndpointMentions(session)...)
 	if hint.Host != "" {
-		mentions = append(mentions, mention("domain", hint.Host, "object"))
+		kind := "domain"
+		if net.ParseIP(strings.TrimSpace(hint.Host)) != nil {
+			kind = "ip"
+		}
+		mentions = append(mentions, mention(kind, hint.Host, "object"))
 	}
 	attributes := map[string]any{
 		"parent_session_id": session.SourceRef.ExternalID, "transaction_id": hint.Transaction.TxID,
@@ -422,6 +430,15 @@ func protocolEvent(session Session, transaction TransactionRef, eventType, title
 	}
 }
 
+func sessionChildEvent(session Session, event domain.Event) domain.Event {
+	if event.Attributes == nil {
+		event.Attributes = map[string]any{}
+	}
+	event.Attributes["parent_source_event_id"] = sourceEventID(session.SourceRef)
+	event.Attributes["relation_type"] = "subevent_of"
+	return event
+}
+
 func sessionRelations(value Session) []domain.Relation {
 	provenance := objectProvenance(value.SourceRef, value.FetchedAt)
 	result := make([]domain.Relation, 0)
@@ -430,6 +447,7 @@ func sessionRelations(value Session) []domain.Relation {
 		result = append(result, relation("connected_to", entityRef("ip", source.IP), entityRef("ip", destination.IP), value.Start, provenance))
 	}
 	for _, endpoint := range []Endpoint{source, destination} {
+		result = append(result, endpointIdentifierRelations(endpoint, value.SourceRef.SourceInstance, value.Start, provenance)...)
 		if endpoint.Host != "" && endpoint.IP != "" {
 			result = append(result, relation("has_interface", entityRef("host", endpoint.Host), entityRef("ip", endpoint.IP), value.Start, provenance))
 		}
@@ -499,14 +517,17 @@ func entitiesForEvent(event domain.Event, sourceInstance string) []domain.Entity
 }
 
 func sessionEndpointMentions(value Session) []domain.EntityMention {
-	mentions := make([]domain.EntityMention, 0, 6)
-	mentions = append(mentions, endpointMentions(value.Source, "src")...)
-	mentions = append(mentions, endpointMentions(value.Destination, "dst")...)
+	mentions := make([]domain.EntityMention, 0, 8)
+	mentions = append(mentions, endpointMentions(value.Source, "src", value.SourceRef.SourceInstance)...)
+	mentions = append(mentions, endpointMentions(value.Destination, "dst", value.SourceRef.SourceInstance)...)
 	return normalizeMentions(mentions)
 }
 
-func endpointMentions(value Endpoint, role string) []domain.EntityMention {
-	result := make([]domain.EntityMention, 0, 3)
+func endpointMentions(value Endpoint, role, sourceInstance string) []domain.EntityMention {
+	result := make([]domain.EntityMention, 0, 4)
+	if device := endpointDeviceRef(value, sourceInstance); device.Value != "" {
+		result = append(result, domain.EntityMention{EntityRef: device, Roles: []string{role}})
+	}
 	if value.IP != "" {
 		result = append(result, mention("ip", value.IP, role))
 	}
@@ -515,6 +536,43 @@ func endpointMentions(value Endpoint, role string) []domain.EntityMention {
 	}
 	if host := firstNonEmpty(value.Host, value.DNS); host != "" {
 		result = append(result, mention("host", host, role))
+	}
+	return result
+}
+
+func endpointDeviceRef(value Endpoint, sourceInstance string) domain.EntityRef {
+	if value.MAC != "" {
+		return entityRef("device", domain.CanonicalValue("mac", value.MAC))
+	}
+	if value.HostID != "" {
+		return entityRef("device", fmt.Sprintf("pt-nad:%s:host:%s", sourceInstance, strings.TrimSpace(value.HostID)))
+	}
+	return domain.EntityRef{Type: "device"}
+}
+
+func endpointIdentifierRefs(value Endpoint) []domain.EntityRef {
+	result := make([]domain.EntityRef, 0, 3)
+	if value.IP != "" {
+		result = append(result, entityRef("ip", value.IP))
+	}
+	if value.MAC != "" {
+		result = append(result, entityRef("mac", value.MAC))
+	}
+	if host := firstNonEmpty(value.Host, value.DNS); host != "" {
+		result = append(result, entityRef("host", host))
+	}
+	return result
+}
+
+func endpointIdentifierRelations(value Endpoint, sourceInstance string, occurredAt time.Time, provenance domain.Provenance) []domain.Relation {
+	device := endpointDeviceRef(value, sourceInstance)
+	if device.Value == "" {
+		return nil
+	}
+	identifiers := endpointIdentifierRefs(value)
+	result := make([]domain.Relation, 0, len(identifiers))
+	for _, identifier := range identifiers {
+		result = append(result, relation("has_identifier", device, identifier, occurredAt, provenance))
 	}
 	return result
 }

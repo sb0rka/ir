@@ -50,11 +50,14 @@ export function mapSeverity(value: string | undefined | null): Severity {
 
 export function mapEntityKind(value: string | undefined | null): EntityKind {
   switch (value) {
+    case 'device':
     case 'host':
     case 'user':
     case 'process':
     case 'file_hash':
     case 'ip':
+    case 'mac':
+    case 'hostname':
     case 'domain':
     case 'email':
     case 'account':

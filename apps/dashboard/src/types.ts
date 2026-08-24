@@ -8,12 +8,15 @@ export type AlertStatus = 'new' | 'investigating' | 'closed'
 export type Source = string
 
 export type EntityKind =
+  | 'device'
   | 'host'
   | 'user'
   | 'account'
   | 'process'
   | 'file_hash'
   | 'ip'
+  | 'mac'
+  | 'hostname'
   | 'domain'
   | 'email'
   | 'url'

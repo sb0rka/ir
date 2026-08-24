@@ -57,11 +57,12 @@ export function buildVisibleGraph(args: {
   const alertInTime = (alert: AlertNode) => inRange(alert.event_ts, alert.event_ts)
   const originVisible = (origin: EdgeOrigin) => filters.edgeOrigins.has(origin)
 
-  const visibleEntities = entities.filter(
+  const eligibleEntities = entities.filter(
+    (e) => entityInTime(e) && originVisible(e.origin),
+  )
+  const visibleEntities = eligibleEntities.filter(
     (e) =>
-      filters.entityTypes.has(e.type_code) &&
-      entityInTime(e) &&
-      originVisible(e.origin),
+      filters.entityTypes.has(e.type_code),
   )
   const visibleAlerts = alerts.filter(
     (a) =>
@@ -70,8 +71,33 @@ export function buildVisibleGraph(args: {
       originVisible(a.origin),
   )
 
+  const visibleEntityIds = new Set(visibleEntities.map((e) => e.id))
+  const eligibleById = new Map(eligibleEntities.map((e) => [e.id, e]))
+  const foldedInto = new Map<string, string>()
+  const deviceMembers = new Map<string, Entity[]>()
+
+  for (const edge of edges) {
+    if (edge.kind !== 'has_identifier' || !originVisible(edge.origin)) continue
+    const device = eligibleById.get(edge.source_id)
+    const identifier = eligibleById.get(edge.target_id)
+    if (
+      device?.type_code !== 'device' ||
+      !identifier ||
+      !visibleEntityIds.has(device.id) ||
+      !visibleEntityIds.has(identifier.id)
+    ) {
+      continue
+    }
+    foldedInto.set(identifier.id, device.id)
+    const members = deviceMembers.get(device.id) ?? []
+    members.push(identifier)
+    deviceMembers.set(device.id, members)
+  }
+
+  const projectedEntities = visibleEntities.filter((e) => !foldedInto.has(e.id))
+  const projectId = (id: string) => foldedInto.get(id) ?? id
   const visibleIds = new Set([
-    ...visibleEntities.map((e) => e.id),
+    ...projectedEntities.map((e) => e.id),
     ...visibleAlerts.map((a) => a.id),
   ])
 
@@ -95,23 +121,44 @@ export function buildVisibleGraph(args: {
   )
 
   const nodes: RFNode<GraphNodeData>[] = [
-    ...visibleEntities.map((e) => ({
-      id: e.id,
-      type: 'entity',
-      position: e.position,
-      data: {
-        kind: 'entity' as const,
-        label: e.display_name,
-        sublabel: e.type_code,
-        entityType: e.type_code,
-        dimmed: hovering,
-        highlighted: false,
-        selected:
-          selectedId === e.id ||
-          (!!e.entity_id && selectedId === e.entity_id),
-        entityId: e.entity_id ?? e.id,
-      },
-    })),
+    ...projectedEntities.map((e) => {
+      const members = deviceMembers.get(e.id) ?? []
+      const preferredIdentifier = [...members].sort((left, right) => {
+        const rank = (type: EntityTypeCode) =>
+          type === 'host' || type === 'hostname' ? 0 : type === 'ip' ? 1 : 2
+        return rank(left.type_code) - rank(right.type_code)
+      })[0]
+      const selected =
+        selectedId === e.id ||
+        (!!e.entity_id && selectedId === e.entity_id) ||
+        members.some(
+          (member) =>
+            selectedId === member.id ||
+            (!!member.entity_id && selectedId === member.entity_id),
+        )
+      return {
+        id: e.id,
+        type: 'entity',
+        position: e.position,
+        data: {
+          kind: 'entity' as const,
+          label: preferredIdentifier?.display_name ?? e.display_name,
+          sublabel:
+            e.type_code === 'device' && members.length > 0
+              ? `device · ${members.length} identifiers`
+              : e.type_code,
+          entityType: e.type_code,
+          dimmed: hovering,
+          highlighted: false,
+          selected,
+          entityId: e.entity_id ?? e.id,
+          tooltip:
+            members.length > 0
+              ? members.map((member) => `${member.type_code}: ${member.display_name}`).join('\n')
+              : undefined,
+        },
+      }
+    }),
     ...visibleAlerts.map((a) => {
       const highlighted = isHoveredAlert(a)
       const dimmed = hovering && !highlighted
@@ -140,10 +187,18 @@ export function buildVisibleGraph(args: {
     }),
   ]
 
-  const curvatureByTarget = new Map<string, number>()
-  const rfEdges: RFEdge[] = edges
+  const projectedEdges = new Map<string, Edge & { source_id: string; target_id: string }>()
+  for (const edge of edges
     .filter((e) => filters.edgeOrigins.has(e.origin))
-    .filter((e) => visibleIds.has(e.source_id) && visibleIds.has(e.target_id))
+    .map((e) => ({ ...e, source_id: projectId(e.source_id), target_id: projectId(e.target_id) }))
+    .filter((e) => e.source_id !== e.target_id)
+    .filter((e) => visibleIds.has(e.source_id) && visibleIds.has(e.target_id))) {
+    const key = `${edge.source_id}\x00${edge.target_id}\x00${edge.kind}\x00${edge.origin}\x00${edge.status}`
+    if (!projectedEdges.has(key)) projectedEdges.set(key, edge)
+  }
+
+  const curvatureByTarget = new Map<string, number>()
+  const rfEdges: RFEdge[] = [...projectedEdges.values()]
     .map((e) => {
       const fromAgent = e.origin === 'agent'
       const opacity =

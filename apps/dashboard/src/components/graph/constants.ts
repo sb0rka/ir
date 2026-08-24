@@ -8,10 +8,13 @@ export const SEVERITY_COLOR: Record<Severity, string> = {
 }
 
 export const ALL_ENTITY_TYPES = [
+  'device',
   'host',
   'user',
   'process',
   'ip',
+  'mac',
+  'hostname',
   'file_hash',
   'domain',
   'url',

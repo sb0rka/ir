@@ -22,6 +22,8 @@ import type { Investigation } from '../types'
 
 function mapEntityType(kind: string): EntityTypeCode {
   switch (kind) {
+    case 'device':
+      return 'device'
     case 'host':
       return 'host'
     case 'user':
@@ -31,6 +33,10 @@ function mapEntityType(kind: string): EntityTypeCode {
       return 'process'
     case 'ip':
       return 'ip'
+    case 'mac':
+      return 'mac'
+    case 'hostname':
+      return 'hostname'
     case 'file_hash':
     case 'file':
       return 'file_hash'

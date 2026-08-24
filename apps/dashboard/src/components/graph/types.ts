@@ -1,10 +1,13 @@
 export type Severity = 'critical' | 'high' | 'medium' | 'low'
 
 export type EntityTypeCode =
+  | 'device'
   | 'host'
   | 'user'
   | 'process'
   | 'ip'
+  | 'mac'
+  | 'hostname'
   | 'file_hash'
   | 'domain'
   | 'url'

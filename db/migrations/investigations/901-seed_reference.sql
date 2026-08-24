@@ -5,6 +5,7 @@ BEGIN;
 SET LOCAL search_path = :"DB_INV_SCHEMA_NAME", pg_temp;
 
 INSERT INTO entity_types (code, title, category) VALUES
+    ('device',    'Устройство',     'asset'),
     ('host',      'Узел',           'asset'),
     ('user',      'Пользователь',   'identity'),
     ('account',   'Учетная запись', 'identity'),
@@ -28,6 +29,8 @@ INSERT INTO relation_types (code, title, source_kind, target_kind, directed) VAL
     ('dst',      'Назначение',      'event',  'entity', true),
     ('attacker', 'Атакующий',       'event',  'entity', true),
     ('victim',   'Жертва',          'event',  'entity', true),
+    ('suspected_source', 'Предполагаемый источник', 'event', 'entity', true),
+    ('suspected_target', 'Предполагаемая цель',      'event', 'entity', true),
     ('account',  'Учетная запись',  'event',  'entity', true),
     ('file',     'Файл',             'event',  'entity', true)
 ON CONFLICT (code) DO NOTHING;
@@ -38,6 +41,7 @@ INSERT INTO relation_types (code, title, source_kind, target_kind, directed) VAL
     ('logged_in',      'Вход на узел',         'entity', 'entity', true),
     ('connected_to',   'Сетевое соединение',   'entity', 'entity', true),
     ('has_interface',  'Сетевой интерфейс',    'entity', 'entity', true),
+    ('has_identifier', 'Идентификатор устройства','entity', 'entity', true),
     ('authenticated_to','Аутентификация',       'entity', 'entity', true),
     ('transferred_to', 'Передача данных',       'entity', 'entity', true),
     ('executed',       'Запуск файла',         'entity', 'entity', true),
@@ -48,6 +52,7 @@ ON CONFLICT (code) DO NOTHING;
 -- Связи между событиями: цепочка атаки во времени
 INSERT INTO relation_types (code, title, source_kind, target_kind, directed) VALUES
     ('subevent_of', 'Породило сработку', 'event', 'event', true),
+    ('observed_in', 'Обнаружено в',      'event', 'event', true),
     ('followed_by', 'Следующее событие', 'event', 'event', true)
 ON CONFLICT (code) DO NOTHING;
 

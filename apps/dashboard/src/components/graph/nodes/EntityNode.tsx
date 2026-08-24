@@ -17,10 +17,13 @@ import type { GraphNodeData } from '../graph-adapters'
 import type { EntityTypeCode } from '../types'
 
 const ICONS: Record<EntityTypeCode, typeof User> = {
+  device: Monitor,
   user: User,
   host: Monitor,
   process: Terminal,
   ip: Network,
+  mac: Network,
+  hostname: Monitor,
   file_hash: Hash,
   domain: Globe,
   url: Link2,
@@ -42,7 +45,7 @@ export function EntityNode({ data }: NodeProps<EntityFlowNode>) {
     .join(' ')
 
   return (
-    <div className={classes}>
+    <div className={classes} title={data.tooltip}>
       <Handle
         type="target"
         position={Position.Left}

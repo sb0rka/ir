@@ -65,6 +65,7 @@ export function matchesChips(
 export function fieldForEntityKind(kind: EntityKind): FilterField | null {
   switch (kind) {
     case 'host':
+    case 'hostname':
       return 'host'
     case 'user':
     case 'account':
