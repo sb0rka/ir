@@ -10,8 +10,9 @@ import (
 )
 
 type LookupEntityRequest struct {
-	Sources []string
-	Entity  domain.EntityRef
+	Sources   []string
+	Entity    domain.EntityRef
+	TimeRange domain.TimeRange
 }
 
 type LookupEntityResult struct {
@@ -21,7 +22,7 @@ type LookupEntityResult struct {
 	SourceErrors []domain.SourceError
 }
 
-func (service *Service) LookupEntity(ctx context.Context, request LookupEntityRequest) (LookupEntityResult, error) {
+func (service *Service) LookupEntity(ctx context.Context, access ProjectAccess, request LookupEntityRequest) (LookupEntityResult, error) {
 	providers, err := service.registry.Select(request.Sources, domain.CapabilityEntityLookup)
 	if err != nil {
 		return LookupEntityResult{}, err
@@ -37,9 +38,12 @@ func (service *Service) LookupEntity(ctx context.Context, request LookupEntityRe
 	for _, provider := range providers {
 		provider := provider
 		go func() {
-			sourceCtx, sourceCancel := context.WithTimeout(requestCtx, service.sourceTimeout)
-			defer sourceCancel()
-			value, callErr := provider.EntityLookup.LookupEntity(sourceCtx, capability.LookupEntityRequest{Entity: request.Entity})
+			var value capability.LookupEntityResult
+			callErr := service.callProvider(requestCtx, access, provider, func(attemptCtx context.Context, providerAccess capability.Access) error {
+				var innerErr error
+				value, innerErr = provider.EntityLookup.LookupEntity(attemptCtx, providerAccess, capability.LookupEntityRequest{Entity: request.Entity, TimeRange: request.TimeRange})
+				return innerErr
+			})
 			results <- providerResult{source: provider.Source.Code, value: value, err: callErr}
 		}()
 	}

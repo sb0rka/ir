@@ -31,13 +31,32 @@ FK в локальной БД.
 
 ## Доказательная база
 
-События и сущности принадлежат проекту, а не расследованию: один и тот же хост
-или одна и та же сработка штатно фигурируют в нескольких кейсах, и копировать
-их на каждый — значит потерять ответ на вопрос «где ещё это встречалось», ради
-которого карточка сущности и существует.
+Findings, network sessions, события и сущности принадлежат проекту, а не
+расследованию: один и тот же инцидент, flow или хост штатно фигурирует в
+нескольких кейсах. Во всех внешних identity участвует `project_id`.
 
-Принадлежность расследованию вынесена в `investigation_events` и
-`investigation_entities`. Там же живёт доказательство: кто добавил и зачем.
+### `findings`
+
+First-class SIEM incident/correlation и NAD attack. Source identity:
+`(project_id, source_code, source_instance, record_type, external_id)`.
+`time_from/time_to` обязательны для повторного resolve, но не входят в identity.
+Mutable нормализованный snapshot обновляется идемпотентно; при partial resolve
+новые поля накладываются на последний полный snapshot. `context_errors`
+содержит только безопасные Gateway errors без query, credentials и vendor raw.
+
+### `network_sessions`
+
+First-class NAD session с той же схемой identity и replay window. Полный
+доступный normalized snapshot хранится без payload, cookies, auth material,
+PCAP и содержимого файлов.
+
+### Coarse-object relations
+
+`finding_relations` хранит incident → correlation,
+`finding_sessions` — attack → session. `finding_events`, `finding_entities`,
+`network_session_events` и `network_session_entities` фиксируют ownership
+granular context. Связи добавляются, но не вычищаются при partial refresh, чтобы
+временная деградация источника не уничтожала уже сохранённое evidence.
 
 ### `events`
 
@@ -77,19 +96,34 @@ FK в локальной БД.
 
 ## Состав расследования
 
+### `investigation_findings`, `investigation_sessions`
+
+Membership хранит независимо `directly_added` и `derived`: объект может сначала
+прийти как дочерний контекст, а затем быть выбран аналитиком напрямую. Повторный
+импорт объединяет эти признаки и не создаёт копий.
+
 ### `investigation_events`
 
 `reason` — зачем добавили: нарратив расследования, а не служебное поле.
+`directly_added/derived` нужны для безопасной отвязки coarse object.
 
 ### `investigation_entities`
 
 Как сущность попала в кейс: извлечена из события, введена аналитиком как
-индикатор или предложена агентом.
+индикатор или предложена агентом. Direct/derived provenance хранится отдельно
+от `added_via`.
+
+При detach finding/session удаляется только его membership и exclusively
+derived granular context. Сохраняются записи, добавленные напрямую,
+принадлежащие другому прикреплённому coarse object, упоминаемые оставшимся
+event или участвующие в confirmed evidence. Очистка и detach выполняются в той
+же транзакции, что и проверка project scope.
 
 ## Граф
 
 Проект графа однозначно задаёт `investigation_id`; `project_id` здесь не
-дублируется.
+дублируется. Findings и sessions не становятся типами узлов: их granular
+events/entities и source-backed relations проецируются в существующий граф.
 
 ### `graph_nodes`
 

@@ -19,14 +19,20 @@ func (server *Server) LookupEntity(w http.ResponseWriter, r *http.Request, _ api
 		respondError(w, http.StatusBadRequest, "bad_request", "entity type and value are required")
 		return
 	}
+	timeRange, err := objectTimeRange(body.TimeRange.From, body.TimeRange.To)
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "bad_request", err.Error())
+		return
+	}
 	sources, err := server.constrainSources(r.Context(), valueOrEmpty(body.Sources), domain.CapabilityEntityLookup)
 	if err != nil {
 		server.writeServiceError(w, err)
 		return
 	}
-	result, err := server.service.LookupEntity(r.Context(), service.LookupEntityRequest{
-		Sources: sources,
-		Entity:  domain.EntityRef{Type: body.Entity.Type, Value: body.Entity.Value},
+	result, err := server.service.LookupEntity(r.Context(), projectAccess(r), service.LookupEntityRequest{
+		Sources:   sources,
+		Entity:    domain.EntityRef{Type: body.Entity.Type, Value: body.Entity.Value},
+		TimeRange: timeRange,
 	})
 	if err != nil {
 		server.writeServiceError(w, err)

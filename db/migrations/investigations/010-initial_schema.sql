@@ -1,4 +1,4 @@
--- Migration: 90ed76030198
+-- Migration: 81cde9c33b72
 
 BEGIN;
 
@@ -189,6 +189,101 @@ CREATE INDEX IF NOT EXISTS ix_events_normalized
 CREATE INDEX IF NOT EXISTS ix_events_normalized_trgm
     ON events USING gin ((normalized_data::text) gin_trgm_ops);
 
+-- Coarse source objects are persisted independently from their investigation
+-- memberships. Their time range is required for replay, but is deliberately
+-- excluded from source identity.
+CREATE TABLE IF NOT EXISTS findings (
+    id UUID DEFAULT gen_random_uuid() NOT NULL,
+    project_id VARCHAR(12) NOT NULL,
+    source_code VARCHAR(32) NOT NULL,
+    source_instance VARCHAR NOT NULL DEFAULT '',
+    record_type VARCHAR(32) NOT NULL
+        CHECK (record_type IN ('siem_incident', 'siem_correlation', 'nad_attack')),
+    external_id VARCHAR NOT NULL,
+    time_from TIMESTAMP WITH TIME ZONE NOT NULL,
+    time_to TIMESTAMP WITH TIME ZONE NOT NULL,
+
+    kind VARCHAR(32) NOT NULL
+        CHECK (kind IN ('siem_incident', 'siem_correlation', 'nad_attack')),
+    title VARCHAR NOT NULL,
+    description VARCHAR,
+    severity VARCHAR(8) NOT NULL
+        CHECK (severity IN ('info', 'low', 'medium', 'high', 'critical', 'unknown')),
+    occurred_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    status VARCHAR,
+    source_ref VARCHAR,
+    fetched_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    normalized_snapshot JSONB DEFAULT '{}'::jsonb NOT NULL,
+    provenance JSONB DEFAULT '{}'::jsonb NOT NULL,
+    context_status VARCHAR(8) NOT NULL
+        CHECK (context_status IN ('complete', 'partial')),
+    context_errors JSONB DEFAULT '[]'::jsonb NOT NULL
+        CHECK (jsonb_typeof(context_errors) = 'array'),
+
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
+
+    CONSTRAINT pk_findings PRIMARY KEY (id),
+    CONSTRAINT uq_findings_id_project UNIQUE (id, project_id),
+    CONSTRAINT uq_findings_source UNIQUE
+        (project_id, source_code, source_instance, record_type, external_id),
+    CONSTRAINT ck_findings_time_range CHECK (time_from < time_to),
+    CONSTRAINT ck_findings_kind_record_type CHECK (kind = record_type),
+    CONSTRAINT fk_findings_source FOREIGN KEY (source_code) REFERENCES sources (code)
+);
+
+DROP TRIGGER IF EXISTS trg_findings_set_updated_at ON findings;
+CREATE TRIGGER trg_findings_set_updated_at
+BEFORE UPDATE ON findings
+FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+CREATE INDEX IF NOT EXISTS ix_findings_project_occurred
+    ON findings (project_id, occurred_at DESC, id DESC);
+
+CREATE TABLE IF NOT EXISTS network_sessions (
+    id UUID DEFAULT gen_random_uuid() NOT NULL,
+    project_id VARCHAR(12) NOT NULL,
+    source_code VARCHAR(32) NOT NULL,
+    source_instance VARCHAR NOT NULL DEFAULT '',
+    record_type VARCHAR(32) NOT NULL CHECK (record_type = 'nad_session'),
+    external_id VARCHAR NOT NULL,
+    time_from TIMESTAMP WITH TIME ZONE NOT NULL,
+    time_to TIMESTAMP WITH TIME ZONE NOT NULL,
+
+    title VARCHAR NOT NULL,
+    severity VARCHAR(8) NOT NULL
+        CHECK (severity IN ('info', 'low', 'medium', 'high', 'critical', 'unknown')),
+    started_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    ended_at TIMESTAMP WITH TIME ZONE,
+    source_ref VARCHAR,
+    fetched_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    normalized_snapshot JSONB DEFAULT '{}'::jsonb NOT NULL,
+    provenance JSONB DEFAULT '{}'::jsonb NOT NULL,
+    context_status VARCHAR(8) NOT NULL
+        CHECK (context_status IN ('complete', 'partial')),
+    context_errors JSONB DEFAULT '[]'::jsonb NOT NULL
+        CHECK (jsonb_typeof(context_errors) = 'array'),
+
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
+
+    CONSTRAINT pk_network_sessions PRIMARY KEY (id),
+    CONSTRAINT uq_network_sessions_id_project UNIQUE (id, project_id),
+    CONSTRAINT uq_network_sessions_source UNIQUE
+        (project_id, source_code, source_instance, record_type, external_id),
+    CONSTRAINT ck_network_sessions_time_range CHECK (time_from < time_to),
+    CONSTRAINT ck_network_sessions_times CHECK (ended_at IS NULL OR started_at <= ended_at),
+    CONSTRAINT fk_network_sessions_source FOREIGN KEY (source_code) REFERENCES sources (code)
+);
+
+DROP TRIGGER IF EXISTS trg_network_sessions_set_updated_at ON network_sessions;
+CREATE TRIGGER trg_network_sessions_set_updated_at
+BEFORE UPDATE ON network_sessions
+FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+CREATE INDEX IF NOT EXISTS ix_network_sessions_project_started
+    ON network_sessions (project_id, started_at DESC, id DESC);
+
 CREATE TABLE IF NOT EXISTS entities (
     id UUID DEFAULT gen_random_uuid() NOT NULL,
     project_id VARCHAR(12) NOT NULL,
@@ -306,7 +401,156 @@ CREATE TRIGGER trg_entity_relations_set_updated_at
 BEFORE UPDATE ON entity_relations
 FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
+-- Source-owned nesting stays first class without adding finding/session graph
+-- node kinds. Granular facts below are still projected into the existing graph.
+CREATE TABLE IF NOT EXISTS finding_relations (
+    project_id VARCHAR(12) NOT NULL,
+    source_finding_id UUID NOT NULL,
+    target_finding_id UUID NOT NULL,
+    relation_code VARCHAR(64) NOT NULL DEFAULT 'contains',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
+
+    CONSTRAINT pk_finding_relations PRIMARY KEY
+        (source_finding_id, target_finding_id, relation_code),
+    CONSTRAINT ck_finding_relations_not_self CHECK (source_finding_id <> target_finding_id),
+    CONSTRAINT fk_finding_relations_source FOREIGN KEY (source_finding_id, project_id)
+        REFERENCES findings (id, project_id) ON DELETE CASCADE,
+    CONSTRAINT fk_finding_relations_target FOREIGN KEY (target_finding_id, project_id)
+        REFERENCES findings (id, project_id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS ix_finding_relations_target
+    ON finding_relations (target_finding_id);
+
+CREATE TABLE IF NOT EXISTS finding_sessions (
+    project_id VARCHAR(12) NOT NULL,
+    finding_id UUID NOT NULL,
+    session_id UUID NOT NULL,
+    relation_code VARCHAR(64) NOT NULL DEFAULT 'related_session',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
+
+    CONSTRAINT pk_finding_sessions PRIMARY KEY (finding_id, session_id, relation_code),
+    CONSTRAINT fk_finding_sessions_finding FOREIGN KEY (finding_id, project_id)
+        REFERENCES findings (id, project_id) ON DELETE CASCADE,
+    CONSTRAINT fk_finding_sessions_session FOREIGN KEY (session_id, project_id)
+        REFERENCES network_sessions (id, project_id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS ix_finding_sessions_session ON finding_sessions (session_id);
+
+CREATE TABLE IF NOT EXISTS finding_events (
+    project_id VARCHAR(12) NOT NULL,
+    finding_id UUID NOT NULL,
+    event_id UUID NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
+
+    CONSTRAINT pk_finding_events PRIMARY KEY (finding_id, event_id),
+    CONSTRAINT fk_finding_events_finding FOREIGN KEY (finding_id, project_id)
+        REFERENCES findings (id, project_id) ON DELETE CASCADE,
+    CONSTRAINT fk_finding_events_event FOREIGN KEY (event_id, project_id)
+        REFERENCES events (id, project_id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS ix_finding_events_event ON finding_events (event_id);
+
+CREATE TABLE IF NOT EXISTS finding_entities (
+    project_id VARCHAR(12) NOT NULL,
+    finding_id UUID NOT NULL,
+    entity_id UUID NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
+
+    CONSTRAINT pk_finding_entities PRIMARY KEY (finding_id, entity_id),
+    CONSTRAINT fk_finding_entities_finding FOREIGN KEY (finding_id, project_id)
+        REFERENCES findings (id, project_id) ON DELETE CASCADE,
+    CONSTRAINT fk_finding_entities_entity FOREIGN KEY (entity_id, project_id)
+        REFERENCES entities (id, project_id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS ix_finding_entities_entity ON finding_entities (entity_id);
+
+CREATE TABLE IF NOT EXISTS network_session_events (
+    project_id VARCHAR(12) NOT NULL,
+    session_id UUID NOT NULL,
+    event_id UUID NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
+
+    CONSTRAINT pk_network_session_events PRIMARY KEY (session_id, event_id),
+    CONSTRAINT fk_network_session_events_session FOREIGN KEY (session_id, project_id)
+        REFERENCES network_sessions (id, project_id) ON DELETE CASCADE,
+    CONSTRAINT fk_network_session_events_event FOREIGN KEY (event_id, project_id)
+        REFERENCES events (id, project_id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS ix_network_session_events_event
+    ON network_session_events (event_id);
+
+CREATE TABLE IF NOT EXISTS network_session_entities (
+    project_id VARCHAR(12) NOT NULL,
+    session_id UUID NOT NULL,
+    entity_id UUID NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
+
+    CONSTRAINT pk_network_session_entities PRIMARY KEY (session_id, entity_id),
+    CONSTRAINT fk_network_session_entities_session FOREIGN KEY (session_id, project_id)
+        REFERENCES network_sessions (id, project_id) ON DELETE CASCADE,
+    CONSTRAINT fk_network_session_entities_entity FOREIGN KEY (entity_id, project_id)
+        REFERENCES entities (id, project_id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS ix_network_session_entities_entity
+    ON network_session_entities (entity_id);
+
 -- INVESTIGATION COMPONENTS
+
+CREATE TABLE IF NOT EXISTS investigation_findings (
+    investigation_id UUID NOT NULL,
+    finding_id UUID NOT NULL,
+    project_id VARCHAR(12) NOT NULL,
+    directly_added BOOLEAN DEFAULT false NOT NULL,
+    derived BOOLEAN DEFAULT false NOT NULL,
+    attached_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
+
+    CONSTRAINT pk_investigation_findings PRIMARY KEY (investigation_id, finding_id),
+    CONSTRAINT uq_inv_findings_project UNIQUE (investigation_id, finding_id, project_id),
+    CONSTRAINT ck_inv_findings_origin CHECK (directly_added OR derived),
+    CONSTRAINT fk_inv_findings_investigation FOREIGN KEY (investigation_id, project_id)
+        REFERENCES investigations (id, project_id) ON DELETE CASCADE,
+    CONSTRAINT fk_inv_findings_finding FOREIGN KEY (finding_id, project_id)
+        REFERENCES findings (id, project_id) ON DELETE CASCADE
+);
+
+DROP TRIGGER IF EXISTS trg_investigation_findings_set_updated_at ON investigation_findings;
+CREATE TRIGGER trg_investigation_findings_set_updated_at
+BEFORE UPDATE ON investigation_findings
+FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+CREATE INDEX IF NOT EXISTS ix_inv_findings_finding ON investigation_findings (finding_id);
+
+CREATE TABLE IF NOT EXISTS investigation_sessions (
+    investigation_id UUID NOT NULL,
+    session_id UUID NOT NULL,
+    project_id VARCHAR(12) NOT NULL,
+    directly_added BOOLEAN DEFAULT false NOT NULL,
+    derived BOOLEAN DEFAULT false NOT NULL,
+    attached_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
+
+    CONSTRAINT pk_investigation_sessions PRIMARY KEY (investigation_id, session_id),
+    CONSTRAINT uq_inv_sessions_project UNIQUE (investigation_id, session_id, project_id),
+    CONSTRAINT ck_inv_sessions_origin CHECK (directly_added OR derived),
+    CONSTRAINT fk_inv_sessions_investigation FOREIGN KEY (investigation_id, project_id)
+        REFERENCES investigations (id, project_id) ON DELETE CASCADE,
+    CONSTRAINT fk_inv_sessions_session FOREIGN KEY (session_id, project_id)
+        REFERENCES network_sessions (id, project_id) ON DELETE CASCADE
+);
+
+DROP TRIGGER IF EXISTS trg_investigation_sessions_set_updated_at ON investigation_sessions;
+CREATE TRIGGER trg_investigation_sessions_set_updated_at
+BEFORE UPDATE ON investigation_sessions
+FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+CREATE INDEX IF NOT EXISTS ix_inv_sessions_session ON investigation_sessions (session_id);
 
 CREATE TABLE IF NOT EXISTS investigation_events (
     investigation_id UUID NOT NULL,
@@ -316,12 +560,15 @@ CREATE TABLE IF NOT EXISTS investigation_events (
     attached_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
     attached_by VARCHAR(16) DEFAULT 'analyst' NOT NULL
         CHECK (attached_by IN ('analyst', 'agent', 'system')),
+    directly_added BOOLEAN DEFAULT true NOT NULL,
+    derived BOOLEAN DEFAULT false NOT NULL,
     reason VARCHAR,
 
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
 
     CONSTRAINT pk_investigation_events PRIMARY KEY (investigation_id, event_id),
     CONSTRAINT uq_inv_events_project UNIQUE (investigation_id, event_id, project_id),
+    CONSTRAINT ck_inv_events_origin CHECK (directly_added OR derived),
     CONSTRAINT fk_inv_events_investigation FOREIGN KEY (investigation_id, project_id)
         REFERENCES investigations (id, project_id) ON DELETE CASCADE,
     CONSTRAINT fk_inv_events_event FOREIGN KEY (event_id, project_id)
@@ -343,12 +590,15 @@ CREATE TABLE IF NOT EXISTS investigation_entities (
 
     added_via VARCHAR(16) DEFAULT 'event' NOT NULL
         CHECK (added_via IN ('event', 'ioc', 'agent', 'analyst')),
+    directly_added BOOLEAN DEFAULT true NOT NULL,
+    derived BOOLEAN DEFAULT false NOT NULL,
     added_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
 
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
 
     CONSTRAINT pk_investigation_entities PRIMARY KEY (investigation_id, entity_id),
     CONSTRAINT uq_inv_entities_project UNIQUE (investigation_id, entity_id, project_id),
+    CONSTRAINT ck_inv_entities_origin CHECK (directly_added OR derived),
     CONSTRAINT fk_inv_entities_investigation FOREIGN KEY (investigation_id, project_id)
         REFERENCES investigations (id, project_id) ON DELETE CASCADE,
     CONSTRAINT fk_inv_entities_entity FOREIGN KEY (entity_id, project_id)
@@ -492,28 +742,13 @@ EXECUTE FUNCTION set_updated_at();
 
 CREATE INDEX IF NOT EXISTS ix_edge_evidence_event ON edge_evidence (event_id);
 
--- ACCESS CONTROL
-
-CREATE TABLE IF NOT EXISTS role_bindings (
-    project_id VARCHAR(12) NOT NULL,
-    subject_id UUID NOT NULL,
-    role VARCHAR(8) NOT NULL CHECK (role IN ('l1', 'l2', 'lead', 'admin')),
-
-    granted_by_subject_id UUID,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
-
-    CONSTRAINT pk_role_bindings PRIMARY KEY (project_id, subject_id, role)
-);
-
-CREATE INDEX IF NOT EXISTS ix_role_bindings_subject ON role_bindings (subject_id);
-
 WITH updated AS (
     UPDATE version_investigations
-    SET version_num = '202608170002'
+    SET version_num = '202608240001'
     RETURNING version_investigations.version_num
 )
 INSERT INTO version_investigations (version_num)
-SELECT '202608170002'
+SELECT '202608240001'
 WHERE NOT EXISTS (SELECT 1 FROM updated)
 RETURNING version_num;
 

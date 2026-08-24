@@ -1,7 +1,5 @@
 package maxpatrol
 
-import "encoding/json"
-
 // EventsRequest is the used subset of POST /api/events/v2/events in SIEM 8.1.
 type EventsRequest struct {
 	Filter      EventsFilter `json:"filter"`
@@ -30,49 +28,26 @@ type EventsResponse struct {
 	Events     []EventRecord `json:"events"`
 }
 
-// EventRecord is the stable subset selected by the Gateway. Fields outside the
-// fixed select list remain in Fields because SIEM event schemas are dynamic.
+// EventRecord is the bounded legacy subset selected by the Gateway.
 type EventRecord struct {
-	Time            string                     `json:"time"`
-	UUID            string                     `json:"uuid"`
-	ID              string                     `json:"id"`
-	Text            string                     `json:"text"`
-	Importance      string                     `json:"importance,omitempty"`
-	EventSourceHost string                     `json:"event_src.host,omitempty"`
-	EventSourceIP   string                     `json:"event_src.ip,omitempty"`
-	SourceIP        string                     `json:"src.ip,omitempty"`
-	DestinationIP   string                     `json:"dst.ip,omitempty"`
-	DestinationPort int64                      `json:"dst.port,omitempty"`
-	CorrelationName *string                    `json:"correlation_name,omitempty"`
-	Meta            EventMeta                  `json:"_meta,omitempty"`
-	Fields          map[string]json.RawMessage `json:"-"`
+	Time            string    `json:"time"`
+	UUID            string    `json:"uuid"`
+	ID              string    `json:"id"`
+	Text            string    `json:"text"`
+	Importance      string    `json:"importance,omitempty"`
+	EventSourceHost string    `json:"event_src.host,omitempty"`
+	EventSourceIP   string    `json:"event_src.ip,omitempty"`
+	SourceIP        string    `json:"src.ip,omitempty"`
+	DestinationIP   string    `json:"dst.ip,omitempty"`
+	DestinationPort int64     `json:"dst.port,omitempty"`
+	CorrelationName *string   `json:"correlation_name,omitempty"`
+	Meta            EventMeta `json:"_meta,omitempty"`
 }
 
 type EventMeta struct {
 	ID       string   `json:"id,omitempty"`
 	Time     string   `json:"time,omitempty"`
 	AssetIDs []string `json:"assetIds,omitempty"`
-}
-
-func (record *EventRecord) UnmarshalJSON(data []byte) error {
-	type plain EventRecord
-	var value plain
-	if err := json.Unmarshal(data, &value); err != nil {
-		return err
-	}
-	var fields map[string]json.RawMessage
-	if err := json.Unmarshal(data, &fields); err != nil {
-		return err
-	}
-	for _, key := range []string{
-		"time", "uuid", "id", "text", "importance", "event_src.host",
-		"event_src.ip", "src.ip", "dst.ip", "dst.port", "correlation_name", "_meta",
-	} {
-		delete(fields, key)
-	}
-	*record = EventRecord(value)
-	record.Fields = fields
-	return nil
 }
 
 // AccountUserinfo is returned by GET /api/account/userinfo.
@@ -83,12 +58,4 @@ type AccountUserinfo struct {
 	LastName        *string  `json:"lastName"`
 	Roles           []string `json:"roles"`
 	PasswordExpired bool     `json:"passwordExpired"`
-}
-
-// OAuthTokenResponse is returned by the MaxPatrol OAuth token endpoint.
-type OAuthTokenResponse struct {
-	AccessToken  string `json:"access_token"`
-	ExpiresIn    int64  `json:"expires_in"`
-	TokenType    string `json:"token_type"`
-	RefreshToken string `json:"refresh_token"`
 }

@@ -136,7 +136,7 @@ components:
 
     SearchEndpointsRequest:
       type: object
-      description: Filters for endpoint inventory search.
+      description: Bounded endpoint inventory page request.
       properties:
         sources:
           type: array
@@ -144,10 +144,6 @@ components:
           description: Source codes to query; omit to use every allowed endpoint source.
           items:
             type: string
-        query:
-          type: string
-          maxLength: 1000
-          description: Free-text query matched against endpoint inventory fields.
         limit:
           type: integer
           minimum: 1

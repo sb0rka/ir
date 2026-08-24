@@ -19,6 +19,8 @@ const investigationSelect = `
 	       COALESCE((SELECT array_agg(w.workspace_id::text ORDER BY w.workspace_id)
 	                   FROM investigation_som_workspaces w WHERE w.investigation_id=i.id), '{}'),
 	       (SELECT count(*)::int FROM investigations c WHERE c.parent_id=i.id),
+	       (SELECT count(*)::int FROM investigation_findings f WHERE f.investigation_id=i.id),
+	       (SELECT count(*)::int FROM investigation_sessions s WHERE s.investigation_id=i.id),
 	       (SELECT count(*)::int FROM investigation_events ie WHERE ie.investigation_id=i.id),
 	       (SELECT count(*)::int FROM investigation_entities ie WHERE ie.investigation_id=i.id),
 	       (SELECT count(*)::int FROM edges e WHERE e.investigation_id=i.id AND e.status='proposed')
@@ -29,7 +31,7 @@ func scanInvestigation(row pgx.Row) (model.Investigation, error) {
 	err := row.Scan(&out.ID, &out.ProjectID, &out.ParentID, &out.Title, &out.Description,
 		&out.Status, &out.Severity, &out.Verdict, &out.VerdictReason, &out.Confidence,
 		&out.Origin, &out.OriginRef, &out.Version, &out.CreatedAt, &out.UpdatedAt, &out.ClosedAt,
-		&out.WorkspaceIDs, &out.Counters.Children, &out.Counters.Events,
+		&out.WorkspaceIDs, &out.Counters.Children, &out.Counters.Findings, &out.Counters.Sessions, &out.Counters.Events,
 		&out.Counters.Entities, &out.Counters.ProposedEdges)
 	return out, err
 }

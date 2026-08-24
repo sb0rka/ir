@@ -1,6 +1,6 @@
 # Покрытие требований Техлаб
 
-Текущий объём контракта: 24 пути, 37 операций, 6 доменов.
+Текущий объём контракта: 30 путей, 43 операции, 8 доменов.
 
 Важно: контракт шире реализованного вертикального среза. Незаявленные
 update/delete/review операции сохраняют `501 not_implemented`.
@@ -8,7 +8,7 @@ update/delete/review операции сохраняют `501 not_implemented`.
 | № | Требование | Контракт | Реализация |
 |---|---|---|---|
 | 5.1 | Единый рабочий стол инцидента | Investigation, graph, timeline, entity cards | Read-срез готов; tree/update 501 |
-| 5.2 | Источники Gateway | Исходные идентификаторы и нормализованные данные | Готово для выбранного контекста |
+| 5.2 | Источники Gateway | Findings/sessions как first-class objects; events/entities как drill-down | Готово для выбранного полного или partial контекста |
 | 5.3 | Автосвязывание и ручная корректировка | analyst `mentions`/Gateway relations; agent proposals | Импорт готов; review 501 |
 | 5.4 | Граф и таймлайн | `getGraph`, `listNodes`, `listGraphEdges`, `listEvents` | Готово, включая filters/cursors |
 | 5.5 | Историчность и окружение сущности | `getEntityCard` | Готово |
@@ -29,9 +29,11 @@ update/delete/review операции сохраняют `501 not_implemented`.
 - **Project isolation:** обязательный `X-Project-ID` задаёт scope запроса;
   `project_id` хранится на общих для проекта сущностях и проверяется составными FK. Узлы и рёбра
   получают project scope через `investigation_id` и не дублируют `project_id`.
-- **Воспроизводимость:** событие хранит пару `source_code + source_event_id`,
-  сущность — отдельные ссылки на исходные инструменты; нормализованные поля,
-  provenance/source URL сохранены, agent edge требует `why` и evidence.
+- **Воспроизводимость:** finding/session хранит stable ref без времени в identity,
+  но с обязательным replay window; событие хранит `source_code + source_event_id`,
+  сущность — отдельные ссылки на исходные инструменты. Normalized snapshot,
+  безопасный provenance и partial errors сохраняются; agent edge требует `why`
+  и evidence.
 - **Граница источников:** UI и агент читают Gateway напрямую. `ir-api` не
   выполняет Gateway search и не хранит полный поток или vendor raw payload.
 

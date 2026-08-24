@@ -6,6 +6,7 @@
 package api
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -36,7 +37,9 @@ const (
 	CapabilityEndpoints        Capability = "endpoints"
 	CapabilityEntityLookup     Capability = "entity_lookup"
 	CapabilityEvents           Capability = "events"
+	CapabilityFindings         Capability = "findings"
 	CapabilityResponseCatalog  Capability = "response_catalog"
+	CapabilitySessions         Capability = "sessions"
 )
 
 // Valid indicates whether the value is a known member of the Capability enum.
@@ -52,7 +55,11 @@ func (e Capability) Valid() bool {
 		return true
 	case CapabilityEvents:
 		return true
+	case CapabilityFindings:
+		return true
 	case CapabilityResponseCatalog:
+		return true
+	case CapabilitySessions:
 		return true
 	default:
 		return false
@@ -74,6 +81,45 @@ func (e EndpointStatus) Valid() bool {
 	case EndpointStatusOnline:
 		return true
 	case EndpointStatusUnknown:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for EntityMentionRoles.
+const (
+	Account  EntityMentionRoles = "account"
+	Actor    EntityMentionRoles = "actor"
+	Attacker EntityMentionRoles = "attacker"
+	Dst      EntityMentionRoles = "dst"
+	File     EntityMentionRoles = "file"
+	Mentions EntityMentionRoles = "mentions"
+	Object   EntityMentionRoles = "object"
+	Src      EntityMentionRoles = "src"
+	Victim   EntityMentionRoles = "victim"
+)
+
+// Valid indicates whether the value is a known member of the EntityMentionRoles enum.
+func (e EntityMentionRoles) Valid() bool {
+	switch e {
+	case Account:
+		return true
+	case Actor:
+		return true
+	case Attacker:
+		return true
+	case Dst:
+		return true
+	case File:
+		return true
+	case Mentions:
+		return true
+	case Object:
+		return true
+	case Src:
+		return true
+	case Victim:
 		return true
 	default:
 		return false
@@ -110,6 +156,57 @@ func (e EventSeverity) Valid() bool {
 	}
 }
 
+// Defines values for FindingSeverity.
+const (
+	FindingSeverityCritical FindingSeverity = "critical"
+	FindingSeverityHigh     FindingSeverity = "high"
+	FindingSeverityInfo     FindingSeverity = "info"
+	FindingSeverityLow      FindingSeverity = "low"
+	FindingSeverityMedium   FindingSeverity = "medium"
+	FindingSeverityUnknown  FindingSeverity = "unknown"
+)
+
+// Valid indicates whether the value is a known member of the FindingSeverity enum.
+func (e FindingSeverity) Valid() bool {
+	switch e {
+	case FindingSeverityCritical:
+		return true
+	case FindingSeverityHigh:
+		return true
+	case FindingSeverityInfo:
+		return true
+	case FindingSeverityLow:
+		return true
+	case FindingSeverityMedium:
+		return true
+	case FindingSeverityUnknown:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for FindingKind.
+const (
+	FindingKindNadAttack       FindingKind = "nad_attack"
+	FindingKindSiemCorrelation FindingKind = "siem_correlation"
+	FindingKindSiemIncident    FindingKind = "siem_incident"
+)
+
+// Valid indicates whether the value is a known member of the FindingKind enum.
+func (e FindingKind) Valid() bool {
+	switch e {
+	case FindingKindNadAttack:
+		return true
+	case FindingKindSiemCorrelation:
+		return true
+	case FindingKindSiemIncident:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for HealthStatus.
 const (
 	Ok HealthStatus = "ok"
@@ -119,6 +216,54 @@ const (
 func (e HealthStatus) Valid() bool {
 	switch e {
 	case Ok:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ObjectResolutionStatus.
+const (
+	ObjectResolutionStatusComplete ObjectResolutionStatus = "complete"
+	ObjectResolutionStatusPartial  ObjectResolutionStatus = "partial"
+)
+
+// Valid indicates whether the value is a known member of the ObjectResolutionStatus enum.
+func (e ObjectResolutionStatus) Valid() bool {
+	switch e {
+	case ObjectResolutionStatusComplete:
+		return true
+	case ObjectResolutionStatusPartial:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SessionSeverity.
+const (
+	SessionSeverityCritical SessionSeverity = "critical"
+	SessionSeverityHigh     SessionSeverity = "high"
+	SessionSeverityInfo     SessionSeverity = "info"
+	SessionSeverityLow      SessionSeverity = "low"
+	SessionSeverityMedium   SessionSeverity = "medium"
+	SessionSeverityUnknown  SessionSeverity = "unknown"
+)
+
+// Valid indicates whether the value is a known member of the SessionSeverity enum.
+func (e SessionSeverity) Valid() bool {
+	switch e {
+	case SessionSeverityCritical:
+		return true
+	case SessionSeverityHigh:
+		return true
+	case SessionSeverityInfo:
+		return true
+	case SessionSeverityLow:
+		return true
+	case SessionSeverityMedium:
+		return true
+	case SessionSeverityUnknown:
 		return true
 	default:
 		return false
@@ -154,15 +299,12 @@ func (e SourceKind) Valid() bool {
 
 // Defines values for SourceMode.
 const (
-	Mock  SourceMode = "mock"
 	Proxy SourceMode = "proxy"
 )
 
 // Valid indicates whether the value is a known member of the SourceMode enum.
 func (e SourceMode) Valid() bool {
 	switch e {
-	case Mock:
-		return true
 	case Proxy:
 		return true
 	default:
@@ -172,16 +314,64 @@ func (e SourceMode) Valid() bool {
 
 // Defines values for SourceStatus.
 const (
-	SourceStatusOffline SourceStatus = "offline"
-	SourceStatusOnline  SourceStatus = "online"
+	SourceStatusDegraded SourceStatus = "degraded"
+	SourceStatusOffline  SourceStatus = "offline"
+	SourceStatusOnline   SourceStatus = "online"
 )
 
 // Valid indicates whether the value is a known member of the SourceStatus enum.
 func (e SourceStatus) Valid() bool {
 	switch e {
+	case SourceStatusDegraded:
+		return true
 	case SourceStatusOffline:
 		return true
 	case SourceStatusOnline:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SourceObjectRefRecordType.
+const (
+	SourceObjectRefRecordTypeNadAttack       SourceObjectRefRecordType = "nad_attack"
+	SourceObjectRefRecordTypeNadSession      SourceObjectRefRecordType = "nad_session"
+	SourceObjectRefRecordTypeSiemCorrelation SourceObjectRefRecordType = "siem_correlation"
+	SourceObjectRefRecordTypeSiemIncident    SourceObjectRefRecordType = "siem_incident"
+)
+
+// Valid indicates whether the value is a known member of the SourceObjectRefRecordType enum.
+func (e SourceObjectRefRecordType) Valid() bool {
+	switch e {
+	case SourceObjectRefRecordTypeNadAttack:
+		return true
+	case SourceObjectRefRecordTypeNadSession:
+		return true
+	case SourceObjectRefRecordTypeSiemCorrelation:
+		return true
+	case SourceObjectRefRecordTypeSiemIncident:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SourceStateStatus.
+const (
+	SourceStateStatusComplete  SourceStateStatus = "complete"
+	SourceStateStatusFailed    SourceStateStatus = "failed"
+	SourceStateStatusTruncated SourceStateStatus = "truncated"
+)
+
+// Valid indicates whether the value is a known member of the SourceStateStatus enum.
+func (e SourceStateStatus) Valid() bool {
+	switch e {
+	case SourceStateStatusComplete:
+		return true
+	case SourceStateStatusFailed:
+		return true
+	case SourceStateStatusTruncated:
 		return true
 	default:
 		return false
@@ -206,6 +396,27 @@ func (e VerdictValue) Valid() bool {
 	case VerdictValueSuspicious:
 		return true
 	case VerdictValueUnknown:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for GetFindingParamsKind.
+const (
+	GetFindingParamsKindNadAttack       GetFindingParamsKind = "nad_attack"
+	GetFindingParamsKindSiemCorrelation GetFindingParamsKind = "siem_correlation"
+	GetFindingParamsKindSiemIncident    GetFindingParamsKind = "siem_incident"
+)
+
+// Valid indicates whether the value is a known member of the GetFindingParamsKind enum.
+func (e GetFindingParamsKind) Valid() bool {
+	switch e {
+	case GetFindingParamsKindNadAttack:
+		return true
+	case GetFindingParamsKindSiemCorrelation:
+		return true
+	case GetFindingParamsKindSiemIncident:
 		return true
 	default:
 		return false
@@ -269,6 +480,12 @@ type Artifact struct {
 // Capability Operation that a source can perform through the Gateway.
 type Capability string
 
+// CorrelationDetails defines model for CorrelationDetails.
+type CorrelationDetails struct {
+	CorrelationType *string `json:"correlation_type,omitempty"`
+	SubeventCount   *int    `json:"subevent_count,omitempty"`
+}
+
 // CreateArtifactAnalysisRequest Request to analyze a known artifact with one source.
 type CreateArtifactAnalysisRequest struct {
 	// Artifact Metadata used to identify the artifact for analysis.
@@ -329,6 +546,21 @@ type Entity struct {
 	Value string `json:"value"`
 }
 
+// EntityMention Canonical entity mentioned by an event or a source object, with its observed roles.
+type EntityMention struct {
+	// Roles Roles observed in this record; vendor direction and attacker semantics remain distinct.
+	Roles []EntityMentionRoles `json:"roles"`
+
+	// Type Canonical entity kind.
+	Type string `json:"type"`
+
+	// Value Canonical entity value.
+	Value string `json:"value"`
+}
+
+// EntityMentionRoles defines model for EntityMention.Roles.
+type EntityMentionRoles string
+
 // EntityRef Entity value used as a search or lookup condition.
 type EntityRef struct {
 	// Type Canonical entity kind, such as ip, domain, hostname, email, or hash.
@@ -372,8 +604,8 @@ type Event struct {
 	// Attributes Selected event fields that have no canonical top-level property.
 	Attributes map[string]interface{} `json:"attributes"`
 
-	// Entities Canonical entities mentioned by the event.
-	Entities []EntityRef `json:"entities"`
+	// Entities Canonical entities and their observed roles in this event.
+	Entities []EntityMention `json:"entities"`
 
 	// FetchedAt Time when the Gateway obtained the source data.
 	FetchedAt time.Time `json:"fetched_at"`
@@ -412,6 +644,36 @@ type EventSourceRef struct {
 	SourceEventId string `json:"source_event_id"`
 }
 
+// Finding A source-native coarse security object; never a renamed raw event.
+type Finding struct {
+	Correlation *CorrelationDetails `json:"correlation,omitempty"`
+	Description *string             `json:"description,omitempty"`
+	Entities    []EntityMention     `json:"entities"`
+	FetchedAt   time.Time           `json:"fetched_at"`
+	Incident    *IncidentDetails    `json:"incident,omitempty"`
+	Kind        FindingKind         `json:"kind"`
+	NadAttack   *NADAttackDetails   `json:"nad_attack,omitempty"`
+	OccurredAt  time.Time           `json:"occurred_at"`
+
+	// Ref Stable source-owned object identity plus the bounded time window needed to resolve it again.
+	Ref             SourceObjectRef    `json:"ref"`
+	RelatedFindings *[]SourceObjectRef `json:"related_findings,omitempty"`
+	RelatedSessions *[]SourceObjectRef `json:"related_sessions,omitempty"`
+
+	// Rule Bounded rule metadata observed on a finding.
+	Rule      *RuleRef        `json:"rule,omitempty"`
+	Severity  FindingSeverity `json:"severity"`
+	SourceRef *string         `json:"source_ref,omitempty"`
+	Status    *string         `json:"status,omitempty"`
+	Title     string          `json:"title"`
+}
+
+// FindingSeverity defines model for Finding.Severity.
+type FindingSeverity string
+
+// FindingKind defines model for FindingKind.
+type FindingKind string
+
 // Hashes Cryptographic checksums available for an artifact.
 type Hashes struct {
 	// Md5 MD5 checksum in hexadecimal form.
@@ -433,6 +695,19 @@ type Health struct {
 // HealthStatus Current health state of the checked component.
 type HealthStatus string
 
+// IncidentDetails defines model for IncidentDetails.
+type IncidentDetails struct {
+	Archived       *bool      `json:"archived,omitempty"`
+	AssignedTo     *string    `json:"assigned_to,omitempty"`
+	ChangedAt      *time.Time `json:"changed_at,omitempty"`
+	Damage         *string    `json:"damage,omitempty"`
+	ExternalKey    *string    `json:"external_key,omitempty"`
+	Key            *string    `json:"key,omitempty"`
+	Recommendation *string    `json:"recommendation,omitempty"`
+	Removed        *bool      `json:"removed,omitempty"`
+	Verdict        *string    `json:"verdict,omitempty"`
+}
+
 // LookupEntityRequest Request to enrich one entity from one or more sources.
 type LookupEntityRequest struct {
 	// Entity Entity to normalize and enrich.
@@ -440,6 +715,9 @@ type LookupEntityRequest struct {
 
 	// Sources Source codes to query; omit to use every allowed source with entity lookup.
 	Sources *[]string `json:"sources,omitempty"`
+
+	// TimeRange Inclusive source-record occurrence-time interval.
+	TimeRange TimeRange `json:"time_range"`
 }
 
 // LookupEntityResponse Entity enrichment merged from the selected sources.
@@ -456,6 +734,36 @@ type LookupEntityResponse struct {
 	// Verdicts Security assessments returned for the requested entity.
 	Verdicts []Verdict `json:"verdicts"`
 }
+
+// NADAttackDetails defines model for NADAttackDetails.
+type NADAttackDetails struct {
+	Class         *string `json:"class,omitempty"`
+	FalsePositive *bool   `json:"false_positive,omitempty"`
+	Gid           *int    `json:"gid,omitempty"`
+	RawPriority   *int    `json:"raw_priority,omitempty"`
+	Revision      *int    `json:"revision,omitempty"`
+	Sid           *int    `json:"sid,omitempty"`
+}
+
+// NetworkEndpoint defines model for NetworkEndpoint.
+type NetworkEndpoint struct {
+	Host *string `json:"host,omitempty"`
+	Ip   *string `json:"ip,omitempty"`
+	Mac  *string `json:"mac,omitempty"`
+	Port int     `json:"port"`
+}
+
+// ObjectResolution defines model for ObjectResolution.
+type ObjectResolution struct {
+	Errors []SourceError `json:"errors"`
+
+	// Ref Stable source-owned object identity plus the bounded time window needed to resolve it again.
+	Ref    SourceObjectRef        `json:"ref"`
+	Status ObjectResolutionStatus `json:"status"`
+}
+
+// ObjectResolutionStatus defines model for ObjectResolution.Status.
+type ObjectResolutionStatus string
 
 // Provenance Origin of a normalized record.
 type Provenance struct {
@@ -498,16 +806,23 @@ type Relation struct {
 
 // ResolveContextRequest Source records selected by a client for persistence in an investigation.
 type ResolveContextRequest struct {
-	Entities []EntitySourceRef `json:"entities"`
-	Events   []EventSourceRef  `json:"events"`
+	Entities *[]EntitySourceRef `json:"entities,omitempty"`
+	Events   *[]EventSourceRef  `json:"events,omitempty"`
+	Findings *[]SourceObjectRef `json:"findings,omitempty"`
+	Sessions *[]SourceObjectRef `json:"sessions,omitempty"`
 }
 
 // ResolveContextResponse Normalized records and relationships resolved from source-owned identifiers.
 type ResolveContextResponse struct {
-	Entities     []Entity      `json:"entities"`
-	Events       []Event       `json:"events"`
-	Relations    []Relation    `json:"relations"`
-	SourceErrors []SourceError `json:"source_errors"`
+	Entities  []Entity   `json:"entities"`
+	Events    []Event    `json:"events"`
+	Findings  []Finding  `json:"findings"`
+	Relations []Relation `json:"relations"`
+
+	// Resolutions Per-selected-object completeness. Missing root records are not represented as resolved objects.
+	Resolutions  []ObjectResolution `json:"resolutions"`
+	Sessions     []Session          `json:"sessions"`
+	SourceErrors []SourceError      `json:"source_errors"`
 }
 
 // ResponseAction Response operation advertised for an endpoint; the Gateway does not execute it.
@@ -525,16 +840,20 @@ type ResponseAction struct {
 	Title string `json:"title"`
 }
 
-// SearchEndpointsRequest Filters for endpoint inventory search.
+// RuleRef Bounded rule metadata observed on a finding.
+type RuleRef struct {
+	Id       *string `json:"id,omitempty"`
+	Name     string  `json:"name"`
+	Revision *int    `json:"revision,omitempty"`
+}
+
+// SearchEndpointsRequest Bounded endpoint inventory page request.
 type SearchEndpointsRequest struct {
 	// Cursor Opaque next_cursor from the previous response with the same filters.
 	Cursor *string `json:"cursor,omitempty"`
 
 	// Limit Maximum number of endpoints returned after merging all sources.
 	Limit *int `json:"limit,omitempty"`
-
-	// Query Free-text query matched against endpoint inventory fields.
-	Query *string `json:"query,omitempty"`
 
 	// Sources Source codes to query; omit to use every allowed endpoint source.
 	Sources *[]string `json:"sources,omitempty"`
@@ -563,14 +882,11 @@ type SearchEventsRequest struct {
 	// Limit Maximum number of events returned after merging all sources.
 	Limit *int `json:"limit,omitempty"`
 
-	// Query Free-text query interpreted by each selected source.
-	Query *string `json:"query,omitempty"`
-
 	// Sources Source codes to query; omit to use every allowed source with event search.
 	Sources *[]string `json:"sources,omitempty"`
 
-	// TimeRange Optional occurrence-time interval.
-	TimeRange *TimeRange `json:"time_range,omitempty"`
+	// TimeRange Required occurrence-time interval.
+	TimeRange TimeRange `json:"time_range"`
 }
 
 // SearchEventsResponse Merged event page with the entities and relations needed to interpret it.
@@ -589,6 +905,99 @@ type SearchEventsResponse struct {
 
 	// SourceErrors Per-source failures when at least one selected source succeeded.
 	SourceErrors []SourceError `json:"source_errors"`
+	SourceStates []SourceState `json:"source_states"`
+}
+
+// SearchFindingsRequest defines model for SearchFindingsRequest.
+type SearchFindingsRequest struct {
+	Cursor  *string        `json:"cursor,omitempty"`
+	Kinds   *[]FindingKind `json:"kinds,omitempty"`
+	Limit   *int           `json:"limit,omitempty"`
+	Sources *[]string      `json:"sources,omitempty"`
+
+	// TimeRange Inclusive source-record occurrence-time interval.
+	TimeRange TimeRange `json:"time_range"`
+}
+
+// SearchFindingsResponse defines model for SearchFindingsResponse.
+type SearchFindingsResponse struct {
+	Findings     []Finding     `json:"findings"`
+	NextCursor   *string       `json:"next_cursor,omitempty"`
+	SourceErrors []SourceError `json:"source_errors"`
+	SourceStates []SourceState `json:"source_states"`
+}
+
+// SearchSessionsRequest defines model for SearchSessionsRequest.
+type SearchSessionsRequest struct {
+	Cursor  *string   `json:"cursor,omitempty"`
+	Limit   *int      `json:"limit,omitempty"`
+	Sources *[]string `json:"sources,omitempty"`
+
+	// TimeRange Inclusive source-record occurrence-time interval.
+	TimeRange TimeRange `json:"time_range"`
+}
+
+// SearchSessionsResponse defines model for SearchSessionsResponse.
+type SearchSessionsResponse struct {
+	NextCursor   *string       `json:"next_cursor,omitempty"`
+	Sessions     []Session     `json:"sessions"`
+	SourceErrors []SourceError `json:"source_errors"`
+	SourceStates []SourceState `json:"source_states"`
+}
+
+// Session defines model for Session.
+type Session struct {
+	ApplicationProtocol *string                     `json:"application_protocol,omitempty"`
+	AuthenticationHints []SessionAuthenticationHint `json:"authentication_hints"`
+	Bytes               *TrafficCounters            `json:"bytes,omitempty"`
+	DestinationEndpoint NetworkEndpoint             `json:"destination_endpoint"`
+	DurationSeconds     *float64                    `json:"duration_seconds,omitempty"`
+	EndedAt             *time.Time                  `json:"ended_at,omitempty"`
+	Entities            []EntityMention             `json:"entities"`
+	FalsePositive       *bool                       `json:"false_positive,omitempty"`
+	FetchedAt           time.Time                   `json:"fetched_at"`
+	FileHints           []SessionFileHint           `json:"file_hints"`
+	HasFiles            *bool                       `json:"has_files,omitempty"`
+	Packets             *TrafficCounters            `json:"packets,omitempty"`
+	RawCriticality      *int                        `json:"raw_criticality,omitempty"`
+
+	// Ref Stable source-owned object identity plus the bounded time window needed to resolve it again.
+	Ref               SourceObjectRef   `json:"ref"`
+	RelatedFindings   []SourceObjectRef `json:"related_findings"`
+	Severity          SessionSeverity   `json:"severity"`
+	SourceEndpoint    NetworkEndpoint   `json:"source_endpoint"`
+	SourceRef         *string           `json:"source_ref,omitempty"`
+	StartedAt         time.Time         `json:"started_at"`
+	State             []string          `json:"state"`
+	TcpFlags          *[]string         `json:"tcp_flags,omitempty"`
+	Title             string            `json:"title"`
+	TransportProtocol string            `json:"transport_protocol"`
+}
+
+// SessionSeverity defines model for Session.Severity.
+type SessionSeverity string
+
+// SessionAuthenticationHint Non-secret authentication metadata; proofs, session keys, passwords, and protocol payloads are excluded.
+type SessionAuthenticationHint struct {
+	Account        *string `json:"account,omitempty"`
+	ClientHost     *string `json:"client_host,omitempty"`
+	FailedAttempts *int64  `json:"failed_attempts,omitempty"`
+	Method         *string `json:"method,omitempty"`
+	Protocol       string  `json:"protocol"`
+	ServerHost     *string `json:"server_host,omitempty"`
+	Valid          *bool   `json:"valid,omitempty"`
+}
+
+// SessionFileHint Safe metadata for a file observed in the session; file content and full vendor records are never returned.
+type SessionFileHint struct {
+	Direction  *string `json:"direction,omitempty"`
+	ExternalId string  `json:"external_id"`
+	Md5        *string `json:"md5,omitempty"`
+	Mime       *string `json:"mime,omitempty"`
+	Name       *string `json:"name,omitempty"`
+	Sha256     *string `json:"sha256,omitempty"`
+	Size       int64   `json:"size"`
+	State      *string `json:"state,omitempty"`
 }
 
 // Source External security product registered in the Gateway.
@@ -608,7 +1017,7 @@ type Source struct {
 	// Name Human-readable product name.
 	Name string `json:"name"`
 
-	// Status Result of the current connection probe, or mock availability for mock-only sources.
+	// Status Result of the current connection probe.
 	Status SourceStatus `json:"status"`
 }
 
@@ -618,7 +1027,7 @@ type SourceKind string
 // SourceMode Adapter mode currently backing the source.
 type SourceMode string
 
-// SourceStatus Result of the current connection probe, or mock availability for mock-only sources.
+// SourceStatus Result of the current connection probe.
 type SourceStatus string
 
 // SourceError Failure reported by one source during a multi-source request.
@@ -636,13 +1045,44 @@ type SourceError struct {
 	Source string `json:"source"`
 }
 
-// TimeRange Inclusive event occurrence-time interval.
-type TimeRange struct {
-	// From Inclusive lower boundary of event occurrence time.
-	From time.Time `json:"from"`
+// SourceObjectRef Stable source-owned object identity plus the bounded time window needed to resolve it again.
+type SourceObjectRef struct {
+	// ExternalId Identifier assigned by the source. The time window is not part of identity.
+	ExternalId string                    `json:"external_id"`
+	RecordType SourceObjectRefRecordType `json:"record_type"`
+	SourceCode string                    `json:"source_code"`
 
-	// To Inclusive upper boundary of event occurrence time.
-	To time.Time `json:"to"`
+	// SourceInstance Provider instance, such as a PT NAD numeric store id. Empty for SIEM.
+	SourceInstance *string `json:"source_instance,omitempty"`
+
+	// TimeRange Inclusive source-record occurrence-time interval.
+	TimeRange TimeRange `json:"time_range"`
+}
+
+// SourceObjectRefRecordType defines model for SourceObjectRef.RecordType.
+type SourceObjectRefRecordType string
+
+// SourceState Completeness of one source stream in a search response.
+type SourceState struct {
+	Reason *string           `json:"reason,omitempty"`
+	Source string            `json:"source"`
+	Status SourceStateStatus `json:"status"`
+}
+
+// SourceStateStatus defines model for SourceState.Status.
+type SourceStateStatus string
+
+// TimeRange Inclusive source-record occurrence-time interval.
+type TimeRange struct {
+	From time.Time `json:"from"`
+	To   time.Time `json:"to"`
+}
+
+// TrafficCounters defines model for TrafficCounters.
+type TrafficCounters struct {
+	Received *int64 `json:"received,omitempty"`
+	Sent     *int64 `json:"sent,omitempty"`
+	Total    *int64 `json:"total,omitempty"`
 }
 
 // Verdict Normalized security assessment returned by a source.
@@ -735,6 +1175,18 @@ type SearchEventsParams struct {
 	XProjectID ProjectId `json:"X-Project-ID"`
 }
 
+// SearchFindingsParams defines parameters for SearchFindings.
+type SearchFindingsParams struct {
+	// XProjectID Sb0rka project whose integration allowlist is used.
+	XProjectID ProjectId `json:"X-Project-ID"`
+}
+
+// SearchSessionsParams defines parameters for SearchSessions.
+type SearchSessionsParams struct {
+	// XProjectID Sb0rka project whose integration allowlist is used.
+	XProjectID ProjectId `json:"X-Project-ID"`
+}
+
 // ListSourcesParams defines parameters for ListSources.
 type ListSourcesParams struct {
 	// XProjectID Sb0rka project whose integration allowlist is used.
@@ -753,6 +1205,29 @@ type ListResponseActionsParams struct {
 	XProjectID ProjectId `json:"X-Project-ID"`
 }
 
+// GetFindingParams defines parameters for GetFinding.
+type GetFindingParams struct {
+	SourceInstance *string   `form:"source_instance,omitempty" json:"source_instance,omitempty"`
+	From           time.Time `form:"from" json:"from"`
+	To             time.Time `form:"to" json:"to"`
+
+	// XProjectID Sb0rka project whose integration allowlist is used.
+	XProjectID ProjectId `json:"X-Project-ID"`
+}
+
+// GetFindingParamsKind defines parameters for GetFinding.
+type GetFindingParamsKind string
+
+// GetSessionParams defines parameters for GetSession.
+type GetSessionParams struct {
+	SourceInstance string    `form:"source_instance" json:"source_instance"`
+	From           time.Time `form:"from" json:"from"`
+	To             time.Time `form:"to" json:"to"`
+
+	// XProjectID Sb0rka project whose integration allowlist is used.
+	XProjectID ProjectId `json:"X-Project-ID"`
+}
+
 // CreateArtifactAnalysisJSONRequestBody defines body for CreateArtifactAnalysis for application/json ContentType.
 type CreateArtifactAnalysisJSONRequestBody = CreateArtifactAnalysisRequest
 
@@ -767,6 +1242,12 @@ type LookupEntityJSONRequestBody = LookupEntityRequest
 
 // SearchEventsJSONRequestBody defines body for SearchEvents for application/json ContentType.
 type SearchEventsJSONRequestBody = SearchEventsRequest
+
+// SearchFindingsJSONRequestBody defines body for SearchFindings for application/json ContentType.
+type SearchFindingsJSONRequestBody = SearchFindingsRequest
+
+// SearchSessionsJSONRequestBody defines body for SearchSessions for application/json ContentType.
+type SearchSessionsJSONRequestBody = SearchSessionsRequest
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
@@ -788,6 +1269,12 @@ type ServerInterface interface {
 	// SearchEvents Search normalized events
 	// (POST /api/v1/events/search)
 	SearchEvents(w http.ResponseWriter, r *http.Request, params SearchEventsParams)
+	// SearchFindings Search source-native security findings
+	// (POST /api/v1/findings/search)
+	SearchFindings(w http.ResponseWriter, r *http.Request, params SearchFindingsParams)
+	// SearchSessions Search source-native network sessions
+	// (POST /api/v1/sessions/search)
+	SearchSessions(w http.ResponseWriter, r *http.Request, params SearchSessionsParams)
 	// ListSources List registered sources
 	// (GET /api/v1/sources)
 	ListSources(w http.ResponseWriter, r *http.Request, params ListSourcesParams)
@@ -797,6 +1284,12 @@ type ServerInterface interface {
 	// ListResponseActions List endpoint response actions
 	// (GET /api/v1/sources/{source}/endpoints/{external_id}/response-actions)
 	ListResponseActions(w http.ResponseWriter, r *http.Request, source string, externalId string, params ListResponseActionsParams)
+	// GetFinding Resolve one source-native finding
+	// (GET /api/v1/sources/{source}/findings/{kind}/{external_id})
+	GetFinding(w http.ResponseWriter, r *http.Request, source string, kind GetFindingParamsKind, externalId string, params GetFindingParams)
+	// GetSession Resolve one source-native network session
+	// (GET /api/v1/sources/{source}/sessions/{external_id})
+	GetSession(w http.ResponseWriter, r *http.Request, source string, externalId string, params GetSessionParams)
 	// Healthz Check process health
 	// (GET /healthz)
 	Healthz(w http.ResponseWriter, r *http.Request)
@@ -1093,6 +1586,96 @@ func (siw *ServerInterfaceWrapper) SearchEvents(w http.ResponseWriter, r *http.R
 	handler.ServeHTTP(w, r)
 }
 
+// SearchFindings operation middleware
+func (siw *ServerInterfaceWrapper) SearchFindings(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params SearchFindingsParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "X-Project-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Project-ID")]; found {
+		var XProjectID ProjectId
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Project-ID", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Project-ID", valueList[0], &XProjectID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Project-ID", Err: err})
+			return
+		}
+
+		params.XProjectID = XProjectID
+
+	} else {
+		err := fmt.Errorf("Header parameter X-Project-ID is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Project-ID", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SearchFindings(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// SearchSessions operation middleware
+func (siw *ServerInterfaceWrapper) SearchSessions(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params SearchSessionsParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "X-Project-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Project-ID")]; found {
+		var XProjectID ProjectId
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Project-ID", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Project-ID", valueList[0], &XProjectID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Project-ID", Err: err})
+			return
+		}
+
+		params.XProjectID = XProjectID
+
+	} else {
+		err := fmt.Errorf("Header parameter X-Project-ID is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Project-ID", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SearchSessions(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListSources operation middleware
 func (siw *ServerInterfaceWrapper) ListSources(w http.ResponseWriter, r *http.Request) {
 
@@ -1246,6 +1829,219 @@ func (siw *ServerInterfaceWrapper) ListResponseActions(w http.ResponseWriter, r 
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ListResponseActions(w, r, source, externalId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetFinding operation middleware
+func (siw *ServerInterfaceWrapper) GetFinding(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "source" -------------
+	var source string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "source", r.PathValue("source"), &source, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "source", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "kind" -------------
+	var kind GetFindingParamsKind
+
+	err = runtime.BindStyledParameterWithOptions("simple", "kind", r.PathValue("kind"), &kind, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "kind", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "external_id" -------------
+	var externalId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "external_id", r.PathValue("external_id"), &externalId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "external_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetFindingParams
+
+	// ------------- Optional query parameter "source_instance" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "source_instance", r.URL.Query(), &params.SourceInstance, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "source_instance"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "source_instance", Err: err})
+		}
+		return
+	}
+
+	// ------------- Required query parameter "from" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "from", r.URL.Query(), &params.From, runtime.BindQueryParameterOptions{Type: "string", Format: "date-time"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "from"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "from", Err: err})
+		}
+		return
+	}
+
+	// ------------- Required query parameter "to" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "to", r.URL.Query(), &params.To, runtime.BindQueryParameterOptions{Type: "string", Format: "date-time"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "to"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "to", Err: err})
+		}
+		return
+	}
+
+	headers := r.Header
+
+	// ------------- Required header parameter "X-Project-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Project-ID")]; found {
+		var XProjectID ProjectId
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Project-ID", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Project-ID", valueList[0], &XProjectID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Project-ID", Err: err})
+			return
+		}
+
+		params.XProjectID = XProjectID
+
+	} else {
+		err := fmt.Errorf("Header parameter X-Project-ID is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Project-ID", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetFinding(w, r, source, kind, externalId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetSession operation middleware
+func (siw *ServerInterfaceWrapper) GetSession(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "source" -------------
+	var source string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "source", r.PathValue("source"), &source, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "source", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "external_id" -------------
+	var externalId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "external_id", r.PathValue("external_id"), &externalId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "external_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetSessionParams
+
+	// ------------- Required query parameter "source_instance" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "source_instance", r.URL.Query(), &params.SourceInstance, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "source_instance"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "source_instance", Err: err})
+		}
+		return
+	}
+
+	// ------------- Required query parameter "from" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "from", r.URL.Query(), &params.From, runtime.BindQueryParameterOptions{Type: "string", Format: "date-time"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "from"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "from", Err: err})
+		}
+		return
+	}
+
+	// ------------- Required query parameter "to" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "to", r.URL.Query(), &params.To, runtime.BindQueryParameterOptions{Type: "string", Format: "date-time"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "to"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "to", Err: err})
+		}
+		return
+	}
+
+	headers := r.Header
+
+	// ------------- Required header parameter "X-Project-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Project-ID")]; found {
+		var XProjectID ProjectId
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Project-ID", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Project-ID", valueList[0], &XProjectID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Project-ID", Err: err})
+			return
+		}
+
+		params.XProjectID = XProjectID
+
+	} else {
+		err := fmt.Errorf("Header parameter X-Project-ID is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Project-ID", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetSession(w, r, source, externalId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1411,8 +2207,12 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/entities/lookup", wrapper.LookupEntity)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/events/search", wrapper.SearchEvents)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/context/resolve", wrapper.ResolveContext)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/findings/search", wrapper.SearchFindings)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/sources/{source}/findings/{kind}/{external_id}", wrapper.GetFinding)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/healthz", wrapper.Healthz)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/ping", wrapper.Ping)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/sessions/search", wrapper.SearchSessions)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/sources/{source}/sessions/{external_id}", wrapper.GetSession)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/sources", wrapper.ListSources)
 
 	return m

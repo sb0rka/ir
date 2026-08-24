@@ -2,7 +2,6 @@ package httptransport
 
 import (
 	"net/http"
-	"unicode/utf8"
 
 	"github.com/sb0rka/ir/apps/gateway/api"
 	"github.com/sb0rka/ir/apps/gateway/internal/domain"
@@ -19,17 +18,13 @@ func (server *Server) SearchEndpoints(w http.ResponseWriter, r *http.Request, _ 
 		respondError(w, http.StatusBadRequest, "bad_request", err.Error())
 		return
 	}
-	if body.Query != nil && utf8.RuneCountInString(*body.Query) > 1000 {
-		respondError(w, http.StatusBadRequest, "bad_request", "query must not exceed 1000 characters")
-		return
-	}
 	sources, err := server.constrainSources(r.Context(), valueOrEmpty(body.Sources), domain.CapabilityEndpoints)
 	if err != nil {
 		server.writeServiceError(w, err)
 		return
 	}
-	result, err := server.service.SearchEndpoints(r.Context(), service.SearchEndpointsRequest{
-		Sources: sources, Query: stringValue(body.Query), Limit: intValue(body.Limit), Cursor: stringValue(body.Cursor),
+	result, err := server.service.SearchEndpoints(r.Context(), projectAccess(r), service.SearchEndpointsRequest{
+		Sources: sources, Limit: intValue(body.Limit), Cursor: stringValue(body.Cursor),
 	})
 	if err != nil {
 		server.writeServiceError(w, err)
@@ -47,7 +42,7 @@ func (server *Server) ListResponseActions(w http.ResponseWriter, r *http.Request
 		server.writeServiceError(w, sourceForbidden(source))
 		return
 	}
-	items, err := server.service.ListResponseActions(r.Context(), source, externalID)
+	items, err := server.service.ListResponseActions(r.Context(), projectAccess(r), source, externalID)
 	if err != nil {
 		server.writeServiceError(w, err)
 		return

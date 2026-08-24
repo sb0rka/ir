@@ -40,14 +40,10 @@ func entitiesToAPI(values []domain.Entity) []api.Entity {
 func eventsToAPI(values []domain.Event) []api.Event {
 	result := make([]api.Event, 0, len(values))
 	for _, value := range values {
-		entities := make([]api.EntityRef, 0, len(value.Entities))
-		for _, entity := range value.Entities {
-			entities = append(entities, api.EntityRef{Type: entity.Type, Value: entity.Value})
-		}
 		item := api.Event{
 			SourceCode: value.Provenance.Source, SourceEventId: value.Provenance.ExternalID,
 			Type: value.Type, Title: value.Title, Severity: api.EventSeverity(value.Severity),
-			OccurredAt: value.OccurredAt, Entities: entities, Attributes: nonNilMap(value.Attributes), FetchedAt: value.Provenance.FetchedAt,
+			OccurredAt: value.OccurredAt, Entities: entityMentionsToAPI(value.Entities), Attributes: nonNilMap(value.Attributes), FetchedAt: value.Provenance.FetchedAt,
 		}
 		if value.Provenance.SourceURL != "" {
 			item.SourceRef = &value.Provenance.SourceURL
@@ -55,6 +51,156 @@ func eventsToAPI(values []domain.Event) []api.Event {
 		result = append(result, item)
 	}
 	return result
+}
+
+func findingsToAPI(values []domain.Finding) []api.Finding {
+	result := make([]api.Finding, 0, len(values))
+	for _, value := range values {
+		item := api.Finding{
+			Ref: sourceObjectRefToAPI(value.Ref), Kind: api.FindingKind(value.Kind), Title: value.Title,
+			Severity: api.FindingSeverity(value.Severity), OccurredAt: value.OccurredAt,
+			Entities: entityMentionsToAPI(value.Entities), FetchedAt: value.FetchedAt,
+		}
+		item.Description = stringPointer(value.Description)
+		item.Status = stringPointer(value.Status)
+		item.SourceRef = stringPointer(value.SourceRef)
+		if len(value.RelatedFindings) > 0 {
+			refs := sourceObjectRefsToAPI(value.RelatedFindings)
+			item.RelatedFindings = &refs
+		}
+		if len(value.RelatedSessions) > 0 {
+			refs := sourceObjectRefsToAPI(value.RelatedSessions)
+			item.RelatedSessions = &refs
+		}
+		if value.Rule != nil {
+			item.Rule = &api.RuleRef{Id: stringPointer(value.Rule.ID), Name: value.Rule.Name}
+		}
+		if value.Incident != nil {
+			item.Incident = &api.IncidentDetails{
+				Key: stringPointer(value.Incident.Key), ExternalKey: stringPointer(value.Incident.ExternalKey),
+				Verdict: stringPointer(value.Incident.Verdict), Damage: stringPointer(value.Incident.Damage),
+				Recommendation: stringPointer(value.Incident.Recommendation), AssignedTo: stringPointer(value.Incident.AssignedTo),
+				ChangedAt: value.Incident.ChangedAt, Archived: boolPointer(value.Incident.Archived), Removed: boolPointer(value.Incident.Removed),
+			}
+		}
+		if value.Correlation != nil {
+			item.Correlation = &api.CorrelationDetails{
+				CorrelationType: stringPointer(value.Correlation.CorrelationType), SubeventCount: intPointer(value.Correlation.SubeventCount),
+			}
+		}
+		if value.NADAttack != nil {
+			item.NadAttack = &api.NADAttackDetails{
+				Class: stringPointer(value.NADAttack.Class), Gid: intPointer(value.NADAttack.GID), Sid: intPointer(value.NADAttack.SID),
+				Revision: intPointer(value.NADAttack.Revision), RawPriority: intPointer(value.NADAttack.RawPriority), FalsePositive: value.NADAttack.FalsePositive,
+			}
+		}
+		result = append(result, item)
+	}
+	return result
+}
+
+func sessionsToAPI(values []domain.Session) []api.Session {
+	result := make([]api.Session, 0, len(values))
+	for _, value := range values {
+		item := api.Session{
+			Ref: sourceObjectRefToAPI(value.Ref), Title: value.Title, Severity: api.SessionSeverity(value.Severity),
+			AuthenticationHints: authenticationHintsToAPI(value.AuthenticationHints), FileHints: fileHintsToAPI(value.FileHints),
+			RawCriticality: value.RawCriticality, StartedAt: value.StartedAt, EndedAt: value.EndedAt,
+			DurationSeconds: value.DurationSeconds, SourceEndpoint: networkEndpointToAPI(value.SourceEndpoint),
+			DestinationEndpoint: networkEndpointToAPI(value.DestinationEndpoint), TransportProtocol: value.TransportProtocol,
+			ApplicationProtocol: stringPointer(value.ApplicationProtocol), State: nonNilSlice(value.State),
+			FalsePositive: value.FalsePositive, HasFiles: value.HasFiles, Entities: entityMentionsToAPI(value.Entities),
+			RelatedFindings: sourceObjectRefsToAPI(value.RelatedFindings), SourceRef: stringPointer(value.SourceRef), FetchedAt: value.FetchedAt,
+		}
+		if value.Bytes != nil {
+			item.Bytes = trafficCountersToAPI(*value.Bytes)
+		}
+		if value.Packets != nil {
+			item.Packets = trafficCountersToAPI(*value.Packets)
+		}
+		if len(value.TCPFlags) > 0 {
+			flags := append([]string(nil), value.TCPFlags...)
+			item.TcpFlags = &flags
+		}
+		result = append(result, item)
+	}
+	return result
+}
+
+func fileHintsToAPI(values []domain.SessionFileHint) []api.SessionFileHint {
+	result := make([]api.SessionFileHint, 0, len(values))
+	for _, value := range values {
+		result = append(result, api.SessionFileHint{
+			ExternalId: value.ExternalID, Name: stringPointer(value.Name), Mime: stringPointer(value.MIME), Size: value.Size,
+			Md5: stringPointer(value.MD5), Sha256: stringPointer(value.SHA256), State: stringPointer(value.State), Direction: stringPointer(value.Direction),
+		})
+	}
+	return result
+}
+
+func authenticationHintsToAPI(values []domain.SessionAuthenticationHint) []api.SessionAuthenticationHint {
+	result := make([]api.SessionAuthenticationHint, 0, len(values))
+	for _, value := range values {
+		result = append(result, api.SessionAuthenticationHint{
+			Protocol: value.Protocol, Method: stringPointer(value.Method), Account: stringPointer(value.Account), Valid: value.Valid,
+			FailedAttempts: value.FailedAttempts, ClientHost: stringPointer(value.ClientHost), ServerHost: stringPointer(value.ServerHost),
+		})
+	}
+	return result
+}
+
+func sourceObjectRefToAPI(value domain.SourceObjectRef) api.SourceObjectRef {
+	return api.SourceObjectRef{
+		SourceCode: value.SourceCode, SourceInstance: stringPointer(value.SourceInstance),
+		RecordType: api.SourceObjectRefRecordType(value.RecordType), ExternalId: value.ExternalID,
+		TimeRange: api.TimeRange{From: value.TimeRange.From, To: value.TimeRange.To},
+	}
+}
+
+func sourceObjectRefsToAPI(values []domain.SourceObjectRef) []api.SourceObjectRef {
+	result := make([]api.SourceObjectRef, 0, len(values))
+	for _, value := range values {
+		result = append(result, sourceObjectRefToAPI(value))
+	}
+	return result
+}
+
+func entityMentionsToAPI(values []domain.EntityMention) []api.EntityMention {
+	result := make([]api.EntityMention, 0, len(values))
+	for _, value := range values {
+		roles := make([]api.EntityMentionRoles, 0, len(value.Roles))
+		for _, role := range value.Roles {
+			roles = append(roles, api.EntityMentionRoles(role))
+		}
+		result = append(result, api.EntityMention{Type: value.Type, Value: value.Value, Roles: roles})
+	}
+	return result
+}
+
+func sourceStatesToAPI(values []domain.SourceState) []api.SourceState {
+	result := make([]api.SourceState, 0, len(values))
+	for _, value := range values {
+		result = append(result, api.SourceState{Source: value.Source, Status: api.SourceStateStatus(value.Status)})
+	}
+	return result
+}
+
+func resolutionsToAPI(values []domain.ObjectResolution) []api.ObjectResolution {
+	result := make([]api.ObjectResolution, 0, len(values))
+	for _, value := range values {
+		result = append(result, api.ObjectResolution{
+			Ref: sourceObjectRefToAPI(value.Ref), Status: api.ObjectResolutionStatus(value.Status), Errors: sourceErrorsToAPI(value.Errors),
+		})
+	}
+	return result
+}
+
+func networkEndpointToAPI(value domain.NetworkEndpoint) api.NetworkEndpoint {
+	return api.NetworkEndpoint{Ip: stringPointer(value.IP), Mac: stringPointer(value.MAC), Host: stringPointer(value.Host), Port: value.Port}
+}
+
+func trafficCountersToAPI(value domain.TrafficCounters) *api.TrafficCounters {
+	return &api.TrafficCounters{Sent: int64Pointer(value.Sent), Received: int64Pointer(value.Received), Total: int64Pointer(value.Total)}
 }
 
 func relationsToAPI(values []domain.Relation) []api.Relation {
@@ -159,6 +305,12 @@ func intValue(value *int) int {
 	}
 	return *value
 }
+
+func intPointer(value int) *int { return &value }
+
+func int64Pointer(value int64) *int64 { return &value }
+
+func boolPointer(value bool) *bool { return &value }
 
 func valueOrEmpty[T any](value *[]T) []T {
 	if value == nil {

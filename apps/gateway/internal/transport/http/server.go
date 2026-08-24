@@ -28,13 +28,24 @@ const (
 type projectIDKey struct{}
 
 type Server struct {
-	service        *service.Service
-	log            *slog.Logger
-	projectSources map[string]map[string]bool
+	service         *service.Service
+	log             *slog.Logger
+	projectSources  map[string]map[string]bool
+	sourceInstances map[string]map[string]bool
 }
 
 func NewHandler(cfg config.Config, log *slog.Logger, service *service.Service) http.Handler {
-	server := &Server{service: service, log: log, projectSources: cfg.ProjectSources}
+	instances := make(map[string]map[string]bool)
+	for source, sourceConfig := range cfg.Sources {
+		if len(sourceConfig.StoreIDs) == 0 {
+			continue
+		}
+		instances[source] = make(map[string]bool, len(sourceConfig.StoreIDs))
+		for _, storeID := range sourceConfig.StoreIDs {
+			instances[source][storeID] = true
+		}
+	}
+	server := &Server{service: service, log: log, projectSources: cfg.ProjectSources, sourceInstances: instances}
 	generated := http.NewServeMux()
 	api.HandlerWithOptions(server, api.StdHTTPServerOptions{
 		BaseRouter: generated,
@@ -154,6 +165,9 @@ func (server *Server) constrainSources(ctx context.Context, requested []string, 
 		if !allowed[source] {
 			return nil, sourceForbidden(source)
 		}
+		if !server.service.Supports(source, capabilityName) {
+			return nil, fmt.Errorf("%w: source %q does not support %s", domain.ErrUnsupportedCapability, source, capabilityName)
+		}
 	}
 	return requested, nil
 }
@@ -161,6 +175,14 @@ func (server *Server) constrainSources(ctx context.Context, requested []string, 
 func (server *Server) sourceAllowed(ctx context.Context, source string) bool {
 	allowed, restricted := server.projectSources[projectIDFromContext(ctx)]
 	return restricted && allowed[source]
+}
+
+func (server *Server) sourceInstanceAllowed(source, instance string) bool {
+	instances, constrained := server.sourceInstances[source]
+	if !constrained {
+		return strings.TrimSpace(instance) == ""
+	}
+	return instances[strings.TrimSpace(instance)]
 }
 
 func sourceForbidden(source string) error {

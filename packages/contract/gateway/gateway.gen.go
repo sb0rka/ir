@@ -40,7 +40,9 @@ const (
 	CapabilityEndpoints        Capability = "endpoints"
 	CapabilityEntityLookup     Capability = "entity_lookup"
 	CapabilityEvents           Capability = "events"
+	CapabilityFindings         Capability = "findings"
 	CapabilityResponseCatalog  Capability = "response_catalog"
+	CapabilitySessions         Capability = "sessions"
 )
 
 // Valid indicates whether the value is a known member of the Capability enum.
@@ -56,7 +58,11 @@ func (e Capability) Valid() bool {
 		return true
 	case CapabilityEvents:
 		return true
+	case CapabilityFindings:
+		return true
 	case CapabilityResponseCatalog:
+		return true
+	case CapabilitySessions:
 		return true
 	default:
 		return false
@@ -78,6 +84,45 @@ func (e EndpointStatus) Valid() bool {
 	case EndpointStatusOnline:
 		return true
 	case EndpointStatusUnknown:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for EntityMentionRoles.
+const (
+	Account  EntityMentionRoles = "account"
+	Actor    EntityMentionRoles = "actor"
+	Attacker EntityMentionRoles = "attacker"
+	Dst      EntityMentionRoles = "dst"
+	File     EntityMentionRoles = "file"
+	Mentions EntityMentionRoles = "mentions"
+	Object   EntityMentionRoles = "object"
+	Src      EntityMentionRoles = "src"
+	Victim   EntityMentionRoles = "victim"
+)
+
+// Valid indicates whether the value is a known member of the EntityMentionRoles enum.
+func (e EntityMentionRoles) Valid() bool {
+	switch e {
+	case Account:
+		return true
+	case Actor:
+		return true
+	case Attacker:
+		return true
+	case Dst:
+		return true
+	case File:
+		return true
+	case Mentions:
+		return true
+	case Object:
+		return true
+	case Src:
+		return true
+	case Victim:
 		return true
 	default:
 		return false
@@ -114,6 +159,57 @@ func (e EventSeverity) Valid() bool {
 	}
 }
 
+// Defines values for FindingSeverity.
+const (
+	FindingSeverityCritical FindingSeverity = "critical"
+	FindingSeverityHigh     FindingSeverity = "high"
+	FindingSeverityInfo     FindingSeverity = "info"
+	FindingSeverityLow      FindingSeverity = "low"
+	FindingSeverityMedium   FindingSeverity = "medium"
+	FindingSeverityUnknown  FindingSeverity = "unknown"
+)
+
+// Valid indicates whether the value is a known member of the FindingSeverity enum.
+func (e FindingSeverity) Valid() bool {
+	switch e {
+	case FindingSeverityCritical:
+		return true
+	case FindingSeverityHigh:
+		return true
+	case FindingSeverityInfo:
+		return true
+	case FindingSeverityLow:
+		return true
+	case FindingSeverityMedium:
+		return true
+	case FindingSeverityUnknown:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for FindingKind.
+const (
+	FindingKindNadAttack       FindingKind = "nad_attack"
+	FindingKindSiemCorrelation FindingKind = "siem_correlation"
+	FindingKindSiemIncident    FindingKind = "siem_incident"
+)
+
+// Valid indicates whether the value is a known member of the FindingKind enum.
+func (e FindingKind) Valid() bool {
+	switch e {
+	case FindingKindNadAttack:
+		return true
+	case FindingKindSiemCorrelation:
+		return true
+	case FindingKindSiemIncident:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for HealthStatus.
 const (
 	Ok HealthStatus = "ok"
@@ -123,6 +219,54 @@ const (
 func (e HealthStatus) Valid() bool {
 	switch e {
 	case Ok:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ObjectResolutionStatus.
+const (
+	ObjectResolutionStatusComplete ObjectResolutionStatus = "complete"
+	ObjectResolutionStatusPartial  ObjectResolutionStatus = "partial"
+)
+
+// Valid indicates whether the value is a known member of the ObjectResolutionStatus enum.
+func (e ObjectResolutionStatus) Valid() bool {
+	switch e {
+	case ObjectResolutionStatusComplete:
+		return true
+	case ObjectResolutionStatusPartial:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SessionSeverity.
+const (
+	SessionSeverityCritical SessionSeverity = "critical"
+	SessionSeverityHigh     SessionSeverity = "high"
+	SessionSeverityInfo     SessionSeverity = "info"
+	SessionSeverityLow      SessionSeverity = "low"
+	SessionSeverityMedium   SessionSeverity = "medium"
+	SessionSeverityUnknown  SessionSeverity = "unknown"
+)
+
+// Valid indicates whether the value is a known member of the SessionSeverity enum.
+func (e SessionSeverity) Valid() bool {
+	switch e {
+	case SessionSeverityCritical:
+		return true
+	case SessionSeverityHigh:
+		return true
+	case SessionSeverityInfo:
+		return true
+	case SessionSeverityLow:
+		return true
+	case SessionSeverityMedium:
+		return true
+	case SessionSeverityUnknown:
 		return true
 	default:
 		return false
@@ -158,15 +302,12 @@ func (e SourceKind) Valid() bool {
 
 // Defines values for SourceMode.
 const (
-	Mock  SourceMode = "mock"
 	Proxy SourceMode = "proxy"
 )
 
 // Valid indicates whether the value is a known member of the SourceMode enum.
 func (e SourceMode) Valid() bool {
 	switch e {
-	case Mock:
-		return true
 	case Proxy:
 		return true
 	default:
@@ -176,16 +317,64 @@ func (e SourceMode) Valid() bool {
 
 // Defines values for SourceStatus.
 const (
-	SourceStatusOffline SourceStatus = "offline"
-	SourceStatusOnline  SourceStatus = "online"
+	SourceStatusDegraded SourceStatus = "degraded"
+	SourceStatusOffline  SourceStatus = "offline"
+	SourceStatusOnline   SourceStatus = "online"
 )
 
 // Valid indicates whether the value is a known member of the SourceStatus enum.
 func (e SourceStatus) Valid() bool {
 	switch e {
+	case SourceStatusDegraded:
+		return true
 	case SourceStatusOffline:
 		return true
 	case SourceStatusOnline:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SourceObjectRefRecordType.
+const (
+	SourceObjectRefRecordTypeNadAttack       SourceObjectRefRecordType = "nad_attack"
+	SourceObjectRefRecordTypeNadSession      SourceObjectRefRecordType = "nad_session"
+	SourceObjectRefRecordTypeSiemCorrelation SourceObjectRefRecordType = "siem_correlation"
+	SourceObjectRefRecordTypeSiemIncident    SourceObjectRefRecordType = "siem_incident"
+)
+
+// Valid indicates whether the value is a known member of the SourceObjectRefRecordType enum.
+func (e SourceObjectRefRecordType) Valid() bool {
+	switch e {
+	case SourceObjectRefRecordTypeNadAttack:
+		return true
+	case SourceObjectRefRecordTypeNadSession:
+		return true
+	case SourceObjectRefRecordTypeSiemCorrelation:
+		return true
+	case SourceObjectRefRecordTypeSiemIncident:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SourceStateStatus.
+const (
+	SourceStateStatusComplete  SourceStateStatus = "complete"
+	SourceStateStatusFailed    SourceStateStatus = "failed"
+	SourceStateStatusTruncated SourceStateStatus = "truncated"
+)
+
+// Valid indicates whether the value is a known member of the SourceStateStatus enum.
+func (e SourceStateStatus) Valid() bool {
+	switch e {
+	case SourceStateStatusComplete:
+		return true
+	case SourceStateStatusFailed:
+		return true
+	case SourceStateStatusTruncated:
 		return true
 	default:
 		return false
@@ -210,6 +399,27 @@ func (e VerdictValue) Valid() bool {
 	case VerdictValueSuspicious:
 		return true
 	case VerdictValueUnknown:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for GetFindingParamsKind.
+const (
+	GetFindingParamsKindNadAttack       GetFindingParamsKind = "nad_attack"
+	GetFindingParamsKindSiemCorrelation GetFindingParamsKind = "siem_correlation"
+	GetFindingParamsKindSiemIncident    GetFindingParamsKind = "siem_incident"
+)
+
+// Valid indicates whether the value is a known member of the GetFindingParamsKind enum.
+func (e GetFindingParamsKind) Valid() bool {
+	switch e {
+	case GetFindingParamsKindNadAttack:
+		return true
+	case GetFindingParamsKindSiemCorrelation:
+		return true
+	case GetFindingParamsKindSiemIncident:
 		return true
 	default:
 		return false
@@ -273,6 +483,12 @@ type Artifact struct {
 // Capability Operation that a source can perform through the Gateway.
 type Capability string
 
+// CorrelationDetails defines model for CorrelationDetails.
+type CorrelationDetails struct {
+	CorrelationType *string `json:"correlation_type,omitempty"`
+	SubeventCount   *int    `json:"subevent_count,omitempty"`
+}
+
 // CreateArtifactAnalysisRequest Request to analyze a known artifact with one source.
 type CreateArtifactAnalysisRequest struct {
 	// Artifact Metadata used to identify the artifact for analysis.
@@ -333,6 +549,21 @@ type Entity struct {
 	Value string `json:"value"`
 }
 
+// EntityMention Canonical entity mentioned by an event or a source object, with its observed roles.
+type EntityMention struct {
+	// Roles Roles observed in this record; vendor direction and attacker semantics remain distinct.
+	Roles []EntityMentionRoles `json:"roles"`
+
+	// Type Canonical entity kind.
+	Type string `json:"type"`
+
+	// Value Canonical entity value.
+	Value string `json:"value"`
+}
+
+// EntityMentionRoles defines model for EntityMention.Roles.
+type EntityMentionRoles string
+
 // EntityRef Entity value used as a search or lookup condition.
 type EntityRef struct {
 	// Type Canonical entity kind, such as ip, domain, hostname, email, or hash.
@@ -376,8 +607,8 @@ type Event struct {
 	// Attributes Selected event fields that have no canonical top-level property.
 	Attributes map[string]interface{} `json:"attributes"`
 
-	// Entities Canonical entities mentioned by the event.
-	Entities []EntityRef `json:"entities"`
+	// Entities Canonical entities and their observed roles in this event.
+	Entities []EntityMention `json:"entities"`
 
 	// FetchedAt Time when the Gateway obtained the source data.
 	FetchedAt time.Time `json:"fetched_at"`
@@ -416,6 +647,36 @@ type EventSourceRef struct {
 	SourceEventId string `json:"source_event_id"`
 }
 
+// Finding A source-native coarse security object; never a renamed raw event.
+type Finding struct {
+	Correlation *CorrelationDetails `json:"correlation,omitempty"`
+	Description *string             `json:"description,omitempty"`
+	Entities    []EntityMention     `json:"entities"`
+	FetchedAt   time.Time           `json:"fetched_at"`
+	Incident    *IncidentDetails    `json:"incident,omitempty"`
+	Kind        FindingKind         `json:"kind"`
+	NadAttack   *NADAttackDetails   `json:"nad_attack,omitempty"`
+	OccurredAt  time.Time           `json:"occurred_at"`
+
+	// Ref Stable source-owned object identity plus the bounded time window needed to resolve it again.
+	Ref             SourceObjectRef    `json:"ref"`
+	RelatedFindings *[]SourceObjectRef `json:"related_findings,omitempty"`
+	RelatedSessions *[]SourceObjectRef `json:"related_sessions,omitempty"`
+
+	// Rule Bounded rule metadata observed on a finding.
+	Rule      *RuleRef        `json:"rule,omitempty"`
+	Severity  FindingSeverity `json:"severity"`
+	SourceRef *string         `json:"source_ref,omitempty"`
+	Status    *string         `json:"status,omitempty"`
+	Title     string          `json:"title"`
+}
+
+// FindingSeverity defines model for Finding.Severity.
+type FindingSeverity string
+
+// FindingKind defines model for FindingKind.
+type FindingKind string
+
 // Hashes Cryptographic checksums available for an artifact.
 type Hashes struct {
 	// Md5 MD5 checksum in hexadecimal form.
@@ -437,6 +698,19 @@ type Health struct {
 // HealthStatus Current health state of the checked component.
 type HealthStatus string
 
+// IncidentDetails defines model for IncidentDetails.
+type IncidentDetails struct {
+	Archived       *bool      `json:"archived,omitempty"`
+	AssignedTo     *string    `json:"assigned_to,omitempty"`
+	ChangedAt      *time.Time `json:"changed_at,omitempty"`
+	Damage         *string    `json:"damage,omitempty"`
+	ExternalKey    *string    `json:"external_key,omitempty"`
+	Key            *string    `json:"key,omitempty"`
+	Recommendation *string    `json:"recommendation,omitempty"`
+	Removed        *bool      `json:"removed,omitempty"`
+	Verdict        *string    `json:"verdict,omitempty"`
+}
+
 // LookupEntityRequest Request to enrich one entity from one or more sources.
 type LookupEntityRequest struct {
 	// Entity Entity to normalize and enrich.
@@ -444,6 +718,9 @@ type LookupEntityRequest struct {
 
 	// Sources Source codes to query; omit to use every allowed source with entity lookup.
 	Sources *[]string `json:"sources,omitempty"`
+
+	// TimeRange Inclusive source-record occurrence-time interval.
+	TimeRange TimeRange `json:"time_range"`
 }
 
 // LookupEntityResponse Entity enrichment merged from the selected sources.
@@ -460,6 +737,36 @@ type LookupEntityResponse struct {
 	// Verdicts Security assessments returned for the requested entity.
 	Verdicts []Verdict `json:"verdicts"`
 }
+
+// NADAttackDetails defines model for NADAttackDetails.
+type NADAttackDetails struct {
+	Class         *string `json:"class,omitempty"`
+	FalsePositive *bool   `json:"false_positive,omitempty"`
+	Gid           *int    `json:"gid,omitempty"`
+	RawPriority   *int    `json:"raw_priority,omitempty"`
+	Revision      *int    `json:"revision,omitempty"`
+	Sid           *int    `json:"sid,omitempty"`
+}
+
+// NetworkEndpoint defines model for NetworkEndpoint.
+type NetworkEndpoint struct {
+	Host *string `json:"host,omitempty"`
+	Ip   *string `json:"ip,omitempty"`
+	Mac  *string `json:"mac,omitempty"`
+	Port int     `json:"port"`
+}
+
+// ObjectResolution defines model for ObjectResolution.
+type ObjectResolution struct {
+	Errors []SourceError `json:"errors"`
+
+	// Ref Stable source-owned object identity plus the bounded time window needed to resolve it again.
+	Ref    SourceObjectRef        `json:"ref"`
+	Status ObjectResolutionStatus `json:"status"`
+}
+
+// ObjectResolutionStatus defines model for ObjectResolution.Status.
+type ObjectResolutionStatus string
 
 // Provenance Origin of a normalized record.
 type Provenance struct {
@@ -502,16 +809,23 @@ type Relation struct {
 
 // ResolveContextRequest Source records selected by a client for persistence in an investigation.
 type ResolveContextRequest struct {
-	Entities []EntitySourceRef `json:"entities"`
-	Events   []EventSourceRef  `json:"events"`
+	Entities *[]EntitySourceRef `json:"entities,omitempty"`
+	Events   *[]EventSourceRef  `json:"events,omitempty"`
+	Findings *[]SourceObjectRef `json:"findings,omitempty"`
+	Sessions *[]SourceObjectRef `json:"sessions,omitempty"`
 }
 
 // ResolveContextResponse Normalized records and relationships resolved from source-owned identifiers.
 type ResolveContextResponse struct {
-	Entities     []Entity      `json:"entities"`
-	Events       []Event       `json:"events"`
-	Relations    []Relation    `json:"relations"`
-	SourceErrors []SourceError `json:"source_errors"`
+	Entities  []Entity   `json:"entities"`
+	Events    []Event    `json:"events"`
+	Findings  []Finding  `json:"findings"`
+	Relations []Relation `json:"relations"`
+
+	// Resolutions Per-selected-object completeness. Missing root records are not represented as resolved objects.
+	Resolutions  []ObjectResolution `json:"resolutions"`
+	Sessions     []Session          `json:"sessions"`
+	SourceErrors []SourceError      `json:"source_errors"`
 }
 
 // ResponseAction Response operation advertised for an endpoint; the Gateway does not execute it.
@@ -529,16 +843,20 @@ type ResponseAction struct {
 	Title string `json:"title"`
 }
 
-// SearchEndpointsRequest Filters for endpoint inventory search.
+// RuleRef Bounded rule metadata observed on a finding.
+type RuleRef struct {
+	Id       *string `json:"id,omitempty"`
+	Name     string  `json:"name"`
+	Revision *int    `json:"revision,omitempty"`
+}
+
+// SearchEndpointsRequest Bounded endpoint inventory page request.
 type SearchEndpointsRequest struct {
 	// Cursor Opaque next_cursor from the previous response with the same filters.
 	Cursor *string `json:"cursor,omitempty"`
 
 	// Limit Maximum number of endpoints returned after merging all sources.
 	Limit *int `json:"limit,omitempty"`
-
-	// Query Free-text query matched against endpoint inventory fields.
-	Query *string `json:"query,omitempty"`
 
 	// Sources Source codes to query; omit to use every allowed endpoint source.
 	Sources *[]string `json:"sources,omitempty"`
@@ -567,14 +885,11 @@ type SearchEventsRequest struct {
 	// Limit Maximum number of events returned after merging all sources.
 	Limit *int `json:"limit,omitempty"`
 
-	// Query Free-text query interpreted by each selected source.
-	Query *string `json:"query,omitempty"`
-
 	// Sources Source codes to query; omit to use every allowed source with event search.
 	Sources *[]string `json:"sources,omitempty"`
 
-	// TimeRange Optional occurrence-time interval.
-	TimeRange *TimeRange `json:"time_range,omitempty"`
+	// TimeRange Required occurrence-time interval.
+	TimeRange TimeRange `json:"time_range"`
 }
 
 // SearchEventsResponse Merged event page with the entities and relations needed to interpret it.
@@ -593,6 +908,99 @@ type SearchEventsResponse struct {
 
 	// SourceErrors Per-source failures when at least one selected source succeeded.
 	SourceErrors []SourceError `json:"source_errors"`
+	SourceStates []SourceState `json:"source_states"`
+}
+
+// SearchFindingsRequest defines model for SearchFindingsRequest.
+type SearchFindingsRequest struct {
+	Cursor  *string        `json:"cursor,omitempty"`
+	Kinds   *[]FindingKind `json:"kinds,omitempty"`
+	Limit   *int           `json:"limit,omitempty"`
+	Sources *[]string      `json:"sources,omitempty"`
+
+	// TimeRange Inclusive source-record occurrence-time interval.
+	TimeRange TimeRange `json:"time_range"`
+}
+
+// SearchFindingsResponse defines model for SearchFindingsResponse.
+type SearchFindingsResponse struct {
+	Findings     []Finding     `json:"findings"`
+	NextCursor   *string       `json:"next_cursor,omitempty"`
+	SourceErrors []SourceError `json:"source_errors"`
+	SourceStates []SourceState `json:"source_states"`
+}
+
+// SearchSessionsRequest defines model for SearchSessionsRequest.
+type SearchSessionsRequest struct {
+	Cursor  *string   `json:"cursor,omitempty"`
+	Limit   *int      `json:"limit,omitempty"`
+	Sources *[]string `json:"sources,omitempty"`
+
+	// TimeRange Inclusive source-record occurrence-time interval.
+	TimeRange TimeRange `json:"time_range"`
+}
+
+// SearchSessionsResponse defines model for SearchSessionsResponse.
+type SearchSessionsResponse struct {
+	NextCursor   *string       `json:"next_cursor,omitempty"`
+	Sessions     []Session     `json:"sessions"`
+	SourceErrors []SourceError `json:"source_errors"`
+	SourceStates []SourceState `json:"source_states"`
+}
+
+// Session defines model for Session.
+type Session struct {
+	ApplicationProtocol *string                     `json:"application_protocol,omitempty"`
+	AuthenticationHints []SessionAuthenticationHint `json:"authentication_hints"`
+	Bytes               *TrafficCounters            `json:"bytes,omitempty"`
+	DestinationEndpoint NetworkEndpoint             `json:"destination_endpoint"`
+	DurationSeconds     *float64                    `json:"duration_seconds,omitempty"`
+	EndedAt             *time.Time                  `json:"ended_at,omitempty"`
+	Entities            []EntityMention             `json:"entities"`
+	FalsePositive       *bool                       `json:"false_positive,omitempty"`
+	FetchedAt           time.Time                   `json:"fetched_at"`
+	FileHints           []SessionFileHint           `json:"file_hints"`
+	HasFiles            *bool                       `json:"has_files,omitempty"`
+	Packets             *TrafficCounters            `json:"packets,omitempty"`
+	RawCriticality      *int                        `json:"raw_criticality,omitempty"`
+
+	// Ref Stable source-owned object identity plus the bounded time window needed to resolve it again.
+	Ref               SourceObjectRef   `json:"ref"`
+	RelatedFindings   []SourceObjectRef `json:"related_findings"`
+	Severity          SessionSeverity   `json:"severity"`
+	SourceEndpoint    NetworkEndpoint   `json:"source_endpoint"`
+	SourceRef         *string           `json:"source_ref,omitempty"`
+	StartedAt         time.Time         `json:"started_at"`
+	State             []string          `json:"state"`
+	TcpFlags          *[]string         `json:"tcp_flags,omitempty"`
+	Title             string            `json:"title"`
+	TransportProtocol string            `json:"transport_protocol"`
+}
+
+// SessionSeverity defines model for Session.Severity.
+type SessionSeverity string
+
+// SessionAuthenticationHint Non-secret authentication metadata; proofs, session keys, passwords, and protocol payloads are excluded.
+type SessionAuthenticationHint struct {
+	Account        *string `json:"account,omitempty"`
+	ClientHost     *string `json:"client_host,omitempty"`
+	FailedAttempts *int64  `json:"failed_attempts,omitempty"`
+	Method         *string `json:"method,omitempty"`
+	Protocol       string  `json:"protocol"`
+	ServerHost     *string `json:"server_host,omitempty"`
+	Valid          *bool   `json:"valid,omitempty"`
+}
+
+// SessionFileHint Safe metadata for a file observed in the session; file content and full vendor records are never returned.
+type SessionFileHint struct {
+	Direction  *string `json:"direction,omitempty"`
+	ExternalId string  `json:"external_id"`
+	Md5        *string `json:"md5,omitempty"`
+	Mime       *string `json:"mime,omitempty"`
+	Name       *string `json:"name,omitempty"`
+	Sha256     *string `json:"sha256,omitempty"`
+	Size       int64   `json:"size"`
+	State      *string `json:"state,omitempty"`
 }
 
 // Source External security product registered in the Gateway.
@@ -612,7 +1020,7 @@ type Source struct {
 	// Name Human-readable product name.
 	Name string `json:"name"`
 
-	// Status Result of the current connection probe, or mock availability for mock-only sources.
+	// Status Result of the current connection probe.
 	Status SourceStatus `json:"status"`
 }
 
@@ -622,7 +1030,7 @@ type SourceKind string
 // SourceMode Adapter mode currently backing the source.
 type SourceMode string
 
-// SourceStatus Result of the current connection probe, or mock availability for mock-only sources.
+// SourceStatus Result of the current connection probe.
 type SourceStatus string
 
 // SourceError Failure reported by one source during a multi-source request.
@@ -640,13 +1048,44 @@ type SourceError struct {
 	Source string `json:"source"`
 }
 
-// TimeRange Inclusive event occurrence-time interval.
-type TimeRange struct {
-	// From Inclusive lower boundary of event occurrence time.
-	From time.Time `json:"from"`
+// SourceObjectRef Stable source-owned object identity plus the bounded time window needed to resolve it again.
+type SourceObjectRef struct {
+	// ExternalId Identifier assigned by the source. The time window is not part of identity.
+	ExternalId string                    `json:"external_id"`
+	RecordType SourceObjectRefRecordType `json:"record_type"`
+	SourceCode string                    `json:"source_code"`
 
-	// To Inclusive upper boundary of event occurrence time.
-	To time.Time `json:"to"`
+	// SourceInstance Provider instance, such as a PT NAD numeric store id. Empty for SIEM.
+	SourceInstance *string `json:"source_instance,omitempty"`
+
+	// TimeRange Inclusive source-record occurrence-time interval.
+	TimeRange TimeRange `json:"time_range"`
+}
+
+// SourceObjectRefRecordType defines model for SourceObjectRef.RecordType.
+type SourceObjectRefRecordType string
+
+// SourceState Completeness of one source stream in a search response.
+type SourceState struct {
+	Reason *string           `json:"reason,omitempty"`
+	Source string            `json:"source"`
+	Status SourceStateStatus `json:"status"`
+}
+
+// SourceStateStatus defines model for SourceState.Status.
+type SourceStateStatus string
+
+// TimeRange Inclusive source-record occurrence-time interval.
+type TimeRange struct {
+	From time.Time `json:"from"`
+	To   time.Time `json:"to"`
+}
+
+// TrafficCounters defines model for TrafficCounters.
+type TrafficCounters struct {
+	Received *int64 `json:"received,omitempty"`
+	Sent     *int64 `json:"sent,omitempty"`
+	Total    *int64 `json:"total,omitempty"`
 }
 
 // Verdict Normalized security assessment returned by a source.
@@ -739,6 +1178,18 @@ type SearchEventsParams struct {
 	XProjectID ProjectId `json:"X-Project-ID"`
 }
 
+// SearchFindingsParams defines parameters for SearchFindings.
+type SearchFindingsParams struct {
+	// XProjectID Sb0rka project whose integration allowlist is used.
+	XProjectID ProjectId `json:"X-Project-ID"`
+}
+
+// SearchSessionsParams defines parameters for SearchSessions.
+type SearchSessionsParams struct {
+	// XProjectID Sb0rka project whose integration allowlist is used.
+	XProjectID ProjectId `json:"X-Project-ID"`
+}
+
 // ListSourcesParams defines parameters for ListSources.
 type ListSourcesParams struct {
 	// XProjectID Sb0rka project whose integration allowlist is used.
@@ -757,6 +1208,29 @@ type ListResponseActionsParams struct {
 	XProjectID ProjectId `json:"X-Project-ID"`
 }
 
+// GetFindingParams defines parameters for GetFinding.
+type GetFindingParams struct {
+	SourceInstance *string   `form:"source_instance,omitempty" json:"source_instance,omitempty"`
+	From           time.Time `form:"from" json:"from"`
+	To             time.Time `form:"to" json:"to"`
+
+	// XProjectID Sb0rka project whose integration allowlist is used.
+	XProjectID ProjectId `json:"X-Project-ID"`
+}
+
+// GetFindingParamsKind defines parameters for GetFinding.
+type GetFindingParamsKind string
+
+// GetSessionParams defines parameters for GetSession.
+type GetSessionParams struct {
+	SourceInstance string    `form:"source_instance" json:"source_instance"`
+	From           time.Time `form:"from" json:"from"`
+	To             time.Time `form:"to" json:"to"`
+
+	// XProjectID Sb0rka project whose integration allowlist is used.
+	XProjectID ProjectId `json:"X-Project-ID"`
+}
+
 // CreateArtifactAnalysisJSONRequestBody defines body for CreateArtifactAnalysis for application/json ContentType.
 type CreateArtifactAnalysisJSONRequestBody = CreateArtifactAnalysisRequest
 
@@ -771,6 +1245,12 @@ type LookupEntityJSONRequestBody = LookupEntityRequest
 
 // SearchEventsJSONRequestBody defines body for SearchEvents for application/json ContentType.
 type SearchEventsJSONRequestBody = SearchEventsRequest
+
+// SearchFindingsJSONRequestBody defines body for SearchFindings for application/json ContentType.
+type SearchFindingsJSONRequestBody = SearchFindingsRequest
+
+// SearchSessionsJSONRequestBody defines body for SearchSessions for application/json ContentType.
+type SearchSessionsJSONRequestBody = SearchSessionsRequest
 
 // RequestEditorFn is the function signature for the RequestEditor callback function
 type RequestEditorFn func(ctx context.Context, req *http.Request) error
@@ -921,9 +1401,37 @@ type ClientInterface interface {
 	// Corresponds with POST /api/v1/events/search (the `SearchEvents` operationId).
 	SearchEvents(ctx context.Context, params *SearchEventsParams, body SearchEventsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// SearchFindingsWithBody Search source-native security findings
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /api/v1/findings/search (the `SearchFindings` operationId).
+	SearchFindingsWithBody(ctx context.Context, params *SearchFindingsParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// SearchFindings Search source-native security findings
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /api/v1/findings/search (the `SearchFindings` operationId).
+	SearchFindings(ctx context.Context, params *SearchFindingsParams, body SearchFindingsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// SearchSessionsWithBody Search source-native network sessions
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /api/v1/sessions/search (the `SearchSessions` operationId).
+	SearchSessionsWithBody(ctx context.Context, params *SearchSessionsParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// SearchSessions Search source-native network sessions
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /api/v1/sessions/search (the `SearchSessions` operationId).
+	SearchSessions(ctx context.Context, params *SearchSessionsParams, body SearchSessionsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// ListSources List registered sources
 	//
-	// Returns project-allowed sources and actively probes account-capable connections.
+	// Returns project-allowed sources and probes every configured backend or store through a short cache.
 	//
 	// Corresponds with GET /api/v1/sources (the `ListSources` operationId).
 	ListSources(ctx context.Context, params *ListSourcesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -939,6 +1447,16 @@ type ClientInterface interface {
 	//
 	// Corresponds with GET /api/v1/sources/{source}/endpoints/{external_id}/response-actions (the `ListResponseActions` operationId).
 	ListResponseActions(ctx context.Context, source string, externalId string, params *ListResponseActionsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetFinding Resolve one source-native finding
+	//
+	// Corresponds with GET /api/v1/sources/{source}/findings/{kind}/{external_id} (the `GetFinding` operationId).
+	GetFinding(ctx context.Context, source string, kind GetFindingParamsKind, externalId string, params *GetFindingParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetSession Resolve one source-native network session
+	//
+	// Corresponds with GET /api/v1/sources/{source}/sessions/{external_id} (the `GetSession` operationId).
+	GetSession(ctx context.Context, source string, externalId string, params *GetSessionParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// Healthz Check process health
 	//
@@ -1136,9 +1654,77 @@ func (c *Client) SearchEvents(ctx context.Context, params *SearchEventsParams, b
 	return c.Client.Do(req)
 }
 
+// SearchFindingsWithBody Search source-native security findings
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /api/v1/findings/search (the `SearchFindings` operationId).
+func (c *Client) SearchFindingsWithBody(ctx context.Context, params *SearchFindingsParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewSearchFindingsRequestWithBody(c.Server, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// SearchFindings Search source-native security findings
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /api/v1/findings/search (the `SearchFindings` operationId).
+func (c *Client) SearchFindings(ctx context.Context, params *SearchFindingsParams, body SearchFindingsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewSearchFindingsRequest(c.Server, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// SearchSessionsWithBody Search source-native network sessions
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /api/v1/sessions/search (the `SearchSessions` operationId).
+func (c *Client) SearchSessionsWithBody(ctx context.Context, params *SearchSessionsParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewSearchSessionsRequestWithBody(c.Server, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// SearchSessions Search source-native network sessions
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /api/v1/sessions/search (the `SearchSessions` operationId).
+func (c *Client) SearchSessions(ctx context.Context, params *SearchSessionsParams, body SearchSessionsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewSearchSessionsRequest(c.Server, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 // ListSources List registered sources
 //
-// Returns project-allowed sources and actively probes account-capable connections.
+// Returns project-allowed sources and probes every configured backend or store through a short cache.
 //
 // Corresponds with GET /api/v1/sources (the `ListSources` operationId).
 func (c *Client) ListSources(ctx context.Context, params *ListSourcesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -1175,6 +1761,36 @@ func (c *Client) GetSourceAccountUserinfo(ctx context.Context, source string, pa
 // Corresponds with GET /api/v1/sources/{source}/endpoints/{external_id}/response-actions (the `ListResponseActions` operationId).
 func (c *Client) ListResponseActions(ctx context.Context, source string, externalId string, params *ListResponseActionsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewListResponseActionsRequest(c.Server, source, externalId, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetFinding Resolve one source-native finding
+//
+// Corresponds with GET /api/v1/sources/{source}/findings/{kind}/{external_id} (the `GetFinding` operationId).
+func (c *Client) GetFinding(ctx context.Context, source string, kind GetFindingParamsKind, externalId string, params *GetFindingParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetFindingRequest(c.Server, source, kind, externalId, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetSession Resolve one source-native network session
+//
+// Corresponds with GET /api/v1/sources/{source}/sessions/{external_id} (the `GetSession` operationId).
+func (c *Client) GetSession(ctx context.Context, source string, externalId string, params *GetSessionParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetSessionRequest(c.Server, source, externalId, params)
 	if err != nil {
 		return nil, err
 	}
@@ -1527,6 +2143,112 @@ func NewSearchEventsRequestWithBody(server string, params *SearchEventsParams, c
 	return req, nil
 }
 
+// NewSearchFindingsRequest calls the generic SearchFindings builder with application/json body
+func NewSearchFindingsRequest(server string, params *SearchFindingsParams, body SearchFindingsJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewSearchFindingsRequestWithBody(server, params, "application/json", bodyReader)
+}
+
+// NewSearchFindingsRequestWithBody constructs an http.Request for the SearchFindings method, with any body, and a specified content type
+func NewSearchFindingsRequestWithBody(server string, params *SearchFindingsParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/findings/search")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "X-Project-ID", params.XProjectID, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("X-Project-ID", headerParam0)
+
+	}
+
+	return req, nil
+}
+
+// NewSearchSessionsRequest calls the generic SearchSessions builder with application/json body
+func NewSearchSessionsRequest(server string, params *SearchSessionsParams, body SearchSessionsJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewSearchSessionsRequestWithBody(server, params, "application/json", bodyReader)
+}
+
+// NewSearchSessionsRequestWithBody constructs an http.Request for the SearchSessions method, with any body, and a specified content type
+func NewSearchSessionsRequestWithBody(server string, params *SearchSessionsParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/sessions/search")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "X-Project-ID", params.XProjectID, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("X-Project-ID", headerParam0)
+
+	}
+
+	return req, nil
+}
+
 // NewListSourcesRequest constructs an http.Request for the ListSources method
 func NewListSourcesRequest(server string, params *ListSourcesParams) (*http.Request, error) {
 	var err error
@@ -1645,6 +2367,203 @@ func NewListResponseActionsRequest(server string, source string, externalId stri
 	queryURL, err := serverURL.Parse(operationPath)
 	if err != nil {
 		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "X-Project-ID", params.XProjectID, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("X-Project-ID", headerParam0)
+
+	}
+
+	return req, nil
+}
+
+// NewGetFindingRequest constructs an http.Request for the GetFinding method
+func NewGetFindingRequest(server string, source string, kind GetFindingParamsKind, externalId string, params *GetFindingParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "source", source, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "kind", kind, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam2 string
+
+	pathParam2, err = runtime.StyleParamWithOptions("simple", false, "external_id", externalId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/sources/%s/findings/%s/%s", pathParam0, pathParam1, pathParam2)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.SourceInstance != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "source_instance", *params.SourceInstance, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", true, "from", params.From, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: "date-time"}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
+		}
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", true, "to", params.To, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: "date-time"}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "X-Project-ID", params.XProjectID, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("X-Project-ID", headerParam0)
+
+	}
+
+	return req, nil
+}
+
+// NewGetSessionRequest constructs an http.Request for the GetSession method
+func NewGetSessionRequest(server string, source string, externalId string, params *GetSessionParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "source", source, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "external_id", externalId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/sources/%s/sessions/%s", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", true, "source_instance", params.SourceInstance, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
+		}
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", true, "from", params.From, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: "date-time"}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
+		}
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", true, "to", params.To, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: "date-time"}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
 	}
 
 	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
@@ -1843,9 +2762,37 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with POST /api/v1/events/search (the `SearchEvents` operationId).
 	SearchEventsWithResponse(ctx context.Context, params *SearchEventsParams, body SearchEventsJSONRequestBody, reqEditors ...RequestEditorFn) (*SearchEventsClientResponse, error)
 
+	// SearchFindingsWithBodyWithResponse Search source-native security findings
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/findings/search (the `SearchFindings` operationId).
+	SearchFindingsWithBodyWithResponse(ctx context.Context, params *SearchFindingsParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SearchFindingsClientResponse, error)
+
+	// SearchFindingsWithResponse Search source-native security findings
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/findings/search (the `SearchFindings` operationId).
+	SearchFindingsWithResponse(ctx context.Context, params *SearchFindingsParams, body SearchFindingsJSONRequestBody, reqEditors ...RequestEditorFn) (*SearchFindingsClientResponse, error)
+
+	// SearchSessionsWithBodyWithResponse Search source-native network sessions
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/sessions/search (the `SearchSessions` operationId).
+	SearchSessionsWithBodyWithResponse(ctx context.Context, params *SearchSessionsParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SearchSessionsClientResponse, error)
+
+	// SearchSessionsWithResponse Search source-native network sessions
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/sessions/search (the `SearchSessions` operationId).
+	SearchSessionsWithResponse(ctx context.Context, params *SearchSessionsParams, body SearchSessionsJSONRequestBody, reqEditors ...RequestEditorFn) (*SearchSessionsClientResponse, error)
+
 	// ListSourcesWithResponse List registered sources
 	//
-	// Returns project-allowed sources and actively probes account-capable connections.
+	// Returns project-allowed sources and probes every configured backend or store through a short cache.
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -1867,6 +2814,20 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with GET /api/v1/sources/{source}/endpoints/{external_id}/response-actions (the `ListResponseActions` operationId).
 	ListResponseActionsWithResponse(ctx context.Context, source string, externalId string, params *ListResponseActionsParams, reqEditors ...RequestEditorFn) (*ListResponseActionsClientResponse, error)
+
+	// GetFindingWithResponse Resolve one source-native finding
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /api/v1/sources/{source}/findings/{kind}/{external_id} (the `GetFinding` operationId).
+	GetFindingWithResponse(ctx context.Context, source string, kind GetFindingParamsKind, externalId string, params *GetFindingParams, reqEditors ...RequestEditorFn) (*GetFindingClientResponse, error)
+
+	// GetSessionWithResponse Resolve one source-native network session
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /api/v1/sources/{source}/sessions/{external_id} (the `GetSession` operationId).
+	GetSessionWithResponse(ctx context.Context, source string, externalId string, params *GetSessionParams, reqEditors ...RequestEditorFn) (*GetSessionClientResponse, error)
 
 	// HealthzWithResponse Check process health
 	//
@@ -2493,6 +3454,186 @@ func (r SearchEventsClientResponse) ContentType() string {
 	return ""
 }
 
+type SearchFindingsClientResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *SearchFindingsResponse
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *BadRequest
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Unauthorized
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Forbidden
+	// JSON422 the response for an HTTP 422 `application/json` response
+	JSON422 *ValidationError
+	// JSON502 the response for an HTTP 502 `application/json` response
+	JSON502 *BadGateway
+	// JSON504 the response for an HTTP 504 `application/json` response
+	JSON504 *GatewayTimeout
+	// JSONDefault the response for an HTTP default `application/json` response
+	JSONDefault *ErrorResponse
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r SearchFindingsClientResponse) GetJSON200() *SearchFindingsResponse {
+	return r.JSON200
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r SearchFindingsClientResponse) GetJSON400() *BadRequest {
+	return r.JSON400
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r SearchFindingsClientResponse) GetJSON401() *Unauthorized {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r SearchFindingsClientResponse) GetJSON403() *Forbidden {
+	return r.JSON403
+}
+
+// GetJSON422 returns the response for an HTTP 422 `application/json` response
+func (r SearchFindingsClientResponse) GetJSON422() *ValidationError {
+	return r.JSON422
+}
+
+// GetJSON502 returns the response for an HTTP 502 `application/json` response
+func (r SearchFindingsClientResponse) GetJSON502() *BadGateway {
+	return r.JSON502
+}
+
+// GetJSON504 returns the response for an HTTP 504 `application/json` response
+func (r SearchFindingsClientResponse) GetJSON504() *GatewayTimeout {
+	return r.JSON504
+}
+
+// GetJSONDefault returns the response for an HTTP default `application/json` response
+func (r SearchFindingsClientResponse) GetJSONDefault() *ErrorResponse {
+	return r.JSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r SearchFindingsClientResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r SearchFindingsClientResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r SearchFindingsClientResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r SearchFindingsClientResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type SearchSessionsClientResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *SearchSessionsResponse
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *BadRequest
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Unauthorized
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Forbidden
+	// JSON422 the response for an HTTP 422 `application/json` response
+	JSON422 *ValidationError
+	// JSON502 the response for an HTTP 502 `application/json` response
+	JSON502 *BadGateway
+	// JSON504 the response for an HTTP 504 `application/json` response
+	JSON504 *GatewayTimeout
+	// JSONDefault the response for an HTTP default `application/json` response
+	JSONDefault *ErrorResponse
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r SearchSessionsClientResponse) GetJSON200() *SearchSessionsResponse {
+	return r.JSON200
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r SearchSessionsClientResponse) GetJSON400() *BadRequest {
+	return r.JSON400
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r SearchSessionsClientResponse) GetJSON401() *Unauthorized {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r SearchSessionsClientResponse) GetJSON403() *Forbidden {
+	return r.JSON403
+}
+
+// GetJSON422 returns the response for an HTTP 422 `application/json` response
+func (r SearchSessionsClientResponse) GetJSON422() *ValidationError {
+	return r.JSON422
+}
+
+// GetJSON502 returns the response for an HTTP 502 `application/json` response
+func (r SearchSessionsClientResponse) GetJSON502() *BadGateway {
+	return r.JSON502
+}
+
+// GetJSON504 returns the response for an HTTP 504 `application/json` response
+func (r SearchSessionsClientResponse) GetJSON504() *GatewayTimeout {
+	return r.JSON504
+}
+
+// GetJSONDefault returns the response for an HTTP default `application/json` response
+func (r SearchSessionsClientResponse) GetJSONDefault() *ErrorResponse {
+	return r.JSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r SearchSessionsClientResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r SearchSessionsClientResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r SearchSessionsClientResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r SearchSessionsClientResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type ListSourcesClientResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -2761,6 +3902,200 @@ func (r ListResponseActionsClientResponse) ContentType() string {
 	return ""
 }
 
+type GetFindingClientResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *struct {
+		// Finding A source-native coarse security object; never a renamed raw event.
+		Finding    Finding          `json:"finding"`
+		Resolution ObjectResolution `json:"resolution"`
+	}
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *BadRequest
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Unauthorized
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Forbidden
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *NotFound
+	// JSON502 the response for an HTTP 502 `application/json` response
+	JSON502 *BadGateway
+	// JSON504 the response for an HTTP 504 `application/json` response
+	JSON504 *GatewayTimeout
+	// JSONDefault the response for an HTTP default `application/json` response
+	JSONDefault *ErrorResponse
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetFindingClientResponse) GetJSON200() *struct {
+	// Finding A source-native coarse security object; never a renamed raw event.
+	Finding    Finding          `json:"finding"`
+	Resolution ObjectResolution `json:"resolution"`
+} {
+	return r.JSON200
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r GetFindingClientResponse) GetJSON400() *BadRequest {
+	return r.JSON400
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r GetFindingClientResponse) GetJSON401() *Unauthorized {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r GetFindingClientResponse) GetJSON403() *Forbidden {
+	return r.JSON403
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r GetFindingClientResponse) GetJSON404() *NotFound {
+	return r.JSON404
+}
+
+// GetJSON502 returns the response for an HTTP 502 `application/json` response
+func (r GetFindingClientResponse) GetJSON502() *BadGateway {
+	return r.JSON502
+}
+
+// GetJSON504 returns the response for an HTTP 504 `application/json` response
+func (r GetFindingClientResponse) GetJSON504() *GatewayTimeout {
+	return r.JSON504
+}
+
+// GetJSONDefault returns the response for an HTTP default `application/json` response
+func (r GetFindingClientResponse) GetJSONDefault() *ErrorResponse {
+	return r.JSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r GetFindingClientResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetFindingClientResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetFindingClientResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetFindingClientResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GetSessionClientResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *struct {
+		Resolution ObjectResolution `json:"resolution"`
+		Session    Session          `json:"session"`
+	}
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *BadRequest
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Unauthorized
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Forbidden
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *NotFound
+	// JSON502 the response for an HTTP 502 `application/json` response
+	JSON502 *BadGateway
+	// JSON504 the response for an HTTP 504 `application/json` response
+	JSON504 *GatewayTimeout
+	// JSONDefault the response for an HTTP default `application/json` response
+	JSONDefault *ErrorResponse
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetSessionClientResponse) GetJSON200() *struct {
+	Resolution ObjectResolution `json:"resolution"`
+	Session    Session          `json:"session"`
+} {
+	return r.JSON200
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r GetSessionClientResponse) GetJSON400() *BadRequest {
+	return r.JSON400
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r GetSessionClientResponse) GetJSON401() *Unauthorized {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r GetSessionClientResponse) GetJSON403() *Forbidden {
+	return r.JSON403
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r GetSessionClientResponse) GetJSON404() *NotFound {
+	return r.JSON404
+}
+
+// GetJSON502 returns the response for an HTTP 502 `application/json` response
+func (r GetSessionClientResponse) GetJSON502() *BadGateway {
+	return r.JSON502
+}
+
+// GetJSON504 returns the response for an HTTP 504 `application/json` response
+func (r GetSessionClientResponse) GetJSON504() *GatewayTimeout {
+	return r.JSON504
+}
+
+// GetJSONDefault returns the response for an HTTP default `application/json` response
+func (r GetSessionClientResponse) GetJSONDefault() *ErrorResponse {
+	return r.JSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r GetSessionClientResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetSessionClientResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetSessionClientResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetSessionClientResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type HealthzClientResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -2979,9 +4314,61 @@ func (c *ClientWithResponses) SearchEventsWithResponse(ctx context.Context, para
 	return ParseSearchEventsClientResponse(rsp)
 }
 
+// SearchFindingsWithBodyWithResponse Search source-native security findings
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/findings/search (the `SearchFindings` operationId).
+func (c *ClientWithResponses) SearchFindingsWithBodyWithResponse(ctx context.Context, params *SearchFindingsParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SearchFindingsClientResponse, error) {
+	rsp, err := c.SearchFindingsWithBody(ctx, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseSearchFindingsClientResponse(rsp)
+}
+
+// SearchFindingsWithResponse Search source-native security findings
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/findings/search (the `SearchFindings` operationId).
+func (c *ClientWithResponses) SearchFindingsWithResponse(ctx context.Context, params *SearchFindingsParams, body SearchFindingsJSONRequestBody, reqEditors ...RequestEditorFn) (*SearchFindingsClientResponse, error) {
+	rsp, err := c.SearchFindings(ctx, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseSearchFindingsClientResponse(rsp)
+}
+
+// SearchSessionsWithBodyWithResponse Search source-native network sessions
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/sessions/search (the `SearchSessions` operationId).
+func (c *ClientWithResponses) SearchSessionsWithBodyWithResponse(ctx context.Context, params *SearchSessionsParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SearchSessionsClientResponse, error) {
+	rsp, err := c.SearchSessionsWithBody(ctx, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseSearchSessionsClientResponse(rsp)
+}
+
+// SearchSessionsWithResponse Search source-native network sessions
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/sessions/search (the `SearchSessions` operationId).
+func (c *ClientWithResponses) SearchSessionsWithResponse(ctx context.Context, params *SearchSessionsParams, body SearchSessionsJSONRequestBody, reqEditors ...RequestEditorFn) (*SearchSessionsClientResponse, error) {
+	rsp, err := c.SearchSessions(ctx, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseSearchSessionsClientResponse(rsp)
+}
+
 // ListSourcesWithResponse List registered sources
 //
-// Returns project-allowed sources and actively probes account-capable connections.
+// Returns project-allowed sources and probes every configured backend or store through a short cache.
 //
 // Returns a wrapper object for the known response body format(s).
 //
@@ -3020,6 +4407,32 @@ func (c *ClientWithResponses) ListResponseActionsWithResponse(ctx context.Contex
 		return nil, err
 	}
 	return ParseListResponseActionsClientResponse(rsp)
+}
+
+// GetFindingWithResponse Resolve one source-native finding
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /api/v1/sources/{source}/findings/{kind}/{external_id} (the `GetFinding` operationId).
+func (c *ClientWithResponses) GetFindingWithResponse(ctx context.Context, source string, kind GetFindingParamsKind, externalId string, params *GetFindingParams, reqEditors ...RequestEditorFn) (*GetFindingClientResponse, error) {
+	rsp, err := c.GetFinding(ctx, source, kind, externalId, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetFindingClientResponse(rsp)
+}
+
+// GetSessionWithResponse Resolve one source-native network session
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /api/v1/sources/{source}/sessions/{external_id} (the `GetSession` operationId).
+func (c *ClientWithResponses) GetSessionWithResponse(ctx context.Context, source string, externalId string, params *GetSessionParams, reqEditors ...RequestEditorFn) (*GetSessionClientResponse, error) {
+	rsp, err := c.GetSession(ctx, source, externalId, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetSessionClientResponse(rsp)
 }
 
 // HealthzWithResponse Check process health
@@ -3568,6 +4981,156 @@ func ParseSearchEventsClientResponse(rsp *http.Response) (*SearchEventsClientRes
 	return response, nil
 }
 
+// ParseSearchFindingsClientResponse parses an HTTP response from a SearchFindingsWithResponse call
+func ParseSearchFindingsClientResponse(rsp *http.Response) (*SearchFindingsClientResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &SearchFindingsClientResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest SearchFindingsResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest ValidationError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON422 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 502:
+		var dest BadGateway
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON502 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 504:
+		var dest GatewayTimeout
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON504 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseSearchSessionsClientResponse parses an HTTP response from a SearchSessionsWithResponse call
+func ParseSearchSessionsClientResponse(rsp *http.Response) (*SearchSessionsClientResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &SearchSessionsClientResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest SearchSessionsResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest ValidationError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON422 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 502:
+		var dest BadGateway
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON502 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 504:
+		var dest GatewayTimeout
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON504 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseListSourcesClientResponse parses an HTTP response from a ListSourcesWithResponse call
 func ParseListSourcesClientResponse(rsp *http.Response) (*ListSourcesClientResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -3765,6 +5328,163 @@ func ParseListResponseActionsClientResponse(rsp *http.Response) (*ListResponseAc
 			return nil, err
 		}
 		response.JSON500 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 504:
+		var dest GatewayTimeout
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON504 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetFindingClientResponse parses an HTTP response from a GetFindingWithResponse call
+func ParseGetFindingClientResponse(rsp *http.Response) (*GetFindingClientResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetFindingClientResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			// Finding A source-native coarse security object; never a renamed raw event.
+			Finding    Finding          `json:"finding"`
+			Resolution ObjectResolution `json:"resolution"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 502:
+		var dest BadGateway
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON502 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 504:
+		var dest GatewayTimeout
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON504 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetSessionClientResponse parses an HTTP response from a GetSessionWithResponse call
+func ParseGetSessionClientResponse(rsp *http.Response) (*GetSessionClientResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetSessionClientResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			Resolution ObjectResolution `json:"resolution"`
+			Session    Session          `json:"session"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 502:
+		var dest BadGateway
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON502 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 504:
 		var dest GatewayTimeout

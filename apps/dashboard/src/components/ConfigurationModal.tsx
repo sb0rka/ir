@@ -18,12 +18,13 @@ import {
 import { Button } from './ui'
 import { clsx } from '../lib/utils'
 import {
-  PT_COOKIE_FIELD_IDSRV,
-  PT_COOKIE_FIELD_IDSRV_SESSION,
-  PT_COOKIE_FIELD_PORTAL,
-  buildPtCookie,
-  validatePtCookieParts,
-  type PtCookieField,
+  PT_SIEM_COOKIE_E,
+  PT_SIEM_COOKIE_IDSRV,
+  PT_SIEM_COOKIE_IDSRV_SESSION,
+  PT_SIEM_COOKIE_PORTAL,
+  buildPtSiemCookie,
+  validatePtSiemCookieParts,
+  type PtSiemCookieField,
 } from '../lib/pt-cookie'
 import { validatePTURL } from '../lib/validation'
 import {
@@ -43,8 +44,9 @@ const SECRET_METADATA_TIMEOUT_MS = 10_000
 const SOM_SECRET = 'DEMO_SOM_ACCESS_TOKEN'
 const SOM_VARIANT_KEY = 'som_variant'
 const SOM_MODEL_ID_KEY = 'som_model_id'
-const PT_COOKIE_SECRET = 'DEMO_PT_COOKIE'
+const PT_COOKIE_SECRET = 'DEMO_PT_SIEM_COOKIE'
 const PT_URL_SECRET = 'DEMO_PT_SIEM_BASE_URL'
+const PT_SIEM_COOKIE_VALUE = 'pt_siem_cookie_value'
 
 type SecretName =
   | typeof SOM_SECRET
@@ -57,9 +59,10 @@ interface Drafts {
   [SOM_VARIANT_KEY]: string
   [SOM_MODEL_ID_KEY]: string
   [PT_URL_SECRET]: string
-  [PT_COOKIE_FIELD_IDSRV_SESSION]: string
-  [PT_COOKIE_FIELD_IDSRV]: string
-  [PT_COOKIE_FIELD_PORTAL]: string
+  [PT_SIEM_COOKIE_E]: string
+  [PT_SIEM_COOKIE_IDSRV_SESSION]: string
+  [PT_SIEM_COOKIE_IDSRV]: string
+  [PT_SIEM_COOKIE_PORTAL]: string
 }
 
 type DraftName = keyof Drafts
@@ -69,9 +72,10 @@ const emptyDrafts: Drafts = {
   [SOM_VARIANT_KEY]: '',
   [SOM_MODEL_ID_KEY]: '',
   [PT_URL_SECRET]: '',
-  [PT_COOKIE_FIELD_IDSRV_SESSION]: '',
-  [PT_COOKIE_FIELD_IDSRV]: '',
-  [PT_COOKIE_FIELD_PORTAL]: '',
+  [PT_SIEM_COOKIE_E]: '',
+  [PT_SIEM_COOKIE_IDSRV_SESSION]: '',
+  [PT_SIEM_COOKIE_IDSRV]: '',
+  [PT_SIEM_COOKIE_PORTAL]: '',
 }
 
 const emptyStates: Record<SecretName, FieldState> = {
@@ -84,11 +88,12 @@ function isSecretName(name: DraftName): name is typeof SOM_SECRET | typeof PT_UR
   return name === SOM_SECRET || name === PT_URL_SECRET
 }
 
-function isPtCookieField(name: DraftName): name is PtCookieField {
+function isPtCookieField(name: DraftName): name is PtSiemCookieField {
   return (
-    name === PT_COOKIE_FIELD_IDSRV_SESSION ||
-    name === PT_COOKIE_FIELD_IDSRV ||
-    name === PT_COOKIE_FIELD_PORTAL
+    name === PT_SIEM_COOKIE_E ||
+    name === PT_SIEM_COOKIE_IDSRV_SESSION ||
+    name === PT_SIEM_COOKIE_IDSRV ||
+    name === PT_SIEM_COOKIE_PORTAL
   )
 }
 
@@ -296,17 +301,18 @@ export function ConfigurationModal({
 
   const save = async () => {
     const cookieParts = {
-      [PT_COOKIE_FIELD_IDSRV_SESSION]: drafts[PT_COOKIE_FIELD_IDSRV_SESSION].trim(),
-      [PT_COOKIE_FIELD_IDSRV]: drafts[PT_COOKIE_FIELD_IDSRV].trim(),
-      [PT_COOKIE_FIELD_PORTAL]: drafts[PT_COOKIE_FIELD_PORTAL].trim(),
+      [PT_SIEM_COOKIE_E]: drafts[PT_SIEM_COOKIE_E].trim(),
+      [PT_SIEM_COOKIE_IDSRV_SESSION]: drafts[PT_SIEM_COOKIE_IDSRV_SESSION].trim(),
+      [PT_SIEM_COOKIE_IDSRV]: drafts[PT_SIEM_COOKIE_IDSRV].trim(),
+      [PT_SIEM_COOKIE_PORTAL]: drafts[PT_SIEM_COOKIE_PORTAL].trim(),
     }
-    const cookieError = validatePtCookieParts(cookieParts)
+    const cookieError = validatePtSiemCookieParts(cookieParts)
     if (cookieError) {
       setStates((current) => ({ ...current, [PT_COOKIE_SECRET]: 'error' }))
       setErrors((current) => ({ ...current, [PT_COOKIE_SECRET]: cookieError }))
       return
     }
-    const ptCookie = Object.values(cookieParts).every(Boolean) ? buildPtCookie(cookieParts) : ''
+    const ptCookie = buildPtSiemCookie(cookieParts)
 
     const values = {
       [SOM_SECRET]: drafts[SOM_SECRET].trim(),
@@ -423,15 +429,12 @@ export function ConfigurationModal({
       [SOM_VARIANT_KEY]: somRunSettings.variant,
       [SOM_MODEL_ID_KEY]: somRunSettings.modelId,
       [PT_URL_SECRET]: failedNames.has(PT_URL_SECRET) ? values[PT_URL_SECRET] : '',
-      [PT_COOKIE_FIELD_IDSRV_SESSION]: failedNames.has(PT_COOKIE_SECRET)
-        ? cookieParts[PT_COOKIE_FIELD_IDSRV_SESSION]
+      [PT_SIEM_COOKIE_E]: failedNames.has(PT_COOKIE_SECRET) ? cookieParts[PT_SIEM_COOKIE_E] : '',
+      [PT_SIEM_COOKIE_IDSRV_SESSION]: failedNames.has(PT_COOKIE_SECRET)
+        ? cookieParts[PT_SIEM_COOKIE_IDSRV_SESSION]
         : '',
-      [PT_COOKIE_FIELD_IDSRV]: failedNames.has(PT_COOKIE_SECRET)
-        ? cookieParts[PT_COOKIE_FIELD_IDSRV]
-        : '',
-      [PT_COOKIE_FIELD_PORTAL]: failedNames.has(PT_COOKIE_SECRET)
-        ? cookieParts[PT_COOKIE_FIELD_PORTAL]
-        : '',
+      [PT_SIEM_COOKIE_IDSRV]: failedNames.has(PT_COOKIE_SECRET) ? cookieParts[PT_SIEM_COOKIE_IDSRV] : '',
+      [PT_SIEM_COOKIE_PORTAL]: failedNames.has(PT_COOKIE_SECRET) ? cookieParts[PT_SIEM_COOKIE_PORTAL] : '',
     })
     setSummary(
       savedCount ? `Сохранено новых версий: ${savedCount}` : 'Конфигурация сохранена',
@@ -500,23 +503,32 @@ export function ConfigurationModal({
                 {PT_COOKIE_SECRET}
                 <FieldStatus state={states[PT_COOKIE_SECRET]} />
               </div>
+              <p className="text-[11px] text-fg-dim">
+                Events API (:443): e, idsrv.session, idsrv. Incidents (:8887): IncidentManagementPortalCookie.
+              </p>
               <CookiePartInput
-                placeholder={PT_COOKIE_FIELD_IDSRV_SESSION}
-                value={drafts[PT_COOKIE_FIELD_IDSRV_SESSION]}
+                placeholder={PT_SIEM_COOKIE_E}
+                value={drafts[PT_SIEM_COOKIE_E]}
                 state={states[PT_COOKIE_SECRET]}
-                onChange={(value) => setDraft(PT_COOKIE_FIELD_IDSRV_SESSION, value)}
+                onChange={(value) => setDraft(PT_SIEM_COOKIE_E, value)}
               />
               <CookiePartInput
-                placeholder={PT_COOKIE_FIELD_IDSRV}
-                value={drafts[PT_COOKIE_FIELD_IDSRV]}
+                placeholder={PT_SIEM_COOKIE_IDSRV_SESSION}
+                value={drafts[PT_SIEM_COOKIE_IDSRV_SESSION]}
                 state={states[PT_COOKIE_SECRET]}
-                onChange={(value) => setDraft(PT_COOKIE_FIELD_IDSRV, value)}
+                onChange={(value) => setDraft(PT_SIEM_COOKIE_IDSRV_SESSION, value)}
               />
               <CookiePartInput
-                placeholder={PT_COOKIE_FIELD_PORTAL}
-                value={drafts[PT_COOKIE_FIELD_PORTAL]}
+                placeholder={PT_SIEM_COOKIE_IDSRV}
+                value={drafts[PT_SIEM_COOKIE_IDSRV]}
                 state={states[PT_COOKIE_SECRET]}
-                onChange={(value) => setDraft(PT_COOKIE_FIELD_PORTAL, value)}
+                onChange={(value) => setDraft(PT_SIEM_COOKIE_IDSRV, value)}
+              />
+              <CookiePartInput
+                placeholder={PT_SIEM_COOKIE_PORTAL}
+                value={drafts[PT_SIEM_COOKIE_PORTAL]}
+                state={states[PT_COOKIE_SECRET]}
+                onChange={(value) => setDraft(PT_SIEM_COOKIE_PORTAL, value)}
               />
               {errors[PT_COOKIE_SECRET] && (
                 <p className="text-[11px] text-critical">{errors[PT_COOKIE_SECRET]}</p>

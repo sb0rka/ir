@@ -28,6 +28,14 @@ type Database interface {
 	InvestigationExists(ctx context.Context, projectID, investigationID string) (bool, error)
 	ImportContext(ctx context.Context, request model.ImportRequest) (model.ImportStats, error)
 
+	InvestigationFindings(ctx context.Context, projectID, investigationID string, filter model.ObjectFilter) ([]model.Finding, error)
+	GetFinding(ctx context.Context, projectID, findingID string) (model.Finding, error)
+	DetachFinding(ctx context.Context, projectID, investigationID, findingID string) error
+
+	InvestigationSessions(ctx context.Context, projectID, investigationID string, filter model.ObjectFilter) ([]model.NetworkSession, error)
+	GetSession(ctx context.Context, projectID, sessionID string) (model.NetworkSession, error)
+	DetachSession(ctx context.Context, projectID, investigationID, sessionID string) error
+
 	InvestigationEvents(ctx context.Context, projectID, investigationID string, filter model.EventFilter) ([]model.EventSummary, error)
 	GetEvent(ctx context.Context, projectID, eventID string) (model.Event, error)
 	DetachEvent(ctx context.Context, projectID, investigationID, eventID string) error

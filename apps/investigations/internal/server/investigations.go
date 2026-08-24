@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"strings"
@@ -134,17 +135,31 @@ func (s *Server) AddInvestigationContext(ctx context.Context, request investigat
 		return nil, storeError(err)
 	}
 	gatewayRequest := gatewayclient.ResolveContextRequest{}
+	for _, ref := range request.Body.Findings {
+		converted, err := gatewaySourceObjectRef(ref)
+		if err != nil {
+			return nil, validationError("invalid finding source reference")
+		}
+		gatewayRequest.Findings = appendOptionalSlice(gatewayRequest.Findings, converted)
+	}
+	for _, ref := range request.Body.Sessions {
+		converted, err := gatewaySourceObjectRef(ref)
+		if err != nil {
+			return nil, validationError("invalid session source reference")
+		}
+		gatewayRequest.Sessions = appendOptionalSlice(gatewayRequest.Sessions, converted)
+	}
 	for _, ref := range request.Body.Events {
-		gatewayRequest.Events = append(gatewayRequest.Events, gatewayclient.EventSourceRef{SourceCode: ref.SourceCode, SourceEventId: ref.SourceEventId})
+		gatewayRequest.Events = appendOptionalSlice(gatewayRequest.Events, gatewayclient.EventSourceRef{SourceCode: ref.SourceCode, SourceEventId: ref.SourceEventId})
 	}
 	for _, ref := range request.Body.Entities {
-		gatewayRequest.Entities = append(gatewayRequest.Entities, gatewayclient.EntitySourceRef{SourceCode: ref.SourceCode, SourceEntityId: ref.SourceEntityId})
+		gatewayRequest.Entities = appendOptionalSlice(gatewayRequest.Entities, gatewayclient.EntitySourceRef{SourceCode: ref.SourceCode, SourceEntityId: ref.SourceEntityId})
 	}
 	resolved, err := s.resolveGatewayContext(ctx, scope, gatewayRequest)
 	if err != nil {
 		return nil, err
 	}
-	stats, err := s.db.ImportContext(ctx, model.ImportRequest{ProjectID: scope.ProjectID, InvestigationID: request.InvestigationId.String(), Selection: resolved.Selection, Origin: "analyst"})
+	stats, err := s.db.ImportContext(ctx, model.ImportRequest{ProjectID: scope.ProjectID, InvestigationID: request.InvestigationId.String(), Selection: resolved.Selection, Origin: "analyst", Warnings: resolved.Warnings})
 	if err != nil {
 		return nil, storeError(err)
 	}
@@ -178,7 +193,7 @@ func (s *Server) AddAgentResults(ctx context.Context, request investigations.Add
 		}
 		sourceKey := sourceRecordKey(event.SourceCode, event.SourceEventId)
 		eventRefs[ref] = sourceKey
-		gatewayRequest.Events = append(gatewayRequest.Events, gatewayclient.EventSourceRef{SourceCode: event.SourceCode, SourceEventId: event.SourceEventId})
+		gatewayRequest.Events = appendOptionalSlice(gatewayRequest.Events, gatewayclient.EventSourceRef{SourceCode: event.SourceCode, SourceEventId: event.SourceEventId})
 	}
 	for _, entity := range request.Body.Entities {
 		ref := strings.TrimSpace(entity.Ref)
@@ -190,16 +205,16 @@ func (s *Server) AddAgentResults(ctx context.Context, request investigations.Add
 		}
 		sourceKey := sourceRecordKey(entity.SourceCode, entity.SourceEntityId)
 		entityRefs[ref] = sourceKey
-		gatewayRequest.Entities = append(gatewayRequest.Entities, gatewayclient.EntitySourceRef{SourceCode: entity.SourceCode, SourceEntityId: entity.SourceEntityId})
+		gatewayRequest.Entities = appendOptionalSlice(gatewayRequest.Entities, gatewayclient.EntitySourceRef{SourceCode: entity.SourceCode, SourceEntityId: entity.SourceEntityId})
 	}
 	resolved := resolvedGatewayContext{EventsBySource: map[string]string{}, EntitiesBySource: map[string]string{}}
-	if len(gatewayRequest.Events) > 0 || len(gatewayRequest.Entities) > 0 {
+	if len(optionalSlice(gatewayRequest.Events)) > 0 || len(optionalSlice(gatewayRequest.Entities)) > 0 {
 		resolved, err = s.resolveGatewayContext(ctx, scope, gatewayRequest)
 		if err != nil {
 			return nil, err
 		}
 	}
-	input := model.ImportRequest{ProjectID: scope.ProjectID, InvestigationID: request.InvestigationId.String(), Origin: "agent", Selection: resolved.Selection}
+	input := model.ImportRequest{ProjectID: scope.ProjectID, InvestigationID: request.InvestigationId.String(), Origin: "agent", Selection: resolved.Selection, Warnings: resolved.Warnings}
 	for _, id := range request.Body.SomIssueIds {
 		input.SomIssueIDs = append(input.SomIssueIDs, id.String())
 	}
@@ -239,63 +254,199 @@ func (s *Server) AddAgentResults(ctx context.Context, request investigations.Add
 
 type resolvedGatewayContext struct {
 	Selection        model.GatewaySelection
+	FindingsBySource map[string]string
+	SessionsBySource map[string]string
 	EventsBySource   map[string]string
 	EntitiesBySource map[string]string
+	Warnings         []string
 }
 
 func (s *Server) resolveGatewayContext(ctx context.Context, scope socctx.Scope, request gatewayclient.ResolveContextRequest) (resolvedGatewayContext, error) {
-	if len(request.Events) == 0 && len(request.Entities) == 0 {
-		return resolvedGatewayContext{}, validationError("at least one event or entity is required")
+	findings := optionalSlice(request.Findings)
+	sessions := optionalSlice(request.Sessions)
+	events := optionalSlice(request.Events)
+	entities := optionalSlice(request.Entities)
+	if len(findings) == 0 && len(sessions) == 0 && len(events) == 0 && len(entities) == 0 {
+		return resolvedGatewayContext{}, validationError("at least one finding, session, event, or entity is required")
 	}
 	bearer, _ := socctx.BearerFromContext(ctx)
 	response, err := s.gateway.ResolveContext(ctx, scope.ProjectID, bearer, request)
 	if err != nil {
 		return resolvedGatewayContext{}, gatewayError(err)
 	}
-	if len(response.SourceErrors) > 0 {
-		for _, sourceErr := range response.SourceErrors {
-			if sourceErr.Code == "source_record_not_found" {
-				return resolvedGatewayContext{}, validationError("Gateway could not find a selected source record")
-			}
-		}
-		return resolvedGatewayContext{}, httperr.New(http.StatusBadGateway, httperr.CodeSourceUnavailable, "Gateway could not resolve every selected source record")
-	}
-	resolved, err := convertGatewayContext(response)
+	resolved, err := convertGatewayContext(response, request)
 	if err != nil {
 		return resolvedGatewayContext{}, err
 	}
-	for _, ref := range request.Events {
-		if _, ok := resolved.EventsBySource[sourceRecordKey(ref.SourceCode, ref.SourceEventId)]; !ok {
-			return resolvedGatewayContext{}, validationError("Gateway did not return a selected event")
+	selectedReturned := 0
+	for _, ref := range findings {
+		key := sourceObjectKey(modelSourceObjectRef(ref))
+		if _, ok := resolved.FindingsBySource[key]; ok {
+			selectedReturned++
+		} else {
+			resolved.Warnings = append(resolved.Warnings, "Gateway did not return selected finding "+ref.ExternalId)
 		}
 	}
-	for _, ref := range request.Entities {
-		if _, ok := resolved.EntitiesBySource[sourceRecordKey(ref.SourceCode, ref.SourceEntityId)]; !ok {
-			return resolvedGatewayContext{}, validationError("Gateway did not return a selected entity")
+	for _, ref := range sessions {
+		key := sourceObjectKey(modelSourceObjectRef(ref))
+		if _, ok := resolved.SessionsBySource[key]; ok {
+			selectedReturned++
+		} else {
+			resolved.Warnings = append(resolved.Warnings, "Gateway did not return selected session "+ref.ExternalId)
 		}
+	}
+	for _, ref := range events {
+		if _, ok := resolved.EventsBySource[sourceRecordKey(ref.SourceCode, ref.SourceEventId)]; !ok {
+			resolved.Warnings = append(resolved.Warnings, "Gateway did not return selected event "+ref.SourceEventId)
+		} else {
+			selectedReturned++
+		}
+	}
+	for _, ref := range entities {
+		if _, ok := resolved.EntitiesBySource[sourceRecordKey(ref.SourceCode, ref.SourceEntityId)]; !ok {
+			resolved.Warnings = append(resolved.Warnings, "Gateway did not return selected entity "+ref.SourceEntityId)
+		} else {
+			selectedReturned++
+		}
+	}
+	if selectedReturned == 0 {
+		return resolvedGatewayContext{}, validationError("Gateway did not return any selected source record")
+	}
+	for _, sourceErr := range response.SourceErrors {
+		resolved.Warnings = append(resolved.Warnings, "Gateway source "+sourceErr.Source+": "+sourceErr.Message)
 	}
 	return resolved, nil
 }
 
-func convertGatewayContext(input gatewayclient.ResolveContextResponse) (resolvedGatewayContext, error) {
-	out := resolvedGatewayContext{EventsBySource: make(map[string]string), EntitiesBySource: make(map[string]string)}
+func convertGatewayContext(input gatewayclient.ResolveContextResponse, request gatewayclient.ResolveContextRequest) (resolvedGatewayContext, error) {
+	findings := optionalSlice(request.Findings)
+	sessions := optionalSlice(request.Sessions)
+	events := optionalSlice(request.Events)
+	entities := optionalSlice(request.Entities)
+	out := resolvedGatewayContext{
+		FindingsBySource: make(map[string]string), SessionsBySource: make(map[string]string),
+		EventsBySource: make(map[string]string), EntitiesBySource: make(map[string]string),
+	}
+	selectedFindings := make(map[string]struct{}, len(findings))
+	selectedSessions := make(map[string]struct{}, len(sessions))
+	selectedEvents := make(map[string]struct{}, len(events))
+	selectedEntities := make(map[string]struct{}, len(entities))
+	for _, ref := range findings {
+		selectedFindings[sourceObjectKey(modelSourceObjectRef(ref))] = struct{}{}
+	}
+	for _, ref := range sessions {
+		selectedSessions[sourceObjectKey(modelSourceObjectRef(ref))] = struct{}{}
+	}
+	for _, ref := range events {
+		selectedEvents[sourceRecordKey(ref.SourceCode, ref.SourceEventId)] = struct{}{}
+	}
+	for _, ref := range entities {
+		selectedEntities[sourceRecordKey(ref.SourceCode, ref.SourceEntityId)] = struct{}{}
+	}
+	type resolution struct {
+		status string
+		errors []model.GatewayContextError
+	}
+	resolutions := make(map[string]resolution, len(input.Resolutions))
+	for _, item := range input.Resolutions {
+		converted := resolution{status: string(item.Status)}
+		for _, sourceErr := range item.Errors {
+			converted.errors = append(converted.errors, model.GatewayContextError{Source: sourceErr.Source, Code: sourceErr.Code, Message: sourceErr.Message, Retryable: sourceErr.Retryable})
+		}
+		resolutions[sourceObjectKey(modelSourceObjectRef(item.Ref))] = converted
+	}
 	for _, entity := range input.Entities {
 		snapshotID := entityKey(entity.Type, entity.Value)
 		item := model.GatewayEntity{SnapshotID: snapshotID, TypeCode: entity.Type, Value: entity.Value, Attributes: entity.Attributes}
 		for _, source := range entity.Sources {
 			item.Provenance = append(item.Provenance, model.GatewayProvenance{Source: source.SourceCode, ExternalID: source.SourceEntityId, SourceURL: source.SourceRef, FetchedAt: source.FetchedAt})
-			out.EntitiesBySource[sourceRecordKey(source.SourceCode, source.SourceEntityId)] = snapshotID
+			key := sourceRecordKey(source.SourceCode, source.SourceEntityId)
+			out.EntitiesBySource[key] = snapshotID
+			if _, ok := selectedEntities[key]; ok {
+				item.Direct = true
+			}
 		}
 		out.Selection.Entities = append(out.Selection.Entities, item)
 	}
 	for _, event := range input.Events {
 		snapshotID := sourceRecordKey(event.SourceCode, event.SourceEventId)
-		item := model.GatewayEvent{SnapshotID: snapshotID, Title: event.Title, EventType: event.Type, Severity: string(event.Severity), OccurredAt: event.OccurredAt, Attributes: event.Attributes, Provenance: model.GatewayProvenance{Source: event.SourceCode, ExternalID: event.SourceEventId, SourceURL: event.SourceRef, FetchedAt: event.FetchedAt}}
+		_, direct := selectedEvents[snapshotID]
+		item := model.GatewayEvent{SnapshotID: snapshotID, Direct: direct, Title: event.Title, EventType: event.Type, Severity: string(event.Severity), OccurredAt: event.OccurredAt, Attributes: event.Attributes, Provenance: model.GatewayProvenance{Source: event.SourceCode, ExternalID: event.SourceEventId, SourceURL: event.SourceRef, FetchedAt: event.FetchedAt}}
 		for _, entity := range event.Entities {
-			item.EntitySnapshotIDs = append(item.EntitySnapshotIDs, entityKey(entity.Type, entity.Value))
+			mention := model.GatewayEventEntity{SnapshotID: entityKey(entity.Type, entity.Value)}
+			for _, role := range entity.Roles {
+				mention.Roles = append(mention.Roles, string(role))
+			}
+			item.Entities = append(item.Entities, mention)
 		}
 		out.Selection.Events = append(out.Selection.Events, item)
 		out.EventsBySource[sourceRecordKey(event.SourceCode, event.SourceEventId)] = snapshotID
+	}
+	for _, finding := range input.Findings {
+		ref := modelSourceObjectRef(finding.Ref)
+		key := sourceObjectKey(ref)
+		_, direct := selectedFindings[key]
+		contextStatus := "complete"
+		var contextErrors []model.GatewayContextError
+		if state, ok := resolutions[key]; ok {
+			contextStatus, contextErrors = state.status, state.errors
+		}
+		normalized, err := json.Marshal(finding)
+		if err != nil {
+			return resolvedGatewayContext{}, err
+		}
+		provenance, _ := json.Marshal(map[string]any{"ref": ref, "source_ref": finding.SourceRef, "fetched_at": finding.FetchedAt})
+		item := model.GatewayFinding{
+			SnapshotID: key, Ref: ref, Kind: string(finding.Kind), Title: finding.Title,
+			Description: finding.Description, Severity: string(finding.Severity), OccurredAt: finding.OccurredAt,
+			Status: finding.Status, SourceRef: finding.SourceRef, FetchedAt: finding.FetchedAt,
+			Normalized: normalized, Provenance: provenance, ContextStatus: contextStatus,
+			ContextErrors: contextErrors, Direct: direct,
+		}
+		for _, entity := range finding.Entities {
+			item.EntitySnapshotIDs = append(item.EntitySnapshotIDs, entityKey(entity.Type, entity.Value))
+		}
+		if finding.RelatedFindings != nil {
+			for _, related := range *finding.RelatedFindings {
+				item.RelatedFindings = append(item.RelatedFindings, modelSourceObjectRef(related))
+			}
+		}
+		if finding.RelatedSessions != nil {
+			for _, related := range *finding.RelatedSessions {
+				item.RelatedSessions = append(item.RelatedSessions, modelSourceObjectRef(related))
+			}
+		}
+		out.Selection.Findings = append(out.Selection.Findings, item)
+		out.FindingsBySource[key] = key
+	}
+	for _, session := range input.Sessions {
+		ref := modelSourceObjectRef(session.Ref)
+		key := sourceObjectKey(ref)
+		_, direct := selectedSessions[key]
+		contextStatus := "complete"
+		var contextErrors []model.GatewayContextError
+		if state, ok := resolutions[key]; ok {
+			contextStatus, contextErrors = state.status, state.errors
+		}
+		normalized, err := json.Marshal(session)
+		if err != nil {
+			return resolvedGatewayContext{}, err
+		}
+		provenance, _ := json.Marshal(map[string]any{"ref": ref, "source_ref": session.SourceRef, "fetched_at": session.FetchedAt})
+		item := model.GatewaySession{
+			SnapshotID: key, Ref: ref, Title: session.Title, Severity: string(session.Severity),
+			StartedAt: session.StartedAt, EndedAt: session.EndedAt, SourceRef: session.SourceRef,
+			FetchedAt: session.FetchedAt, Normalized: normalized, Provenance: provenance,
+			ContextStatus: contextStatus, ContextErrors: contextErrors, Direct: direct,
+		}
+		for _, entity := range session.Entities {
+			item.EntitySnapshotIDs = append(item.EntitySnapshotIDs, entityKey(entity.Type, entity.Value))
+		}
+		for _, related := range session.RelatedFindings {
+			item.RelatedFindings = append(item.RelatedFindings, modelSourceObjectRef(related))
+		}
+		out.Selection.Sessions = append(out.Selection.Sessions, item)
+		out.SessionsBySource[key] = key
 	}
 	for _, relation := range input.Relations {
 		out.Selection.Relations = append(out.Selection.Relations, model.GatewayRelation{
@@ -306,7 +457,137 @@ func convertGatewayContext(input gatewayclient.ResolveContextResponse) (resolved
 			Provenance:             model.GatewayProvenance{Source: relation.SourceCode, ExternalID: relation.SourceRelationId, SourceURL: relation.SourceRef, FetchedAt: relation.FetchedAt},
 		})
 	}
+	assignGatewayObjectOwnership(&out.Selection)
 	return out, nil
+}
+
+// assignGatewayObjectOwnership keeps detach ownership bounded to context that
+// can be attributed from the normalized Gateway response. It intentionally
+// leaves unmarked vendor events unowned instead of assigning them to every
+// coarse object returned by a multi-root resolve.
+func assignGatewayObjectOwnership(selection *model.GatewaySelection) {
+	for index := range selection.Findings {
+		finding := &selection.Findings[index]
+		refs := []model.GatewayObjectRef{finding.Ref}
+		if finding.Ref.RecordType == "siem_incident" {
+			refs = append(refs, finding.RelatedFindings...)
+		}
+		finding.EventSnapshotIDs = ownedEventSnapshotIDs(selection.Events, refs)
+		finding.EntitySnapshotIDs = ownedEntitySnapshotIDs(finding.EntitySnapshotIDs, selection.Events, finding.EventSnapshotIDs)
+	}
+	for index := range selection.Sessions {
+		session := &selection.Sessions[index]
+		session.EventSnapshotIDs = ownedEventSnapshotIDs(selection.Events, []model.GatewayObjectRef{session.Ref})
+		session.EntitySnapshotIDs = ownedEntitySnapshotIDs(session.EntitySnapshotIDs, selection.Events, session.EventSnapshotIDs)
+	}
+}
+
+func ownedEventSnapshotIDs(events []model.GatewayEvent, refs []model.GatewayObjectRef) []string {
+	result := make([]string, 0)
+	seen := make(map[string]struct{})
+	for _, event := range events {
+		for _, ref := range refs {
+			if !eventBelongsToObject(event, ref) {
+				continue
+			}
+			if _, duplicate := seen[event.SnapshotID]; !duplicate {
+				seen[event.SnapshotID] = struct{}{}
+				result = append(result, event.SnapshotID)
+			}
+			break
+		}
+	}
+	return result
+}
+
+func ownedEntitySnapshotIDs(explicit []string, events []model.GatewayEvent, ownedEventIDs []string) []string {
+	result := make([]string, 0, len(explicit))
+	seen := make(map[string]struct{}, len(explicit))
+	appendID := func(snapshotID string) {
+		if _, duplicate := seen[snapshotID]; duplicate {
+			return
+		}
+		seen[snapshotID] = struct{}{}
+		result = append(result, snapshotID)
+	}
+	for _, snapshotID := range explicit {
+		appendID(snapshotID)
+	}
+	ownedEvents := make(map[string]struct{}, len(ownedEventIDs))
+	for _, snapshotID := range ownedEventIDs {
+		ownedEvents[snapshotID] = struct{}{}
+	}
+	for _, event := range events {
+		if _, owned := ownedEvents[event.SnapshotID]; !owned {
+			continue
+		}
+		for _, mention := range event.Entities {
+			appendID(mention.SnapshotID)
+		}
+	}
+	return result
+}
+
+func eventBelongsToObject(event model.GatewayEvent, ref model.GatewayObjectRef) bool {
+	if event.Provenance.Source != ref.SourceCode {
+		return false
+	}
+	eventID := strings.TrimSpace(event.Provenance.ExternalID)
+	if ref.SourceInstance != "" && !strings.HasPrefix(eventID, ref.SourceInstance+":") {
+		return false
+	}
+	switch ref.RecordType {
+	case "siem_incident":
+		parentID, _ := event.Attributes["parent_finding_id"].(string)
+		return strings.TrimSpace(parentID) == ref.ExternalID
+	case "siem_correlation":
+		if eventID == ref.ExternalID {
+			return true
+		}
+		parentID, _ := event.Attributes["parent_source_event_id"].(string)
+		relationType, _ := event.Attributes["relation_type"].(string)
+		return relationType == "subevent_of" && strings.TrimSpace(parentID) == ref.ExternalID
+	case "nad_attack":
+		return eventID == ref.SourceInstance+":"+ref.RecordType+":"+ref.ExternalID
+	case "nad_session":
+		if eventID == ref.SourceInstance+":"+ref.RecordType+":"+ref.ExternalID {
+			return true
+		}
+		parentID, _ := event.Attributes["parent_session_id"].(string)
+		return strings.TrimSpace(parentID) == ref.ExternalID
+	default:
+		return false
+	}
+}
+
+func gatewaySourceObjectRef(input any) (gatewayclient.SourceObjectRef, error) {
+	raw, err := json.Marshal(input)
+	if err != nil {
+		return gatewayclient.SourceObjectRef{}, err
+	}
+	var out gatewayclient.SourceObjectRef
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return gatewayclient.SourceObjectRef{}, err
+	}
+	if !out.TimeRange.From.Before(out.TimeRange.To) {
+		return gatewayclient.SourceObjectRef{}, errors.New("invalid time range")
+	}
+	return out, nil
+}
+
+func modelSourceObjectRef(ref gatewayclient.SourceObjectRef) model.GatewayObjectRef {
+	sourceInstance := ""
+	if ref.SourceInstance != nil {
+		sourceInstance = *ref.SourceInstance
+	}
+	return model.GatewayObjectRef{
+		SourceCode: strings.TrimSpace(ref.SourceCode), SourceInstance: strings.TrimSpace(sourceInstance), RecordType: strings.TrimSpace(string(ref.RecordType)),
+		ExternalID: strings.TrimSpace(ref.ExternalId), TimeRange: model.GatewayTimeRange{From: ref.TimeRange.From, To: ref.TimeRange.To},
+	}
+}
+
+func sourceObjectKey(ref model.GatewayObjectRef) string {
+	return strings.Join([]string{strings.TrimSpace(ref.SourceCode), strings.TrimSpace(ref.SourceInstance), strings.TrimSpace(ref.RecordType), strings.TrimSpace(ref.ExternalID)}, "\x00")
 }
 
 func sourceRecordKey(source, id string) string {
@@ -315,6 +596,22 @@ func sourceRecordKey(source, id string) string {
 
 func entityKey(kind, value string) string {
 	return strings.ToLower(strings.TrimSpace(kind)) + "\x00" + strings.TrimSpace(value)
+}
+
+func optionalSlice[T any](items *[]T) []T {
+	if items == nil {
+		return nil
+	}
+	return *items
+}
+
+func appendOptionalSlice[T any](items *[]T, value T) *[]T {
+	if items == nil {
+		slice := []T{value}
+		return &slice
+	}
+	*items = append(*items, value)
+	return items
 }
 
 func validationError(message string) error {
@@ -333,7 +630,7 @@ func gatewayError(err error) error {
 }
 
 func importResult(stats model.ImportStats) investigations.ContextImportResult {
-	return investigations.ContextImportResult{Events: stats.Events, Entities: stats.Entities, Nodes: stats.Nodes, Edges: stats.Edges}
+	return investigations.ContextImportResult{Findings: stats.Findings, Sessions: stats.Sessions, Events: stats.Events, Entities: stats.Entities, Nodes: stats.Nodes, Edges: stats.Edges, Warnings: append([]string{}, stats.Warnings...)}
 }
 
 func convertInvestigation(inv model.Investigation) (investigations.Investigation, error) {
@@ -344,6 +641,8 @@ func convertInvestigation(inv model.Investigation) (investigations.Investigation
 	origin := investigations.Origin(inv.Origin)
 	out := investigations.Investigation{Id: id, ProjectId: inv.ProjectID, Title: inv.Title, Description: inv.Description, Status: investigations.InvestigationStatus(inv.Status), Severity: (*investigations.Severity)(inv.Severity), Verdict: (*investigations.Verdict)(inv.Verdict), VerdictReason: inv.VerdictReason, Confidence: inv.Confidence, Origin: &origin, OriginRef: inv.OriginRef, Version: inv.Version, SomWorkspaceIds: []uuid.UUID{}, CreatedAt: inv.CreatedAt, UpdatedAt: inv.UpdatedAt, ClosedAt: inv.ClosedAt}
 	out.Counters.Children = inv.Counters.Children
+	out.Counters.Findings = inv.Counters.Findings
+	out.Counters.Sessions = inv.Counters.Sessions
 	out.Counters.Events = inv.Counters.Events
 	out.Counters.Entities = inv.Counters.Entities
 	out.Counters.ProposedEdges = inv.Counters.ProposedEdges

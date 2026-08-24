@@ -17,6 +17,10 @@ tags:
     description: Registered external security products.
   - name: events
     description: Normalized event search.
+  - name: findings
+    description: Source-native incidents, correlation firings and network attacks.
+  - name: sessions
+    description: Source-native network sessions.
   - name: entities
     description: Entity lookup across security products.
   - name: artifacts

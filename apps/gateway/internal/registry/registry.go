@@ -11,12 +11,16 @@ import (
 
 type Provider struct {
 	Source           domain.Source
+	CredentialSecret string
+	Findings         capability.FindingSource
+	Sessions         capability.SessionSource
 	Events           capability.EventSource
 	EntityLookup     capability.EntityLookup
 	ArtifactAnalyzer capability.ArtifactAnalyzer
 	Endpoints        capability.EndpointSource
 	ResponseCatalog  capability.ResponseCatalog
 	AccountUserinfo  capability.AccountUserinfoSource
+	Prober           capability.SourceProber
 }
 
 type Registry struct {
@@ -100,8 +104,19 @@ func supports(source domain.Source, capabilityName domain.Capability) bool {
 }
 
 func validateCapabilities(provider Provider) error {
+	if len(provider.Source.Capabilities) > 0 && strings.TrimSpace(provider.CredentialSecret) == "" {
+		return fmt.Errorf("credential secret name is required")
+	}
 	for _, item := range provider.Source.Capabilities {
 		switch item {
+		case domain.CapabilityFindings:
+			if provider.Findings == nil {
+				return fmt.Errorf("findings capability has no implementation")
+			}
+		case domain.CapabilitySessions:
+			if provider.Sessions == nil {
+				return fmt.Errorf("sessions capability has no implementation")
+			}
 		case domain.CapabilityEvents:
 			if provider.Events == nil {
 				return fmt.Errorf("events capability has no implementation")
@@ -125,10 +140,6 @@ func validateCapabilities(provider Provider) error {
 		case domain.CapabilityAccountUserinfo:
 			if provider.AccountUserinfo == nil {
 				return fmt.Errorf("account userinfo capability has no implementation")
-			}
-			secretNames := provider.AccountUserinfo.SecretNames()
-			if strings.TrimSpace(secretNames.BaseURL) == "" || strings.TrimSpace(secretNames.Credential) == "" {
-				return fmt.Errorf("account userinfo capability has no secret mapping")
 			}
 		default:
 			return fmt.Errorf("unknown capability %q", item)

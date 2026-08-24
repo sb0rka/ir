@@ -1,6 +1,5 @@
-// Package ptnad integrates PT NAD.
-//
-// Implement capability.EventSource and capability.EntityLookup here. Convert
-// sessions and detections into canonical events, entities, and relations without
-// exposing the vendor response.
+// Package ptnad implements the typed PT NAD vendor boundary for sessions,
+// attacks, flow details, and configured-store probes. It exposes only fixed BQL
+// operations and sanitized normalized records; credentials remain per-call and
+// raw vendor responses never cross the package boundary.
 package ptnad

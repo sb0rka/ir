@@ -180,6 +180,78 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/investigations/{investigation_id}/findings": {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
+            path: {
+                /** @description Identifier of an investigation in the selected project. */
+                investigation_id: components["parameters"]["InvestigationId"];
+            };
+            cookie?: never;
+        };
+        /** List findings attached to an investigation */
+        get: operations["listFindings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/findings/{finding_id}": {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
+            path: {
+                finding_id: string;
+            };
+            cookie?: never;
+        };
+        /** Get one project finding */
+        get: operations["getFinding"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/investigations/{investigation_id}/findings/{finding_id}": {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
+            path: {
+                /** @description Identifier of an investigation in the selected project. */
+                investigation_id: components["parameters"]["InvestigationId"];
+                finding_id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Detach a finding and its exclusively derived context
+         * @description Keeps directly added evidence, evidence owned by another attached finding/session, and evidence used by confirmed graph edges.
+         */
+        delete: operations["detachFinding"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/investigations/{investigation_id}/graph": {
         parameters: {
             query?: never;
@@ -584,6 +656,78 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/investigations/{investigation_id}/sessions": {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
+            path: {
+                /** @description Identifier of an investigation in the selected project. */
+                investigation_id: components["parameters"]["InvestigationId"];
+            };
+            cookie?: never;
+        };
+        /** List network sessions attached to an investigation */
+        get: operations["listSessions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sessions/{session_id}": {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        /** Get one project network session */
+        get: operations["getSession"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/investigations/{investigation_id}/sessions/{session_id}": {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
+            path: {
+                /** @description Identifier of an investigation in the selected project. */
+                investigation_id: components["parameters"]["InvestigationId"];
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Detach a session and its exclusively derived context
+         * @description Keeps directly added evidence, evidence owned by another attached finding/session, and evidence used by confirmed graph edges.
+         */
+        delete: operations["detachSession"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/som/workspaces": {
         parameters: {
             query?: never;
@@ -949,6 +1093,73 @@ export interface components {
          * @enum {string}
          */
         Actor: "analyst" | "agent" | "system";
+        TimeRange: {
+            /** Format: date-time */
+            from: string;
+            /** Format: date-time */
+            to: string;
+        };
+        /** @description Stable source identity and the bounded replay window; time is not identity. */
+        SourceObjectRef: {
+            source_code: string;
+            source_instance?: string;
+            /** @enum {string} */
+            record_type: "siem_incident" | "siem_correlation" | "nad_attack" | "nad_session";
+            external_id: string;
+            time_range: components["schemas"]["TimeRange"];
+        };
+        /** @enum {string} */
+        FindingKind: "siem_incident" | "siem_correlation" | "nad_attack";
+        /** @enum {string} */
+        ObjectSeverity: "info" | "low" | "medium" | "high" | "critical" | "unknown";
+        /** @enum {string} */
+        ContextStatus: "complete" | "partial";
+        ContextError: {
+            source: string;
+            code: string;
+            /** @description Safe summary without credentials, queries, or vendor payloads. */
+            message: string;
+            retryable: boolean;
+        };
+        Finding: {
+            /** Format: uuid */
+            id: string;
+            investigation_ids?: string[];
+            ref: components["schemas"]["SourceObjectRef"];
+            kind: components["schemas"]["FindingKind"];
+            title: string;
+            description?: string | null;
+            severity: components["schemas"]["ObjectSeverity"];
+            /** Format: date-time */
+            occurred_at: string;
+            status?: string | null;
+            /** Format: uri */
+            source_ref?: string | null;
+            /** Format: date-time */
+            fetched_at: string;
+            normalized_snapshot: {
+                [key: string]: unknown;
+            };
+            provenance: {
+                [key: string]: unknown;
+            };
+            context_status: components["schemas"]["ContextStatus"];
+            context_errors: components["schemas"]["ContextError"][];
+            /** @description Present and meaningful when listed through an investigation. */
+            directly_added?: boolean;
+            /** @description The finding was discovered while resolving another selected object. */
+            derived?: boolean;
+            /** Format: date-time */
+            attached_at?: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        FindingPage: {
+            findings: components["schemas"]["Finding"][];
+            next_cursor?: string | null;
+        };
         /** @description Nodes and edges as one payload, ready to render. */
         Graph: {
             /**
@@ -1242,6 +1453,10 @@ export interface components {
             counters: {
                 /** @description Direct child investigations — the open hypotheses under this one. */
                 children: number;
+                /** @description First-class incidents, correlations and attacks attached here. */
+                findings: number;
+                /** @description First-class network sessions attached here. */
+                sessions: number;
                 /** @description Events pulled into this investigation. */
                 events: number;
                 /** @description Distinct entities extracted from those events. */
@@ -1266,19 +1481,21 @@ export interface components {
             closed_at?: string | null;
         };
         EventSourceRef: {
-            /** @description Gateway source code, for example maxpatrol-siem. */
+            /** @description Gateway source code, for example pt-maxpatrol-siem. */
             source_code: string;
             /** @description Original event identifier assigned by the source. */
             source_event_id: string;
         };
         EntitySourceRef: {
-            /** @description Gateway source code, for example maxpatrol-siem. */
+            /** @description Gateway source code, for example pt-maxpatrol-siem. */
             source_code: string;
             /** @description Original entity record identifier assigned by the source. */
             source_entity_id: string;
         };
-        /** @description Source-owned identifiers selected in the Gateway event list. */
+        /** @description Source-owned identifiers selected in Gateway. At least one item across all four arrays is required; the server validates that aggregate rule. */
         ContextSelection: {
+            findings: components["schemas"]["SourceObjectRef"][];
+            sessions: components["schemas"]["SourceObjectRef"][];
             events: components["schemas"]["EventSourceRef"][];
             entities: components["schemas"]["EntitySourceRef"][];
         };
@@ -1320,10 +1537,14 @@ export interface components {
             evidence_event_refs: string[];
         };
         ContextImportResult: {
+            findings: number;
+            sessions: number;
             events: number;
             entities: number;
             nodes: number;
             edges: number;
+            /** @description Safe summaries for objects whose available context is partial. */
+            warnings: string[];
         };
         /** @description A new case, or a new hypothesis inside an existing one. */
         InvestigationCreate: {
@@ -1434,6 +1655,44 @@ export interface components {
          * @enum {string}
          */
         SourceKind: "siem" | "edr" | "ndr" | "infra" | "sandbox" | "other";
+        NetworkSession: {
+            /** Format: uuid */
+            id: string;
+            investigation_ids?: string[];
+            ref: components["schemas"]["SourceObjectRef"];
+            title: string;
+            severity: components["schemas"]["ObjectSeverity"];
+            /** Format: date-time */
+            started_at: string;
+            /** Format: date-time */
+            ended_at?: string | null;
+            /** Format: uri */
+            source_ref?: string | null;
+            /** Format: date-time */
+            fetched_at: string;
+            normalized_snapshot: {
+                [key: string]: unknown;
+            };
+            provenance: {
+                [key: string]: unknown;
+            };
+            context_status: components["schemas"]["ContextStatus"];
+            context_errors: components["schemas"]["ContextError"][];
+            /** @description Present and meaningful when listed through an investigation. */
+            directly_added?: boolean;
+            /** @description The session was discovered while resolving a selected object. */
+            derived?: boolean;
+            /** Format: date-time */
+            attached_at?: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        SessionPage: {
+            sessions: components["schemas"]["NetworkSession"][];
+            next_cursor?: string | null;
+        };
         /** @description A SOM workspace visible to the configured project account. */
         SomWorkspace: {
             /**
@@ -2003,6 +2262,103 @@ export interface operations {
             409: components["responses"]["Conflict"];
             500: components["responses"]["InternalError"];
             501: components["responses"]["NotImplemented"];
+        };
+    };
+    listFindings: {
+        parameters: {
+            query?: {
+                record_type?: components["schemas"]["FindingKind"];
+                severity?: components["schemas"]["ObjectSeverity"];
+                context_status?: components["schemas"]["ContextStatus"];
+                /** @description How many items to return. The server may return fewer, never more. */
+                limit?: components["parameters"]["Limit"];
+                /** @description Opaque keyset cursor taken from `next_cursor` of the previous page. Encodes a position, not a query — do not build one by hand. Omit it to start from the beginning. */
+                cursor?: components["parameters"]["Cursor"];
+            };
+            header: {
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
+            path: {
+                /** @description Identifier of an investigation in the selected project. */
+                investigation_id: components["parameters"]["InvestigationId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description One page of source findings. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FindingPage"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["ValidationError"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getFinding: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
+            path: {
+                finding_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The current normalized finding snapshot. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Finding"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    detachFinding: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
+            path: {
+                /** @description Identifier of an investigation in the selected project. */
+                investigation_id: components["parameters"]["InvestigationId"];
+                finding_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Detached */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
         };
     };
     getGraph: {
@@ -2822,6 +3178,102 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             500: components["responses"]["InternalError"];
             501: components["responses"]["NotImplemented"];
+        };
+    };
+    listSessions: {
+        parameters: {
+            query?: {
+                severity?: components["schemas"]["ObjectSeverity"];
+                context_status?: components["schemas"]["ContextStatus"];
+                /** @description How many items to return. The server may return fewer, never more. */
+                limit?: components["parameters"]["Limit"];
+                /** @description Opaque keyset cursor taken from `next_cursor` of the previous page. Encodes a position, not a query — do not build one by hand. Omit it to start from the beginning. */
+                cursor?: components["parameters"]["Cursor"];
+            };
+            header: {
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
+            path: {
+                /** @description Identifier of an investigation in the selected project. */
+                investigation_id: components["parameters"]["InvestigationId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description One page of attached sessions. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionPage"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["ValidationError"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getSession: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The current normalized network-session snapshot. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NetworkSession"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    detachSession: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
+            path: {
+                /** @description Identifier of an investigation in the selected project. */
+                investigation_id: components["parameters"]["InvestigationId"];
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Detached */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
         };
     };
     listSomWorkspaces: {

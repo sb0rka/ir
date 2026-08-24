@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"net"
 	"strings"
 	"time"
 
@@ -10,6 +11,8 @@ import (
 type Capability string
 
 const (
+	CapabilityFindings         Capability = "findings"
+	CapabilitySessions         Capability = "sessions"
 	CapabilityEvents           Capability = "events"
 	CapabilityEntityLookup     Capability = "entity_lookup"
 	CapabilityArtifactAnalysis Capability = "artifact_analysis"
@@ -39,6 +42,145 @@ type EntityRef struct {
 	Value string
 }
 
+type EntityMention struct {
+	EntityRef
+	Roles []string
+}
+
+type TimeRange struct {
+	From time.Time
+	To   time.Time
+}
+
+type SourceObjectRef struct {
+	SourceCode     string
+	SourceInstance string
+	RecordType     string
+	ExternalID     string
+	TimeRange      TimeRange
+}
+
+type RuleRef struct {
+	ID   string
+	Name string
+}
+
+type IncidentDetails struct {
+	Key            string
+	ExternalKey    string
+	Verdict        string
+	Damage         string
+	Recommendation string
+	AssignedTo     string
+	ChangedAt      *time.Time
+	Archived       bool
+	Removed        bool
+}
+
+type CorrelationDetails struct {
+	CorrelationType string
+	SubeventCount   int
+}
+
+type NADAttackDetails struct {
+	Class         string
+	GID           int
+	SID           int
+	Revision      int
+	RawPriority   int
+	FalsePositive *bool
+}
+
+type Finding struct {
+	Ref             SourceObjectRef
+	Kind            string
+	Title           string
+	Description     string
+	Severity        string
+	OccurredAt      time.Time
+	Status          string
+	Rule            *RuleRef
+	Entities        []EntityMention
+	RelatedFindings []SourceObjectRef
+	RelatedSessions []SourceObjectRef
+	Incident        *IncidentDetails
+	Correlation     *CorrelationDetails
+	NADAttack       *NADAttackDetails
+	SourceRef       string
+	FetchedAt       time.Time
+}
+
+type NetworkEndpoint struct {
+	IP   string
+	MAC  string
+	Host string
+	Port int
+}
+
+type TrafficCounters struct {
+	Sent     int64
+	Received int64
+	Total    int64
+}
+
+type SessionFileHint struct {
+	ExternalID string
+	Name       string
+	MIME       string
+	Size       int64
+	MD5        string
+	SHA256     string
+	State      string
+	Direction  string
+}
+
+type SessionAuthenticationHint struct {
+	Protocol       string
+	Method         string
+	Account        string
+	Valid          *bool
+	FailedAttempts *int64
+	ClientHost     string
+	ServerHost     string
+}
+
+type Session struct {
+	Ref                 SourceObjectRef
+	Title               string
+	Severity            string
+	RawCriticality      *int
+	StartedAt           time.Time
+	EndedAt             *time.Time
+	DurationSeconds     *float64
+	SourceEndpoint      NetworkEndpoint
+	DestinationEndpoint NetworkEndpoint
+	TransportProtocol   string
+	ApplicationProtocol string
+	Bytes               *TrafficCounters
+	Packets             *TrafficCounters
+	State               []string
+	FalsePositive       *bool
+	HasFiles            *bool
+	FileHints           []SessionFileHint
+	AuthenticationHints []SessionAuthenticationHint
+	TCPFlags            []string
+	Entities            []EntityMention
+	RelatedFindings     []SourceObjectRef
+	SourceRef           string
+	FetchedAt           time.Time
+}
+
+type SourceState struct {
+	Source string
+	Status string
+}
+
+type ObjectResolution struct {
+	Ref    SourceObjectRef
+	Status string
+	Errors []SourceError
+}
+
 type EventSourceRef struct {
 	SourceCode    string
 	SourceEventID string
@@ -61,7 +203,7 @@ type Event struct {
 	Title      string
 	Severity   string
 	OccurredAt time.Time
-	Entities   []EntityRef
+	Entities   []EntityMention
 	Attributes map[string]any
 	Provenance Provenance
 }
@@ -143,7 +285,19 @@ func StableID(parts ...string) uuid.UUID {
 func CanonicalValue(kind, value string) string {
 	value = strings.TrimSpace(value)
 	switch strings.ToLower(strings.TrimSpace(kind)) {
-	case "ip", "domain", "hostname", "email", "file_hash", "hash":
+	case "ip":
+		if parsed := net.ParseIP(value); parsed != nil {
+			return parsed.String()
+		}
+		return strings.ToLower(value)
+	case "mac":
+		if parsed, err := net.ParseMAC(value); err == nil {
+			return strings.ToLower(parsed.String())
+		}
+		return strings.ToLower(value)
+	case "domain", "host", "hostname":
+		return strings.TrimSuffix(strings.ToLower(value), ".")
+	case "account", "email", "file_hash", "hash", "md5", "sha1", "sha256":
 		return strings.ToLower(value)
 	default:
 		return value

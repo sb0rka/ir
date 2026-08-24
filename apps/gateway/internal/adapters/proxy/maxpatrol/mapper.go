@@ -1,10 +1,8 @@
 package maxpatrol
 
 import (
-	"encoding/json"
 	"fmt"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
@@ -12,7 +10,7 @@ import (
 	"github.com/sb0rka/ir/apps/gateway/internal/domain"
 )
 
-const SourceCode = "maxpatrol-siem"
+const SourceCode = "pt-maxpatrol-siem"
 
 func ToEventPage(response EventsResponse, offset int, fetchedAt time.Time) (capability.EventPage, error) {
 	if response.TotalCount < 0 || offset < 0 {
@@ -21,14 +19,14 @@ func ToEventPage(response EventsResponse, offset int, fetchedAt time.Time) (capa
 	if int64(offset+len(response.Events)) > response.TotalCount {
 		return capability.EventPage{}, fmt.Errorf("MaxPatrol page exceeds totalCount")
 	}
-	if len(response.Events) > 0 && strings.TrimSpace(response.Token) == "" {
-		return capability.EventPage{}, fmt.Errorf("MaxPatrol response has events but no token")
-	}
-
 	page := capability.EventPage{
-		Events:        make([]domain.Event, 0, len(response.Events)),
-		Continuations: make([]string, 0, len(response.Events)),
-		HasMore:       int64(offset+len(response.Events)) < response.TotalCount,
+		Events: make([]domain.Event, 0, len(response.Events)),
+		Status: "complete",
+	}
+	if int64(offset+len(response.Events)) < response.TotalCount {
+		// The reviewed capture does not establish how response.Token is
+		// exchanged for a following page, so it must not become a cursor.
+		page.Status = "truncated"
 	}
 	entities := make(map[string]domain.Entity)
 	for index, record := range response.Events {
@@ -37,7 +35,6 @@ func ToEventPage(response EventsResponse, offset int, fetchedAt time.Time) (capa
 			return capability.EventPage{}, fmt.Errorf("map MaxPatrol event %d: %w", index, err)
 		}
 		page.Events = append(page.Events, event)
-		page.Continuations = append(page.Continuations, response.Token+":"+strconv.Itoa(offset+index+1))
 		for _, entity := range eventEntities {
 			entities[entity.Type+"\x00"+entity.Value] = entity
 		}
@@ -79,18 +76,6 @@ func toEvent(record EventRecord, fetchedAt time.Time) (domain.Event, []domain.En
 	if record.CorrelationName != nil && strings.TrimSpace(*record.CorrelationName) != "" {
 		attributes["correlation_name"] = strings.TrimSpace(*record.CorrelationName)
 	}
-	if len(record.Fields) > 0 {
-		fields := make(map[string]any, len(record.Fields))
-		for key, raw := range record.Fields {
-			var value any
-			if err := json.Unmarshal(raw, &value); err != nil {
-				return domain.Event{}, nil, fmt.Errorf("decode dynamic field %q: %w", key, err)
-			}
-			fields[key] = value
-		}
-		attributes["vendor_fields"] = fields
-	}
-
 	event := domain.Event{
 		Type:       normalize(record.ID),
 		Title:      strings.TrimSpace(record.Text),
@@ -101,7 +86,7 @@ func toEvent(record EventRecord, fetchedAt time.Time) (domain.Event, []domain.En
 	}
 	entities := make([]domain.Entity, 0, 4)
 	seenEntities := make(map[string]struct{}, 4)
-	addEntity := func(kind, value string) {
+	addEntity := func(kind, value, role string) {
 		if strings.TrimSpace(value) == "" {
 			return
 		}
@@ -117,12 +102,15 @@ func toEvent(record EventRecord, fetchedAt time.Time) (domain.Event, []domain.En
 		}
 		seenEntities[key] = struct{}{}
 		entities = append(entities, entity)
-		event.Entities = append(event.Entities, domain.EntityRef{Type: entity.Type, Value: entity.Value})
+		event.Entities = append(event.Entities, domain.EntityMention{
+			EntityRef: domain.EntityRef{Type: entity.Type, Value: entity.Value},
+			Roles:     []string{role},
+		})
 	}
-	addEntity("host", record.EventSourceHost)
-	addEntity("ip", record.EventSourceIP)
-	addEntity("ip", record.SourceIP)
-	addEntity("ip", record.DestinationIP)
+	addEntity("host", record.EventSourceHost, "mentions")
+	addEntity("ip", record.EventSourceIP, "mentions")
+	addEntity("ip", record.SourceIP, "src")
+	addEntity("ip", record.DestinationIP, "dst")
 	sort.Slice(event.Entities, func(i, j int) bool {
 		if event.Entities[i].Type != event.Entities[j].Type {
 			return event.Entities[i].Type < event.Entities[j].Type
