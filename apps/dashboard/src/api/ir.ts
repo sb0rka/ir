@@ -144,7 +144,7 @@ export async function addContext(
   return throwIfError(
     await irClient.POST('/investigations/{investigation_id}/context', {
       params: { ...projectParams(), path: { investigation_id: investigationId } },
-      body: { events, entities: [] },
+      body: { findings: [], sessions: [], events, entities: [] },
     }),
   )
 }

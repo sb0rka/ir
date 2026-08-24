@@ -11,9 +11,35 @@ async function integrationError(response: Response): Promise<Error> {
   }
 }
 
+interface GatewaySource {
+  code: string
+  kind: string
+  capabilities?: string[]
+}
+
+async function listGatewaySources(projectId: string): Promise<GatewaySource[]> {
+  const response = await authorizedFetch(`${env.gatewayUrl}/api/v1/sources`, {
+    headers: { 'X-Project-ID': projectId },
+  })
+  if (!response.ok) throw await integrationError(response)
+  const body = (await response.json()) as { items?: GatewaySource[] }
+  return body.items ?? []
+}
+
+function pickSiemSourceCode(sources: GatewaySource[]): string {
+  const siem = sources.find(
+    (item) => item.kind === 'siem' && item.capabilities?.includes('account_userinfo'),
+  )
+  if (!siem) {
+    throw new Error('В проекте нет SIEM-источника с account_userinfo')
+  }
+  return siem.code
+}
+
 export async function probePTUser(projectId: string): Promise<string> {
+  const sourceCode = pickSiemSourceCode(await listGatewaySources(projectId))
   const response = await authorizedFetch(
-    `${env.gatewayUrl}/api/v1/sources/maxpatrol-siem/account/userinfo`,
+    `${env.gatewayUrl}/api/v1/sources/${encodeURIComponent(sourceCode)}/account/userinfo`,
     { headers: { 'X-Project-ID': projectId } },
   )
   if (!response.ok) throw await integrationError(response)

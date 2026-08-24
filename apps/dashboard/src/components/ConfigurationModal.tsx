@@ -18,7 +18,7 @@ import {
 import { Button } from './ui'
 import { clsx } from '../lib/utils'
 import {
-  PT_SIEM_COOKIE_E,
+  PT_SIEM_COOKIE_CORE_PORTAL,
   PT_SIEM_COOKIE_IDSRV,
   PT_SIEM_COOKIE_IDSRV_SESSION,
   PT_SIEM_COOKIE_PORTAL,
@@ -26,7 +26,13 @@ import {
   validatePtSiemCookieParts,
   type PtSiemCookieField,
 } from '../lib/pt-cookie'
-import { validatePTURL } from '../lib/validation'
+import {
+  PT_NAD_COOKIE_CSRFTOKEN,
+  PT_NAD_COOKIE_SESSIONID,
+  buildPtNadCookie,
+  validatePtNadCookieParts,
+  type PtNadCookieField,
+} from '../lib/pt-nad-cookie'
 import {
   DEFAULT_SOM_MODEL_ID,
   DEFAULT_SOM_VARIANT,
@@ -45,24 +51,21 @@ const SOM_SECRET = 'DEMO_SOM_ACCESS_TOKEN'
 const SOM_VARIANT_KEY = 'som_variant'
 const SOM_MODEL_ID_KEY = 'som_model_id'
 const PT_COOKIE_SECRET = 'DEMO_PT_SIEM_COOKIE'
-const PT_URL_SECRET = 'DEMO_PT_SIEM_BASE_URL'
-const PT_SIEM_COOKIE_VALUE = 'pt_siem_cookie_value'
+const PT_NAD_COOKIE_SECRET = 'DEMO_PT_NAD_COOKIE'
 
-type SecretName =
-  | typeof SOM_SECRET
-  | typeof PT_COOKIE_SECRET
-  | typeof PT_URL_SECRET
+type SecretName = typeof SOM_SECRET | typeof PT_COOKIE_SECRET | typeof PT_NAD_COOKIE_SECRET
 type FieldState = 'idle' | 'saving' | 'saved' | 'error'
 
 interface Drafts {
   [SOM_SECRET]: string
   [SOM_VARIANT_KEY]: string
   [SOM_MODEL_ID_KEY]: string
-  [PT_URL_SECRET]: string
-  [PT_SIEM_COOKIE_E]: string
+  [PT_SIEM_COOKIE_CORE_PORTAL]: string
   [PT_SIEM_COOKIE_IDSRV_SESSION]: string
   [PT_SIEM_COOKIE_IDSRV]: string
   [PT_SIEM_COOKIE_PORTAL]: string
+  [PT_NAD_COOKIE_SESSIONID]: string
+  [PT_NAD_COOKIE_CSRFTOKEN]: string
 }
 
 type DraftName = keyof Drafts
@@ -71,30 +74,35 @@ const emptyDrafts: Drafts = {
   [SOM_SECRET]: '',
   [SOM_VARIANT_KEY]: '',
   [SOM_MODEL_ID_KEY]: '',
-  [PT_URL_SECRET]: '',
-  [PT_SIEM_COOKIE_E]: '',
+  [PT_SIEM_COOKIE_CORE_PORTAL]: '',
   [PT_SIEM_COOKIE_IDSRV_SESSION]: '',
   [PT_SIEM_COOKIE_IDSRV]: '',
   [PT_SIEM_COOKIE_PORTAL]: '',
+  [PT_NAD_COOKIE_SESSIONID]: '',
+  [PT_NAD_COOKIE_CSRFTOKEN]: '',
 }
 
 const emptyStates: Record<SecretName, FieldState> = {
   [SOM_SECRET]: 'idle',
   [PT_COOKIE_SECRET]: 'idle',
-  [PT_URL_SECRET]: 'idle',
+  [PT_NAD_COOKIE_SECRET]: 'idle',
 }
 
-function isSecretName(name: DraftName): name is typeof SOM_SECRET | typeof PT_URL_SECRET {
-  return name === SOM_SECRET || name === PT_URL_SECRET
+function isSecretName(name: DraftName): name is typeof SOM_SECRET {
+  return name === SOM_SECRET
 }
 
 function isPtCookieField(name: DraftName): name is PtSiemCookieField {
   return (
-    name === PT_SIEM_COOKIE_E ||
+    name === PT_SIEM_COOKIE_CORE_PORTAL ||
     name === PT_SIEM_COOKIE_IDSRV_SESSION ||
     name === PT_SIEM_COOKIE_IDSRV ||
     name === PT_SIEM_COOKIE_PORTAL
   )
+}
+
+function isPtNadCookieField(name: DraftName): name is PtNadCookieField {
+  return name === PT_NAD_COOKIE_SESSIONID || name === PT_NAD_COOKIE_CSRFTOKEN
 }
 
 function ageLabel(createdAt: string | null): string {
@@ -165,6 +173,7 @@ export function ConfigurationModal({
   const [states, setStates] = useState<Record<SecretName, FieldState>>(emptyStates)
   const [errors, setErrors] = useState<Partial<Record<SecretName | 'pt' | 'som', string>>>({})
   const [cookieCreatedAt, setCookieCreatedAt] = useState<string | null>(null)
+  const [nadCookieCreatedAt, setNadCookieCreatedAt] = useState<string | null>(null)
   const [userName, setUserName] = useState<string | null>(null)
   const [ptLoading, setPtLoading] = useState(true)
   const [cookieMetaLoading, setCookieMetaLoading] = useState(true)
@@ -193,6 +202,7 @@ export function ConfigurationModal({
     setErrors({})
     setSummary(null)
     setCookieCreatedAt(null)
+    setNadCookieCreatedAt(null)
     setUserName(null)
     setPtLoading(true)
     setCookieMetaLoading(true)
@@ -211,6 +221,14 @@ export function ConfigurationModal({
       })
       .finally(() => {
         if (!cancelled) setCookieMetaLoading(false)
+      })
+
+    void withTimeout(currentSecretVersionCreatedAt(projectId, PT_NAD_COOKIE_SECRET), SECRET_METADATA_TIMEOUT_MS)
+      .then((createdAt) => {
+        if (!cancelled) setNadCookieCreatedAt(createdAt)
+      })
+      .catch(() => {
+        if (!cancelled) setNadCookieCreatedAt(null)
       })
 
     void withTimeout(probePTUser(projectId), PT_PROBE_TIMEOUT_MS)
@@ -265,6 +283,10 @@ export function ConfigurationModal({
       setStates((current) => ({ ...current, [PT_COOKIE_SECRET]: 'idle' }))
       setErrors((current) => ({ ...current, [PT_COOKIE_SECRET]: undefined }))
     }
+    if (isPtNadCookieField(name)) {
+      setStates((current) => ({ ...current, [PT_NAD_COOKIE_SECRET]: 'idle' }))
+      setErrors((current) => ({ ...current, [PT_NAD_COOKIE_SECRET]: undefined }))
+    }
   }
 
   const selectSomWorkspace = async (workspaceId: string) => {
@@ -301,7 +323,7 @@ export function ConfigurationModal({
 
   const save = async () => {
     const cookieParts = {
-      [PT_SIEM_COOKIE_E]: drafts[PT_SIEM_COOKIE_E].trim(),
+      [PT_SIEM_COOKIE_CORE_PORTAL]: drafts[PT_SIEM_COOKIE_CORE_PORTAL].trim(),
       [PT_SIEM_COOKIE_IDSRV_SESSION]: drafts[PT_SIEM_COOKIE_IDSRV_SESSION].trim(),
       [PT_SIEM_COOKIE_IDSRV]: drafts[PT_SIEM_COOKIE_IDSRV].trim(),
       [PT_SIEM_COOKIE_PORTAL]: drafts[PT_SIEM_COOKIE_PORTAL].trim(),
@@ -314,24 +336,30 @@ export function ConfigurationModal({
     }
     const ptCookie = buildPtSiemCookie(cookieParts)
 
+    const nadCookieParts = {
+      [PT_NAD_COOKIE_SESSIONID]: drafts[PT_NAD_COOKIE_SESSIONID].trim(),
+      [PT_NAD_COOKIE_CSRFTOKEN]: drafts[PT_NAD_COOKIE_CSRFTOKEN].trim(),
+    }
+    const nadCookieError = validatePtNadCookieParts(nadCookieParts)
+    if (nadCookieError) {
+      setStates((current) => ({ ...current, [PT_NAD_COOKIE_SECRET]: 'error' }))
+      setErrors((current) => ({ ...current, [PT_NAD_COOKIE_SECRET]: nadCookieError }))
+      return
+    }
+    const ptNadCookie = buildPtNadCookie(nadCookieParts)
+
     const values = {
       [SOM_SECRET]: drafts[SOM_SECRET].trim(),
       [SOM_VARIANT_KEY]: drafts[SOM_VARIANT_KEY].trim(),
       [SOM_MODEL_ID_KEY]: drafts[SOM_MODEL_ID_KEY].trim(),
-      [PT_URL_SECRET]: drafts[PT_URL_SECRET].trim(),
       [PT_COOKIE_SECRET]: ptCookie,
-    }
-    const urlError = validatePTURL(values[PT_URL_SECRET])
-    if (urlError) {
-      setStates((current) => ({ ...current, [PT_URL_SECRET]: 'error' }))
-      setErrors((current) => ({ ...current, [PT_URL_SECRET]: urlError }))
-      return
+      [PT_NAD_COOKIE_SECRET]: ptNadCookie,
     }
 
     setSaving(true)
     setSummary(null)
     setErrors({})
-    const ordered: SecretName[] = [PT_URL_SECRET, PT_COOKIE_SECRET, SOM_SECRET]
+    const ordered: SecretName[] = [PT_COOKIE_SECRET, PT_NAD_COOKIE_SECRET, SOM_SECRET]
     let existing: SecretMetadata[] = []
     if (ordered.some((name) => values[name])) {
       try {
@@ -369,8 +397,7 @@ export function ConfigurationModal({
     }
 
     const projectChanged = projectId !== currentProjectId
-    const ptChanged =
-      savedNames.has(PT_URL_SECRET) || savedNames.has(PT_COOKIE_SECRET)
+    const ptChanged = savedNames.has(PT_COOKIE_SECRET)
     if (ptChanged || projectChanged) {
       setPtLoading(true)
       try {
@@ -408,12 +435,18 @@ export function ConfigurationModal({
     }
 
     try {
-      setCookieCreatedAt(
-        await withTimeout(
+      const [siemCreatedAt, nadCreatedAt] = await Promise.all([
+        withTimeout(
           currentSecretVersionCreatedAt(projectId, PT_COOKIE_SECRET),
           SECRET_METADATA_TIMEOUT_MS,
         ),
-      )
+        withTimeout(
+          currentSecretVersionCreatedAt(projectId, PT_NAD_COOKIE_SECRET),
+          SECRET_METADATA_TIMEOUT_MS,
+        ),
+      ])
+      setCookieCreatedAt(siemCreatedAt)
+      setNadCookieCreatedAt(nadCreatedAt)
     } catch {
       // Saving already has per-field results; unavailable metadata must not hide them.
     } finally {
@@ -428,13 +461,20 @@ export function ConfigurationModal({
       [SOM_SECRET]: failedNames.has(SOM_SECRET) ? values[SOM_SECRET] : '',
       [SOM_VARIANT_KEY]: somRunSettings.variant,
       [SOM_MODEL_ID_KEY]: somRunSettings.modelId,
-      [PT_URL_SECRET]: failedNames.has(PT_URL_SECRET) ? values[PT_URL_SECRET] : '',
-      [PT_SIEM_COOKIE_E]: failedNames.has(PT_COOKIE_SECRET) ? cookieParts[PT_SIEM_COOKIE_E] : '',
+      [PT_SIEM_COOKIE_CORE_PORTAL]: failedNames.has(PT_COOKIE_SECRET)
+        ? cookieParts[PT_SIEM_COOKIE_CORE_PORTAL]
+        : '',
       [PT_SIEM_COOKIE_IDSRV_SESSION]: failedNames.has(PT_COOKIE_SECRET)
         ? cookieParts[PT_SIEM_COOKIE_IDSRV_SESSION]
         : '',
       [PT_SIEM_COOKIE_IDSRV]: failedNames.has(PT_COOKIE_SECRET) ? cookieParts[PT_SIEM_COOKIE_IDSRV] : '',
       [PT_SIEM_COOKIE_PORTAL]: failedNames.has(PT_COOKIE_SECRET) ? cookieParts[PT_SIEM_COOKIE_PORTAL] : '',
+      [PT_NAD_COOKIE_SESSIONID]: failedNames.has(PT_NAD_COOKIE_SECRET)
+        ? nadCookieParts[PT_NAD_COOKIE_SESSIONID]
+        : '',
+      [PT_NAD_COOKIE_CSRFTOKEN]: failedNames.has(PT_NAD_COOKIE_SECRET)
+        ? nadCookieParts[PT_NAD_COOKIE_CSRFTOKEN]
+        : '',
     })
     setSummary(
       savedCount ? `Сохранено новых версий: ${savedCount}` : 'Конфигурация сохранена',
@@ -489,42 +529,34 @@ export function ConfigurationModal({
           <div className="my-5 border-t border-border" />
 
           <div className="space-y-4">
-            <SecretField
-              label={PT_URL_SECRET}
-              value={drafts[PT_URL_SECRET]}
-              state={states[PT_URL_SECRET]}
-              error={errors[PT_URL_SECRET]}
-              technicalLabel
-              placeholder="https://siem.example.local"
-              onChange={(value) => setDraft(PT_URL_SECRET, value)}
-            />
             <div className="space-y-2">
               <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wider text-fg-dim">
                 {PT_COOKIE_SECRET}
                 <FieldStatus state={states[PT_COOKIE_SECRET]} />
               </div>
-              <p className="text-[11px] text-fg-dim">
-                Events API (:443): e, idsrv.session, idsrv. Incidents (:8887): IncidentManagementPortalCookie.
-              </p>
               <CookiePartInput
-                placeholder={PT_SIEM_COOKIE_E}
-                value={drafts[PT_SIEM_COOKIE_E]}
+                label={PT_SIEM_COOKIE_CORE_PORTAL}
+                placeholder={PT_SIEM_COOKIE_CORE_PORTAL}
+                value={drafts[PT_SIEM_COOKIE_CORE_PORTAL]}
                 state={states[PT_COOKIE_SECRET]}
-                onChange={(value) => setDraft(PT_SIEM_COOKIE_E, value)}
+                onChange={(value) => setDraft(PT_SIEM_COOKIE_CORE_PORTAL, value)}
               />
               <CookiePartInput
+                label={PT_SIEM_COOKIE_IDSRV_SESSION}
                 placeholder={PT_SIEM_COOKIE_IDSRV_SESSION}
                 value={drafts[PT_SIEM_COOKIE_IDSRV_SESSION]}
                 state={states[PT_COOKIE_SECRET]}
                 onChange={(value) => setDraft(PT_SIEM_COOKIE_IDSRV_SESSION, value)}
               />
               <CookiePartInput
+                label={PT_SIEM_COOKIE_IDSRV}
                 placeholder={PT_SIEM_COOKIE_IDSRV}
                 value={drafts[PT_SIEM_COOKIE_IDSRV]}
                 state={states[PT_COOKIE_SECRET]}
                 onChange={(value) => setDraft(PT_SIEM_COOKIE_IDSRV, value)}
               />
               <CookiePartInput
+                label={PT_SIEM_COOKIE_PORTAL}
                 placeholder={PT_SIEM_COOKIE_PORTAL}
                 value={drafts[PT_SIEM_COOKIE_PORTAL]}
                 state={states[PT_COOKIE_SECRET]}
@@ -533,6 +565,36 @@ export function ConfigurationModal({
               {errors[PT_COOKIE_SECRET] && (
                 <p className="text-[11px] text-critical">{errors[PT_COOKIE_SECRET]}</p>
               )}
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wider text-fg-dim">
+                {PT_NAD_COOKIE_SECRET}
+                <FieldStatus state={states[PT_NAD_COOKIE_SECRET]} />
+              </div>
+              <CookiePartInput
+                label={PT_NAD_COOKIE_SESSIONID}
+                placeholder={PT_NAD_COOKIE_SESSIONID}
+                value={drafts[PT_NAD_COOKIE_SESSIONID]}
+                state={states[PT_NAD_COOKIE_SECRET]}
+                onChange={(value) => setDraft(PT_NAD_COOKIE_SESSIONID, value)}
+              />
+              <CookiePartInput
+                label={PT_NAD_COOKIE_CSRFTOKEN}
+                placeholder={PT_NAD_COOKIE_CSRFTOKEN}
+                value={drafts[PT_NAD_COOKIE_CSRFTOKEN]}
+                state={states[PT_NAD_COOKIE_SECRET]}
+                onChange={(value) => setDraft(PT_NAD_COOKIE_CSRFTOKEN, value)}
+              />
+              {errors[PT_NAD_COOKIE_SECRET] && (
+                <p className="text-[11px] text-critical">{errors[PT_NAD_COOKIE_SECRET]}</p>
+              )}
+              <p className="text-[11px] text-fg-dim">
+                Обновление NAD cookie:{' '}
+                <span className="font-mono text-fg-muted">
+                  {cookieMetaLoading ? 'проверка…' : ageLabel(nadCookieCreatedAt)}
+                </span>
+              </p>
             </div>
 
             <div className="grid gap-2 rounded border border-border bg-surface-0 p-3 sm:grid-cols-2">
@@ -651,18 +713,22 @@ export function ConfigurationModal({
 }
 
 function CookiePartInput({
+  label,
   placeholder,
   value,
   state,
   onChange,
 }: {
+  label?: string
   placeholder: string
   value: string
   state: FieldState
   onChange: (value: string) => void
 }) {
   return (
-    <input
+    <label className="block space-y-1">
+      {label && <span className="text-[10px] font-medium text-fg-dim">{label}</span>}
+      <input
       autoComplete="off"
       className={clsx(
         'w-full rounded border bg-surface-0 px-3 py-2 font-mono text-sm text-fg outline-none placeholder:text-fg-dim focus:border-fg/40',
@@ -673,6 +739,7 @@ function CookiePartInput({
       placeholder={placeholder}
       onChange={(event) => onChange(event.target.value)}
     />
+    </label>
   )
 }
 

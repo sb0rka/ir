@@ -27,7 +27,7 @@ Store IDs are unique positive integers and are process-owned. Requests may only 
 Project Secrets provide only the rotating credentials:
 
 - `DEMO_PT_SIEM_COOKIE` for `pt-maxpatrol-siem` — combined header:
-  - Events API (`POST /api/events/v3/events`): `e`, `idsrv.session`, `idsrv`;
+  - Events API (`POST /api/events/v3/events`): `CorePortalCookie`, `idsrv.session`, `idsrv`;
   - Incident Read Model (`:8887`): `IncidentManagementPortalCookie`;
 - `DEMO_PT_NAD_COOKIE` for `pt-nad` — `sessionid=<value>; csrftoken=<value>` (both required).
 

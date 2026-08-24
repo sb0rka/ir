@@ -27,6 +27,7 @@ export interface QueueSearchResult {
   contextEvents: Record<string, ContextEvent>
   sourceErrors: string[]
   availableSources: string[]
+  /** @deprecated Mock sources removed from Gateway; always empty. */
   mockSources: string[]
 }
 
@@ -59,19 +60,19 @@ function chipsToSearch(chips: FilterChip[], timePreset: string, query?: string):
   }
   if (entities.length) body.entities = entities
 
-  const queryBits = [
-    ...(query ? [query] : []),
-    ...(chips.find((c) => c.field === 'hash')?.values ?? []),
-  ]
-  if (queryBits.length) body.query = queryBits.join(' ')
+  for (const value of chips.find((c) => c.field === 'hash')?.values ?? []) {
+    entities.push({ type: 'hash', value })
+  }
+  if (entities.length) body.entities = entities
+
+  if (query?.trim()) {
+    entities.push({ type: 'text', value: query.trim() })
+    body.entities = entities
+  }
   return body
 }
 
-async function eventSources(): Promise<{
-  defaults: string[]
-  available: string[]
-  activeMocks: Set<string>
-}> {
+async function eventSources(): Promise<{ defaults: string[]; available: string[] }> {
   const { data, error, response } = await gatewayClient.GET('/api/v1/sources', {
     params: projectHeader(),
   })
@@ -83,9 +84,6 @@ async function eventSources(): Promise<{
   return {
     defaults: online.map((item) => item.code),
     available: eventCapable.map((item) => item.code),
-    activeMocks: new Set(
-      online.filter((item) => item.mode === 'mock').map((item) => item.code),
-    ),
   }
 }
 
@@ -133,9 +131,7 @@ export async function searchQueue(
     }
     body.sources = sources.defaults
   }
-  const mockSources = [
-    ...new Set(body.sources.filter((source) => sources.activeMocks.has(source))),
-  ]
+  const mockSources: string[] = []
   const { events, entities: gwEntities, sourceErrors } = await searchPages(body)
   const entities: Record<string, Entity> = {}
   for (const entity of gwEntities) {
@@ -180,7 +176,10 @@ export async function searchQueue(
 export async function lookupEntity(type: string, value: string): Promise<string> {
   const { data, error, response } = await gatewayClient.POST('/api/v1/entities/lookup', {
     params: projectHeader(),
-    body: { entity: { type, value } },
+    body: {
+      entity: { type, value },
+      time_range: timeRangeForPreset('90d'),
+    },
   })
   if (error || !data) throw unwrapError(error, response.status)
   if (data.verdicts?.length) {

@@ -1,10 +1,10 @@
-export const PT_SIEM_COOKIE_E = 'e'
+export const PT_SIEM_COOKIE_CORE_PORTAL = 'CorePortalCookie'
 export const PT_SIEM_COOKIE_IDSRV_SESSION = 'idsrv.session'
 export const PT_SIEM_COOKIE_IDSRV = 'idsrv'
 export const PT_SIEM_COOKIE_PORTAL = 'IncidentManagementPortalCookie'
 
 export type PtSiemCookieField =
-  | typeof PT_SIEM_COOKIE_E
+  | typeof PT_SIEM_COOKIE_CORE_PORTAL
   | typeof PT_SIEM_COOKIE_IDSRV_SESSION
   | typeof PT_SIEM_COOKIE_IDSRV
   | typeof PT_SIEM_COOKIE_PORTAL
@@ -12,14 +12,16 @@ export type PtSiemCookieField =
 export type PtSiemCookieParts = Record<PtSiemCookieField, string>
 
 const eventsFields: PtSiemCookieField[] = [
-  PT_SIEM_COOKIE_E,
+  PT_SIEM_COOKIE_CORE_PORTAL,
   PT_SIEM_COOKIE_IDSRV_SESSION,
   PT_SIEM_COOKIE_IDSRV,
 ]
 
+const siemFields: PtSiemCookieField[] = [...eventsFields, PT_SIEM_COOKIE_PORTAL]
+
 export function buildPtSiemCookie(parts: PtSiemCookieParts): string {
   const segments: string[] = []
-  for (const field of [...eventsFields, PT_SIEM_COOKIE_PORTAL]) {
+  for (const field of siemFields) {
     const value = parts[field].trim()
     if (value === '') {
       continue
@@ -40,7 +42,7 @@ export function validatePtSiemCookieParts(parts: PtSiemCookieParts): string | nu
   }
   const eventsFilled = eventsFields.filter((field) => parts[field].trim() !== '').length
   if (eventsFilled > 0 && eventsFilled < eventsFields.length) {
-    return 'Для Events API заполните e, idsrv.session и idsrv'
+    return 'Для Events API заполните CorePortalCookie, idsrv.session и idsrv'
   }
   if (parts[PT_SIEM_COOKIE_PORTAL].trim() === '' && eventsFilled === 0) {
     return 'Укажите cookie для Events API или IncidentManagementPortalCookie'

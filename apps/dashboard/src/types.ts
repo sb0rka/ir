@@ -2,7 +2,7 @@ export type Severity = 'critical' | 'high' | 'medium' | 'low' | 'info'
 
 export type AlertStatus = 'new' | 'investigating' | 'closed'
 
-/** Gateway / ir-api source code, e.g. maxpatrol-siem. */
+/** Gateway / ir-api source code, e.g. pt-maxpatrol-siem. */
 export type Source = string
 
 export type EntityKind =
