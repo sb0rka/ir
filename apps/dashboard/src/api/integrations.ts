@@ -1,5 +1,7 @@
 import { authorizedFetch } from './auth'
+import { gatewayClient } from './clients'
 import { env } from './env'
+import { unwrapError } from './error'
 
 async function integrationError(response: Response): Promise<Error> {
   const text = await response.text()
@@ -11,43 +13,37 @@ async function integrationError(response: Response): Promise<Error> {
   }
 }
 
-interface GatewaySource {
+export interface ProjectSource {
   code: string
+  name: string
   kind: string
+  status: 'online' | 'degraded' | 'offline'
   capabilities?: string[]
 }
 
-async function listGatewaySources(projectId: string): Promise<GatewaySource[]> {
-  const response = await authorizedFetch(`${env.gatewayUrl}/api/v1/sources`, {
-    headers: { 'X-Project-ID': projectId },
+export async function listProjectSources(projectId: string): Promise<ProjectSource[]> {
+  const { data, error, response } = await gatewayClient.GET('/api/v1/sources', {
+    params: { header: { 'X-Project-ID': projectId } },
   })
-  if (!response.ok) throw await integrationError(response)
-  const body = (await response.json()) as { items?: GatewaySource[] }
-  return body.items ?? []
+  if (error || !data) throw unwrapError(error, response.status)
+  return (data.items ?? []) as ProjectSource[]
 }
 
-function pickSiemSourceCode(sources: GatewaySource[]): string {
-  const siem = sources.find(
-    (item) => item.kind === 'siem' && item.capabilities?.includes('account_userinfo'),
+export async function probeSourceUserinfo(projectId: string, sourceCode: string): Promise<string> {
+  const { data, error, response } = await gatewayClient.GET(
+    '/api/v1/sources/{source}/account/userinfo',
+    {
+      params: {
+        header: { 'X-Project-ID': projectId },
+        path: { source: sourceCode },
+      },
+    },
   )
-  if (!siem) {
-    throw new Error('В проекте нет SIEM-источника с account_userinfo')
-  }
-  return siem.code
-}
-
-export async function probePTUser(projectId: string): Promise<string> {
-  const sourceCode = pickSiemSourceCode(await listGatewaySources(projectId))
-  const response = await authorizedFetch(
-    `${env.gatewayUrl}/api/v1/sources/${encodeURIComponent(sourceCode)}/account/userinfo`,
-    { headers: { 'X-Project-ID': projectId } },
-  )
-  if (!response.ok) throw await integrationError(response)
-  const body = (await response.json()) as { user_name?: unknown }
-  if (typeof body.user_name !== 'string' || !body.user_name.trim()) {
+  if (error || !data) throw unwrapError(error, response.status)
+  if (typeof data.user_name !== 'string' || !data.user_name.trim()) {
     throw new Error('Источник не вернул user_name')
   }
-  return body.user_name
+  return data.user_name
 }
 
 export interface SomWorkspaceOption {

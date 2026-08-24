@@ -39,6 +39,8 @@ export function setProjectId(projectId: string | null): void {
   }
 }
 
+export const TIME_PRESET_CUSTOM = 'custom'
+
 export function timeRangeForPreset(preset: string): { from: string; to: string } {
   const to = new Date()
   const from = new Date(to)
@@ -65,4 +67,47 @@ export function timeRangeForPreset(preset: string): { from: string; to: string }
       from.setDate(from.getDate() - 30)
   }
   return { from: from.toISOString(), to: to.toISOString() }
+}
+
+function parseLocalDate(value: string): { year: number; month: number; day: number } | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim())
+  if (!match) return null
+  const year = Number(match[1])
+  const month = Number(match[2])
+  const day = Number(match[3])
+  if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) return null
+  return { year, month, day }
+}
+
+function startOfLocalDay(value: string): Date | null {
+  const parts = parseLocalDate(value)
+  if (!parts) return null
+  const date = new Date(parts.year, parts.month - 1, parts.day, 0, 0, 0, 0)
+  return Number.isNaN(date.getTime()) ? null : date
+}
+
+function endOfLocalDay(value: string): Date | null {
+  const parts = parseLocalDate(value)
+  if (!parts) return null
+  const date = new Date(parts.year, parts.month - 1, parts.day, 23, 59, 59, 999)
+  return Number.isNaN(date.getTime()) ? null : date
+}
+
+export function resolveTimeRange(
+  preset: string,
+  customFrom?: string,
+  customTo?: string,
+): { from: string; to: string } {
+  if (preset === TIME_PRESET_CUSTOM) {
+    const from = customFrom ? startOfLocalDay(customFrom) : null
+    const to = customTo ? endOfLocalDay(customTo) : null
+    if (!from || !to) {
+      throw new Error('Укажите даты «от» и «до»')
+    }
+    if (from.getTime() > to.getTime()) {
+      throw new Error('Дата «от» не может быть позже даты «до»')
+    }
+    return { from: from.toISOString(), to: to.toISOString() }
+  }
+  return timeRangeForPreset(preset)
 }

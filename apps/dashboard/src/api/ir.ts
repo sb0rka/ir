@@ -14,6 +14,7 @@ import {
 import type { ContextEvent, Entity, GraphEdge, GraphNode, Investigation } from '../types'
 
 type EventSourceRef = Ir['schemas']['EventSourceRef']
+type SourceObjectRef = Ir['schemas']['SourceObjectRef']
 
 const FALLBACK_WORKSPACE = '00000000-0000-0000-0000-000000000001'
 function projectParams() {
@@ -138,13 +139,18 @@ export async function createInvestigation(input: {
 
 export async function addContext(
   investigationId: string,
-  events: EventSourceRef[],
+  input: {
+    events?: EventSourceRef[]
+    findings?: SourceObjectRef[]
+  },
 ): Promise<Ir['schemas']['ContextImportResult'] | undefined> {
-  if (events.length === 0) return undefined
+  const events = input.events ?? []
+  const findings = input.findings ?? []
+  if (events.length === 0 && findings.length === 0) return undefined
   return throwIfError(
     await irClient.POST('/investigations/{investigation_id}/context', {
       params: { ...projectParams(), path: { investigation_id: investigationId } },
-      body: { findings: [], sessions: [], events, entities: [] },
+      body: { findings, sessions: [], events, entities: [] },
     }),
   )
 }

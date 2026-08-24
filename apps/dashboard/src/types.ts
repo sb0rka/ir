@@ -56,6 +56,14 @@ export interface AlertEvent {
   description: string
   raw?: Record<string, string>
   sourceEventId?: string
+  /** Present for queue rows loaded from Gateway findings/search. */
+  findingRef?: {
+    source_code: string
+    source_instance?: string
+    record_type: 'siem_incident' | 'siem_correlation' | 'nad_attack'
+    external_id: string
+    time_range: { from: string; to: string }
+  }
 }
 
 export interface CorrelationGroup {
@@ -187,6 +195,10 @@ export interface ContextFilterHistoryEntry {
 export interface ContextQueueState {
   chips: FilterChip[]
   timePreset: string
+  /** YYYY-MM-DD, used when timePreset is `custom`. */
+  timeFrom: string
+  /** YYYY-MM-DD, used when timePreset is `custom`. */
+  timeTo: string
   history: ContextFilterHistoryEntry[]
   selectedIds: string[]
   hideAdded: boolean
@@ -199,6 +211,8 @@ export interface SavedView {
   name: string
   chips: FilterChip[]
   timePreset: string
+  timeFrom?: string
+  timeTo?: string
   query?: string
 }
 

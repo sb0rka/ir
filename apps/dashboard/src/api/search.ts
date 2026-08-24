@@ -1,17 +1,18 @@
 import type { FilterChip } from '../types'
-import { getProjectId, timeRangeForPreset } from './env'
+import { getProjectId, resolveTimeRange } from './env'
 import { gatewayClient } from './clients'
 import { unwrapError } from './error'
-import {
-  groupQueue,
-  mapGatewayContextEvent,
-  mapGatewayEntity,
-  mapGatewayEvent,
-} from './adapters'
+import { mapGatewayFinding } from './adapters'
+import { matchesChips } from '../lib/filters'
 import type { AlertEvent, ContextEvent, CorrelationGroup, Entity, QueueItem } from '../types'
 import type { components as Gw } from '@ir/contract/gateway'
 
-type SearchBody = Gw['schemas']['SearchEventsRequest']
+type FindingsBody = Gw['schemas']['SearchFindingsRequest']
+type FindingKind = Gw['schemas']['FindingKind']
+
+const FINDING_KINDS: FindingKind[] = ['siem_incident', 'siem_correlation', 'nad_attack']
+const PAGE_LIMIT = 100
+const MAX_PAGES = 4
 
 function projectHeader() {
   const projectId = getProjectId()
@@ -31,145 +32,142 @@ export interface QueueSearchResult {
   mockSources: string[]
 }
 
-function chipsToSearch(chips: FilterChip[], timePreset: string, query?: string): SearchBody {
-  const body: SearchBody = {
-    time_range: timeRangeForPreset(timePreset),
-    limit: 100,
+function buildFindingsBody(
+  chips: FilterChip[],
+  timePreset: string,
+  timeFrom: string,
+  timeTo: string,
+  kinds: FindingKind[],
+): FindingsBody {
+  const body: FindingsBody = {
+    time_range: resolveTimeRange(timePreset, timeFrom, timeTo),
+    limit: PAGE_LIMIT,
+    kinds,
   }
   const sources = chips.find((c) => c.field === 'source')?.values
   if (sources?.length) body.sources = sources
-
-  const entities: NonNullable<SearchBody['entities']> = []
-  for (const chip of chips) {
-    const type =
-      chip.field === 'host'
-        ? 'host'
-        : chip.field === 'user'
-          ? 'user'
-          : chip.field === 'process'
-            ? 'process'
-            : chip.field === 'ip'
-              ? 'ip'
-              : chip.field === 'domain'
-                ? 'domain'
-                : null
-    if (!type) continue
-    for (const value of chip.values) {
-      entities.push({ type, value })
-    }
-  }
-  if (entities.length) body.entities = entities
-
-  for (const value of chips.find((c) => c.field === 'hash')?.values ?? []) {
-    entities.push({ type: 'hash', value })
-  }
-  if (entities.length) body.entities = entities
-
-  if (query?.trim()) {
-    entities.push({ type: 'text', value: query.trim() })
-    body.entities = entities
-  }
   return body
 }
 
-async function eventSources(): Promise<{ defaults: string[]; available: string[] }> {
+function matchesQuery(alert: AlertEvent, query?: string): boolean {
+  if (!query?.trim()) return true
+  const needle = query.trim().toLowerCase()
+  const haystack = [alert.title, alert.rule, alert.description, alert.raw?.finding_kind]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase()
+  return haystack.includes(needle)
+}
+
+async function findingSources(): Promise<{ defaults: string[]; available: string[] }> {
   const { data, error, response } = await gatewayClient.GET('/api/v1/sources', {
     params: projectHeader(),
   })
   if (error || !data) throw unwrapError(error, response.status)
-  const eventCapable = (data.items ?? []).filter((item) =>
-    item.capabilities?.includes('events'),
+  const findingCapable = (data.items ?? []).filter((item) =>
+    item.capabilities?.includes('findings'),
   )
-  const online = eventCapable.filter((item) => item.status === 'online')
+  const online = findingCapable.filter((item) => item.status === 'online')
   return {
     defaults: online.map((item) => item.code),
-    available: eventCapable.map((item) => item.code),
+    available: findingCapable.map((item) => item.code),
   }
 }
 
-async function searchPages(body: SearchBody) {
-  const events: Gw['schemas']['Event'][] = []
-  const entities: Gw['schemas']['Entity'][] = []
+async function searchFindingKind(body: FindingsBody): Promise<{
+  findings: Gw['schemas']['Finding'][]
+  sourceErrors: string[]
+}> {
+  const findings: Gw['schemas']['Finding'][] = []
   const sourceErrors: string[] = []
   let cursor: string | undefined
-  for (let i = 0; i < 8; i++) {
-    const { data, error, response } = await gatewayClient.POST('/api/v1/events/search', {
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const { data, error, response } = await gatewayClient.POST('/api/v1/findings/search', {
       params: projectHeader(),
       body: { ...body, cursor },
     })
     if (error || !data) throw unwrapError(error, response.status)
-    events.push(...(data.events ?? []))
-    entities.push(...(data.entities ?? []))
+    findings.push(...(data.findings ?? []))
     for (const err of data.source_errors ?? []) {
       sourceErrors.push(`${err.source}: ${err.message}`)
     }
     if (!data.next_cursor) break
     cursor = data.next_cursor
   }
-  return { events, entities, sourceErrors }
+  return { findings, sourceErrors }
 }
 
 export async function searchQueue(
   chips: FilterChip[],
   timePreset: string,
+  timeFrom: string,
+  timeTo: string,
   query?: string,
 ): Promise<QueueSearchResult> {
-  const body = chipsToSearch(chips, timePreset, query)
-  const sources = await eventSources()
-  if (!body.sources?.length) {
-    if (!sources.defaults.length) {
-      return {
-        alerts: {},
-        correlations: {},
-        queueOrder: [],
-        entities: {},
-        contextEvents: {},
-        sourceErrors: ['Нет доступных online-источников событий'],
-        availableSources: sources.available,
-        mockSources: [],
-      }
+  const sources = await findingSources()
+  const sourceErrors: string[] = []
+  const selectedSources = chips.find((c) => c.field === 'source')?.values
+  const allowedSources =
+    selectedSources?.length ? selectedSources : sources.defaults.length ? sources.defaults : sources.available
+
+  if (!allowedSources.length) {
+    return {
+      alerts: {},
+      correlations: {},
+      queueOrder: [],
+      entities: {},
+      contextEvents: {},
+      sourceErrors: ['Нет доступных online-источников findings'],
+      availableSources: sources.available,
+      mockSources: [],
     }
-    body.sources = sources.defaults
   }
-  const mockSources: string[] = []
-  const { events, entities: gwEntities, sourceErrors } = await searchPages(body)
-  const entities: Record<string, Entity> = {}
-  for (const entity of gwEntities) {
-    const mapped = mapGatewayEntity(entity)
-    entities[mapped.id] = mapped
+
+  const merged = new Map<string, Gw['schemas']['Finding']>()
+  for (const kind of FINDING_KINDS) {
+    const body = buildFindingsBody(chips, timePreset, timeFrom, timeTo, [kind])
+    body.sources = allowedSources
+    const page = await searchFindingKind(body)
+    sourceErrors.push(...page.sourceErrors)
+    for (const finding of page.findings) {
+      const id = `${finding.ref.source_code}/${finding.ref.record_type}/${finding.ref.external_id}`
+      merged.set(id, finding)
+    }
   }
+
   const alerts: Record<string, AlertEvent> = {}
-  const contextEvents: Record<string, ContextEvent> = {}
+  const entities: Record<string, Entity> = {}
   const alertList: AlertEvent[] = []
-  for (const event of events) {
-    const entityIds = event.entities.map((ref) => {
-      const id = `${ref.type}:${ref.value}`
-      if (!entities[id]) {
-        entities[id] = {
-          id,
-          kind: ref.type as Entity['kind'],
-          label: ref.value,
-          attributes: {},
-        }
-      }
-      return id
-    })
-    const alert = mapGatewayEvent(event, entityIds)
-    alerts[alert.id] = alert
-    alertList.push(alert)
-    const ctx = mapGatewayContextEvent(event, entityIds)
-    contextEvents[ctx.id] = ctx
+  for (const finding of merged.values()) {
+    const mapped = mapGatewayFinding(finding)
+    for (const entity of mapped.entities) entities[entity.id] = entity
+    alerts[mapped.alert.id] = mapped.alert
+    alertList.push(mapped.alert)
   }
-  const { correlations, queueOrder } = groupQueue(alertList, entities)
+
+  const filtered = alertList
+    .filter((alert) => matchesQuery(alert, query))
+    .filter((alert) =>
+      matchesChips(alert.entityIds, alert.severity, alert.source, alert.status, chips, entities),
+    )
+    .sort((a, b) => b.time.localeCompare(a.time))
+
+  const queueAlerts: Record<string, AlertEvent> = {}
+  const queueOrder: QueueItem[] = []
+  for (const alert of filtered) {
+    queueAlerts[alert.id] = alert
+    queueOrder.push({ kind: 'alert', id: alert.id })
+  }
+
   return {
-    alerts,
-    correlations,
+    alerts: queueAlerts,
+    correlations: {},
     queueOrder,
     entities,
-    contextEvents,
-    sourceErrors,
+    contextEvents: {},
+    sourceErrors: [...new Set(sourceErrors)],
     availableSources: sources.available,
-    mockSources,
+    mockSources: [],
   }
 }
 
@@ -178,7 +176,7 @@ export async function lookupEntity(type: string, value: string): Promise<string>
     params: projectHeader(),
     body: {
       entity: { type, value },
-      time_range: timeRangeForPreset('90d'),
+      time_range: resolveTimeRange('90d', '', ''),
     },
   })
   if (error || !data) throw unwrapError(error, response.status)

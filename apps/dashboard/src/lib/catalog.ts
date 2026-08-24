@@ -26,13 +26,6 @@ export const defaultFilterValueOptions: Record<FilterField, string[]> = {
 
 export const savedViews: SavedView[] = [
   {
-    id: 'view-smbexec',
-    name: 'impacket_smbexec',
-    chips: [],
-    timePreset: '30d',
-    query: 'impacket_smbexec',
-  },
-  {
     id: 'view-critical',
     name: 'Только critical/high',
     chips: [

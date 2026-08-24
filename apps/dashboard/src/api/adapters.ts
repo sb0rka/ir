@@ -108,6 +108,67 @@ export function mapIrEntity(entity: IrEntity): Entity {
   }
 }
 
+export function gatewayFindingId(ref: {
+  source_code: string
+  source_instance?: string
+  record_type: string
+  external_id: string
+}): string {
+  const instance = ref.source_instance ? `${ref.source_instance}/` : ''
+  return `${ref.source_code}/${instance}${ref.record_type}/${ref.external_id}`
+}
+
+export function mapGatewayFinding(
+  finding: Gw['schemas']['Finding'],
+): { alert: AlertEvent; entities: Entity[] } {
+  const ref = finding.ref
+  const entityIds: string[] = []
+  const entities: Entity[] = []
+  for (const mention of finding.entities ?? []) {
+    if (!mention.type || !mention.value) continue
+    const mapped = mapGatewayEntity({
+      type: mention.type,
+      value: mention.value,
+      attributes: {},
+      sources: [],
+    })
+    entityIds.push(mapped.id)
+    entities.push(mapped)
+  }
+  const ruleName = finding.rule?.name ?? finding.kind
+  const recordType = finding.ref.record_type
+  const findingRef =
+    recordType === 'siem_incident' ||
+    recordType === 'siem_correlation' ||
+    recordType === 'nad_attack'
+      ? {
+          source_code: ref.source_code,
+          source_instance: ref.source_instance,
+          record_type: recordType,
+          external_id: ref.external_id,
+          time_range: ref.time_range,
+        }
+      : undefined
+  const alert: AlertEvent = {
+    id: gatewayFindingId(ref),
+    time: finding.occurred_at,
+    severity: mapSeverity(finding.severity),
+    title: finding.title,
+    rule: ruleName,
+    source: ref.source_code,
+    status: 'new',
+    entityIds,
+    description: finding.description ?? finding.title,
+    raw: {
+      finding_kind: finding.kind,
+      ...(finding.status ? { status: finding.status } : {}),
+    },
+    sourceEventId: ref.external_id,
+    findingRef,
+  }
+  return { alert, entities }
+}
+
 export function mapGatewayEvent(
   event: GwEvent,
   entityIds: string[],

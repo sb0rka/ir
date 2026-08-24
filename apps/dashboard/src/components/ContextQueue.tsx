@@ -1,4 +1,5 @@
 import { useAppStore, emptyContextQueue } from '../store/appStore'
+import { TIME_PRESET_CUSTOM } from '../api/env'
 import type { EventOrigin, ReviewState } from '../types'
 import { FilterBar } from './FilterBar'
 import { Button, Chip, SeverityBadge } from './ui'
@@ -171,6 +172,8 @@ export function ContextQueuePage({ investigationId }: { investigationId: string 
       <FilterBar
         chips={queue.chips}
         timePreset={queue.timePreset}
+        timeFrom={queue.timeFrom}
+        timeTo={queue.timeTo}
         onAddChip={(field, value) => addContextChip(investigationId, field, value)}
         onRemoveChip={(chipId) => removeContextChip(investigationId, chipId)}
         onRemoveChipValue={(chipId, value) =>
@@ -178,7 +181,14 @@ export function ContextQueuePage({ investigationId }: { investigationId: string 
         }
         onClearChips={() => clearContextChips(investigationId)}
         onTimePresetChange={(timePreset) =>
-          setContextQueue(investigationId, { timePreset })
+          setContextQueue(investigationId, { timePreset, timeFrom: '', timeTo: '' })
+        }
+        onCustomTimeRangeChange={(timeFrom, timeTo) =>
+          setContextQueue(investigationId, {
+            timePreset: TIME_PRESET_CUSTOM,
+            timeFrom,
+            timeTo,
+          })
         }
         history={queue.history}
         extra={

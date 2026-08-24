@@ -1,16 +1,16 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Check, CircleAlert, LoaderCircle, Settings2, X } from 'lucide-react'
 import {
+  listProjectSources,
   listSomBoards,
   listSomWorkspaces,
-  probePTUser,
+  probeSourceUserinfo,
+  type ProjectSource,
   type SomBoardOption,
   type SomWorkspaceOption,
 } from '../api/integrations'
 import {
-  currentSecretVersionCreatedAt,
   listSecrets,
-  secretAgeHours,
   writeSecret,
   type Project,
   type SecretMetadata,
@@ -46,7 +46,6 @@ import {
 import { withTimeout } from '../lib/with-timeout'
 
 const PT_PROBE_TIMEOUT_MS = 20_000
-const SECRET_METADATA_TIMEOUT_MS = 10_000
 const SOM_SECRET = 'DEMO_SOM_ACCESS_TOKEN'
 const SOM_VARIANT_KEY = 'som_variant'
 const SOM_MODEL_ID_KEY = 'som_model_id'
@@ -105,11 +104,35 @@ function isPtNadCookieField(name: DraftName): name is PtNadCookieField {
   return name === PT_NAD_COOKIE_SESSIONID || name === PT_NAD_COOKIE_CSRFTOKEN
 }
 
-function ageLabel(createdAt: string | null): string {
-  const hours = secretAgeHours(createdAt)
-  if (hours == null) return 'не задана'
-  if (hours === 0) return '<1 ч назад'
-  return `${hours} ч назад`
+function sourceIsOnline(status: ProjectSource['status']): boolean {
+  return status === 'online' || status === 'degraded'
+}
+
+async function loadSourceStatuses(projectId: string): Promise<{
+  sources: ProjectSource[]
+  userinfo: Record<string, string | null>
+}> {
+  const sources = await listProjectSources(projectId)
+  const userinfo: Record<string, string | null> = {}
+  await Promise.all(
+    sources
+      .filter((source) => source.capabilities?.includes('account_userinfo'))
+      .map(async (source) => {
+        if (!sourceIsOnline(source.status)) {
+          userinfo[source.code] = null
+          return
+        }
+        try {
+          userinfo[source.code] = await withTimeout(
+            probeSourceUserinfo(projectId, source.code),
+            PT_PROBE_TIMEOUT_MS,
+          )
+        } catch {
+          userinfo[source.code] = null
+        }
+      }),
+  )
+  return { sources, userinfo }
 }
 
 function FieldStatus({ state }: { state: FieldState }) {
@@ -171,12 +194,10 @@ export function ConfigurationModal({
   const [projectId, setProjectId] = useState(currentProjectId)
   const [drafts, setDrafts] = useState<Drafts>(emptyDrafts)
   const [states, setStates] = useState<Record<SecretName, FieldState>>(emptyStates)
-  const [errors, setErrors] = useState<Partial<Record<SecretName | 'pt' | 'som', string>>>({})
-  const [cookieCreatedAt, setCookieCreatedAt] = useState<string | null>(null)
-  const [nadCookieCreatedAt, setNadCookieCreatedAt] = useState<string | null>(null)
-  const [userName, setUserName] = useState<string | null>(null)
-  const [ptLoading, setPtLoading] = useState(true)
-  const [cookieMetaLoading, setCookieMetaLoading] = useState(true)
+  const [errors, setErrors] = useState<Partial<Record<SecretName | 'som' | 'sources', string>>>({})
+  const [sources, setSources] = useState<ProjectSource[]>([])
+  const [userinfoBySource, setUserinfoBySource] = useState<Record<string, string | null>>({})
+  const [sourcesLoading, setSourcesLoading] = useState(true)
   const [somLoading, setSomLoading] = useState(true)
   const [somWorkspaces, setSomWorkspaces] = useState<SomWorkspaceOption[]>([])
   const [somWorkspaceId, setSomWorkspaceId] = useState('')
@@ -201,55 +222,37 @@ export function ConfigurationModal({
     setStates(emptyStates)
     setErrors({})
     setSummary(null)
-    setCookieCreatedAt(null)
-    setNadCookieCreatedAt(null)
-    setUserName(null)
-    setPtLoading(true)
-    setCookieMetaLoading(true)
+    setSources([])
+    setUserinfoBySource({})
+    setSourcesLoading(true)
     setSomLoading(true)
     setSomWorkspaces([])
     setSomWorkspaceId('')
     setSomBoards([])
     setSomBoardId('')
 
-    void withTimeout(currentSecretVersionCreatedAt(projectId, PT_COOKIE_SECRET), SECRET_METADATA_TIMEOUT_MS)
-      .then((createdAt) => {
-        if (!cancelled) setCookieCreatedAt(createdAt)
-      })
-      .catch(() => {
-        if (!cancelled) setCookieCreatedAt(null)
-      })
-      .finally(() => {
-        if (!cancelled) setCookieMetaLoading(false)
-      })
-
-    void withTimeout(currentSecretVersionCreatedAt(projectId, PT_NAD_COOKIE_SECRET), SECRET_METADATA_TIMEOUT_MS)
-      .then((createdAt) => {
-        if (!cancelled) setNadCookieCreatedAt(createdAt)
-      })
-      .catch(() => {
-        if (!cancelled) setNadCookieCreatedAt(null)
-      })
-
-    void withTimeout(probePTUser(projectId), PT_PROBE_TIMEOUT_MS)
-      .then((name) => {
+    void loadSourceStatuses(projectId)
+      .then(({ sources: loadedSources, userinfo }) => {
         if (!cancelled) {
-          setUserName(name)
-          setErrors((current) => ({ ...current, pt: undefined }))
+          setSources(loadedSources)
+          setUserinfoBySource(userinfo)
+          setErrors((current) => ({ ...current, sources: undefined }))
         }
       })
       .catch((reason: unknown) => {
         if (!cancelled) {
-          setUserName(null)
+          setSources([])
+          setUserinfoBySource({})
           setErrors((current) => ({
             ...current,
-            pt: reason instanceof Error ? reason.message : 'PT SIEM недоступен',
+            sources: reason instanceof Error ? reason.message : 'Не удалось проверить источники',
           }))
         }
       })
       .finally(() => {
-        if (!cancelled) setPtLoading(false)
+        if (!cancelled) setSourcesLoading(false)
       })
+
     void loadSomOptions(projectId, false)
       .then((options) => {
         if (cancelled) return
@@ -398,19 +401,23 @@ export function ConfigurationModal({
 
     const projectChanged = projectId !== currentProjectId
     const ptChanged = savedNames.has(PT_COOKIE_SECRET)
-    if (ptChanged || projectChanged) {
-      setPtLoading(true)
+    const nadChanged = savedNames.has(PT_NAD_COOKIE_SECRET)
+    if (ptChanged || nadChanged || projectChanged) {
+      setSourcesLoading(true)
       try {
-        setUserName(await withTimeout(probePTUser(projectId), PT_PROBE_TIMEOUT_MS))
-        setErrors((current) => ({ ...current, pt: undefined }))
+        const { sources: loadedSources, userinfo } = await loadSourceStatuses(projectId)
+        setSources(loadedSources)
+        setUserinfoBySource(userinfo)
+        setErrors((current) => ({ ...current, sources: undefined }))
       } catch (reason) {
-        setUserName(null)
+        setSources([])
+        setUserinfoBySource({})
         setErrors((current) => ({
           ...current,
-          pt: reason instanceof Error ? reason.message : 'PT SIEM недоступен',
+          sources: reason instanceof Error ? reason.message : 'Не удалось проверить источники',
         }))
       } finally {
-        setPtLoading(false)
+        setSourcesLoading(false)
       }
     }
 
@@ -434,24 +441,6 @@ export function ConfigurationModal({
       }
     }
 
-    try {
-      const [siemCreatedAt, nadCreatedAt] = await Promise.all([
-        withTimeout(
-          currentSecretVersionCreatedAt(projectId, PT_COOKIE_SECRET),
-          SECRET_METADATA_TIMEOUT_MS,
-        ),
-        withTimeout(
-          currentSecretVersionCreatedAt(projectId, PT_NAD_COOKIE_SECRET),
-          SECRET_METADATA_TIMEOUT_MS,
-        ),
-      ])
-      setCookieCreatedAt(siemCreatedAt)
-      setNadCookieCreatedAt(nadCreatedAt)
-    } catch {
-      // Saving already has per-field results; unavailable metadata must not hide them.
-    } finally {
-      setCookieMetaLoading(false)
-    }
     const somRunSettings = {
       variant: values[SOM_VARIANT_KEY] || DEFAULT_SOM_VARIANT,
       modelId: values[SOM_MODEL_ID_KEY] || DEFAULT_SOM_MODEL_ID,
@@ -529,6 +518,13 @@ export function ConfigurationModal({
           <div className="my-5 border-t border-border" />
 
           <div className="space-y-4">
+            <SourceStatusPanel
+              loading={sourcesLoading}
+              sources={sources}
+              userinfoBySource={userinfoBySource}
+              error={errors.sources}
+            />
+
             <div className="space-y-2">
               <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wider text-fg-dim">
                 {PT_COOKIE_SECRET}
@@ -589,39 +585,6 @@ export function ConfigurationModal({
               {errors[PT_NAD_COOKIE_SECRET] && (
                 <p className="text-[11px] text-critical">{errors[PT_NAD_COOKIE_SECRET]}</p>
               )}
-              <p className="text-[11px] text-fg-dim">
-                Обновление NAD cookie:{' '}
-                <span className="font-mono text-fg-muted">
-                  {cookieMetaLoading ? 'проверка…' : ageLabel(nadCookieCreatedAt)}
-                </span>
-              </p>
-            </div>
-
-            <div className="grid gap-2 rounded border border-border bg-surface-0 p-3 sm:grid-cols-2">
-              <div>
-                <div className="text-[10px] font-medium text-fg-dim">PT user</div>
-                <div className="mt-1 font-mono text-sm">
-                  {ptLoading ? (
-                    <LoaderCircle className="h-3.5 w-3.5 animate-spin text-fg-dim" />
-                  ) : (
-                    userName ?? 'не определен'
-                  )}
-                </div>
-                {errors.pt && <p className="mt-1 text-[11px] text-critical">{errors.pt}</p>}
-              </div>
-              <div>
-                <div className="text-[10px] font-medium text-fg-dim">
-                  Обновление cookie
-                </div>
-                <div
-                  className={clsx(
-                    'mt-1 font-mono text-sm',
-                    userName ? 'text-fg-muted' : 'text-critical',
-                  )}
-                >
-                  {cookieMetaLoading ? 'проверка…' : ageLabel(cookieCreatedAt)}
-                </div>
-              </div>
             </div>
 
             <div className="border-t border-border pt-4">
@@ -708,6 +671,66 @@ export function ConfigurationModal({
           </Button>
         </div>
       </div>
+    </div>
+  )
+}
+
+function SourceStatusPanel({
+  loading,
+  sources,
+  userinfoBySource,
+  error,
+}: {
+  loading: boolean
+  sources: ProjectSource[]
+  userinfoBySource: Record<string, string | null>
+  error?: string
+}) {
+  return (
+    <div className="space-y-2 rounded border border-border bg-surface-0 p-3">
+      <div className="text-[10px] font-medium text-fg-dim">Источники проекта</div>
+      {loading ? (
+        <LoaderCircle className="h-3.5 w-3.5 animate-spin text-fg-dim" />
+      ) : sources.length === 0 ? (
+        <p className="text-sm text-fg-muted">Нет настроенных источников</p>
+      ) : (
+        <div className="space-y-2">
+          {sources.map((source) => (
+            <SourceStatusLine
+              key={source.code}
+              source={source}
+              caption={userinfoBySource[source.code] ?? undefined}
+            />
+          ))}
+        </div>
+      )}
+      {error && <p className="text-[11px] text-critical">{error}</p>}
+    </div>
+  )
+}
+
+function SourceStatusLine({
+  source,
+  caption,
+}: {
+  source: ProjectSource
+  caption?: string
+}) {
+  const online = sourceIsOnline(source.status)
+  return (
+    <div>
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-sm text-fg">{source.name}</span>
+        <span
+          className={clsx(
+            'shrink-0 text-xs font-medium',
+            online ? 'text-confirmed' : 'text-critical',
+          )}
+        >
+          {online ? 'онлайн' : 'не в сети'}
+        </span>
+      </div>
+      {caption && <p className="mt-0.5 text-[11px] text-fg-dim">{caption}</p>}
     </div>
   )
 }

@@ -16,6 +16,7 @@ import type {
   QueueItem,
   ReviewState,
 } from '../types'
+import { TIME_PRESET_CUSTOM } from '../api/env'
 import { uid } from '../lib/utils'
 import { defaultFilterValueOptions, issueTemplates, savedViews } from '../lib/catalog'
 import { parseGatewayEventId, saveLayout } from '../api/adapters'
@@ -46,6 +47,8 @@ export type TabId = 'queue' | string
 export const emptyContextQueue: ContextQueueState = {
   chips: [],
   timePreset: '30d',
+  timeFrom: '',
+  timeTo: '',
   history: [],
   selectedIds: [],
   hideAdded: false,
@@ -56,6 +59,8 @@ export const emptyContextQueue: ContextQueueState = {
 interface AppState {
   chips: FilterChip[]
   timePreset: string
+  timeFrom: string
+  timeTo: string
   queueQuery: string
   selectedAlertIds: string[]
   expandedCorrelationIds: string[]
@@ -97,6 +102,7 @@ interface AppState {
   removeChip: (id: string) => void
   removeChipValue: (id: string, value: string) => void
   setTimePreset: (preset: string) => void
+  setCustomTimeRange: (from: string, to: string) => void
   setQueueQuery: (query: string) => void
   applySavedView: (viewId: string) => void
   toggleAlertSelect: (id: string) => void
@@ -165,36 +171,56 @@ function mergeEntities(
   return { ...current, ...incoming }
 }
 
-function sourceRefsFromIds(
+function contextRefsFromIds(
   ids: string[],
   alerts: Record<string, AlertEvent>,
   correlations: Record<string, CorrelationGroup>,
   contextEvents: Record<string, ContextEvent>,
-): Ir['schemas']['EventSourceRef'][] {
-  const refs: Ir['schemas']['EventSourceRef'][] = []
-  const seen = new Set<string>()
-  const push = (source: string, sourceEventId: string | undefined, fallbackId: string) => {
+): { events: Ir['schemas']['EventSourceRef'][]; findings: Ir['schemas']['SourceObjectRef'][] } {
+  const events: Ir['schemas']['EventSourceRef'][] = []
+  const findings: Ir['schemas']['SourceObjectRef'][] = []
+  const seenEvents = new Set<string>()
+  const seenFindings = new Set<string>()
+  const pushEvent = (source: string, sourceEventId: string | undefined, fallbackId: string) => {
     const parsed = parseGatewayEventId(fallbackId)
     const source_code = source || parsed?.source_code
     const source_event_id = sourceEventId || parsed?.source_event_id
     if (!source_code || !source_event_id) return
     const key = `${source_code}/${source_event_id}`
-    if (seen.has(key)) return
-    seen.add(key)
-    refs.push({ source_code, source_event_id })
+    if (seenEvents.has(key)) return
+    seenEvents.add(key)
+    events.push({ source_code, source_event_id })
+  }
+  const pushFinding = (alert: AlertEvent) => {
+    if (!alert.findingRef) return
+    const key = `${alert.findingRef.source_code}/${alert.findingRef.record_type}/${alert.findingRef.external_id}`
+    if (seenFindings.has(key)) return
+    seenFindings.add(key)
+    findings.push({
+      source_code: alert.findingRef.source_code,
+      source_instance: alert.findingRef.source_instance,
+      record_type: alert.findingRef.record_type,
+      external_id: alert.findingRef.external_id,
+      time_range: alert.findingRef.time_range,
+    })
   }
   for (const id of ids) {
     if (correlations[id]) {
       for (const eid of correlations[id].eventIds) {
         const a = alerts[eid] ?? contextEvents[eid]
-        if (a) push(a.source, a.sourceEventId, a.id)
+        if (a) pushEvent(a.source, a.sourceEventId, a.id)
       }
       continue
     }
     const a = alerts[id] ?? contextEvents[id]
-    if (a) push(a.source, a.sourceEventId, a.id)
+    if (!a) continue
+    if ('findingRef' in a && a.findingRef) {
+      pushFinding(a as AlertEvent)
+      continue
+    }
+    pushEvent(a.source, a.sourceEventId, a.id)
   }
-  return refs
+  return { events, findings }
 }
 
 function applyBundle(
@@ -235,7 +261,9 @@ function applyBundle(
 export const useAppStore = create<AppState>((set, get) => ({
   chips: [],
   timePreset: '30d',
-  queueQuery: 'impacket_smbexec',
+  timeFrom: '',
+  timeTo: '',
+  queueQuery: '',
   selectedAlertIds: [],
   expandedCorrelationIds: [],
   inspectedQueueItem: null,
@@ -294,7 +322,11 @@ export const useAppStore = create<AppState>((set, get) => ({
     void get().loadQueue()
   },
   setTimePreset: (timePreset) => {
-    set({ timePreset })
+    set({ timePreset, timeFrom: '', timeTo: '' })
+    void get().loadQueue()
+  },
+  setCustomTimeRange: (timeFrom, timeTo) => {
+    set({ timePreset: TIME_PRESET_CUSTOM, timeFrom, timeTo })
     void get().loadQueue()
   },
   setQueueQuery: (queueQuery) => {
@@ -307,6 +339,8 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({
       chips: view.chips.map((c) => ({ ...c, id: uid('chip') })),
       timePreset: view.timePreset,
+      timeFrom: view.timeFrom ?? '',
+      timeTo: view.timeTo ?? '',
       queueQuery: view.query ?? '',
     })
     void get().loadQueue()
@@ -358,7 +392,13 @@ export const useAppStore = create<AppState>((set, get) => ({
   loadQueue: async () => {
     set({ queueLoading: true, lastError: null, mockSources: [] })
     try {
-      const result = await searchQueue(get().chips, get().timePreset, get().queueQuery)
+      const result = await searchQueue(
+        get().chips,
+        get().timePreset,
+        get().timeFrom,
+        get().timeTo,
+        get().queueQuery,
+      )
       const hosts = new Set(get().filterValueOptions.host ?? [])
       const ips = new Set(get().filterValueOptions.ip ?? [])
       for (const e of Object.values(result.entities)) {
@@ -421,8 +461,8 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ investigationLoading: true, lastError: null })
     try {
       const created = await createInvestigation({ title, severity })
-      const refs = sourceRefsFromIds(ids, alerts, correlations, get().contextEvents)
-      if (refs.length) await addContext(created.id, refs)
+      const refs = contextRefsFromIds(ids, alerts, correlations, get().contextEvents)
+      if (refs.events.length || refs.findings.length) await addContext(created.id, refs)
       const bundle = await loadInvestigationBundle(created.id, {
         seedEventIds: ids,
         view: 'graph',
@@ -458,13 +498,13 @@ export const useAppStore = create<AppState>((set, get) => ({
       const relatedEvents = parent.eventIds.filter((eid) =>
         get().contextEvents[eid]?.entityIds.some((x) => entityIds.includes(x)),
       )
-      const refs = sourceRefsFromIds(
+      const refs = contextRefsFromIds(
         relatedEvents,
         get().alerts,
         get().correlations,
         get().contextEvents,
       )
-      if (refs.length) await addContext(created.id, refs)
+      if (refs.events.length || refs.findings.length) await addContext(created.id, refs)
       const bundle = await loadInvestigationBundle(created.id, {
         parentId,
         view: 'graph',
@@ -627,13 +667,13 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   addEventsToContext: async (investigationId, eventIds) => {
-    const refs = sourceRefsFromIds(
+    const refs = contextRefsFromIds(
       eventIds,
       get().alerts,
       get().correlations,
       get().contextEvents,
     )
-    if (refs.length === 0) return
+    if (refs.events.length === 0 && refs.findings.length === 0) return
     try {
       await addContext(investigationId, refs)
       const cur = get().contextQueue[investigationId] ?? emptyContextQueue
