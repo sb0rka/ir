@@ -1,10 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { savedViews, useAppStore } from '../store/appStore'
 import { filterFieldLabels } from '../lib/catalog'
 import type { FilterChip as FilterChipModel, FilterField } from '../types'
 import { Button, Chip } from './ui'
 import { clsx } from '../lib/utils'
-import { TIME_PRESET_CUSTOM } from '../api/env'
+import { TIME_PRESET_CUSTOM, timeRangeChipLabel } from '../api/env'
 import { Clock, Filter, History, Search, X } from 'lucide-react'
 
 const FIELDS = Object.keys(filterFieldLabels) as FilterField[]
@@ -27,7 +27,8 @@ export interface FilterBarProps {
   onRemoveChipValue: (id: string, value: string) => void
   onClearChips: () => void
   onTimePresetChange: (preset: string) => void
-  onCustomTimeRangeChange?: (from: string, to: string) => void
+  onTimeFromChange?: (from: string) => void
+  onTimeToChange?: (to: string) => void
   /** Saved views block; omitted where views make no sense. */
   onApplySavedView?: (id: string) => void
   /** Recently applied filters, most recent first. Click re-applies. */
@@ -55,7 +56,8 @@ export function FilterBar({
   onRemoveChipValue,
   onClearChips,
   onTimePresetChange,
-  onCustomTimeRangeChange,
+  onTimeFromChange,
+  onTimeToChange,
   onApplySavedView,
   history,
   extra,
@@ -66,28 +68,6 @@ export function FilterBar({
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchField, setSearchFieldRaw] = useState<FilterField | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
-  const [draftFrom, setDraftFrom] = useState(timeFrom)
-  const [draftTo, setDraftTo] = useState(timeTo)
-
-  useEffect(() => {
-    setDraftFrom(timeFrom)
-    setDraftTo(timeTo)
-  }, [timeFrom, timeTo])
-
-  const applyCustomRange = (from: string, to: string) => {
-    if (!onCustomTimeRangeChange || !from || !to) return
-    onCustomTimeRangeChange(from, to)
-  }
-
-  const updateCustomFrom = (value: string) => {
-    setDraftFrom(value)
-    if (value && draftTo) applyCustomRange(value, draftTo)
-  }
-
-  const updateCustomTo = (value: string) => {
-    setDraftTo(value)
-    if (draftFrom && value) applyCustomRange(draftFrom, value)
-  }
 
   const setSearchField = (field: FilterField | null) => {
     setSearchFieldRaw(field)
@@ -107,6 +87,8 @@ export function FilterBar({
       )
     : []
 
+  const periodLabel = timeRangeChipLabel(timePreset, timeFrom, timeTo)
+
   return (
     <div className="border-b border-border bg-surface-1 px-4 py-3">
       <div className="relative flex flex-wrap items-center gap-2">
@@ -115,6 +97,9 @@ export function FilterBar({
           onClick={() => setSearchOpen(true)}
         >
           <Search className="h-3.5 w-3.5 text-fg-dim" />
+          <Chip onRemove={() => onTimePresetChange('30d')}>
+            <span className="text-fg-muted">период:</span> {periodLabel}
+          </Chip>
           {query && onQueryChange && (
             <Chip onRemove={() => onQueryChange('')}>
               <span className="text-fg-muted">q:</span> {query}
@@ -168,6 +153,7 @@ export function FilterBar({
                 onClearChips()
                 onQueryChange?.('')
               }}
+              title="Очистить фильтры"
             >
               <X className="h-3.5 w-3.5" />
             </button>
@@ -180,11 +166,7 @@ export function FilterBar({
             <button
               key={p.id}
               type="button"
-              onClick={() => {
-                setDraftFrom('')
-                setDraftTo('')
-                onTimePresetChange(p.id)
-              }}
+              onClick={() => onTimePresetChange(p.id)}
               className={clsx(
                 'rounded px-2 py-1 text-xs',
                 timePreset === p.id
@@ -195,15 +177,15 @@ export function FilterBar({
               {p.label}
             </button>
           ))}
-          {onCustomTimeRangeChange && (
+          {onTimeFromChange && onTimeToChange && (
             <>
               <span className="mx-0.5 text-fg-dim">|</span>
               <label className="flex items-center gap-1 px-1 text-xs text-fg-muted">
                 от
                 <input
                   type="date"
-                  value={timePreset === TIME_PRESET_CUSTOM ? timeFrom : draftFrom}
-                  onChange={(event) => updateCustomFrom(event.target.value)}
+                  value={timeFrom}
+                  onChange={(event) => onTimeFromChange(event.target.value)}
                   className={clsx(
                     'rounded border bg-surface-1 px-1.5 py-0.5 font-mono text-xs text-fg outline-none focus:border-fg/40',
                     timePreset === TIME_PRESET_CUSTOM ? 'border-fg/30' : 'border-border',
@@ -214,8 +196,8 @@ export function FilterBar({
                 до
                 <input
                   type="date"
-                  value={timePreset === TIME_PRESET_CUSTOM ? timeTo : draftTo}
-                  onChange={(event) => updateCustomTo(event.target.value)}
+                  value={timeTo}
+                  onChange={(event) => onTimeToChange(event.target.value)}
                   className={clsx(
                     'rounded border bg-surface-1 px-1.5 py-0.5 font-mono text-xs text-fg outline-none focus:border-fg/40',
                     timePreset === TIME_PRESET_CUSTOM ? 'border-fg/30' : 'border-border',
@@ -334,7 +316,8 @@ export function GlobalFilterBar() {
   const removeChipValue = useAppStore((s) => s.removeChipValue)
   const setChips = useAppStore((s) => s.setChips)
   const setTimePreset = useAppStore((s) => s.setTimePreset)
-  const setCustomTimeRange = useAppStore((s) => s.setCustomTimeRange)
+  const setTimeFrom = useAppStore((s) => s.setTimeFrom)
+  const setTimeTo = useAppStore((s) => s.setTimeTo)
   const applySavedView = useAppStore((s) => s.applySavedView)
   const queueQuery = useAppStore((s) => s.queueQuery)
   const setQueueQuery = useAppStore((s) => s.setQueueQuery)
@@ -352,7 +335,8 @@ export function GlobalFilterBar() {
       onRemoveChipValue={removeChipValue}
       onClearChips={() => setChips([])}
       onTimePresetChange={setTimePreset}
-      onCustomTimeRangeChange={setCustomTimeRange}
+      onTimeFromChange={setTimeFrom}
+      onTimeToChange={setTimeTo}
       onApplySavedView={applySavedView}
     />
   )

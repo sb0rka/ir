@@ -225,7 +225,7 @@ function Dashboard({
 
 function LoadingScreen({ label, action }: { label: string; action?: React.ReactNode }) {
   return (
-    <main className="ir-auth-grid flex min-h-full items-center justify-center bg-surface-0 p-6 text-fg">
+    <main className="flex min-h-full items-center justify-center bg-surface-0 p-6 text-fg">
       <div className="rounded border border-border bg-surface-1 px-6 py-5 text-center shadow-xl">
         <div className="font-mono text-xs uppercase tracking-[0.18em] text-fg-muted">{label}</div>
         {action && <div className="mt-4 flex justify-center">{action}</div>}

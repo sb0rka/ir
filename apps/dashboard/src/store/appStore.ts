@@ -102,7 +102,8 @@ interface AppState {
   removeChip: (id: string) => void
   removeChipValue: (id: string, value: string) => void
   setTimePreset: (preset: string) => void
-  setCustomTimeRange: (from: string, to: string) => void
+  setTimeFrom: (from: string) => void
+  setTimeTo: (to: string) => void
   setQueueQuery: (query: string) => void
   applySavedView: (viewId: string) => void
   toggleAlertSelect: (id: string) => void
@@ -325,9 +326,23 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ timePreset, timeFrom: '', timeTo: '' })
     void get().loadQueue()
   },
-  setCustomTimeRange: (timeFrom, timeTo) => {
-    set({ timePreset: TIME_PRESET_CUSTOM, timeFrom, timeTo })
-    void get().loadQueue()
+  setTimeFrom: (timeFrom) => {
+    const timeTo = get().timeTo
+    if (timeFrom && timeTo) {
+      set({ timeFrom, timeTo, timePreset: TIME_PRESET_CUSTOM })
+      void get().loadQueue()
+      return
+    }
+    set({ timeFrom })
+  },
+  setTimeTo: (timeTo) => {
+    const timeFrom = get().timeFrom
+    if (timeFrom && timeTo) {
+      set({ timeFrom, timeTo, timePreset: TIME_PRESET_CUSTOM })
+      void get().loadQueue()
+      return
+    }
+    set({ timeTo })
   },
   setQueueQuery: (queueQuery) => {
     set({ queueQuery })

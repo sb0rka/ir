@@ -41,6 +41,28 @@ export function setProjectId(projectId: string | null): void {
 
 export const TIME_PRESET_CUSTOM = 'custom'
 
+const TIME_PRESET_LABELS: Record<string, string> = {
+  '1h': '1ч',
+  '6h': '6ч',
+  '24h': '24ч',
+  '7d': '7д',
+  '30d': '30д',
+  '90d': '90д',
+}
+
+export function formatDisplayDate(isoDate: string): string {
+  const [year, month, day] = isoDate.split('-')
+  if (!year || !month || !day) return isoDate
+  return `${day}.${month}.${year}`
+}
+
+export function timeRangeChipLabel(preset: string, from: string, to: string): string {
+  if (preset === TIME_PRESET_CUSTOM && from && to) {
+    return `${formatDisplayDate(from)} — ${formatDisplayDate(to)}`
+  }
+  return TIME_PRESET_LABELS[preset] ?? preset
+}
+
 export function timeRangeForPreset(preset: string): { from: string; to: string } {
   const to = new Date()
   const from = new Date(to)

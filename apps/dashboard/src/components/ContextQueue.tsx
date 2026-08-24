@@ -183,13 +183,30 @@ export function ContextQueuePage({ investigationId }: { investigationId: string 
         onTimePresetChange={(timePreset) =>
           setContextQueue(investigationId, { timePreset, timeFrom: '', timeTo: '' })
         }
-        onCustomTimeRangeChange={(timeFrom, timeTo) =>
-          setContextQueue(investigationId, {
-            timePreset: TIME_PRESET_CUSTOM,
-            timeFrom,
-            timeTo,
-          })
-        }
+        onTimeFromChange={(timeFrom) => {
+          const timeTo = queue.timeTo
+          if (timeFrom && timeTo) {
+            setContextQueue(investigationId, {
+              timePreset: TIME_PRESET_CUSTOM,
+              timeFrom,
+              timeTo,
+            })
+            return
+          }
+          setContextQueue(investigationId, { timeFrom })
+        }}
+        onTimeToChange={(timeTo) => {
+          const timeFrom = queue.timeFrom
+          if (timeFrom && timeTo) {
+            setContextQueue(investigationId, {
+              timePreset: TIME_PRESET_CUSTOM,
+              timeFrom,
+              timeTo,
+            })
+            return
+          }
+          setContextQueue(investigationId, { timeTo })
+        }}
         history={queue.history}
         extra={
           <button
