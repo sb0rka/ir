@@ -1,3 +1,5 @@
+import type { TimeInterval } from './components/time-interval'
+
 export type Severity = 'critical' | 'high' | 'medium' | 'low' | 'info'
 
 export type AlertStatus = 'new' | 'investigating' | 'closed'
@@ -186,7 +188,7 @@ export interface ContextFilterHistoryEntry {
 /** Per-investigation state of the context event queue (search + filters). */
 export interface ContextQueueState {
   chips: FilterChip[]
-  timePreset: string
+  timeInterval: TimeInterval
   history: ContextFilterHistoryEntry[]
   selectedIds: string[]
   hideAdded: boolean

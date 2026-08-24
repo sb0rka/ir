@@ -447,6 +447,13 @@ export function ConfigurationModal({
       aria-label="Конфигурация интеграций"
     >
       <div className="flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded border border-border-strong bg-surface-1 shadow-2xl shadow-black">
+        <form
+          autoComplete="off"
+          className="contents"
+          onSubmit={(event) => {
+            event.preventDefault()
+          }}
+        >
         <div className="flex items-center justify-between border-b border-border bg-surface-2 px-5 py-3">
           <div className="flex items-center gap-2.5">
             <Settings2 className="h-4 w-4 text-fg-muted" />
@@ -492,6 +499,7 @@ export function ConfigurationModal({
               state={states[PT_URL_SECRET]}
               error={errors[PT_URL_SECRET]}
               technicalLabel
+              inputType="text"
               placeholder="https://siem.example.local"
               onChange={(value) => setDraft(PT_URL_SECRET, value)}
             />
@@ -633,6 +641,7 @@ export function ConfigurationModal({
             Сохранить и проверить
           </Button>
         </div>
+        </form>
       </div>
     </div>
   )
@@ -651,7 +660,15 @@ function CookiePartInput({
 }) {
   return (
     <input
-      autoComplete="off"
+      autoComplete="new-password"
+      autoCorrect="off"
+      autoCapitalize="off"
+      spellCheck={false}
+      data-1p-ignore="true"
+      data-lpignore="true"
+      data-form-type="other"
+      name={`ir-config-cookie-${placeholder}`}
+      readOnly
       className={clsx(
         'w-full rounded border bg-surface-0 px-3 py-2 font-mono text-sm text-fg outline-none placeholder:text-fg-dim focus:border-fg/40',
         state === 'error' ? 'border-critical/70' : 'border-border',
@@ -659,6 +676,9 @@ function CookiePartInput({
       type="password"
       value={value}
       placeholder={placeholder}
+      onFocus={(event) => {
+        event.currentTarget.readOnly = false
+      }}
       onChange={(event) => onChange(event.target.value)}
     />
   )
@@ -697,7 +717,15 @@ function SecretField({
         <FieldStatus state={state} />
       </span>
       <input
-        autoComplete="off"
+        autoComplete={secret ? 'new-password' : 'off'}
+        autoCorrect="off"
+        autoCapitalize="off"
+        spellCheck={false}
+        data-1p-ignore="true"
+        data-lpignore="true"
+        data-form-type="other"
+        name={`ir-config-${label}`}
+        readOnly
         className={clsx(
           'w-full rounded border bg-surface-0 px-3 py-2 font-mono text-sm text-fg outline-none placeholder:text-fg-dim focus:border-fg/40',
           state === 'error' ? 'border-critical/70' : 'border-border',
@@ -705,6 +733,9 @@ function SecretField({
         type={secret ? 'password' : (inputType ?? 'url')}
         value={value}
         placeholder={placeholder}
+        onFocus={(event) => {
+          event.currentTarget.readOnly = false
+        }}
         onChange={(event) => onChange(event.target.value)}
       />
       {error && <span className="block text-[11px] text-critical">{error}</span>}

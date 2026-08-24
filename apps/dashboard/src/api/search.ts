@@ -1,5 +1,5 @@
-import type { FilterChip } from '../types'
-import { getProjectId, timeRangeForPreset } from './env'
+import type { AlertEvent, ContextEvent, CorrelationGroup, Entity, FilterChip, QueueItem } from '../types'
+import { getProjectId } from './env'
 import { gatewayClient } from './clients'
 import { unwrapError } from './error'
 import {
@@ -8,8 +8,8 @@ import {
   mapGatewayEntity,
   mapGatewayEvent,
 } from './adapters'
-import type { AlertEvent, ContextEvent, CorrelationGroup, Entity, QueueItem } from '../types'
 import type { components as Gw } from '@ir/contract/gateway'
+import { resolve, type TimeInterval } from '../components/time-interval'
 
 type SearchBody = Gw['schemas']['SearchEventsRequest']
 
@@ -30,9 +30,9 @@ export interface QueueSearchResult {
   mockSources: string[]
 }
 
-function chipsToSearch(chips: FilterChip[], timePreset: string, query?: string): SearchBody {
+function chipsToSearch(chips: FilterChip[], interval: TimeInterval, query?: string): SearchBody {
   const body: SearchBody = {
-    time_range: timeRangeForPreset(timePreset),
+    time_range: resolve(interval),
     limit: 100,
   }
   const sources = chips.find((c) => c.field === 'source')?.values
@@ -113,10 +113,10 @@ async function searchPages(body: SearchBody) {
 
 export async function searchQueue(
   chips: FilterChip[],
-  timePreset: string,
+  interval: TimeInterval,
   query?: string,
 ): Promise<QueueSearchResult> {
-  const body = chipsToSearch(chips, timePreset, query)
+  const body = chipsToSearch(chips, interval, query)
   const sources = await eventSources()
   if (!body.sources?.length) {
     if (!sources.defaults.length) {

@@ -3,27 +3,19 @@ import { savedViews, useAppStore } from '../store/appStore'
 import { filterFieldLabels } from '../lib/catalog'
 import type { FilterChip as FilterChipModel, FilterField } from '../types'
 import { Button, Chip } from './ui'
-import { clsx } from '../lib/utils'
-import { Clock, Filter, History, Search, X } from 'lucide-react'
+import { Filter, History, Search, X } from 'lucide-react'
+import { TimeIntervalButton, type TimeInterval } from './time-interval'
 
 const FIELDS = Object.keys(filterFieldLabels) as FilterField[]
-const TIME_PRESETS = [
-  { id: '1h', label: '1ч' },
-  { id: '6h', label: '6ч' },
-  { id: '24h', label: '24ч' },
-  { id: '7d', label: '7д' },
-  { id: '30d', label: '30д' },
-  { id: '90d', label: '90д' },
-]
 
 export interface FilterBarProps {
   chips: FilterChipModel[]
-  timePreset: string
+  interval: TimeInterval
   onAddChip: (field: FilterField, value: string) => void
   onRemoveChip: (id: string) => void
   onRemoveChipValue: (id: string, value: string) => void
   onClearChips: () => void
-  onTimePresetChange: (preset: string) => void
+  onIntervalChange: (interval: TimeInterval) => void
   /** Saved views block; omitted where views make no sense. */
   onApplySavedView?: (id: string) => void
   /** Recently applied filters, most recent first. Click re-applies. */
@@ -43,12 +35,12 @@ function useFilterOptions() {
  */
 export function FilterBar({
   chips,
-  timePreset,
+  interval,
   onAddChip,
   onRemoveChip,
   onRemoveChipValue,
   onClearChips,
-  onTimePresetChange,
+  onIntervalChange,
   onApplySavedView,
   history,
   extra,
@@ -145,24 +137,7 @@ export function FilterBar({
           )}
         </div>
 
-        <div className="flex items-center gap-1 rounded border border-border bg-surface-0 p-0.5">
-          <Clock className="ml-1.5 h-3.5 w-3.5 text-fg-dim" />
-          {TIME_PRESETS.map((p) => (
-            <button
-              key={p.id}
-              type="button"
-              onClick={() => onTimePresetChange(p.id)}
-              className={clsx(
-                'rounded px-2 py-1 text-xs',
-                timePreset === p.id
-                  ? 'bg-surface-3 text-fg'
-                  : 'text-fg-muted hover:text-fg',
-              )}
-            >
-              {p.label}
-            </button>
-          ))}
-        </div>
+        <TimeIntervalButton value={interval} onChange={onIntervalChange} />
 
         {onApplySavedView && (
           <div className="flex items-center gap-1">
@@ -264,12 +239,12 @@ export function FilterBar({
 /** The global queue's filter row, wired to the app-wide chip state. */
 export function GlobalFilterBar() {
   const chips = useAppStore((s) => s.chips)
-  const timePreset = useAppStore((s) => s.timePreset)
+  const interval = useAppStore((s) => s.timeInterval)
   const addChip = useAppStore((s) => s.addChip)
   const removeChip = useAppStore((s) => s.removeChip)
   const removeChipValue = useAppStore((s) => s.removeChipValue)
   const setChips = useAppStore((s) => s.setChips)
-  const setTimePreset = useAppStore((s) => s.setTimePreset)
+  const setTimeInterval = useAppStore((s) => s.setTimeInterval)
   const applySavedView = useAppStore((s) => s.applySavedView)
   const queueQuery = useAppStore((s) => s.queueQuery)
   const setQueueQuery = useAppStore((s) => s.setQueueQuery)
@@ -277,14 +252,14 @@ export function GlobalFilterBar() {
   return (
     <FilterBar
       chips={chips}
-      timePreset={timePreset}
+      interval={interval}
       query={queueQuery}
       onQueryChange={setQueueQuery}
       onAddChip={addChip}
       onRemoveChip={removeChip}
       onRemoveChipValue={removeChipValue}
       onClearChips={() => setChips([])}
-      onTimePresetChange={setTimePreset}
+      onIntervalChange={setTimeInterval}
       onApplySavedView={applySavedView}
     />
   )

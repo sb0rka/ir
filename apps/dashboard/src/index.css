@@ -12,6 +12,7 @@
   --color-fg-muted: #9a9a9a;
   --color-fg-dim: #6b6b6b;
   --color-accent: #e8e8e8;
+  --color-interval: #e2a64a;
   --color-critical: #ef4444;
   --color-high: #f97316;
   --color-medium: #eab308;
@@ -72,4 +73,20 @@ body {
 }
 ::-webkit-scrollbar-thumb:hover {
   background: #444;
+}
+
+@keyframes interval-live-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .interval-live-dot {
+    animation: interval-live-pulse 2.4s ease-in-out infinite;
+  }
 }

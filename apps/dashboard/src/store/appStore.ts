@@ -17,6 +17,7 @@ import type {
   ReviewState,
 } from '../types'
 import { uid } from '../lib/utils'
+import { defaultQueueInterval, intervalFromLegacyPreset, type TimeInterval } from '../components/time-interval'
 import { defaultFilterValueOptions, issueTemplates, savedViews } from '../lib/catalog'
 import { parseGatewayEventId, saveLayout } from '../api/adapters'
 import { errorMessage, isNotImplemented, isUnauthorized } from '../api/error'
@@ -45,7 +46,7 @@ export type TabId = 'queue' | string
 
 export const emptyContextQueue: ContextQueueState = {
   chips: [],
-  timePreset: '30d',
+  timeInterval: defaultQueueInterval(),
   history: [],
   selectedIds: [],
   hideAdded: false,
@@ -55,7 +56,7 @@ export const emptyContextQueue: ContextQueueState = {
 
 interface AppState {
   chips: FilterChip[]
-  timePreset: string
+  timeInterval: TimeInterval
   queueQuery: string
   selectedAlertIds: string[]
   expandedCorrelationIds: string[]
@@ -96,7 +97,7 @@ interface AppState {
   addChip: (field: FilterField, value: string) => void
   removeChip: (id: string) => void
   removeChipValue: (id: string, value: string) => void
-  setTimePreset: (preset: string) => void
+  setTimeInterval: (interval: TimeInterval) => void
   setQueueQuery: (query: string) => void
   applySavedView: (viewId: string) => void
   toggleAlertSelect: (id: string) => void
@@ -234,7 +235,7 @@ function applyBundle(
 
 export const useAppStore = create<AppState>((set, get) => ({
   chips: [],
-  timePreset: '30d',
+  timeInterval: defaultQueueInterval(),
   queueQuery: 'impacket_smbexec',
   selectedAlertIds: [],
   expandedCorrelationIds: [],
@@ -293,8 +294,8 @@ export const useAppStore = create<AppState>((set, get) => ({
     })
     void get().loadQueue()
   },
-  setTimePreset: (timePreset) => {
-    set({ timePreset })
+  setTimeInterval: (timeInterval) => {
+    set({ timeInterval })
     void get().loadQueue()
   },
   setQueueQuery: (queueQuery) => {
@@ -306,7 +307,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (!view) return
     set({
       chips: view.chips.map((c) => ({ ...c, id: uid('chip') })),
-      timePreset: view.timePreset,
+      timeInterval: intervalFromLegacyPreset(view.timePreset),
       queueQuery: view.query ?? '',
     })
     void get().loadQueue()
@@ -358,7 +359,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   loadQueue: async () => {
     set({ queueLoading: true, lastError: null, mockSources: [] })
     try {
-      const result = await searchQueue(get().chips, get().timePreset, get().queueQuery)
+      const result = await searchQueue(get().chips, get().timeInterval, get().queueQuery)
       const hosts = new Set(get().filterValueOptions.host ?? [])
       const ips = new Set(get().filterValueOptions.ip ?? [])
       for (const e of Object.values(result.entities)) {

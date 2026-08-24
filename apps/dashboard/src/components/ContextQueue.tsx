@@ -170,15 +170,15 @@ export function ContextQueuePage({ investigationId }: { investigationId: string 
       {/* Same search/filter row as the global queue, scoped to this investigation */}
       <FilterBar
         chips={queue.chips}
-        timePreset={queue.timePreset}
+        interval={queue.timeInterval}
         onAddChip={(field, value) => addContextChip(investigationId, field, value)}
         onRemoveChip={(chipId) => removeContextChip(investigationId, chipId)}
         onRemoveChipValue={(chipId, value) =>
           removeContextChipValue(investigationId, chipId, value)
         }
         onClearChips={() => clearContextChips(investigationId)}
-        onTimePresetChange={(timePreset) =>
-          setContextQueue(investigationId, { timePreset })
+        onIntervalChange={(timeInterval) =>
+          setContextQueue(investigationId, { timeInterval })
         }
         history={queue.history}
         extra={
