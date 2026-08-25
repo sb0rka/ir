@@ -14,11 +14,11 @@ import type {
   Investigation,
   Issue,
   QueueItem,
+  QueryHistoryEntry,
   ReviewState,
 } from '../types'
-import { TIME_PRESET_CUSTOM } from '../api/env'
 import { uid } from '../lib/utils'
-import { defaultFilterValueOptions, issueTemplates, savedViews } from '../lib/catalog'
+import { defaultFilterValueOptions, issueTemplates } from '../lib/catalog'
 import { parseGatewayEventId, saveLayout } from '../api/adapters'
 import { errorMessage, isNotImplemented, isUnauthorized } from '../api/error'
 import {
@@ -26,6 +26,10 @@ import {
   lookupEntity,
   searchQueue,
 } from '../api/search'
+import { appendCondition, astToFilterChips, defaultQuery, parseQueuePdql, pdqlToSearchParts, serialize } from '../lib/pdql'
+import { pdqlFieldForFilterField } from '../lib/filters'
+import { filterFingerprint } from '../lib/queryFingerprint'
+import { demoDayInterval, type TimeInterval } from '../components/time-interval'
 import {
   addContext,
   countProposedAgentEdges,
@@ -44,24 +48,39 @@ import type { components as Ir } from '@ir/contract'
 
 export type TabId = 'queue' | string
 
+const DEFAULT_QUEUE_PDQL = serialize(defaultQuery())
+const DEFAULT_TIME_INTERVAL = demoDayInterval()
+const HISTORY_LIMIT = 8
+
 export const emptyContextQueue: ContextQueueState = {
   chips: [],
-  timePreset: '30d',
-  timeFrom: '',
-  timeTo: '',
-  history: [],
+  pdql: DEFAULT_QUEUE_PDQL,
+  timeInterval: DEFAULT_TIME_INTERVAL,
+  executedFingerprint: filterFingerprint(DEFAULT_QUEUE_PDQL, DEFAULT_TIME_INTERVAL),
+  queryHistory: [],
   selectedIds: [],
   hideAdded: false,
   originFilter: 'all',
   reviewFilter: 'all',
 }
 
+function pushQueryHistory(
+  history: QueryHistoryEntry[],
+  entry: QueryHistoryEntry,
+): QueryHistoryEntry[] {
+  const key = filterFingerprint(entry.pdql, entry.timeInterval)
+  return [
+    entry,
+    ...history.filter((item) => filterFingerprint(item.pdql, item.timeInterval) !== key),
+  ].slice(0, HISTORY_LIMIT)
+}
+
 interface AppState {
   chips: FilterChip[]
-  timePreset: string
-  timeFrom: string
-  timeTo: string
-  queueQuery: string
+  timeInterval: TimeInterval
+  queuePdql: string
+  executedFingerprint: string | null
+  queryHistory: QueryHistoryEntry[]
   selectedAlertIds: string[]
   expandedCorrelationIds: string[]
   inspectedQueueItem: QueueItem | null
@@ -97,15 +116,10 @@ interface AppState {
   somHint: string | null
   somCatalog: SomCatalog | null
 
-  setChips: (chips: FilterChip[]) => void
   addChip: (field: FilterField, value: string) => void
-  removeChip: (id: string) => void
-  removeChipValue: (id: string, value: string) => void
-  setTimePreset: (preset: string) => void
-  setTimeFrom: (from: string) => void
-  setTimeTo: (to: string) => void
-  setQueueQuery: (query: string) => void
-  applySavedView: (viewId: string) => void
+  setQueuePdql: (pdql: string) => void
+  setTimeInterval: (interval: TimeInterval) => void
+  applyQueueHistory: (entry: QueryHistoryEntry) => void
   toggleAlertSelect: (id: string) => void
   clearAlertSelection: () => void
   toggleCorrelationExpand: (id: string) => void
@@ -130,9 +144,7 @@ interface AppState {
   ) => void
   setContextQueue: (investigationId: string, patch: Partial<ContextQueueState>) => void
   addContextChip: (investigationId: string, field: FilterField, value: string) => void
-  removeContextChip: (investigationId: string, chipId: string) => void
-  removeContextChipValue: (investigationId: string, chipId: string, value: string) => void
-  clearContextChips: (investigationId: string) => void
+  executeContextQuery: (investigationId: string) => boolean
   addEventsToContext: (investigationId: string, eventIds: string[]) => Promise<void>
   setAgentPanelOpen: (open: boolean) => void
   setDetailPanelOpen: (open: boolean) => void
@@ -150,19 +162,6 @@ interface AppState {
   addIssueComment: (issueId: string, text: string) => void
   runEntityAction: (entityId: string, action: string) => Promise<void>
   addFindingFromEntity: (investigationId: string, entityId: string) => void
-}
-
-function mergeChipValue(
-  chips: FilterChip[],
-  field: FilterField,
-  value: string,
-): FilterChip[] {
-  const existing = chips.find((c) => c.field === field)
-  if (!existing) return [...chips, { id: uid('chip'), field, values: [value] }]
-  if (existing.values.includes(value)) return chips
-  return chips.map((c) =>
-    c.id === existing.id ? { ...c, values: [...c.values, value] } : c,
-  )
 }
 
 function mergeEntities(
@@ -261,10 +260,10 @@ function applyBundle(
 
 export const useAppStore = create<AppState>((set, get) => ({
   chips: [],
-  timePreset: '30d',
-  timeFrom: '',
-  timeTo: '',
-  queueQuery: '',
+  timeInterval: DEFAULT_TIME_INTERVAL,
+  queuePdql: DEFAULT_QUEUE_PDQL,
+  executedFingerprint: null,
+  queryHistory: [],
   selectedAlertIds: [],
   expandedCorrelationIds: [],
   inspectedQueueItem: null,
@@ -300,66 +299,14 @@ export const useAppStore = create<AppState>((set, get) => ({
   somHint: null,
   somCatalog: null,
 
-  setChips: (chips) => {
-    set({ chips })
-    void get().loadQueue()
-  },
   addChip: (field, value) => {
-    set({ chips: mergeChipValue(get().chips, field, value) })
-    void get().loadQueue()
-  },
-  removeChip: (id) => {
-    set({ chips: get().chips.filter((c) => c.id !== id) })
-    void get().loadQueue()
-  },
-  removeChipValue: (id, value) => {
     set({
-      chips: get()
-        .chips.map((c) =>
-          c.id === id ? { ...c, values: c.values.filter((v) => v !== value) } : c,
-        )
-        .filter((c) => c.values.length > 0),
+      queuePdql: appendCondition(get().queuePdql, pdqlFieldForFilterField(field), '=', value),
     })
-    void get().loadQueue()
   },
-  setTimePreset: (timePreset) => {
-    set({ timePreset, timeFrom: '', timeTo: '' })
-    void get().loadQueue()
-  },
-  setTimeFrom: (timeFrom) => {
-    const timeTo = get().timeTo
-    if (timeFrom && timeTo) {
-      set({ timeFrom, timeTo, timePreset: TIME_PRESET_CUSTOM })
-      void get().loadQueue()
-      return
-    }
-    set({ timeFrom })
-  },
-  setTimeTo: (timeTo) => {
-    const timeFrom = get().timeFrom
-    if (timeFrom && timeTo) {
-      set({ timeFrom, timeTo, timePreset: TIME_PRESET_CUSTOM })
-      void get().loadQueue()
-      return
-    }
-    set({ timeTo })
-  },
-  setQueueQuery: (queueQuery) => {
-    set({ queueQuery })
-    void get().loadQueue()
-  },
-  applySavedView: (viewId) => {
-    const view = savedViews.find((v) => v.id === viewId)
-    if (!view) return
-    set({
-      chips: view.chips.map((c) => ({ ...c, id: uid('chip') })),
-      timePreset: view.timePreset,
-      timeFrom: view.timeFrom ?? '',
-      timeTo: view.timeTo ?? '',
-      queueQuery: view.query ?? '',
-    })
-    void get().loadQueue()
-  },
+  setQueuePdql: (queuePdql) => set({ queuePdql }),
+  setTimeInterval: (timeInterval) => set({ timeInterval }),
+  applyQueueHistory: (entry) => set({ queuePdql: entry.pdql, timeInterval: entry.timeInterval }),
   toggleAlertSelect: (id) => {
     const sel = get().selectedAlertIds
     set({
@@ -405,15 +352,20 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   loadQueue: async () => {
+    const parsed = parseQueuePdql(get().queuePdql)
+    if (parsed.ok === false) {
+      const { error } = parsed
+      set({
+        lastError: `${error.message}${error.position > 0 ? ` (позиция ${error.position})` : ''}`,
+      })
+      return
+    }
+    const chips = astToFilterChips(parsed.ast)
+    const query = pdqlToSearchParts(parsed.ast).query
+    const timeInterval = get().timeInterval
     set({ queueLoading: true, lastError: null, mockSources: [] })
     try {
-      const result = await searchQueue(
-        get().chips,
-        get().timePreset,
-        get().timeFrom,
-        get().timeTo,
-        get().queueQuery,
-      )
+      const result = await searchQueue(chips, timeInterval, query)
       const hosts = new Set(get().filterValueOptions.host ?? [])
       const ips = new Set(get().filterValueOptions.ip ?? [])
       for (const e of Object.values(result.entities)) {
@@ -421,6 +373,13 @@ export const useAppStore = create<AppState>((set, get) => ({
         if (e.kind === 'ip') ips.add(e.label)
       }
       set({
+        chips,
+        queuePdql: serialize(parsed.ast),
+        executedFingerprint: filterFingerprint(serialize(parsed.ast), timeInterval),
+        queryHistory: pushQueryHistory(get().queryHistory, {
+          pdql: serialize(parsed.ast),
+          timeInterval,
+        }),
         alerts: result.alerts,
         correlations: result.correlations,
         queueOrder: result.queueOrder,
@@ -630,55 +589,40 @@ export const useAppStore = create<AppState>((set, get) => ({
         ...get().contextQueue,
         [investigationId]: {
           ...cur,
-          chips: mergeChipValue(cur.chips, field, value),
-          history: [
-            { field, value },
-            ...cur.history.filter((h) => !(h.field === field && h.value === value)),
-          ].slice(0, 8),
+          pdql: appendCondition(cur.pdql, pdqlFieldForFilterField(field), '=', value),
         },
       },
     })
-    void get().loadQueue()
   },
-
-  removeContextChip: (investigationId, chipId) => {
+  executeContextQuery: (investigationId) => {
     const cur = get().contextQueue[investigationId] ?? emptyContextQueue
+    const parsed = parseQueuePdql(cur.pdql)
+    if (parsed.ok === false) {
+      const { error } = parsed
+      set({
+        lastError: `${error.message}${error.position > 0 ? ` (позиция ${error.position})` : ''}`,
+      })
+      return false
+    }
+    const canonical = serialize(parsed.ast)
+    const chips = astToFilterChips(parsed.ast)
     set({
+      lastError: null,
       contextQueue: {
         ...get().contextQueue,
         [investigationId]: {
           ...cur,
-          chips: cur.chips.filter((c) => c.id !== chipId),
+          pdql: canonical,
+          chips,
+          executedFingerprint: filterFingerprint(canonical, cur.timeInterval),
+          queryHistory: pushQueryHistory(cur.queryHistory, {
+            pdql: canonical,
+            timeInterval: cur.timeInterval,
+          }),
         },
       },
     })
-  },
-
-  removeContextChipValue: (investigationId, chipId, value) => {
-    const cur = get().contextQueue[investigationId] ?? emptyContextQueue
-    set({
-      contextQueue: {
-        ...get().contextQueue,
-        [investigationId]: {
-          ...cur,
-          chips: cur.chips
-            .map((c) =>
-              c.id === chipId ? { ...c, values: c.values.filter((v) => v !== value) } : c,
-            )
-            .filter((c) => c.values.length > 0),
-        },
-      },
-    })
-  },
-
-  clearContextChips: (investigationId) => {
-    const cur = get().contextQueue[investigationId] ?? emptyContextQueue
-    set({
-      contextQueue: {
-        ...get().contextQueue,
-        [investigationId]: { ...cur, chips: [] },
-      },
-    })
+    return true
   },
 
   addEventsToContext: async (investigationId, eventIds) => {

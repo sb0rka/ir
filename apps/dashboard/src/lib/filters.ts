@@ -83,3 +83,27 @@ export function fieldForEntityKind(kind: EntityKind): FilterField | null {
       return null
   }
 }
+
+/** PDQL field used when a queue chip/entity click is appended to the query. */
+export function pdqlFieldForFilterField(field: FilterField): string {
+  switch (field) {
+    case 'host':
+      return 'event_src.host'
+    case 'user':
+      return 'subject.account.name'
+    case 'process':
+      return 'object.process.name'
+    case 'ip':
+      return 'src.ip'
+    case 'hash':
+      return 'object.file.hash.sha256'
+    case 'domain':
+      return 'object.url'
+    case 'severity':
+      return 'importance'
+    case 'source':
+      return 'event_src.vendor'
+    case 'status':
+      return 'status'
+  }
+}

@@ -4,6 +4,7 @@ import { gatewayClient } from './clients'
 import { unwrapError } from './error'
 import { mapGatewayFinding } from './adapters'
 import { matchesChips } from '../lib/filters'
+import { resolve, type TimeInterval } from '../components/time-interval/model'
 import type { AlertEvent, ContextEvent, CorrelationGroup, Entity, QueueItem } from '../types'
 import type { components as Gw } from '@ir/contract/gateway'
 
@@ -34,13 +35,11 @@ export interface QueueSearchResult {
 
 function buildFindingsBody(
   chips: FilterChip[],
-  timePreset: string,
-  timeFrom: string,
-  timeTo: string,
+  timeInterval: TimeInterval,
   kinds: FindingKind[],
 ): FindingsBody {
   const body: FindingsBody = {
-    time_range: resolveTimeRange(timePreset, timeFrom, timeTo),
+    time_range: resolve(timeInterval),
     limit: PAGE_LIMIT,
     kinds,
   }
@@ -99,9 +98,7 @@ async function searchFindingKind(body: FindingsBody): Promise<{
 
 export async function searchQueue(
   chips: FilterChip[],
-  timePreset: string,
-  timeFrom: string,
-  timeTo: string,
+  timeInterval: TimeInterval,
   query?: string,
 ): Promise<QueueSearchResult> {
   const sources = await findingSources()
@@ -125,7 +122,7 @@ export async function searchQueue(
 
   const merged = new Map<string, Gw['schemas']['Finding']>()
   for (const kind of FINDING_KINDS) {
-    const body = buildFindingsBody(chips, timePreset, timeFrom, timeTo, [kind])
+    const body = buildFindingsBody(chips, timeInterval, [kind])
     body.sources = allowedSources
     const page = await searchFindingKind(body)
     sourceErrors.push(...page.sourceErrors)

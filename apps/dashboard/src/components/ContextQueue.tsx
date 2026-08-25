@@ -1,7 +1,6 @@
 import { useAppStore, emptyContextQueue } from '../store/appStore'
-import { TIME_PRESET_CUSTOM } from '../api/env'
 import type { EventOrigin, ReviewState } from '../types'
-import { FilterBar } from './FilterBar'
+import { ContextQueryComposer } from './QueryComposer'
 import { Button, Chip, SeverityBadge } from './ui'
 import { clsx, formatTime, statusLabel } from '../lib/utils'
 import { fieldForEntityKind, matchesChips } from '../lib/filters'
@@ -141,9 +140,6 @@ export function ContextQueuePage({ investigationId }: { investigationId: string 
   const entities = useAppStore((s) => s.entities)
   const setContextQueue = useAppStore((s) => s.setContextQueue)
   const addContextChip = useAppStore((s) => s.addContextChip)
-  const removeContextChip = useAppStore((s) => s.removeContextChip)
-  const removeContextChipValue = useAppStore((s) => s.removeContextChipValue)
-  const clearContextChips = useAppStore((s) => s.clearContextChips)
   const addEventsToContext = useAppStore((s) => s.addEventsToContext)
   const setReview = useAppStore((s) => s.setReview)
 
@@ -168,46 +164,8 @@ export function ContextQueuePage({ investigationId }: { investigationId: string 
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      {/* Same search/filter row as the global queue, scoped to this investigation */}
-      <FilterBar
-        chips={queue.chips}
-        timePreset={queue.timePreset}
-        timeFrom={queue.timeFrom}
-        timeTo={queue.timeTo}
-        onAddChip={(field, value) => addContextChip(investigationId, field, value)}
-        onRemoveChip={(chipId) => removeContextChip(investigationId, chipId)}
-        onRemoveChipValue={(chipId, value) =>
-          removeContextChipValue(investigationId, chipId, value)
-        }
-        onClearChips={() => clearContextChips(investigationId)}
-        onTimePresetChange={(timePreset) =>
-          setContextQueue(investigationId, { timePreset, timeFrom: '', timeTo: '' })
-        }
-        onTimeFromChange={(timeFrom) => {
-          const timeTo = queue.timeTo
-          if (timeFrom && timeTo) {
-            setContextQueue(investigationId, {
-              timePreset: TIME_PRESET_CUSTOM,
-              timeFrom,
-              timeTo,
-            })
-            return
-          }
-          setContextQueue(investigationId, { timeFrom })
-        }}
-        onTimeToChange={(timeTo) => {
-          const timeFrom = queue.timeFrom
-          if (timeFrom && timeTo) {
-            setContextQueue(investigationId, {
-              timePreset: TIME_PRESET_CUSTOM,
-              timeFrom,
-              timeTo,
-            })
-            return
-          }
-          setContextQueue(investigationId, { timeTo })
-        }}
-        history={queue.history}
+      <ContextQueryComposer
+        investigationId={investigationId}
         extra={
           <button
             type="button"

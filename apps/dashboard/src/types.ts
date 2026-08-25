@@ -1,3 +1,5 @@
+import type { TimeInterval } from './components/time-interval/model'
+
 export type Severity = 'critical' | 'high' | 'medium' | 'low' | 'info'
 
 export type AlertStatus = 'new' | 'investigating' | 'closed'
@@ -186,20 +188,19 @@ export interface FilterChip {
   values: string[]
 }
 
-export interface ContextFilterHistoryEntry {
-  field: FilterField
-  value: string
+export interface QueryHistoryEntry {
+  pdql: string
+  timeInterval: TimeInterval
 }
 
 /** Per-investigation state of the context event queue (search + filters). */
 export interface ContextQueueState {
+  /** Last executed entity chips used to filter the table. */
   chips: FilterChip[]
-  timePreset: string
-  /** YYYY-MM-DD, used when timePreset is `custom`. */
-  timeFrom: string
-  /** YYYY-MM-DD, used when timePreset is `custom`. */
-  timeTo: string
-  history: ContextFilterHistoryEntry[]
+  pdql: string
+  timeInterval: TimeInterval
+  executedFingerprint: string | null
+  queryHistory: QueryHistoryEntry[]
   selectedIds: string[]
   hideAdded: boolean
   originFilter: EventOrigin | 'all'

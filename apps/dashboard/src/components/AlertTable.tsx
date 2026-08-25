@@ -2,7 +2,7 @@ import { useAppStore } from '../store/appStore'
 import type { AlertEvent, CorrelationGroup, Entity, QueueItem } from '../types'
 import { Button, Chip, SeverityBadge } from './ui'
 import { clsx, formatTime } from '../lib/utils'
-import { fieldForEntityKind, matchesChips } from '../lib/filters'
+import { fieldForEntityKind } from '../lib/filters'
 import { ChevronDown, ChevronRight, Layers, Play } from 'lucide-react'
 
 function EntityChips({
@@ -201,7 +201,6 @@ function CorrelationRow({
 }
 
 export function AlertTable() {
-  const chips = useAppStore((s) => s.chips)
   const selected = useAppStore((s) => s.selectedAlertIds)
   const start = useAppStore((s) => s.startInvestigation)
   const clear = useAppStore((s) => s.clearAlertSelection)
@@ -212,25 +211,8 @@ export function AlertTable() {
   const loading = useAppStore((s) => s.queueLoading)
 
   const rows = queueOrder.filter((item) => {
-    if (item.kind === 'correlation') {
-      const g = correlations[item.id]
-      if (!g) return false
-      const groupMatch = matchesChips(
-        g.entityIds,
-        g.severity,
-        Object.keys(g.sourceCounts)[0] ?? '',
-        g.status,
-        chips,
-        entities,
-      )
-      if (groupMatch) return true
-      return g.eventIds.some((eid) => {
-        const a = alerts[eid]
-        return a && matchesChips(a.entityIds, a.severity, a.source, a.status, chips, entities)
-      })
-    }
-    const a = alerts[item.id]
-    return a && matchesChips(a.entityIds, a.severity, a.source, a.status, chips, entities)
+    if (item.kind === 'correlation') return Boolean(correlations[item.id])
+    return Boolean(alerts[item.id])
   })
 
   const criticalCount = rows.filter((r) => {
