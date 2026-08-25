@@ -42,6 +42,34 @@ func (server *Server) SearchEvents(w http.ResponseWriter, r *http.Request, _ api
 	respondJSON(w, http.StatusOK, response)
 }
 
+func (server *Server) AggregateEvents(w http.ResponseWriter, r *http.Request, _ api.AggregateEventsParams) {
+	var body api.AggregateEventsRequest
+	if err := decodeJSON(w, r, &body); err != nil {
+		respondError(w, http.StatusBadRequest, "bad_request", err.Error())
+		return
+	}
+	request, err := aggregateEventsRequest(body)
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "bad_request", err.Error())
+		return
+	}
+	request.Sources, err = server.constrainSources(r.Context(), request.Sources, domain.CapabilityEvents)
+	if err != nil {
+		server.writeServiceError(w, err)
+		return
+	}
+	result, err := server.service.AggregateEvents(r.Context(), projectAccess(r), request)
+	if err != nil {
+		server.writeServiceError(w, err)
+		return
+	}
+	respondJSON(w, http.StatusOK, api.AggregateEventsResponse{
+		Groups:       eventGroupsToAPI(result.Groups),
+		SourceStates: sourceStatesToAPI(result.SourceStates),
+		SourceErrors: sourceErrorsToAPI(result.SourceErrors),
+	})
+}
+
 func (server *Server) ResolveContext(w http.ResponseWriter, r *http.Request, _ api.ResolveContextParams) {
 	var body api.ResolveContextRequest
 	if err := decodeJSON(w, r, &body); err != nil {
@@ -229,6 +257,99 @@ func searchEventsRequest(body api.SearchEventsRequest) (service.SearchEventsRequ
 		}
 	}
 	return request, nil
+}
+
+func aggregateEventsRequest(body api.AggregateEventsRequest) (service.AggregateEventsRequest, error) {
+	if body.Limit != nil && (*body.Limit < 1 || *body.Limit > 1000) {
+		return service.AggregateEventsRequest{}, fmt.Errorf("limit must be between 1 and 1000")
+	}
+	if len(body.GroupBy) < 1 || len(body.GroupBy) > 8 {
+		return service.AggregateEventsRequest{}, fmt.Errorf("group_by must contain between 1 and 8 fields")
+	}
+	if body.Entities != nil && len(*body.Entities) > 100 {
+		return service.AggregateEventsRequest{}, fmt.Errorf("entities must not contain more than 100 items")
+	}
+	timeRange, err := objectTimeRange(body.TimeRange.From, body.TimeRange.To)
+	if err != nil {
+		return service.AggregateEventsRequest{}, err
+	}
+	request := service.AggregateEventsRequest{
+		Sources: valueOrEmpty(body.Sources), TimeRange: timeRange,
+		Filter: strings.TrimSpace(stringValue(body.Filter)), GroupBy: trimmedValues(&body.GroupBy),
+		Limit: intValue(body.Limit),
+	}
+	if len(request.Filter) > 4096 || strings.ContainsAny(request.Filter, "|;\r\n\x00") ||
+		strings.Contains(request.Filter, "--") || strings.Contains(request.Filter, "/*") || strings.Contains(request.Filter, "*/") {
+		return service.AggregateEventsRequest{}, fmt.Errorf("filter must be a predicate without pipeline separators, comments, or control characters")
+	}
+	if err := validateUniqueNonEmpty("group_by", request.GroupBy); err != nil {
+		return service.AggregateEventsRequest{}, err
+	}
+	for _, field := range request.GroupBy {
+		if len(field) > 128 {
+			return service.AggregateEventsRequest{}, fmt.Errorf("group_by fields must not exceed 128 characters")
+		}
+	}
+	if body.Sort != nil {
+		if len(*body.Sort) > 8 {
+			return service.AggregateEventsRequest{}, fmt.Errorf("sort must not contain more than 8 fields")
+		}
+		request.Sort = make([]capability.EventSort, 0, len(*body.Sort))
+		for _, item := range *body.Sort {
+			request.Sort = append(request.Sort, capability.EventSort{Field: strings.TrimSpace(item.Field), Direction: string(item.Direction)})
+		}
+	}
+	if err := validateAggregationSort(request.Sort, request.GroupBy); err != nil {
+		return service.AggregateEventsRequest{}, err
+	}
+	if body.Entities != nil {
+		request.Entities = make([]domain.EntityRef, 0, len(*body.Entities))
+		for _, entity := range *body.Entities {
+			if strings.TrimSpace(entity.Type) == "" || strings.TrimSpace(entity.Value) == "" {
+				return service.AggregateEventsRequest{}, fmt.Errorf("entity type and value are required")
+			}
+			request.Entities = append(request.Entities, domain.EntityRef{Type: entity.Type, Value: entity.Value})
+		}
+	}
+	return request, nil
+}
+
+func validateAggregationSort(values []capability.EventSort, groupBy []string) error {
+	groups := make(map[string]struct{}, len(groupBy))
+	for _, field := range groupBy {
+		groups[field] = struct{}{}
+	}
+	seen := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		if value.Field == "" {
+			return fmt.Errorf("sort field is required")
+		}
+		if value.Field != "count" {
+			if _, grouped := groups[value.Field]; !grouped {
+				return fmt.Errorf("sort field must be count or a group_by field")
+			}
+		}
+		if _, duplicate := seen[value.Field]; duplicate {
+			return fmt.Errorf("sort fields must be unique")
+		}
+		seen[value.Field] = struct{}{}
+		if value.Direction != "asc" && value.Direction != "desc" {
+			return fmt.Errorf("sort direction must be asc or desc")
+		}
+	}
+	return nil
+}
+
+func eventGroupsToAPI(values []domain.EventGroup) []api.EventGroup {
+	result := make([]api.EventGroup, 0, len(values))
+	for _, value := range values {
+		result = append(result, api.EventGroup{
+			SourceCode: value.SourceCode,
+			Values:     append([]*string(nil), value.Values...),
+			Count:      value.Count,
+		})
+	}
+	return result
 }
 
 func trimmedValues(values *[]string) []string {
