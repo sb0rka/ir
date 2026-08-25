@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { Clock } from 'lucide-react'
-import { TimeIntervalPicker } from './TimeIntervalPicker'
+import { TimeIntervalPopover } from './TimeIntervalPopover'
 import {
   activeTimeZone,
   defaultWorkingTimeZone,
@@ -13,23 +13,16 @@ import {
 export function TimeIntervalButton({
   value,
   onChange,
+  onExecute,
 }: {
   value: TimeInterval
   onChange: (value: TimeInterval) => void
+  onExecute: (value: TimeInterval) => void
 }) {
   const [open, setOpen] = useState(false)
   const [display, setDisplay] = useState<DisplayZone>('working')
   const [workingTimeZone, setWorkingTimeZone] = useState(defaultWorkingTimeZone)
   const zone = activeTimeZone(display, workingTimeZone)
-
-  useEffect(() => {
-    if (!open) return
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setOpen(false)
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [open])
 
   return (
     <div className="relative">
@@ -46,19 +39,17 @@ export function TimeIntervalButton({
         <span className="font-mono text-fg-dim">{timeZoneLabel(zone)}</span>
       </button>
       {open && (
-        <>
-          <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 top-full z-40 mt-2 w-[min(40rem,calc(100vw-2rem))]">
-            <TimeIntervalPicker
-              value={value}
-              onChange={onChange}
-              display={display}
-              onDisplayChange={setDisplay}
-              workingTimeZone={workingTimeZone}
-              onWorkingTimeZoneChange={setWorkingTimeZone}
-            />
-          </div>
-        </>
+        <TimeIntervalPopover
+          value={value}
+          onApply={onChange}
+          onExecute={onExecute}
+          onClose={() => setOpen(false)}
+          display={display}
+          onDisplayChange={setDisplay}
+          workingTimeZone={workingTimeZone}
+          onWorkingTimeZoneChange={setWorkingTimeZone}
+          className="absolute left-0 top-full z-40 mt-2 w-[min(40rem,calc(100vw-2rem))]"
+        />
       )}
     </div>
   )

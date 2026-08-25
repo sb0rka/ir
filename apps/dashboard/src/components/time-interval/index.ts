@@ -30,5 +30,6 @@ export {
 } from './model'
 export { TimeIntervalPicker } from './TimeIntervalPicker'
 export type { TimeIntervalPickerProps } from './TimeIntervalPicker'
+export { TimeIntervalPopover } from './TimeIntervalPopover'
 export { TimeIntervalButton } from './TimeIntervalButton'
 export { TimeRail } from './TimeRail'

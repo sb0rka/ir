@@ -107,7 +107,7 @@ export function TimeIntervalPicker({
   return (
     <section
       ref={rootRef}
-      className="space-y-5 rounded-lg border border-border bg-surface-1 p-5"
+      className="space-y-5"
       onClick={onPickerClick}
     >
       <header className="flex flex-wrap items-center justify-between gap-3">
