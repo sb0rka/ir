@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/sb0rka/ir/apps/gateway/api"
+	"github.com/sb0rka/ir/apps/gateway/internal/capability"
 	"github.com/sb0rka/ir/apps/gateway/internal/domain"
 	"github.com/sb0rka/ir/apps/gateway/internal/service"
 )
@@ -202,7 +203,21 @@ func searchEventsRequest(body api.SearchEventsRequest) (service.SearchEventsRequ
 	}
 	request := service.SearchEventsRequest{
 		Sources: valueOrEmpty(body.Sources), TimeFrom: timeRange.From, TimeTo: timeRange.To,
+		Filter: strings.TrimSpace(stringValue(body.Filter)), Columns: trimmedValues(body.Columns),
+		GroupBy: trimmedValues(body.GroupBy), GroupValues: valueOrEmpty(body.GroupValues),
 		Limit: intValue(body.Limit), Cursor: stringValue(body.Cursor),
+	}
+	if err := validateEventSearchControls(request, body.GroupValues != nil); err != nil {
+		return service.SearchEventsRequest{}, err
+	}
+	if body.Sort != nil {
+		request.Sort = make([]capability.EventSort, 0, len(*body.Sort))
+		for _, item := range *body.Sort {
+			request.Sort = append(request.Sort, capability.EventSort{Field: strings.TrimSpace(item.Field), Direction: string(item.Direction)})
+		}
+	}
+	if err := validateEventSort(request.Sort); err != nil {
+		return service.SearchEventsRequest{}, err
 	}
 	if body.Entities != nil {
 		request.Entities = make([]domain.EntityRef, 0, len(*body.Entities))
@@ -214,4 +229,73 @@ func searchEventsRequest(body api.SearchEventsRequest) (service.SearchEventsRequ
 		}
 	}
 	return request, nil
+}
+
+func trimmedValues(values *[]string) []string {
+	if values == nil {
+		return nil
+	}
+	result := make([]string, 0, len(*values))
+	for _, value := range *values {
+		result = append(result, strings.TrimSpace(value))
+	}
+	return result
+}
+
+func validateEventSearchControls(request service.SearchEventsRequest, hasGroupValues bool) error {
+	if strings.ContainsAny(request.Filter, "|;\r\n\x00") {
+		return fmt.Errorf("filter must be a predicate without pipeline separators or control characters")
+	}
+	if err := validateUniqueNonEmpty("columns", request.Columns); err != nil {
+		return err
+	}
+	if err := validateUniqueNonEmpty("group_by", request.GroupBy); err != nil {
+		return err
+	}
+	if len(request.GroupBy) > 0 && !hasGroupValues {
+		return fmt.Errorf("group_values is required with group_by")
+	}
+	if hasGroupValues && len(request.GroupValues) != len(request.GroupBy) {
+		return fmt.Errorf("group_values must contain one value for every group_by field")
+	}
+	if hasGroupValues && len(request.GroupBy) == 0 {
+		return fmt.Errorf("group_values requires group_by")
+	}
+	for _, value := range request.GroupValues {
+		if value != nil && strings.ContainsAny(*value, "\r\n\x00") {
+			return fmt.Errorf("group_values must not contain control characters")
+		}
+	}
+	return nil
+}
+
+func validateEventSort(values []capability.EventSort) error {
+	seen := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		if value.Field == "" {
+			return fmt.Errorf("sort field is required")
+		}
+		if _, exists := seen[value.Field]; exists {
+			return fmt.Errorf("sort fields must be unique")
+		}
+		seen[value.Field] = struct{}{}
+		if value.Direction != "asc" && value.Direction != "desc" {
+			return fmt.Errorf("sort direction must be asc or desc")
+		}
+	}
+	return nil
+}
+
+func validateUniqueNonEmpty(name string, values []string) error {
+	seen := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		if value == "" {
+			return fmt.Errorf("%s must not contain empty fields", name)
+		}
+		if _, exists := seen[value]; exists {
+			return fmt.Errorf("%s fields must be unique", name)
+		}
+		seen[value] = struct{}{}
+	}
+	return nil
 }

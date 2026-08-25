@@ -156,6 +156,24 @@ func (e EventSeverity) Valid() bool {
 	}
 }
 
+// Defines values for EventSortDirection.
+const (
+	Asc  EventSortDirection = "asc"
+	Desc EventSortDirection = "desc"
+)
+
+// Valid indicates whether the value is a known member of the EventSortDirection enum.
+func (e EventSortDirection) Valid() bool {
+	switch e {
+	case Asc:
+		return true
+	case Desc:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for FindingSeverity.
 const (
 	FindingSeverityCritical FindingSeverity = "critical"
@@ -635,6 +653,15 @@ type Event struct {
 // EventSeverity Severity mapped to the Gateway scale.
 type EventSeverity string
 
+// EventSort Source event field and direction used to order matching events.
+type EventSort struct {
+	Direction EventSortDirection `json:"direction"`
+	Field     string             `json:"field"`
+}
+
+// EventSortDirection defines model for EventSort.Direction.
+type EventSortDirection string
+
 // EventSourceRef Stable reference to an event in its source system.
 type EventSourceRef struct {
 	// SourceCode Code of the source that owns the event.
@@ -873,14 +900,29 @@ type SearchEndpointsResponse struct {
 
 // SearchEventsRequest Filters for a normalized multi-source event search.
 type SearchEventsRequest struct {
+	// Columns Allowlisted source event fields to fetch and expose through canonical event fields or attributes. Currently supported by pt-maxpatrol-siem.
+	Columns *[]string `json:"columns,omitempty"`
+
 	// Cursor Opaque next_cursor from the previous response with the same filters.
 	Cursor *string `json:"cursor,omitempty"`
 
 	// Entities Entity conditions; an event matches when it contains at least one listed entity.
 	Entities *[]EntityRef `json:"entities,omitempty"`
 
+	// Filter Bounded source predicate without a query pipeline. Currently supported by pt-maxpatrol-siem; pipeline separators and control characters are rejected.
+	Filter *string `json:"filter,omitempty"`
+
+	// GroupBy Allowlisted source fields whose selected group is searched. Currently supported by pt-maxpatrol-siem.
+	GroupBy *[]string `json:"group_by,omitempty"`
+
+	// GroupValues Group values aligned by position with group_by. A null item selects the source null group. Currently supported by pt-maxpatrol-siem.
+	GroupValues *[]*string `json:"group_values,omitempty"`
+
 	// Limit Maximum number of events returned after merging all sources.
 	Limit *int `json:"limit,omitempty"`
+
+	// Sort Ordered source event sort rules. Currently supported by pt-maxpatrol-siem.
+	Sort *[]EventSort `json:"sort,omitempty"`
 
 	// Sources Source codes to query; omit to use every allowed source with event search.
 	Sources *[]string `json:"sources,omitempty"`
