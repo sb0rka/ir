@@ -46,6 +46,11 @@ export function PdqlBuilder() {
       if (section) addField(activeData.name, section)
       return
     }
+    if (activeData?.type === 'row' && activeData.section === 'columns' && overData?.section === 'groups') {
+      const column = usePdqlStore.getState().query.columns[activeData.index]
+      if (column?.field) addField(column.field, 'groups')
+      return
+    }
     if (
       activeData?.type === 'row' &&
       overData?.type === 'row' &&

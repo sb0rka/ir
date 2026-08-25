@@ -1,7 +1,14 @@
 export { parse } from './parse'
 export { formatConditionLabel, serialize } from './serialize'
 export { appendCondition } from './append'
-export { addFieldToAst, addFieldToPdql, applyGroupInvariant, parseQueuePdql } from './ast'
+export {
+  addFieldToAst,
+  addFieldToPdql,
+  applyGroupInvariant,
+  parseQueuePdql,
+  removeGroup,
+  setGroupAggregate,
+} from './ast'
 export { KNOWN_EVENT_FIELDS, relatedFieldColumns } from './relatedFields'
 export type { RelatedFieldColumn } from './relatedFields'
 export { entityKindForField, roleForField } from './entityKind'
@@ -22,6 +29,9 @@ export {
   defaultQuery,
   emptyQuery,
   fieldPrefix,
+  groupCountColumn,
+  isGroupCountColumn,
+  isGroupDimensionColumn,
   newId,
   operatorsForType,
   withoutIds,

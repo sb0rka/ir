@@ -4,7 +4,7 @@ import { parse } from './parse'
 import { serialize } from './serialize'
 import { pdqlToChips, serializeWithoutChip } from './chips'
 import { astToFilterChips, pdqlToSearchParts } from './toSearch'
-import { addFieldToPdql } from './ast'
+import { addFieldToAst, addFieldToPdql, setGroupAggregate } from './ast'
 import { appendCondition } from './append'
 import { relatedFieldColumns } from './relatedFields'
 
@@ -58,6 +58,20 @@ describe('serialize', () => {
       'group(event_src.host) | select(event_src.host, uniq(src.ip), count(time)) | sort(count(time) desc, uniq(src.ip) desc)',
     )
   })
+
+  it('does not duplicate group fields already present in select', () => {
+    expect(
+      serialize({
+        filter: [],
+        joiners: [],
+        columns: [
+          { id: '1', field: 'action' },
+          { id: '2', field: 'time', aggregate: 'count' },
+        ],
+        groups: [{ id: 'g', field: 'action' }],
+      }),
+    ).toBe('group(action) | select(action, count(time))')
+  })
 })
 
 describe('parse', () => {
@@ -79,6 +93,16 @@ describe('parse', () => {
       ],
       groups: [{ id: 'g', field: 'event_src.host' }],
     })
+  })
+
+  it('round-trips group fields injected into select without duplicating them', () => {
+    const text = 'group(action) | select(action, count(time)) | sort(count(time) desc)'
+    expect(serialize(mustParse(text))).toBe(text)
+  })
+
+  it('round-trips count() without a field', () => {
+    const text = 'group(action) | select(action, count()) | sort(count() desc)'
+    expect(serialize(mustParse(text))).toBe(text)
   })
 
   it('accepts whitespace and attaches sort to existing columns', () => {
@@ -157,7 +181,6 @@ describe('pdqlToChips', () => {
       'action = "login"',
       'event_src.host = "dc01"',
       'group event_src.host',
-      'event_src.host',
       'time desc',
     ])
   })
@@ -167,6 +190,21 @@ describe('pdqlToChips', () => {
     const host = ast.filter.find((condition) => condition.field === 'event_src.host')
     expect(host).toBeTruthy()
     expect(serializeWithoutChip(ast, host!.id)).toBe('filter(action = "login") | select(time)')
+  })
+
+  it('removing a group chip restores the field as a column', () => {
+    const ast = mustParse('group(action) | select(action, count(time))')
+    const group = ast.groups[0]
+    expect(group).toBeTruthy()
+    expect(serializeWithoutChip(ast, group!.id)).toBe('select(action, time)')
+  })
+
+  it('hides group count() from chips and restores it as time', () => {
+    const ast = mustParse('group(action) | select(action, count()) | sort(count() desc)')
+    expect(pdqlToChips(ast).map((chip) => chip.label)).toEqual(['group action'])
+    const group = ast.groups[0]
+    expect(group).toBeTruthy()
+    expect(serializeWithoutChip(ast, group!.id)).toBe('select(action, time) | sort(time desc)')
   })
 })
 
@@ -234,8 +272,55 @@ describe('addFieldToPdql', () => {
       'select(time, event_src.host)',
     )
     expect(addFieldToPdql('select(time)', 'event_src.host', 'groups')).toBe(
-      'group(event_src.host) | select(event_src.host, count(time))',
+      'group(event_src.host) | select(event_src.host, count(), time)',
     )
+  })
+
+  it('moves an existing select field into group without duplicating the column', () => {
+    const ast = addFieldToAst(
+      {
+        filter: [],
+        joiners: [],
+        columns: [
+          { id: 'c1', field: 'time' },
+          { id: 'c2', field: 'action' },
+        ],
+        groups: [],
+      },
+      'action',
+      'groups',
+    )
+    expect(ast.groups.map((group) => group.field)).toEqual(['action'])
+    expect(ast.columns.map((column) => ({ field: column.field, aggregate: column.aggregate }))).toEqual([
+      { field: '', aggregate: 'count' },
+      { field: 'time', aggregate: undefined },
+    ])
+    expect(serialize(ast)).toBe('group(action) | select(action, count(), time)')
+  })
+
+  it('keeps extra measure columns and changes the group aggregate', () => {
+    expect(addFieldToPdql('select(time, src.ip)', 'action', 'groups')).toBe(
+      'group(action) | select(action, count(), time, count(src.ip))',
+    )
+    const ast = addFieldToAst(
+      {
+        filter: [],
+        joiners: [],
+        columns: [{ id: 'c1', field: 'time', sort: { dir: 'desc', priority: 1 } }],
+        groups: [],
+      },
+      'action',
+      'groups',
+    )
+    expect(serialize(setGroupAggregate(ast, 'uniq'))).toBe(
+      'group(action) | select(action, uniq(), time) | sort(time desc)',
+    )
+  })
+
+  it('keeps the default time column when grouping', () => {
+    const ast = addFieldToAst(defaultQuery(), 'action', 'groups')
+    expect(serialize(ast)).toBe('group(action) | select(action, count(), time) | sort(time desc)')
+    expect(serializeWithoutChip(ast, ast.groups[0]!.id)).toBe('select(action, time) | sort(time desc)')
   })
 })
 

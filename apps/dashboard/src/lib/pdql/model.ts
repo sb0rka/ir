@@ -100,6 +100,18 @@ export function fieldPrefix(name: string): string {
   return dot === -1 ? 'общее' : name.slice(0, dot)
 }
 
+export function isGroupDimensionColumn(query: QueryAst, column: Column): boolean {
+  return query.groups.some((group) => group.field === column.field) && !column.aggregate
+}
+
+export function isGroupCountColumn(column: Column): boolean {
+  return !column.field && Boolean(column.aggregate)
+}
+
+export function groupCountColumn(query: QueryAst): Column | undefined {
+  return query.columns.find(isGroupCountColumn)
+}
+
 export function withoutIds(ast: QueryAst): unknown {
   return {
     filter: ast.filter.map(({ field, op, value, values, negated }) => ({

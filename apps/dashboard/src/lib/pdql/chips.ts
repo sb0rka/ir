@@ -1,4 +1,5 @@
-import type { QueryAst } from './model'
+import { removeGroup } from './ast'
+import { isGroupCountColumn, isGroupDimensionColumn, type QueryAst } from './model'
 import { formatConditionLabel, serialize } from './serialize'
 
 export type PdqlChipKind = 'filter' | 'group' | 'column'
@@ -31,6 +32,7 @@ export function pdqlToChips(ast: QueryAst): PdqlChip[] {
     chips.push({ id: group.id, kind: 'group', label: `group ${group.field}` })
   }
   for (const column of ast.columns) {
+    if (isGroupDimensionColumn(ast, column) || isGroupCountColumn(column)) continue
     chips.push({ id: column.id, kind: 'column', label: formatSelectLabel(ast, column.id) })
   }
   return chips
@@ -46,7 +48,7 @@ export function removePdqlChip(ast: QueryAst, id: string): QueryAst {
     return { ...ast, filter, joiners }
   }
   if (ast.groups.some((group) => group.id === id)) {
-    return { ...ast, groups: ast.groups.filter((group) => group.id !== id) }
+    return removeGroup(ast, id)
   }
   return { ...ast, columns: ast.columns.filter((column) => column.id !== id) }
 }

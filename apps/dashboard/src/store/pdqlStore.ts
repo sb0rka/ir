@@ -2,13 +2,15 @@ import { create } from 'zustand'
 import { errorMessage } from '../api/error'
 import {
   addFieldToAst,
-  applyGroupInvariant,
   bumpFieldFreq,
   defaultQuery,
   fetchEventFields,
+  groupCountColumn,
   loadFieldFreq,
   parse,
+  removeGroup as removeGroupFromQuery,
   serialize,
+  setGroupAggregate as setGroupAggregateOnQuery,
   type ActiveSection,
   type AggregateFn,
   type Column,
@@ -50,6 +52,8 @@ interface PdqlState {
   removeColumn: (id: string) => void
   setColumnSort: (id: string, sort: Column['sort'] | undefined) => void
   setColumnAggregate: (id: string, aggregate: AggregateFn | undefined) => void
+  setGroupAggregate: (aggregate: AggregateFn) => void
+  setGroupSort: (sort: Column['sort'] | undefined) => void
   removeGroup: (id: string) => void
   moveCondition: (index: number, delta: number) => void
   moveColumn: (index: number, delta: number) => void
@@ -155,15 +159,39 @@ export const usePdqlStore = create<PdqlState>((set, get) => ({
     )
   },
 
+  setGroupAggregate: (aggregate) => {
+    set(commit(setGroupAggregateOnQuery(get().query, aggregate)))
+  },
+
+  setGroupSort: (sort) => {
+    let query = get().query
+    if (!groupCountColumn(query)) {
+      query = setGroupAggregateOnQuery(query, 'count')
+    }
+    const target = groupCountColumn(query)
+    if (!target) return
+    const columns = query.columns.map((item) => {
+      if (item.id !== target.id) return item
+      return { ...item, sort }
+    })
+    if (sort) {
+      const used = new Set(
+        columns.filter((item) => item.sort && item.id !== target.id).map((item) => item.sort?.priority ?? 0),
+      )
+      if (used.has(sort.priority)) {
+        let priority = 1
+        for (const column of columns) {
+          if (!column.sort) continue
+          column.sort = { ...column.sort, priority }
+          priority += 1
+        }
+      }
+    }
+    set(commit({ ...query, columns }))
+  },
+
   removeGroup: (id) => {
-    set(
-      commit(
-        applyGroupInvariant({
-          ...get().query,
-          groups: get().query.groups.filter((item) => item.id !== id),
-        }),
-      ),
-    )
+    set(commit(removeGroupFromQuery(get().query, id)))
   },
 
   moveCondition: (index, delta) => {

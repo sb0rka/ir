@@ -1,6 +1,6 @@
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { ArrowDown, ArrowUp, ArrowUpDown, ChevronDown, ChevronUp, X } from 'lucide-react'
-import { AGGREGATES } from '../../lib/pdql'
+import { AGGREGATES, isGroupCountColumn, isGroupDimensionColumn } from '../../lib/pdql'
 import { usePdqlStore } from '../../store/pdqlStore'
 import { Button } from '../ui'
 import { SectionShell } from './SectionShell'
@@ -13,16 +13,18 @@ export function ColumnsSection() {
   const setColumnSort = usePdqlStore((s) => s.setColumnSort)
   const moveColumn = usePdqlStore((s) => s.moveColumn)
   const grouped = query.groups.length > 0
-  const groupFields = new Set(query.groups.map((group) => group.field))
+  const visibleColumns = query.columns
+    .map((column, index) => ({ column, index }))
+    .filter(({ column }) => !isGroupDimensionColumn(query, column) && !isGroupCountColumn(column))
 
   return (
     <SectionShell section="columns" title="Колонки">
-      {query.columns.length === 0 && (
+      {visibleColumns.length === 0 && (
         <div className="px-1 py-2 text-xs text-fg-dim">Нет колонок. Добавьте поле из каталога.</div>
       )}
-      <SortableContext items={query.columns.map((item) => item.id)} strategy={verticalListSortingStrategy}>
-        {query.columns.map((column, index) => {
-          const needsAggregate = grouped && !groupFields.has(column.field)
+      <SortableContext items={visibleColumns.map(({ column }) => column.id)} strategy={verticalListSortingStrategy}>
+        {visibleColumns.map(({ column, index }) => {
+          const needsAggregate = grouped
           return (
             <SortableRow key={column.id} id={column.id} section="columns" index={index}>
               <div className="flex flex-wrap items-center gap-1.5">

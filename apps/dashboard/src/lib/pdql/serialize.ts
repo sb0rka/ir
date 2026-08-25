@@ -1,4 +1,4 @@
-import type { Column, CompareOp, Condition, QueryAst } from './model'
+import { isGroupDimensionColumn, type Column, type CompareOp, type Condition, type QueryAst } from './model'
 
 function quote(value: string): string {
   return `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`
@@ -58,8 +58,12 @@ export function serialize(ast: QueryAst): string {
   if (ast.groups.length > 0) {
     stages.push(`group(${ast.groups.map((group) => group.field).join(', ')})`)
   }
-  if (ast.columns.length > 0) {
-    stages.push(`select(${ast.columns.map(formatSelectItem).join(', ')})`)
+  const selectItems = [
+    ...ast.groups.map((group) => group.field),
+    ...ast.columns.filter((column) => !isGroupDimensionColumn(ast, column)).map(formatSelectItem),
+  ]
+  if (selectItems.length > 0) {
+    stages.push(`select(${selectItems.join(', ')})`)
   }
   const sorted = ast.columns
     .filter((column) => column.sort)

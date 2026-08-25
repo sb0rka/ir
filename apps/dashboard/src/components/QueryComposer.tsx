@@ -8,6 +8,8 @@ import {
   serialize,
   serializeWithoutChip,
   type ActiveSection,
+  type ParseError,
+  type ParseResult,
 } from '../lib/pdql'
 import { filterFingerprint } from '../lib/queryFingerprint'
 import { clsx } from '../lib/utils'
@@ -35,6 +37,15 @@ const SECTION_LABELS: { id: ActiveSection; label: string }[] = [
   { id: 'columns', label: 'Поля' },
   { id: 'groups', label: 'Группы' },
 ]
+
+function formatParseError(error: ParseError): string {
+  return error.position > 0 ? `${error.message} (позиция ${error.position})` : error.message
+}
+
+function parseErrorText(result: ParseResult): string | null {
+  if (result.ok === false) return formatParseError(result.error)
+  return null
+}
 
 function queueSourceLabel(source: QueueSource | undefined): string | undefined {
   return QUEUE_SOURCE_OPTIONS.find((option) => option.id === source)?.label
@@ -125,9 +136,7 @@ export function QueryComposer({
   const columns = chips.filter((chip) => chip.kind === 'column')
   const groups = chips.filter((chip) => chip.kind === 'group')
   const stale = filterFingerprint(pdql, timeInterval, queueSource) !== executedFingerprint
-  const parseError = parsed.ok
-    ? null
-    : `${parsed.error.message}${parsed.error.position > 0 ? ` (позиция ${parsed.error.position})` : ''}`
+  const parseError = parseErrorText(parsed)
 
   const removeChip = (id: string) => {
     if (!parsed.ok) return
@@ -142,10 +151,8 @@ export function QueryComposer({
 
   const exitEdit = () => {
     const result = parseQueuePdql(draft)
-    if (!result.ok) {
-      setEditError(
-        `${result.error.message}${result.error.position > 0 ? ` (позиция ${result.error.position})` : ''}`,
-      )
+    if (result.ok === false) {
+      setEditError(formatParseError(result.error))
       return
     }
     onPdqlChange(serialize(result.ast))
@@ -155,12 +162,7 @@ export function QueryComposer({
 
   return (
     <div className="border-b border-border bg-surface-1 px-4 py-3">
-      {queueSource && onQueueSourceChange && (
-        <div className="mb-2">
-          <QueueSourceToggle value={queueSource} onChange={onQueueSourceChange} />
-        </div>
-      )}
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="mb-2 flex flex-wrap items-center gap-2">
         <TimeIntervalButton
           value={timeInterval}
           onChange={onTimeChange}
@@ -169,6 +171,11 @@ export function QueryComposer({
             onExecute()
           }}
         />
+        {queueSource && onQueueSourceChange && (
+          <QueueSourceToggle value={queueSource} onChange={onQueueSourceChange} />
+        )}
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
         {filters.map((chip) => (
           <Chip key={chip.id} onRemove={() => removeChip(chip.id)}>
             {chip.label}
