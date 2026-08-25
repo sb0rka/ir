@@ -207,6 +207,7 @@ export interface QueryHistoryEntry {
   pdql: string
   timeInterval: TimeInterval
   queueSource?: QueueSource
+  groupValues?: (string | null)[]
 }
 
 /** Per-investigation state of the context event queue (search + filters). */
@@ -216,6 +217,7 @@ export interface ContextQueueState {
   pdql: string
   timeInterval: TimeInterval
   queueSource: QueueSource
+  groupValues: (string | null)[]
   executedFingerprint: string | null
   queryHistory: QueryHistoryEntry[]
   selectedIds: string[]

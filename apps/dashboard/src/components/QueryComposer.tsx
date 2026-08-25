@@ -89,11 +89,13 @@ export function QueryComposer({
   extra,
   executing,
   queueSource,
+  groupValues = [],
   onPdqlChange,
   onTimeChange,
   onQueueSourceChange,
   onExecute,
   onApplyHistory,
+  onClearGroupFrom,
 }: {
   pdql: string
   timeInterval: TimeInterval
@@ -102,11 +104,13 @@ export function QueryComposer({
   extra?: React.ReactNode
   executing?: boolean
   queueSource?: QueueSource
+  groupValues?: (string | null)[]
   onPdqlChange: (pdql: string) => void
   onTimeChange: (interval: TimeInterval) => void
   onQueueSourceChange?: (source: QueueSource) => void
   onExecute: () => void
   onApplyHistory: (entry: QueryHistoryEntry) => void
+  onClearGroupFrom?: (index: number) => void
 }) {
   const loadFields = usePdqlStore((s) => s.loadFields)
   const fields = usePdqlStore((s) => s.fields)
@@ -135,7 +139,7 @@ export function QueryComposer({
   const filters = chips.filter((chip) => chip.kind === 'filter')
   const columns = chips.filter((chip) => chip.kind === 'column')
   const groups = chips.filter((chip) => chip.kind === 'group')
-  const stale = filterFingerprint(pdql, timeInterval, queueSource) !== executedFingerprint
+  const stale = filterFingerprint(pdql, timeInterval, queueSource, groupValues) !== executedFingerprint
   const parseError = parseErrorText(parsed)
 
   const removeChip = (id: string) => {
@@ -281,7 +285,12 @@ export function QueryComposer({
                 )}
                 {history.map((entry) => (
                   <button
-                    key={filterFingerprint(entry.pdql, entry.timeInterval, entry.queueSource)}
+                    key={filterFingerprint(
+                      entry.pdql,
+                      entry.timeInterval,
+                      entry.queueSource,
+                      entry.groupValues,
+                    )}
                     type="button"
                     className="flex w-full flex-col items-start gap-0.5 px-3 py-2 text-left hover:bg-surface-3"
                     onClick={() => {
@@ -306,6 +315,25 @@ export function QueryComposer({
         </div>
         {extra}
       </div>
+      {queueSource === 'events' && parsed.ok && parsed.ast.groups.length > 0 && (
+        <div className="mt-2 flex flex-wrap items-center gap-1">
+          {parsed.ast.groups.map((group, index) => (
+            <span key={group.id} className="flex items-center gap-1">
+              {index > 0 && <span className="text-fg-dim">/</span>}
+              <Chip
+                onRemove={
+                  groupValues[index] && onClearGroupFrom
+                    ? () => onClearGroupFrom(index)
+                    : undefined
+                }
+              >
+                <span className="text-fg-dim">{group.field}</span>
+                {groupValues[index] ? ` = ${groupValues[index]}` : ' · выберите'}
+              </Chip>
+            </span>
+          ))}
+        </div>
+      )}
 
       <div className="mt-2 flex items-center gap-2">
         {editing ? (
@@ -400,6 +428,7 @@ export function GlobalQueryComposer() {
   const pdql = useAppStore((s) => s.queuePdql)
   const timeInterval = useAppStore((s) => s.timeInterval)
   const queueSource = useAppStore((s) => s.queueSource)
+  const groupValues = useAppStore((s) => s.groupValues)
   const executedFingerprint = useAppStore((s) => s.executedFingerprint)
   const history = useAppStore((s) => s.queryHistory)
   const executing = useAppStore((s) => s.queueLoading)
@@ -408,12 +437,14 @@ export function GlobalQueryComposer() {
   const setQueueSource = useAppStore((s) => s.setQueueSource)
   const applyQueueHistory = useAppStore((s) => s.applyQueueHistory)
   const loadQueue = useAppStore((s) => s.loadQueue)
+  const clearGroupPathFrom = useAppStore((s) => s.clearGroupPathFrom)
 
   return (
     <QueryComposer
       pdql={pdql}
       timeInterval={timeInterval}
       queueSource={queueSource}
+      groupValues={groupValues}
       executedFingerprint={executedFingerprint}
       history={history}
       executing={executing}
@@ -422,6 +453,7 @@ export function GlobalQueryComposer() {
       onQueueSourceChange={setQueueSource}
       onApplyHistory={applyQueueHistory}
       onExecute={() => void loadQueue()}
+      onClearGroupFrom={(index) => clearGroupPathFrom(null, index)}
     />
   )
 }
@@ -436,12 +468,14 @@ export function ContextQueryComposer({
   const queue = useAppStore((s) => s.contextQueue[investigationId]) ?? emptyContextQueue
   const setContextQueue = useAppStore((s) => s.setContextQueue)
   const executeContextQuery = useAppStore((s) => s.executeContextQuery)
+  const clearGroupPathFrom = useAppStore((s) => s.clearGroupPathFrom)
 
   return (
     <QueryComposer
       pdql={queue.pdql}
       timeInterval={queue.timeInterval}
       queueSource={queue.queueSource}
+      groupValues={queue.groupValues}
       executedFingerprint={queue.executedFingerprint}
       history={queue.queryHistory}
       executing={queue.loading}
@@ -454,11 +488,13 @@ export function ContextQueryComposer({
           pdql: entry.pdql,
           timeInterval: entry.timeInterval,
           queueSource: entry.queueSource ?? DEFAULT_QUEUE_SOURCE,
+          groupValues: entry.groupValues ?? [],
         })
       }
       onExecute={() => {
         void executeContextQuery(investigationId)
       }}
+      onClearGroupFrom={(index) => clearGroupPathFrom(investigationId, index)}
     />
   )
 }

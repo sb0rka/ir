@@ -145,6 +145,7 @@ export function ContextQueuePage({ investigationId }: { investigationId: string 
       current.pdql,
       current.timeInterval,
       current.queueSource,
+      current.groupValues,
     )
     if (current.loading) return
     if (current.executedFingerprint === fingerprint) return

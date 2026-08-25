@@ -5,6 +5,7 @@ import { unwrapError } from './error'
 import { mapGatewayEntity, mapGatewayEvent, mapGatewayFinding } from './adapters'
 import { pickFindingChildEvents, type FindingResolveKey } from '../lib/correlationSubevents'
 import { matchesChips } from '../lib/filters'
+import { astToEventSearch, astToFilterChips, pdqlToSearchParts, type QueryAst } from '../lib/pdql'
 import { resolve, type TimeInterval } from '../components/time-interval/model'
 import type { AlertEvent, ContextEvent, CorrelationGroup, Entity, QueueItem } from '../types'
 import type { components as Gw } from '@ir/contract/gateway'
@@ -16,6 +17,7 @@ type Capability = Gw['schemas']['Capability']
 
 const PAGE_LIMIT = 100
 const MAX_PAGES = 4
+const NAD_SOURCE = 'pt-nad'
 
 function projectHeader() {
   const projectId = getProjectId()
@@ -61,20 +63,6 @@ function buildFindingsBody(
   const sources = chips.find((c) => c.field === 'source')?.values
   if (sources?.length) body.sources = sources
   return body
-}
-
-function eventEntitiesFromChips(chips: FilterChip[]): NonNullable<EventsBody['entities']> {
-  const entities: NonNullable<EventsBody['entities']> = []
-  for (const chip of chips) {
-    const type =
-      chip.field === 'ip' ? 'ip' : chip.field === 'host' ? 'host' : chip.field === 'user' ? 'account' : null
-    if (!type) continue
-    for (const value of chip.values) {
-      const trimmed = value.trim()
-      if (trimmed) entities.push({ type, value: trimmed })
-    }
-  }
-  return entities
 }
 
 function matchesQuery(alert: AlertEvent, query?: string): boolean {
@@ -204,15 +192,31 @@ async function searchFindingsQueue(
   return finishQueue(alertList, entities, chips, query, sourceErrors, sources.available)
 }
 
+function sourcesForEventSearch(allowed: string[], hasControls: boolean): string[] {
+  if (!hasControls) return allowed
+  return allowed.filter((code) => code !== NAD_SOURCE)
+}
+
 async function searchEventsQueue(
-  chips: FilterChip[],
+  ast: QueryAst,
   timeInterval: TimeInterval,
-  query?: string,
+  groupValues?: (string | null)[],
 ): Promise<QueueSearchResult> {
   const sources = await capableSources('events')
-  const allowedSources = resolveAllowedSources(chips, sources)
+  const parts = astToEventSearch(ast, groupValues)
+  const allowedSources = sourcesForEventSearch(
+    sources.defaults.length ? sources.defaults : sources.available,
+    parts.hasControls,
+  )
   if (!allowedSources.length) {
-    return emptyQueue(['Нет доступных online-источников events'], sources.available)
+    return emptyQueue(
+      [
+        parts.hasControls
+          ? 'Нет SIEM-источников для PDQL-поиска событий'
+          : 'Нет доступных online-источников events',
+      ],
+      sources.available,
+    )
   }
 
   const body: EventsBody = {
@@ -220,8 +224,13 @@ async function searchEventsQueue(
     limit: PAGE_LIMIT,
     sources: allowedSources,
   }
-  const entityFilters = eventEntitiesFromChips(chips)
-  if (entityFilters.length) body.entities = entityFilters
+  if (parts.filter) body.filter = parts.filter
+  if (parts.columns) body.columns = parts.columns
+  if (parts.sort) body.sort = parts.sort
+  if (parts.group_by && parts.group_values) {
+    body.group_by = parts.group_by
+    body.group_values = parts.group_values
+  }
 
   const events: Gw['schemas']['Event'][] = []
   const gatewayEntities: Gw['schemas']['Entity'][] = []
@@ -267,16 +276,18 @@ async function searchEventsQueue(
     seen.add(alert.id)
     alertList.push(alert)
   }
-  return finishQueue(alertList, entities, chips, query, sourceErrors, sources.available)
+  return finishQueue(alertList, entities, [], undefined, sourceErrors, sources.available)
 }
 
 export async function searchQueue(
-  chips: FilterChip[],
+  ast: QueryAst,
   timeInterval: TimeInterval,
-  query?: string,
   queueSource: QueueSource = DEFAULT_QUEUE_SOURCE,
+  groupValues?: (string | null)[],
 ): Promise<QueueSearchResult> {
-  if (queueSource === 'events') return searchEventsQueue(chips, timeInterval, query)
+  if (queueSource === 'events') return searchEventsQueue(ast, timeInterval, groupValues)
+  const chips = astToFilterChips(ast)
+  const query = pdqlToSearchParts(ast).query
   return searchFindingsQueue(chips, timeInterval, query, queueSource)
 }
 

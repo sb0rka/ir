@@ -20,5 +20,8 @@ describe('filterFingerprint', () => {
     expect(filterFingerprint('select(time)', day, 'siem_correlation')).not.toBe(base)
     expect(filterFingerprint('select(time)', day, 'nad_attack')).not.toBe(base)
     expect(filterFingerprint('select(time)', day, 'events')).not.toBe(base)
+    expect(filterFingerprint('select(time)', day, 'events', ['dc01'])).not.toBe(
+      filterFingerprint('select(time)', day, 'events'),
+    )
   })
 })

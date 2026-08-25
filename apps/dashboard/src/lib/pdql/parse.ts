@@ -62,7 +62,7 @@ function tokenize(input: string): Token[] {
       }
       continue
     }
-    if (char === '|' || char === '(' || char === ')' || char === ',') {
+    if ('|()[],:*'.includes(char)) {
       tokens.push({ kind: 'punct', value: char, start })
       i += 1
       continue
@@ -106,6 +106,7 @@ function tokenize(input: string): Token[] {
 
 class Parser {
   private readonly tokens: Token[]
+  private readonly aliases = new Map<string, { field: string; aggregate?: AggregateFn }>()
   private pos = 0
 
   constructor(tokens: Token[]) {
@@ -125,12 +126,12 @@ class Parser {
   }
 
   private parseStage(ast: QueryAst, seen: Set<string>) {
-    const name = this.expectIdent('ожидалась стадия filter, group, select или sort')
-    if (seen.has(name)) {
-      throw new ParseFailure(`стадия ${name} повторяется`, this.prev().start)
-    }
-    if (name !== 'filter' && name !== 'group' && name !== 'select' && name !== 'sort') {
+    const name = this.expectIdent('ожидалась стадия filter, group, select, sort или limit').toLowerCase()
+    if (name !== 'filter' && name !== 'group' && name !== 'select' && name !== 'sort' && name !== 'limit') {
       throw new ParseFailure(`неизвестная стадия ${name}`, this.prev().start)
+    }
+    if (name !== 'sort' && seen.has(name)) {
+      throw new ParseFailure(`стадия ${name} повторяется`, this.prev().start)
     }
     seen.add(name)
     this.expectPunct('(', `ожидалась ( после ${name}`)
@@ -138,23 +139,24 @@ class Parser {
     if (name === 'group') this.parseGroup(ast)
     if (name === 'select') this.parseSelect(ast)
     if (name === 'sort') this.parseSort(ast)
+    if (name === 'limit') this.parseLimit()
     this.expectPunct(')', `ожидалась ) после ${name}`)
   }
 
   private parseFilter(ast: QueryAst) {
     ast.filter.push(this.parseCondition())
-    while (this.peekIdent('and') || this.peekIdent('or')) {
-      ast.joiners.push(this.take().value as LogicalJoiner)
+    while (this.peekKeyword('and') || this.peekKeyword('or')) {
+      ast.joiners.push(this.take().value.toLowerCase() as LogicalJoiner)
       ast.filter.push(this.parseCondition())
     }
   }
 
   private parseCondition(): Condition {
-    const negated = this.tryIdent('not')
+    const negated = this.tryKeyword('not')
     const field = this.expectIdent('ожидалось имя поля')
-    if (this.tryIdent('is')) {
-      const notNull = this.tryIdent('not')
-      this.expectIdentValue('null', 'ожидалось null')
+    if (this.tryKeyword('is')) {
+      const notNull = this.tryKeyword('not')
+      this.expectKeyword('null', 'ожидалось null')
       return {
         id: newId('cond'),
         field,
@@ -164,7 +166,7 @@ class Parser {
         negated,
       }
     }
-    if (this.tryIdent('in')) {
+    if (this.tryKeyword('in')) {
       this.expectPunct('(', 'ожидалась ( после in')
       const values: string[] = []
       if (!this.peekPunct(')')) {
@@ -185,9 +187,8 @@ class Parser {
       this.take()
       return token.value as CompareOp
     }
-    if (token.kind === 'ident' && (token.value === 'contains' || token.value === 'startswith')) {
-      this.take()
-      return token.value
+    if (this.peekKeyword('contains') || this.peekKeyword('startswith')) {
+      return this.take().value.toLowerCase() as CompareOp
     }
     throw new ParseFailure('ожидался оператор сравнения', token.start)
   }
@@ -203,57 +204,155 @@ class Parser {
 
   private parseGroup(ast: QueryAst) {
     if (this.peekPunct(')')) return
+    if (this.peekNamedGroupArg()) {
+      this.parseNamedGroup(ast)
+      return
+    }
     ast.groups.push({ id: newId('grp'), field: this.expectIdent('ожидалось поле группировки') })
     while (this.tryPunct(',')) {
       ast.groups.push({ id: newId('grp'), field: this.expectIdent('ожидалось поле группировки') })
     }
   }
 
+  private peekNamedGroupArg(): boolean {
+    if (!this.peekKeyword('key') && !this.peekKeyword('agg')) return false
+    const next = this.tokens[this.pos + 1]
+    return next?.kind === 'punct' && next.value === ':'
+  }
+
+  private parseNamedGroup(ast: QueryAst) {
+    const seen = new Set<string>()
+    while (!this.peekPunct(')')) {
+      const name = this.expectIdent('ожидался параметр key или agg').toLowerCase()
+      this.expectPunct(':', `ожидалось : после ${name}`)
+      if (name !== 'key' && name !== 'agg') {
+        throw new ParseFailure(`неизвестный параметр ${name}`, this.prev().start)
+      }
+      if (seen.has(name)) {
+        throw new ParseFailure(`параметр ${name} повторяется`, this.prev().start)
+      }
+      seen.add(name)
+      if (name === 'key') {
+        for (const field of this.parseGroupKeyList()) {
+          if (ast.groups.some((group) => group.field === field)) continue
+          ast.groups.push({ id: newId('grp'), field })
+        }
+      } else {
+        this.parseGroupAggList(ast)
+      }
+      this.tryPunct(',')
+    }
+  }
+
+  private parseGroupKeyList(): string[] {
+    const bracketed = this.tryPunct('[')
+    const fields: string[] = []
+    if (!this.peekPunct(']') && !this.peekPunct(')') && !this.peekNamedGroupArg()) {
+      fields.push(this.expectIdent('ожидалось поле группировки'))
+      while (this.tryPunct(',')) {
+        if (this.peekPunct(']') || this.peekPunct(')') || this.peekNamedGroupArg()) break
+        fields.push(this.expectIdent('ожидалось поле группировки'))
+      }
+    }
+    if (bracketed) this.expectPunct(']', 'ожидалась ] после списка key')
+    return fields
+  }
+
+  private parseGroupAggList(ast: QueryAst) {
+    this.mergeAggregateColumn(ast, this.parseSelectItem())
+    while (this.tryPunct(',')) {
+      if (this.peekPunct(')') || this.peekNamedGroupArg()) break
+      this.mergeAggregateColumn(ast, this.parseSelectItem())
+    }
+  }
+
+  private mergeAggregateColumn(ast: QueryAst, column: Column) {
+    if (!column.aggregate) {
+      throw new ParseFailure('ожидалась агрегатная функция', this.prev().start)
+    }
+    this.mergeColumn(ast, column)
+  }
+
+  private mergeColumn(ast: QueryAst, column: Column): Column {
+    const match = ast.columns.find(
+      (item) => item.field === column.field && item.aggregate === column.aggregate,
+    )
+    if (!match) {
+      ast.columns.push(column)
+      return column
+    }
+    if (column.sort && !match.sort) match.sort = column.sort
+    return match
+  }
+
   private parseSelect(ast: QueryAst) {
     if (this.peekPunct(')')) return
-    ast.columns.push(this.parseSelectItem())
-    while (this.tryPunct(',')) ast.columns.push(this.parseSelectItem())
+    this.mergeColumn(ast, this.parseSelectItem())
+    while (this.tryPunct(',')) this.mergeColumn(ast, this.parseSelectItem())
   }
 
   private parseSelectItem(): Column {
     const name = this.expectIdent('ожидалось поле или агрегат')
     if (this.tryPunct('(')) {
-      if (!AGGREGATE_SET.has(name)) {
+      const fn = name.toLowerCase()
+      if (!AGGREGATE_SET.has(fn)) {
         throw new ParseFailure(`неизвестная агрегатная функция ${name}`, this.prev().start)
       }
-      const field = this.peekPunct(')') ? '' : this.expectIdent('ожидалось поле агрегата')
+      let field = ''
+      if (this.tryPunct('*')) {
+        field = ''
+      } else if (!this.peekPunct(')')) {
+        field = this.expectIdent('ожидалось поле агрегата')
+      }
       this.expectPunct(')', 'ожидалась ) после агрегата')
-      return { id: newId('col'), field, aggregate: name as AggregateFn }
+      const column: Column = { id: newId('col'), field, aggregate: fn as AggregateFn }
+      this.finishAlias(column)
+      return column
     }
-    return { id: newId('col'), field: name }
+    const alias = this.aliases.get(name)
+    if (alias) {
+      const column: Column = { id: newId('col'), field: alias.field, aggregate: alias.aggregate }
+      this.finishAlias(column)
+      return column
+    }
+    const column: Column = { id: newId('col'), field: name }
+    this.finishAlias(column)
+    return column
+  }
+
+  private finishAlias(column: Column) {
+    if (!this.tryKeyword('as')) return
+    const alias = this.expectIdent('ожидался псевдоним')
+    this.aliases.set(alias, { field: column.field, aggregate: column.aggregate })
   }
 
   private parseSort(ast: QueryAst) {
     if (this.peekPunct(')')) return
-    let priority = 1
-    this.applySort(ast, this.parseSortItem(), priority)
+    let priority = ast.columns.reduce((max, column) => Math.max(max, column.sort?.priority ?? 0), 0)
+    this.applySort(ast, this.parseSortItem(), (priority += 1))
     while (this.tryPunct(',')) {
-      priority += 1
-      this.applySort(ast, this.parseSortItem(), priority)
+      this.applySort(ast, this.parseSortItem(), (priority += 1))
     }
   }
 
   private parseSortItem(): { column: Column; dir: SortDir } {
     const column = this.parseSelectItem()
     let dir: SortDir = 'asc'
-    if (this.peekIdent('asc') || this.peekIdent('desc')) {
-      dir = this.take().value as SortDir
+    if (this.peekKeyword('asc') || this.peekKeyword('desc')) {
+      dir = this.take().value.toLowerCase() as SortDir
     }
     return { column, dir }
   }
 
   private applySort(ast: QueryAst, item: { column: Column; dir: SortDir }, priority: number) {
-    const match = ast.columns.find(
-      (column) => column.field === item.column.field && column.aggregate === item.column.aggregate,
-    )
-    const target = match ?? item.column
+    const target = this.mergeColumn(ast, item.column)
     target.sort = { dir: item.dir, priority }
-    if (!match) ast.columns.push(target)
+  }
+
+  private parseLimit() {
+    const token = this.peek()
+    if (token.kind !== 'number') throw new ParseFailure('ожидалось число', token.start)
+    this.take()
   }
 
   private peek(): Token {
@@ -270,20 +369,24 @@ class Parser {
     return token
   }
 
-  private peekIdent(value: string): boolean {
+  private peekKeyword(value: string): boolean {
     const token = this.peek()
-    return token.kind === 'ident' && token.value === value
+    return token.kind === 'ident' && token.value.toLowerCase() === value
+  }
+
+  private tryKeyword(value: string): boolean {
+    if (!this.peekKeyword(value)) return false
+    this.take()
+    return true
+  }
+
+  private expectKeyword(value: string, message: string) {
+    if (!this.tryKeyword(value)) throw new ParseFailure(message, this.peek().start)
   }
 
   private peekPunct(value: string): boolean {
     const token = this.peek()
     return token.kind === 'punct' && token.value === value
-  }
-
-  private tryIdent(value: string): boolean {
-    if (!this.peekIdent(value)) return false
-    this.take()
-    return true
   }
 
   private tryPunct(value: string): boolean {
@@ -296,14 +399,6 @@ class Parser {
     const token = this.peek()
     if (token.kind !== 'ident') throw new ParseFailure(message, token.start)
     return this.take().value
-  }
-
-  private expectIdentValue(value: string, message: string) {
-    const token = this.peek()
-    if (token.kind !== 'ident' || token.value !== value) {
-      throw new ParseFailure(message, token.start)
-    }
-    this.take()
   }
 
   private expectPunct(value: string, message: string) {

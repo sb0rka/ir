@@ -3,7 +3,7 @@ import { defaultQuery, withoutIds, type QueryAst } from './model'
 import { parse } from './parse'
 import { serialize } from './serialize'
 import { pdqlToChips, serializeWithoutChip } from './chips'
-import { astToFilterChips, pdqlToSearchParts } from './toSearch'
+import { astToEventSearch, astToFilterChips, drillGroupValues, pdqlToSearchParts } from './toSearch'
 import { addFieldToAst, addFieldToPdql, setGroupAggregate } from './ast'
 import { appendCondition } from './append'
 import { relatedFieldColumns } from './relatedFields'
@@ -124,10 +124,28 @@ describe('parse', () => {
   })
 
   it('rejects an unknown stage', () => {
-    const result = parse('limit(10)')
+    const result = parse('window(10)')
     expect(result.ok).toBe(false)
     if (result.ok) return
     expect(result.error.message).toMatch(/стадия/)
+  })
+
+  it('ignores limit and accepts a repeated sort after grouping', () => {
+    const text =
+      'filter(event_src.host = "dkrylova.plat.form") | select(time, event_src.host, text, object.process.cmdline) | sort(time asc) | group(key: [action], agg: COUNT(*) as Cnt) | sort(Cnt desc) | limit(10000)'
+    expect(serialize(mustParse(text))).toBe(
+      'filter(event_src.host = "dkrylova.plat.form") | group(action) | select(action, time, event_src.host, text, object.process.cmdline, count()) | sort(time asc, count() desc)',
+    )
+  })
+
+  it('parses named group keys without brackets', () => {
+    expect(serialize(mustParse('group(key: action, agg: count()) | select(action, count())'))).toBe(
+      'group(action) | select(action, count())',
+    )
+  })
+
+  it('treats group(key) as a field name', () => {
+    expect(serialize(mustParse('group(key) | select(key, count())'))).toBe('group(key) | select(key, count())')
   })
 })
 
@@ -333,6 +351,82 @@ describe('astToFilterChips', () => {
       { id: 'pdql-host', field: 'host', values: ['dc01'] },
       { id: 'pdql-ip', field: 'ip', values: ['10.0.0.1', '10.0.0.2'] },
     ])
+  })
+})
+
+describe('astToEventSearch', () => {
+  it('keeps event-level sort from a MaxPatrol grouped query', () => {
+    const ast = mustParse(
+      'filter(event_src.host = "dkrylova.plat.form") | select(time, event_src.host, text, object.process.cmdline) | sort(time asc) | group(key: [action], agg: COUNT(*) as Cnt) | sort(Cnt desc) | limit(10000)',
+    )
+    expect(astToEventSearch(ast)).toEqual({
+      filter: 'event_src.host = "dkrylova.plat.form"',
+      columns: ['action', 'time', 'event_src.host', 'text', 'object.process.cmdline'],
+      sort: [{ field: 'time', direction: 'asc' }],
+      hasControls: true,
+    })
+    expect(
+      astToEventSearch(ast, ['create']),
+    ).toMatchObject({
+      group_by: ['action'],
+      group_values: ['create'],
+    })
+  })
+
+  it('puts the full predicate in filter, including entity fields', () => {
+    const ast = mustParse(
+      'filter(event_src.host = "dc01" and action = "login" or not src.ip = "8.8.8.8") | select(time) | sort(time desc)',
+    )
+    expect(astToEventSearch(ast)).toEqual({
+      filter: 'event_src.host = "dc01" and action = "login" or not src.ip = "8.8.8.8"',
+      hasControls: true,
+    })
+  })
+
+  it('sends extra columns and non-default sort without aggregates', () => {
+    const ast = mustParse(
+      'group(event_src.host) | select(event_src.host, uniq(src.ip), count(), time) | sort(time desc, event_src.host asc)',
+    )
+    expect(astToEventSearch(ast)).toEqual({
+      columns: ['event_src.host', 'time'],
+      sort: [
+        { field: 'time', direction: 'desc' },
+        { field: 'event_src.host', direction: 'asc' },
+      ],
+      hasControls: true,
+    })
+  })
+
+  it('sends group_by only after a group value is selected', () => {
+    const ast = mustParse('group(event_src.host, action) | select(event_src.host, action, time)')
+    expect(astToEventSearch(ast)).toEqual({
+      columns: ['event_src.host', 'action', 'time'],
+      hasControls: true,
+    })
+    expect(astToEventSearch(ast, ['dc01'])).toEqual({
+      columns: ['event_src.host', 'action', 'time'],
+      group_by: ['event_src.host'],
+      group_values: ['dc01'],
+      hasControls: true,
+    })
+    expect(astToEventSearch(ast, ['dc01', 'login'])).toEqual({
+      columns: ['event_src.host', 'action', 'time'],
+      group_by: ['event_src.host', 'action'],
+      group_values: ['dc01', 'login'],
+      hasControls: true,
+    })
+  })
+})
+
+describe('drillGroupValues', () => {
+  it('sets the field and clears deeper levels', () => {
+    const ast = mustParse('group(event_src.host, action) | select(time)')
+    expect(drillGroupValues(ast, ['dc01', 'login'], 'event_src.host', 'ws01')).toEqual([
+      'ws01',
+      null,
+    ])
+    expect(drillGroupValues(ast, ['dc01'], 'action', 'login')).toEqual(['dc01', 'login'])
+    expect(drillGroupValues(ast, [], 'src.ip', '1.1.1.1')).toBeNull()
   })
 })
 

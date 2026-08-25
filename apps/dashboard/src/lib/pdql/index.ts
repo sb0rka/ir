@@ -1,5 +1,5 @@
 export { parse } from './parse'
-export { formatConditionLabel, serialize } from './serialize'
+export { formatCondition, formatConditionLabel, serialize } from './serialize'
 export { appendCondition } from './append'
 export {
   addFieldToAst,
@@ -21,8 +21,19 @@ export {
 export type { EventHeaderMeta, FieldColumn, FieldGroup, FieldRow } from './siemGroups'
 export { pdqlToChips, removePdqlChip, serializeWithoutChip } from './chips'
 export type { PdqlChip, PdqlChipKind } from './chips'
-export { astToFilterChips, pdqlToSearchParts } from './toSearch'
-export type { PdqlSearchEntity, PdqlSearchParts, SearchEntityType } from './toSearch'
+export {
+  alignGroupValues,
+  astToEventSearch,
+  astToFilterChips,
+  drillGroupValues,
+  pdqlToSearchParts,
+} from './toSearch'
+export type {
+  EventSearchParts,
+  PdqlSearchEntity,
+  PdqlSearchParts,
+  SearchEntityType,
+} from './toSearch'
 export {
   AGGREGATES,
   defaultOpForType,

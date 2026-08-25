@@ -19,7 +19,7 @@ function formatSelectItem(column: Column): string {
   return column.field
 }
 
-function formatCondition(ast: QueryAst): string {
+export function formatCondition(ast: QueryAst): string {
   return ast.filter
     .map((condition, index) => {
       const body = formatConditionLabel(condition)
