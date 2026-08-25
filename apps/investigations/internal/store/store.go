@@ -18,6 +18,13 @@ var (
 	ErrInvalidValue          = errors.New("value violates a domain constraint")
 )
 
+type ConflictError struct {
+	IDs []string
+}
+
+func (e *ConflictError) Error() string { return "operation conflicts with current graph state" }
+func (e *ConflictError) Unwrap() error { return ErrConflict }
+
 type Database interface {
 	Ping(ctx context.Context) error
 	Close()
@@ -49,6 +56,14 @@ type Database interface {
 	GraphNodes(ctx context.Context, projectID, investigationID string, filter model.NodeFilter) ([]model.GraphNode, error)
 	GetNode(ctx context.Context, projectID, investigationID, nodeID string) (model.GraphNode, error)
 	GraphEdges(ctx context.Context, projectID, investigationID string, filter model.EdgeFilter) ([]model.GraphEdge, error)
+	CreateGraphEdge(ctx context.Context, edge model.GraphEdgeNew) (model.GraphEdge, error)
+	GetGraphEdge(ctx context.Context, projectID, investigationID, edgeID string) (model.GraphEdge, error)
+	UpdateGraphEdge(ctx context.Context, patch model.GraphEdgePatch) (model.GraphEdge, error)
+	DeleteGraphEdge(ctx context.Context, projectID, investigationID, edgeID string) error
+	GraphEdgeEvidence(ctx context.Context, projectID, investigationID, edgeID string) ([]model.EvidenceEvent, error)
+	AddGraphEdgeEvidence(ctx context.Context, projectID, investigationID, edgeID string, eventIDs []string) ([]model.EvidenceEvent, error)
+	DeleteGraphEdgeEvidence(ctx context.Context, projectID, investigationID, edgeID, eventID string) error
+	ReviewGraphEdges(ctx context.Context, request model.EdgeReviewRequest) (model.EdgeReviewResult, error)
 
 	Reference(ctx context.Context) (model.Reference, error)
 }

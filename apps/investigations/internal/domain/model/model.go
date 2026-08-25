@@ -404,6 +404,58 @@ type GraphEdge struct {
 	UpdatedAt        time.Time
 }
 
+type GraphEdgeNew struct {
+	ProjectID        string
+	InvestigationID  string
+	SourceNodeID     string
+	TargetNodeID     string
+	RelationCode     string
+	Confidence       *float32
+	Why              *string
+	OriginRef        *string
+	EvidenceEventIDs []string
+}
+
+type GraphEdgePatch struct {
+	ProjectID       string
+	InvestigationID string
+	EdgeID          string
+	Version         int
+	Status          *string
+	RejectReason    *string
+	Confidence      *float32
+	Why             *string
+	Metadata        []byte
+	HasMetadata     bool
+}
+
+type EvidenceEvent struct {
+	ID            string
+	SourceCode    string
+	SourceEventID string
+	SourceRef     *string
+	EventType     string
+	OccurredAt    time.Time
+}
+
+type EdgeReviewItem struct {
+	ID      string
+	Version int
+	Reason  *string
+}
+
+type EdgeReviewRequest struct {
+	ProjectID       string
+	InvestigationID string
+	Confirm         []EdgeReviewItem
+	Reject          []EdgeReviewItem
+}
+
+type EdgeReviewResult struct {
+	Confirmed []string
+	Rejected  []string
+}
+
 type EntityType struct{ Code, Title, Category string }
 type RelationType struct {
 	Code, Title, SourceKind, TargetKind string
