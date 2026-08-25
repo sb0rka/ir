@@ -48,4 +48,10 @@ Development and contract tests use reviewed, sanitized captures from `docs-inter
 
 Gateway builds the vendor query itself and always fetches the canonical identity fields required to return normalized events. Unknown fields and unsafe predicate syntax are rejected before an outbound call. These controls are source-specific: a request that selects `pt-nad` with any of them returns a source error instead of silently ignoring the options.
 
+## Event aggregation
+
+`POST /api/v1/events/aggregate` returns source-local `{source_code, values, count}` groups for a required `time_range` and `group_by`. It accepts the same bounded entity conditions and predicate syntax as event search. Group sorting is limited to canonical `count` or a requested `group_by` field; the default is `count desc`. `limit` is applied independently to each source and there is no aggregation cursor or cross-source count merge.
+
+MaxPatrol uses its reviewed `/api/events/v3/events/aggregation` operation. The adapter owns the required `select`, `group`, count alias, tie-break sorting, and limit pipeline. PT NAD remains an event source for normalized search and context, but reports `unsupported_event_aggregation` for this narrower operation. To drill into one returned group, call `/api/v1/events/search` with the same `group_by` and aligned `group_values`.
+
 See [architecture](docs/architecture.md), [provider mappings](docs/providers.md), and the [OpenAPI contract](../../api/gateway/openapi.yaml).

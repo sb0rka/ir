@@ -126,6 +126,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/events/aggregate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Aggregate events into source-local groups */
+        post: operations["aggregateEvents"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/context/resolve": {
         parameters: {
             query?: never;
@@ -587,11 +604,50 @@ export interface components {
             resolutions: components["schemas"]["ObjectResolution"][];
             source_errors: components["schemas"]["SourceError"][];
         };
-        /** @description Source event field and direction used to order matching events. */
+        /** @description Field and direction used to order matching events or event groups. */
         EventSort: {
             field: string;
             /** @enum {string} */
             direction: "asc" | "desc";
+        };
+        /** @description Filters for source-local event group counts. */
+        AggregateEventsRequest: {
+            /** @description Source codes to query; omit to use every allowed event source. */
+            sources?: string[];
+            /** @description Required occurrence-time interval. */
+            time_range: components["schemas"]["TimeRange"];
+            /** @description Entity conditions; an event matches when it contains at least one listed entity. */
+            entities?: components["schemas"]["EntityRef"][];
+            /** @description Bounded source predicate without a query pipeline. Pipeline separators, comments, and control characters are rejected. */
+            filter?: string;
+            /** @description Allowlisted source event fields whose values form each group. */
+            group_by: string[];
+            /** @description Ordered group sort rules. A field must be count or one of group_by; defaults to count descending. */
+            sort?: components["schemas"]["EventSort"][];
+            /**
+             * @description Maximum number of groups returned by each selected source.
+             * @default 100
+             */
+            limit: number;
+        };
+        /** @description One source-local group and its event count. */
+        EventGroup: {
+            /** @description Source that calculated the group. */
+            source_code: string;
+            /** @description Group values aligned by position with the request group_by fields. */
+            values: (string | null)[];
+            /**
+             * Format: int64
+             * @description Number of source events in the group.
+             */
+            count: number;
+        };
+        /** @description Source-local event groups without cross-source merging. */
+        AggregateEventsResponse: {
+            groups: components["schemas"]["EventGroup"][];
+            source_states: components["schemas"]["SourceState"][];
+            /** @description Per-source failures when at least one selected source succeeded. */
+            source_errors: components["schemas"]["SourceError"][];
         };
         /** @description Filters for a normalized multi-source event search. */
         SearchEventsRequest: {
@@ -1215,6 +1271,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SearchEventsResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["ValidationError"];
+            500: components["responses"]["InternalError"];
+            502: components["responses"]["BadGateway"];
+            504: components["responses"]["GatewayTimeout"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    aggregateEvents: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Sb0rka project whose integration allowlist is used. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AggregateEventsRequest"];
+            };
+        };
+        responses: {
+            /** @description Source-local event groups and their counts. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AggregateEventsResponse"];
                 };
             };
             400: components["responses"]["BadRequest"];

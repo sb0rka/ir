@@ -7,6 +7,7 @@ Vendor DTOs and fixed query builders live in `internal/adapters/proxy/<provider>
 - Incident search/detail uses the Incident Read Model backend and follows only confirmed offset pagination for child events, accounts, files, links, and asset groups.
 - Correlations are firing events from `POST /api/events/v3/events` (PDQL filter with `correlation_name != null`). Exact resolution retrieves the UUID and then each listed subevent.
 - Event search accepts an allowlisted predicate, columns, ordered sort rules, and a selected group path. The adapter composes the PDQL pipeline and rejects arbitrary pipeline fragments, comments, unknown fields, and misaligned group values.
+- Event aggregation calls `POST /api/events/v3/events/aggregation` through a fixed PDQL template. Public `count` sorting maps to the private `Cnt` alias; group values are bounded strings or null and counts must be non-negative integers. PT NAD does not implement this narrower operation.
 - Incident resolution emits child correlation firings as first-class findings. Correlation and subevents also become granular events; subevents carry bounded `parent_source_event_id` and `relation_type=subevent_of` metadata for graph decomposition.
 - `/api/siem/v2/rules/correlation` is intentionally excluded because no reviewed response capture defines rule objects.
 - Account userinfo and health probes use the same per-call project cookie without storing it in the client.
