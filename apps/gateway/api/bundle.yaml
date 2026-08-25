@@ -622,6 +622,15 @@ paths:
       operationId: listSources
       parameters:
         - $ref: '#/components/parameters/ProjectId'
+        - name: refresh
+          in: query
+          required: false
+          description: >-
+            Bypass cached statuses and reload current project credentials before
+            probing.
+          schema:
+            type: boolean
+            default: false
       responses:
         '200':
           description: Registered sources.

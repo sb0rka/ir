@@ -18,7 +18,7 @@ func (service *Service) GetAccountUserinfo(ctx context.Context, access ProjectAc
 	requestCtx, cancel := context.WithTimeout(ctx, service.requestTimeout)
 	defer cancel()
 	var userinfo domain.AccountUserinfo
-	err = service.callProvider(requestCtx, access, provider, func(attemptCtx context.Context, providerAccess capability.Access) error {
+	err = service.callProviderWithCredentialReload(requestCtx, access, provider, true, func(attemptCtx context.Context, providerAccess capability.Access) error {
 		var innerErr error
 		userinfo, innerErr = provider.AccountUserinfo.GetAccountUserinfo(attemptCtx, providerAccess)
 		return innerErr

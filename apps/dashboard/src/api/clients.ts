@@ -19,7 +19,9 @@ export const gatewayClient = createClient<GatewayPaths>({
 gatewayClient.use({
   onRequest({ request }) {
     const projectId = getProjectId()
-    if (projectId) request.headers.set('X-Project-ID', projectId)
+    if (projectId && !request.headers.has('X-Project-ID')) {
+      request.headers.set('X-Project-ID', projectId)
+    }
     const token = getAccessToken()
     if (token) request.headers.set('Authorization', `Bearer ${token}`)
     return request

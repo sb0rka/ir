@@ -1432,7 +1432,10 @@ export interface operations {
     };
     listSources: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Bypass cached statuses and reload current project credentials before probing. */
+                refresh?: boolean;
+            };
             header: {
                 /** @description Sb0rka project whose integration allowlist is used. */
                 "X-Project-ID": components["parameters"]["ProjectId"];

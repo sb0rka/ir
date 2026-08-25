@@ -21,9 +21,15 @@ export interface ProjectSource {
   capabilities?: string[]
 }
 
-export async function listProjectSources(projectId: string): Promise<ProjectSource[]> {
+export async function listProjectSources(
+  projectId: string,
+  refresh = false,
+): Promise<ProjectSource[]> {
   const { data, error, response } = await gatewayClient.GET('/api/v1/sources', {
-    params: { header: { 'X-Project-ID': projectId } },
+    params: {
+      header: { 'X-Project-ID': projectId },
+      query: { refresh },
+    },
   })
   if (error || !data) throw unwrapError(error, response.status)
   return (data.items ?? []) as ProjectSource[]

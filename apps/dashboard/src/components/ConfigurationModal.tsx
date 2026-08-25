@@ -87,6 +87,13 @@ const emptyStates: Record<SecretName, FieldState> = {
   [PT_NAD_COOKIE_SECRET]: 'idle',
 }
 
+interface SourceProbeResult {
+  userName?: string
+  error?: string
+}
+
+type SourceProbes = Record<string, SourceProbeResult>
+
 function isSecretName(name: DraftName): name is typeof SOM_SECRET {
   return name === SOM_SECRET
 }
@@ -104,35 +111,31 @@ function isPtNadCookieField(name: DraftName): name is PtNadCookieField {
   return name === PT_NAD_COOKIE_SESSIONID || name === PT_NAD_COOKIE_CSRFTOKEN
 }
 
-function sourceIsOnline(status: ProjectSource['status']): boolean {
-  return status === 'online' || status === 'degraded'
-}
-
-async function loadSourceStatuses(projectId: string): Promise<{
+async function loadSourceStatuses(projectId: string, refresh = false): Promise<{
   sources: ProjectSource[]
-  userinfo: Record<string, string | null>
+  probes: SourceProbes
 }> {
-  const sources = await listProjectSources(projectId)
-  const userinfo: Record<string, string | null> = {}
+  const sources = await listProjectSources(projectId, refresh)
+  const probes: SourceProbes = {}
   await Promise.all(
     sources
       .filter((source) => source.capabilities?.includes('account_userinfo'))
       .map(async (source) => {
-        if (!sourceIsOnline(source.status)) {
-          userinfo[source.code] = null
-          return
-        }
         try {
-          userinfo[source.code] = await withTimeout(
-            probeSourceUserinfo(projectId, source.code),
-            PT_PROBE_TIMEOUT_MS,
-          )
-        } catch {
-          userinfo[source.code] = null
+          probes[source.code] = {
+            userName: await withTimeout(
+              probeSourceUserinfo(projectId, source.code),
+              PT_PROBE_TIMEOUT_MS,
+            ),
+          }
+        } catch (reason) {
+          probes[source.code] = {
+            error: reason instanceof Error ? reason.message : 'Не удалось проверить account_userinfo',
+          }
         }
       }),
   )
-  return { sources, userinfo }
+  return { sources, probes }
 }
 
 function FieldStatus({ state }: { state: FieldState }) {
@@ -196,7 +199,7 @@ export function ConfigurationModal({
   const [states, setStates] = useState<Record<SecretName, FieldState>>(emptyStates)
   const [errors, setErrors] = useState<Partial<Record<SecretName | 'som' | 'sources', string>>>({})
   const [sources, setSources] = useState<ProjectSource[]>([])
-  const [userinfoBySource, setUserinfoBySource] = useState<Record<string, string | null>>({})
+  const [sourceProbes, setSourceProbes] = useState<SourceProbes>({})
   const [sourcesLoading, setSourcesLoading] = useState(true)
   const [somLoading, setSomLoading] = useState(true)
   const [somWorkspaces, setSomWorkspaces] = useState<SomWorkspaceOption[]>([])
@@ -223,7 +226,7 @@ export function ConfigurationModal({
     setErrors({})
     setSummary(null)
     setSources([])
-    setUserinfoBySource({})
+    setSourceProbes({})
     setSourcesLoading(true)
     setSomLoading(true)
     setSomWorkspaces([])
@@ -232,17 +235,17 @@ export function ConfigurationModal({
     setSomBoardId('')
 
     void loadSourceStatuses(projectId)
-      .then(({ sources: loadedSources, userinfo }) => {
+      .then(({ sources: loadedSources, probes }) => {
         if (!cancelled) {
           setSources(loadedSources)
-          setUserinfoBySource(userinfo)
+          setSourceProbes(probes)
           setErrors((current) => ({ ...current, sources: undefined }))
         }
       })
       .catch((reason: unknown) => {
         if (!cancelled) {
           setSources([])
-          setUserinfoBySource({})
+          setSourceProbes({})
           setErrors((current) => ({
             ...current,
             sources: reason instanceof Error ? reason.message : 'Не удалось проверить источники',
@@ -400,25 +403,21 @@ export function ConfigurationModal({
     }
 
     const projectChanged = projectId !== currentProjectId
-    const ptChanged = savedNames.has(PT_COOKIE_SECRET)
-    const nadChanged = savedNames.has(PT_NAD_COOKIE_SECRET)
-    if (ptChanged || nadChanged || projectChanged) {
-      setSourcesLoading(true)
-      try {
-        const { sources: loadedSources, userinfo } = await loadSourceStatuses(projectId)
-        setSources(loadedSources)
-        setUserinfoBySource(userinfo)
-        setErrors((current) => ({ ...current, sources: undefined }))
-      } catch (reason) {
-        setSources([])
-        setUserinfoBySource({})
-        setErrors((current) => ({
-          ...current,
-          sources: reason instanceof Error ? reason.message : 'Не удалось проверить источники',
-        }))
-      } finally {
-        setSourcesLoading(false)
-      }
+    setSourcesLoading(true)
+    try {
+      const { sources: loadedSources, probes } = await loadSourceStatuses(projectId, true)
+      setSources(loadedSources)
+      setSourceProbes(probes)
+      setErrors((current) => ({ ...current, sources: undefined }))
+    } catch (reason) {
+      setSources([])
+      setSourceProbes({})
+      setErrors((current) => ({
+        ...current,
+        sources: reason instanceof Error ? reason.message : 'Не удалось проверить источники',
+      }))
+    } finally {
+      setSourcesLoading(false)
     }
 
     const somChanged = savedNames.has(SOM_SECRET)
@@ -521,7 +520,7 @@ export function ConfigurationModal({
             <SourceStatusPanel
               loading={sourcesLoading}
               sources={sources}
-              userinfoBySource={userinfoBySource}
+              probes={sourceProbes}
               error={errors.sources}
             />
 
@@ -678,12 +677,12 @@ export function ConfigurationModal({
 function SourceStatusPanel({
   loading,
   sources,
-  userinfoBySource,
+  probes,
   error,
 }: {
   loading: boolean
   sources: ProjectSource[]
-  userinfoBySource: Record<string, string | null>
+  probes: SourceProbes
   error?: string
 }) {
   return (
@@ -699,7 +698,7 @@ function SourceStatusPanel({
             <SourceStatusLine
               key={source.code}
               source={source}
-              caption={userinfoBySource[source.code] ?? undefined}
+              probe={probes[source.code]}
             />
           ))}
         </div>
@@ -711,12 +710,26 @@ function SourceStatusPanel({
 
 function SourceStatusLine({
   source,
-  caption,
+  probe,
 }: {
   source: ProjectSource
-  caption?: string
+  probe?: SourceProbeResult
 }) {
-  const online = sourceIsOnline(source.status)
+  const probeFailed = source.capabilities?.includes('account_userinfo') && probe?.error
+  const label =
+    source.status === 'offline'
+      ? 'не в сети'
+      : source.status === 'degraded'
+        ? 'частично доступен'
+        : probeFailed
+          ? 'ошибка проверки'
+          : 'онлайн'
+  const statusClass =
+    source.status === 'offline'
+      ? 'text-critical'
+      : source.status === 'degraded' || probeFailed
+        ? 'text-medium'
+        : 'text-confirmed'
   return (
     <div>
       <div className="flex items-center justify-between gap-3">
@@ -724,13 +737,14 @@ function SourceStatusLine({
         <span
           className={clsx(
             'shrink-0 text-xs font-medium',
-            online ? 'text-confirmed' : 'text-critical',
+            statusClass,
           )}
         >
-          {online ? 'онлайн' : 'не в сети'}
+          {label}
         </span>
       </div>
-      {caption && <p className="mt-0.5 text-[11px] text-fg-dim">{caption}</p>}
+      {probe?.userName && <p className="mt-0.5 text-[11px] text-fg-dim">{probe.userName}</p>}
+      {probe?.error && <p className="mt-0.5 text-[11px] text-critical">{probe.error}</p>}
     </div>
   )
 }

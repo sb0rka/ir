@@ -1189,6 +1189,9 @@ type SearchSessionsParams struct {
 
 // ListSourcesParams defines parameters for ListSources.
 type ListSourcesParams struct {
+	// Refresh Bypass cached statuses and reload current project credentials before probing.
+	Refresh *bool `form:"refresh,omitempty" json:"refresh,omitempty"`
+
 	// XProjectID Sb0rka project whose integration allowlist is used.
 	XProjectID ProjectId `json:"X-Project-ID"`
 }
@@ -1684,6 +1687,19 @@ func (siw *ServerInterfaceWrapper) ListSources(w http.ResponseWriter, r *http.Re
 
 	// Parameter object where we will unmarshal all parameters from the context
 	var params ListSourcesParams
+
+	// ------------- Optional query parameter "refresh" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "refresh", r.URL.Query(), &params.Refresh, runtime.BindQueryParameterOptions{Type: "boolean", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "refresh"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "refresh", Err: err})
+		}
+		return
+	}
 
 	headers := r.Header
 

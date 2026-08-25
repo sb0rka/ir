@@ -37,31 +37,38 @@ type credentialSnapshot struct {
 	cookie string
 }
 
+type credentialLoad struct {
+	mu   sync.Mutex
+	refs int
+}
+
 type sourceStatusSnapshot struct {
 	status    string
 	expiresAt time.Time
 }
 
 type Service struct {
-	registry       *registry.Registry
-	secrets        SecretResolver
-	requestTimeout time.Duration
-	sourceTimeout  time.Duration
-	cacheMu        sync.Mutex
-	credentials    map[credentialKey]credentialSnapshot
-	credentialKeys []credentialKey
-	statusMu       sync.Mutex
-	statuses       map[credentialKey]sourceStatusSnapshot
+	registry        *registry.Registry
+	secrets         SecretResolver
+	requestTimeout  time.Duration
+	sourceTimeout   time.Duration
+	cacheMu         sync.Mutex
+	credentials     map[credentialKey]credentialSnapshot
+	credentialKeys  []credentialKey
+	credentialLoads map[credentialKey]*credentialLoad
+	statusMu        sync.Mutex
+	statuses        map[credentialKey]sourceStatusSnapshot
 }
 
 func New(registry *registry.Registry, secrets SecretResolver, requestTimeout, sourceTimeout time.Duration) *Service {
 	return &Service{
-		registry:       registry,
-		secrets:        secrets,
-		requestTimeout: requestTimeout,
-		sourceTimeout:  sourceTimeout,
-		credentials:    make(map[credentialKey]credentialSnapshot),
-		statuses:       make(map[credentialKey]sourceStatusSnapshot),
+		registry:        registry,
+		secrets:         secrets,
+		requestTimeout:  requestTimeout,
+		sourceTimeout:   sourceTimeout,
+		credentials:     make(map[credentialKey]credentialSnapshot),
+		credentialLoads: make(map[credentialKey]*credentialLoad),
+		statuses:        make(map[credentialKey]sourceStatusSnapshot),
 	}
 }
 
@@ -180,15 +187,18 @@ func appendPendingErrors(items *[]domain.SourceError, pending map[string]struct{
 	}
 }
 
-// loadCredentials intentionally holds the lock while resolving a Secret. This
-// provides one in-flight load per cache key without ever sharing a credential
-// across projects or providers. Loads are rare and the bounded cache prevents
-// unbounded project cardinality.
+// loadCredentials serializes Secret resolution per project/source key. Different
+// providers resolve concurrently so one slow Secret cannot consume another
+// provider's request budget.
 func (service *Service) loadCredentials(ctx context.Context, access ProjectAccess, provider registry.Provider, force bool) (credentialSnapshot, error) {
 	key := credentialKey{projectID: access.ProjectID, sourceCode: provider.Source.Code}
-	service.cacheMu.Lock()
-	defer service.cacheMu.Unlock()
+	if force {
+		service.invalidateSourceStatus(key)
+	}
+	release := service.acquireCredentialLoad(key)
+	defer release()
 
+	service.cacheMu.Lock()
 	if force {
 		delete(service.credentials, key)
 		for index, cachedKey := range service.credentialKeys {
@@ -199,8 +209,11 @@ func (service *Service) loadCredentials(ctx context.Context, access ProjectAcces
 		}
 	}
 	if snapshot, ok := service.credentials[key]; ok {
+		service.cacheMu.Unlock()
 		return snapshot, nil
 	}
+	service.cacheMu.Unlock()
+
 	if service.secrets == nil || strings.TrimSpace(access.Bearer) == "" || strings.TrimSpace(provider.CredentialSecret) == "" {
 		return credentialSnapshot{}, sourceUnavailable()
 	}
@@ -213,6 +226,8 @@ func (service *Service) loadCredentials(ctx context.Context, access ProjectAcces
 		return credentialSnapshot{}, sourceUnavailable()
 	}
 	snapshot := credentialSnapshot{cookie: cookie}
+	service.cacheMu.Lock()
+	defer service.cacheMu.Unlock()
 	if len(service.credentials) >= credentialCacheLimit {
 		oldest := service.credentialKeys[0]
 		service.credentialKeys = service.credentialKeys[1:]
@@ -221,6 +236,28 @@ func (service *Service) loadCredentials(ctx context.Context, access ProjectAcces
 	service.credentials[key] = snapshot
 	service.credentialKeys = append(service.credentialKeys, key)
 	return snapshot, nil
+}
+
+func (service *Service) acquireCredentialLoad(key credentialKey) func() {
+	service.cacheMu.Lock()
+	load := service.credentialLoads[key]
+	if load == nil {
+		load = &credentialLoad{}
+		service.credentialLoads[key] = load
+	}
+	load.refs++
+	service.cacheMu.Unlock()
+
+	load.mu.Lock()
+	return func() {
+		load.mu.Unlock()
+		service.cacheMu.Lock()
+		defer service.cacheMu.Unlock()
+		load.refs--
+		if load.refs == 0 {
+			delete(service.credentialLoads, key)
+		}
+	}
 }
 
 func sourceUnavailable() error {
@@ -233,7 +270,8 @@ func retryableProviderError(ctx context.Context, err error) bool {
 	}
 	var upstream *domain.UpstreamError
 	if errors.As(err, &upstream) {
-		return upstream.StatusCode == 401 || upstream.StatusCode == 403 || upstream.StatusCode >= 500
+		return upstream.StatusCode == 401 || upstream.StatusCode == 403 ||
+			(upstream.StatusCode >= 300 && upstream.StatusCode < 400) || upstream.StatusCode >= 500
 	}
 	if errors.Is(err, context.DeadlineExceeded) {
 		return true
@@ -270,7 +308,11 @@ func providerError(err error) error {
 }
 
 func (service *Service) callProvider(ctx context.Context, access ProjectAccess, provider registry.Provider, call func(context.Context, capability.Access) error) error {
-	credentials, err := service.loadCredentials(ctx, access, provider, false)
+	return service.callProviderWithCredentialReload(ctx, access, provider, false, call)
+}
+
+func (service *Service) callProviderWithCredentialReload(ctx context.Context, access ProjectAccess, provider registry.Provider, force bool, call func(context.Context, capability.Access) error) error {
+	credentials, err := service.loadCredentials(ctx, access, provider, force)
 	if err != nil {
 		return err
 	}

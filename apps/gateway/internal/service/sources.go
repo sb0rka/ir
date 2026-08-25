@@ -23,7 +23,7 @@ func (service *Service) Supports(sourceCode string, capabilityName domain.Capabi
 	return false
 }
 
-func (service *Service) ListSources(ctx context.Context, access ProjectAccess, allowedSources []string) []domain.Source {
+func (service *Service) ListSources(ctx context.Context, access ProjectAccess, allowedSources []string, refresh bool) []domain.Source {
 	allowed := make(map[string]bool, len(allowedSources))
 	for _, source := range allowedSources {
 		allowed[source] = true
@@ -47,26 +47,28 @@ func (service *Service) ListSources(ctx context.Context, access ProjectAccess, a
 		index := index
 		go func() {
 			key := credentialKey{projectID: access.ProjectID, sourceCode: items[index].Code}
-			if status, ok := service.cachedSourceStatus(key); ok {
-				results <- probeResult{index: index, status: status}
-				return
+			if !refresh {
+				if status, ok := service.cachedSourceStatus(key); ok {
+					results <- probeResult{index: index, status: status}
+					return
+				}
 			}
 			provider, ok := service.registry.Provider(items[index].Code)
 			if !ok || provider.Prober == nil {
-				service.cacheSourceStatus(key, "offline")
 				results <- probeResult{index: index, status: "offline"}
 				return
 			}
 			status := "offline"
-			err := service.callProvider(requestCtx, access, provider, func(attemptCtx context.Context, providerAccess capability.Access) error {
+			err := service.callProviderWithCredentialReload(requestCtx, access, provider, refresh, func(attemptCtx context.Context, providerAccess capability.Access) error {
 				var innerErr error
 				status, innerErr = provider.Prober.Probe(attemptCtx, providerAccess)
 				return innerErr
 			})
 			if err != nil || (status != "online" && status != "degraded") {
 				status = "offline"
+			} else if requestCtx.Err() == nil {
+				service.cacheSourceStatus(key, status)
 			}
-			service.cacheSourceStatus(key, status)
 			results <- probeResult{index: index, status: status}
 		}()
 	}
@@ -106,4 +108,10 @@ func (service *Service) cacheSourceStatus(key credentialKey, status string) {
 		}
 	}
 	service.statuses[key] = sourceStatusSnapshot{status: status, expiresAt: now.Add(sourceStatusTTL)}
+}
+
+func (service *Service) invalidateSourceStatus(key credentialKey) {
+	service.statusMu.Lock()
+	defer service.statusMu.Unlock()
+	delete(service.statuses, key)
 }
