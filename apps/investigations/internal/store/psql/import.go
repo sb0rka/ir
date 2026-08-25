@@ -828,12 +828,32 @@ func insertEdgeTx(ctx context.Context, tx pgx.Tx, investigationID string, source
 	if source.InvestigationID != investigationID || target.InvestigationID != investigationID {
 		return "", false, store.ErrUnknownReference
 	}
+	var err error
+	var directed bool
+	source, target, directed, err = normalizeEdgeNodesTx(ctx, tx, source, target, relationCode)
+	if err != nil {
+		return "", false, err
+	}
+	if !directed {
+		var existingID string
+		err := tx.QueryRow(ctx, `SELECT id::text FROM edges
+			WHERE investigation_id=$1::uuid AND relation_code=$2
+			  AND ((source_node_id=$3::uuid AND target_node_id=$4::uuid)
+			    OR (source_node_id=$4::uuid AND target_node_id=$3::uuid))
+			LIMIT 1`, investigationID, relationCode, source.ID, target.ID).Scan(&existingID)
+		if err == nil {
+			return existingID, false, nil
+		}
+		if !errors.Is(err, pgx.ErrNoRows) {
+			return "", false, fmt.Errorf("find undirected edge: %w", mapConstraint(err))
+		}
+	}
 	metadataJSON := "{}"
 	if len(metadata) > 0 {
 		metadataJSON = string(metadata)
 	}
 	var edgeID string
-	err := tx.QueryRow(ctx, `INSERT INTO edges (investigation_id,source_node_id,target_node_id,relation_code,status,confidence,why,origin,origin_ref,metadata) VALUES ($1::uuid,$2::uuid,$3::uuid,$4,$5,$6,$7,$8,$9,$10::jsonb) ON CONFLICT (investigation_id,source_node_id,target_node_id,relation_code) DO NOTHING RETURNING id::text`, investigationID, source.ID, target.ID, relationCode, status, confidence, why, origin, originRef, metadataJSON).Scan(&edgeID)
+	err = tx.QueryRow(ctx, `INSERT INTO edges (investigation_id,source_node_id,target_node_id,relation_code,status,confidence,why,origin,origin_ref,metadata) VALUES ($1::uuid,$2::uuid,$3::uuid,$4,$5,$6,$7,$8,$9,$10::jsonb) ON CONFLICT (investigation_id,source_node_id,target_node_id,relation_code) DO NOTHING RETURNING id::text`, investigationID, source.ID, target.ID, relationCode, status, confidence, why, origin, originRef, metadataJSON).Scan(&edgeID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		err = tx.QueryRow(ctx, `SELECT id::text FROM edges WHERE investigation_id=$1::uuid AND source_node_id=$2::uuid AND target_node_id=$3::uuid AND relation_code=$4`, investigationID, source.ID, target.ID, relationCode).Scan(&edgeID)
 		return edgeID, false, err

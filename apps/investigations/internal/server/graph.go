@@ -3,13 +3,16 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 
 	"github.com/google/uuid"
 	openapi_types "github.com/oapi-codegen/runtime/types"
+	coreauthctx "github.com/sb0rka/sb0rka/packages/core/transport/authctx"
 
 	"github.com/sb0rka/ir/apps/investigations/internal/domain/model"
+	"github.com/sb0rka/ir/apps/investigations/internal/store"
 	"github.com/sb0rka/ir/apps/investigations/internal/transport/httperr"
 	"github.com/sb0rka/ir/packages/contract/graph"
 )
@@ -280,30 +283,263 @@ func convertGraphEdge(item model.GraphEdge) (graph.GraphEdge, error) {
 	return out, nil
 }
 
-func (s *Server) CreateGraphEdge(context.Context, graph.CreateGraphEdgeRequestObject) (graph.CreateGraphEdgeResponseObject, error) {
-	return nil, httperr.ErrNotImplemented
+func edgeStoreError(err error) error {
+	var conflict *store.ConflictError
+	if errors.As(err, &conflict) {
+		return httperr.New(http.StatusConflict, httperr.CodeConflict,
+			"operation conflicts with current graph state").WithDetails(map[string]any{"conflicts": conflict.IDs})
+	}
+	return storeError(err)
 }
-func (s *Server) DeleteGraphEdge(context.Context, graph.DeleteGraphEdgeRequestObject) (graph.DeleteGraphEdgeResponseObject, error) {
-	return nil, httperr.ErrNotImplemented
+
+func (s *Server) CreateGraphEdge(ctx context.Context, request graph.CreateGraphEdgeRequestObject) (graph.CreateGraphEdgeResponseObject, error) {
+	scope, err := s.scope(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if request.Body == nil {
+		return nil, httperr.BadRequest("request body is required")
+	}
+	relationCode := strings.TrimSpace(request.Body.RelationCode)
+	if relationCode == "" {
+		return nil, validationError("relation_code is required")
+	}
+	if request.Body.Confidence != nil && (*request.Body.Confidence < 0 || *request.Body.Confidence > 1) {
+		return nil, validationError("confidence must be between 0 and 1")
+	}
+	var why *string
+	if request.Body.Why != nil {
+		value := strings.TrimSpace(*request.Body.Why)
+		if value != "" {
+			why = &value
+		}
+	}
+	var originRef *string
+	if subjectID, ok := coreauthctx.SubjectIDFromContext(ctx); ok {
+		originRef = &subjectID
+	}
+	input := model.GraphEdgeNew{
+		ProjectID:       scope.ProjectID,
+		InvestigationID: request.InvestigationId.String(),
+		SourceNodeID:    request.Body.SourceNodeId.String(),
+		TargetNodeID:    request.Body.TargetNodeId.String(),
+		RelationCode:    relationCode,
+		Confidence:      request.Body.Confidence,
+		Why:             why,
+		OriginRef:       originRef,
+	}
+	if request.Body.EvidenceEventIds != nil {
+		for _, id := range *request.Body.EvidenceEventIds {
+			input.EvidenceEventIDs = append(input.EvidenceEventIDs, id.String())
+		}
+	}
+	edge, err := s.db.CreateGraphEdge(ctx, input)
+	if err != nil {
+		return nil, edgeStoreError(err)
+	}
+	out, err := convertGraphEdge(edge)
+	if err != nil {
+		return nil, err
+	}
+	return graph.CreateGraphEdge201JSONResponse(out), nil
 }
-func (s *Server) GetGraphEdge(context.Context, graph.GetGraphEdgeRequestObject) (graph.GetGraphEdgeResponseObject, error) {
-	return nil, httperr.ErrNotImplemented
+
+func (s *Server) GetGraphEdge(ctx context.Context, request graph.GetGraphEdgeRequestObject) (graph.GetGraphEdgeResponseObject, error) {
+	scope, err := s.scope(ctx)
+	if err != nil {
+		return nil, err
+	}
+	edge, err := s.db.GetGraphEdge(ctx, scope.ProjectID, request.InvestigationId.String(), request.EdgeId.String())
+	if err != nil {
+		return nil, edgeStoreError(err)
+	}
+	out, err := convertGraphEdge(edge)
+	if err != nil {
+		return nil, err
+	}
+	return graph.GetGraphEdge200JSONResponse(out), nil
 }
-func (s *Server) UpdateGraphEdge(context.Context, graph.UpdateGraphEdgeRequestObject) (graph.UpdateGraphEdgeResponseObject, error) {
-	return nil, httperr.ErrNotImplemented
+
+func (s *Server) UpdateGraphEdge(ctx context.Context, request graph.UpdateGraphEdgeRequestObject) (graph.UpdateGraphEdgeResponseObject, error) {
+	scope, err := s.scope(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if request.Body == nil {
+		return nil, httperr.BadRequest("request body is required")
+	}
+	if request.Body.Version < 1 {
+		return nil, validationError("version must be positive")
+	}
+	if request.Body.Confidence != nil && (*request.Body.Confidence < 0 || *request.Body.Confidence > 1) {
+		return nil, validationError("confidence must be between 0 and 1")
+	}
+	patch := model.GraphEdgePatch{
+		ProjectID:       scope.ProjectID,
+		InvestigationID: request.InvestigationId.String(),
+		EdgeID:          request.EdgeId.String(),
+		Version:         request.Body.Version,
+		RejectReason:    request.Body.RejectReason,
+		Confidence:      request.Body.Confidence,
+		Why:             request.Body.Why,
+	}
+	if request.Body.Status != nil {
+		value := string(*request.Body.Status)
+		patch.Status = &value
+	}
+	if request.Body.Metadata != nil {
+		patch.Metadata, _ = json.Marshal(*request.Body.Metadata)
+		patch.HasMetadata = true
+	}
+	edge, err := s.db.UpdateGraphEdge(ctx, patch)
+	if err != nil {
+		return nil, edgeStoreError(err)
+	}
+	out, err := convertGraphEdge(edge)
+	if err != nil {
+		return nil, err
+	}
+	return graph.UpdateGraphEdge200JSONResponse(out), nil
 }
-func (s *Server) ListGraphEdgeEvidence(context.Context, graph.ListGraphEdgeEvidenceRequestObject) (graph.ListGraphEdgeEvidenceResponseObject, error) {
-	return nil, httperr.ErrNotImplemented
+
+func (s *Server) DeleteGraphEdge(ctx context.Context, request graph.DeleteGraphEdgeRequestObject) (graph.DeleteGraphEdgeResponseObject, error) {
+	scope, err := s.scope(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.db.DeleteGraphEdge(ctx, scope.ProjectID, request.InvestigationId.String(), request.EdgeId.String()); err != nil {
+		return nil, edgeStoreError(err)
+	}
+	return graph.DeleteGraphEdge204Response{}, nil
 }
-func (s *Server) AddGraphEdgeEvidence(context.Context, graph.AddGraphEdgeEvidenceRequestObject) (graph.AddGraphEdgeEvidenceResponseObject, error) {
-	return nil, httperr.ErrNotImplemented
+
+func convertEvidenceEvents(items []model.EvidenceEvent) ([]graph.EvidenceEvent, error) {
+	out := make([]graph.EvidenceEvent, 0, len(items))
+	for _, item := range items {
+		id, err := dbUUID(item.ID)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, graph.EvidenceEvent{EventId: id, SourceCode: item.SourceCode,
+			SourceEventId: item.SourceEventID, SourceRef: item.SourceRef,
+			EventType: item.EventType, OccurredAt: item.OccurredAt})
+	}
+	return out, nil
 }
-func (s *Server) DeleteGraphEdgeEvidence(context.Context, graph.DeleteGraphEdgeEvidenceRequestObject) (graph.DeleteGraphEdgeEvidenceResponseObject, error) {
-	return nil, httperr.ErrNotImplemented
+
+func (s *Server) ListGraphEdgeEvidence(ctx context.Context, request graph.ListGraphEdgeEvidenceRequestObject) (graph.ListGraphEdgeEvidenceResponseObject, error) {
+	scope, err := s.scope(ctx)
+	if err != nil {
+		return nil, err
+	}
+	items, err := s.db.GraphEdgeEvidence(ctx, scope.ProjectID, request.InvestigationId.String(), request.EdgeId.String())
+	if err != nil {
+		return nil, edgeStoreError(err)
+	}
+	out, err := convertEvidenceEvents(items)
+	if err != nil {
+		return nil, err
+	}
+	return graph.ListGraphEdgeEvidence200JSONResponse(out), nil
+}
+
+func (s *Server) AddGraphEdgeEvidence(ctx context.Context, request graph.AddGraphEdgeEvidenceRequestObject) (graph.AddGraphEdgeEvidenceResponseObject, error) {
+	scope, err := s.scope(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if request.Body == nil {
+		return nil, httperr.BadRequest("request body is required")
+	}
+	if len(request.Body.EventIds) == 0 {
+		return nil, validationError("event_ids must not be empty")
+	}
+	ids := make([]string, 0, len(request.Body.EventIds))
+	for _, id := range request.Body.EventIds {
+		ids = append(ids, id.String())
+	}
+	items, err := s.db.AddGraphEdgeEvidence(ctx, scope.ProjectID, request.InvestigationId.String(), request.EdgeId.String(), ids)
+	if err != nil {
+		return nil, edgeStoreError(err)
+	}
+	out, err := convertEvidenceEvents(items)
+	if err != nil {
+		return nil, err
+	}
+	return graph.AddGraphEdgeEvidence200JSONResponse(out), nil
+}
+
+func (s *Server) DeleteGraphEdgeEvidence(ctx context.Context, request graph.DeleteGraphEdgeEvidenceRequestObject) (graph.DeleteGraphEdgeEvidenceResponseObject, error) {
+	scope, err := s.scope(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.db.DeleteGraphEdgeEvidence(ctx, scope.ProjectID, request.InvestigationId.String(), request.EdgeId.String(), request.EventId.String()); err != nil {
+		return nil, edgeStoreError(err)
+	}
+	return graph.DeleteGraphEdgeEvidence204Response{}, nil
 }
 func (s *Server) DeleteNode(context.Context, graph.DeleteNodeRequestObject) (graph.DeleteNodeResponseObject, error) {
 	return nil, httperr.ErrNotImplemented
 }
-func (s *Server) ReviewGraphEdges(context.Context, graph.ReviewGraphEdgesRequestObject) (graph.ReviewGraphEdgesResponseObject, error) {
-	return nil, httperr.ErrNotImplemented
+func (s *Server) ReviewGraphEdges(ctx context.Context, request graph.ReviewGraphEdgesRequestObject) (graph.ReviewGraphEdgesResponseObject, error) {
+	scope, err := s.scope(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if request.Body == nil {
+		return nil, httperr.BadRequest("request body is required")
+	}
+	input := model.EdgeReviewRequest{ProjectID: scope.ProjectID, InvestigationID: request.InvestigationId.String()}
+	seen := make(map[string]struct{})
+	if request.Body.Confirm != nil {
+		for _, item := range *request.Body.Confirm {
+			id := item.Id.String()
+			if item.Version < 1 {
+				return nil, validationError("review versions must be positive")
+			}
+			if _, duplicate := seen[id]; duplicate {
+				return nil, validationError("review edge ids must be unique")
+			}
+			seen[id] = struct{}{}
+			input.Confirm = append(input.Confirm, model.EdgeReviewItem{ID: id, Version: item.Version})
+		}
+	}
+	if request.Body.Reject != nil {
+		for _, item := range *request.Body.Reject {
+			id := item.Id.String()
+			reason := strings.TrimSpace(item.Reason)
+			if item.Version < 1 || reason == "" {
+				return nil, validationError("reject version and reason are required")
+			}
+			if _, duplicate := seen[id]; duplicate {
+				return nil, validationError("review edge ids must be unique")
+			}
+			seen[id] = struct{}{}
+			input.Reject = append(input.Reject, model.EdgeReviewItem{ID: id, Version: item.Version, Reason: &reason})
+		}
+	}
+	if len(input.Confirm) == 0 && len(input.Reject) == 0 {
+		return nil, validationError("at least one edge must be reviewed")
+	}
+	result, err := s.db.ReviewGraphEdges(ctx, input)
+	if err != nil {
+		return nil, edgeStoreError(err)
+	}
+	out := graph.ReviewResult{Confirmed: make([]openapi_types.UUID, 0, len(result.Confirmed)), Rejected: make([]openapi_types.UUID, 0, len(result.Rejected))}
+	for _, value := range result.Confirmed {
+		id, err := dbUUID(value)
+		if err != nil {
+			return nil, err
+		}
+		out.Confirmed = append(out.Confirmed, id)
+	}
+	for _, value := range result.Rejected {
+		id, err := dbUUID(value)
+		if err != nil {
+			return nil, err
+		}
+		out.Rejected = append(out.Rejected, id)
+	}
+	return graph.ReviewGraphEdges200JSONResponse(out), nil
 }
