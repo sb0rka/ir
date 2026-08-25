@@ -3,6 +3,7 @@ import { InvestigationHeader, ContextTable } from '../components/InvestigationHe
 import { ContextQueuePage } from '../components/ContextQueue'
 import { InvestigationGraph } from '../components/graph'
 import { DetailPanel } from '../components/DetailPanel'
+import { QueueDetailPanel } from '../components/QueueDetailPanel'
 import { AgentPanel } from '../components/AgentPanel'
 import { useAppStore } from '../store/appStore'
 import { useWorkspaceStore } from '../state/useWorkspaceStore'
@@ -60,7 +61,12 @@ export function InvestigationPage({ investigationId }: { investigationId: string
           {inv.view === 'table' ? (
             <ContextTable investigationId={investigationId} />
           ) : inv.view === 'queue' ? (
-            <ContextQueuePage investigationId={investigationId} />
+            <div className="flex min-h-0 flex-1">
+              <div className="min-w-0 flex-1">
+                <ContextQueuePage investigationId={investigationId} />
+              </div>
+              <QueueDetailPanel investigationId={investigationId} />
+            </div>
           ) : loading && inv.nodeIds.length === 0 ? (
             <div className="flex h-full items-center justify-center text-fg-dim">
               Загрузка расследования…
@@ -71,7 +77,9 @@ export function InvestigationPage({ investigationId }: { investigationId: string
             </div>
           )}
         </div>
-        {detailPanelOpen && <DetailPanel investigationId={investigationId} />}
+        {detailPanelOpen && inv.view !== 'queue' && (
+          <DetailPanel investigationId={investigationId} />
+        )}
       </div>
     </div>
   )

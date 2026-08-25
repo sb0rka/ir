@@ -172,6 +172,8 @@ export interface Investigation {
   nodeIds: string[]
   edgeIds: string[]
   findingIds: string[]
+  /** Gateway finding identities attached to this investigation (`source/instance?/kind/external_id`). */
+  findingSourceKeys: string[]
   issueIds: string[]
   createdAt: string
   view: 'table' | 'graph' | 'queue'
@@ -204,12 +206,16 @@ export interface ContextQueueState {
   chips: FilterChip[]
   pdql: string
   timeInterval: TimeInterval
+  queueSource: QueueSource
   executedFingerprint: string | null
   queryHistory: QueryHistoryEntry[]
   selectedIds: string[]
   hideAdded: boolean
   originFilter: EventOrigin | 'all'
   reviewFilter: ReviewState | 'all'
+  alerts: Record<string, AlertEvent>
+  queueOrder: QueueItem[]
+  loading: boolean
 }
 
 export interface SavedView {

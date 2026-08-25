@@ -2,26 +2,44 @@ import { useEffect } from 'react'
 import {
   ArrowUpRight,
   Play,
+  Plus,
   Sparkles,
   UserPlus,
   X,
   XCircle,
 } from 'lucide-react'
-import { useAppStore } from '../store/appStore'
+import { emptyContextQueue, useAppStore } from '../store/appStore'
 import type { AlertEvent, CorrelationGroup } from '../types'
 import { Button, Chip, Panel, SeverityBadge } from './ui'
 import { formatTime, statusLabel } from '../lib/utils'
+import { alertIsInContext, contextEventKeys } from '../lib/queueContext'
 import { EventCard } from './event-card'
 import type { TimeInterval } from './time-interval'
 
-export function QueueDetailPanel() {
+export function QueueDetailPanel({
+  investigationId,
+}: {
+  investigationId?: string
+} = {}) {
   const item = useAppStore((s) => s.inspectedQueueItem)
   const inspect = useAppStore((s) => s.inspectQueueItem)
   const start = useAppStore((s) => s.startInvestigation)
+  const addEventsToContext = useAppStore((s) => s.addEventsToContext)
   const appendPdqlFilter = useAppStore((s) => s.appendPdqlFilter)
-  const timeInterval = useAppStore((s) => s.timeInterval)
+  const globalTime = useAppStore((s) => s.timeInterval)
   const setTimeInterval = useAppStore((s) => s.setTimeInterval)
-  const alerts = useAppStore((s) => s.alerts)
+  const loadQueue = useAppStore((s) => s.loadQueue)
+  const setContextQueue = useAppStore((s) => s.setContextQueue)
+  const executeContextQuery = useAppStore((s) => s.executeContextQuery)
+  const globalAlerts = useAppStore((s) => s.alerts)
+  const queueAlerts = useAppStore((s) =>
+    investigationId ? s.contextQueue[investigationId]?.alerts : undefined,
+  )
+  const queue = useAppStore((s) =>
+    investigationId ? (s.contextQueue[investigationId] ?? emptyContextQueue) : null,
+  )
+  const inv = useAppStore((s) => (investigationId ? s.investigations[investigationId] : undefined))
+  const contextEvents = useAppStore((s) => s.contextEvents)
   const correlations = useAppStore((s) => s.correlations)
   const loading = useAppStore((s) => s.investigationLoading)
 
@@ -36,9 +54,16 @@ export function QueueDetailPanel() {
 
   if (!item) return null
 
-  const alert = item.kind === 'alert' ? alerts[item.id] : undefined
+  const alerts = queueAlerts ?? globalAlerts
+  const alert = item.kind === 'alert' ? (queueAlerts?.[item.id] ?? globalAlerts[item.id]) : undefined
   const group = item.kind === 'correlation' ? correlations[item.id] : undefined
   if (!alert && !group) return null
+
+  const timeInterval = queue?.timeInterval ?? globalTime
+  const eventKeys = inv ? contextEventKeys(inv.eventIds, contextEvents) : new Set<string>()
+  const inContext = Boolean(
+    investigationId && alert && alertIsInContext(alert, inv?.findingSourceKeys ?? [], eventKeys),
+  )
 
   return (
     <Panel
@@ -52,12 +77,27 @@ export function QueueDetailPanel() {
     >
       <div className="flex min-h-full flex-col">
         <div className="flex-1 space-y-4 p-3">
+          {alert && inContext && <Chip tone="confirmed">в контексте</Chip>}
           {alert && (
             <AlertDetails
               alert={alert}
-              onAddFilter={(field, value) => appendPdqlFilter(null, field, value)}
+              onAddFilter={(field, value) =>
+                appendPdqlFilter(investigationId ?? null, field, value)
+              }
               timeInterval={timeInterval}
-              onTimeChange={setTimeInterval}
+              onTimeChange={(interval) => {
+                if (investigationId) setContextQueue(investigationId, { timeInterval: interval })
+                else setTimeInterval(interval)
+              }}
+              onTimeExecute={(interval) => {
+                if (investigationId) {
+                  setContextQueue(investigationId, { timeInterval: interval })
+                  void executeContextQuery(investigationId)
+                  return
+                }
+                setTimeInterval(interval)
+                void loadQueue()
+              }}
             />
           )}
           {group && (
@@ -70,24 +110,43 @@ export function QueueDetailPanel() {
         </div>
 
         <div className="sticky bottom-0 space-y-2 border-t border-border bg-surface-1 p-3">
-          <Button
-            size="md"
-            variant="primary"
-            className="w-full"
-            disabled={loading}
-            onClick={() => void start([item.id])}
-          >
-            <Play className="h-3.5 w-3.5" />
-            Начать расследование
-          </Button>
-          <div className="grid grid-cols-2 gap-1.5">
-            <DecoButton icon={<UserPlus className="h-3 w-3" />}>Назначить</DecoButton>
-            <DecoButton icon={<Sparkles className="h-3 w-3" />}>Обогатить</DecoButton>
-            <DecoButton icon={<ArrowUpRight className="h-3 w-3" />}>
-              Эскалировать
-            </DecoButton>
-            <DecoButton icon={<XCircle className="h-3 w-3" />}>Закрыть</DecoButton>
-          </div>
+          {investigationId ? (
+            inContext ? (
+              <div className="text-xs text-fg-dim">Уже в расследовании</div>
+            ) : (
+              <Button
+                size="md"
+                variant="primary"
+                className="w-full"
+                disabled={loading || !alert}
+                onClick={() => void addEventsToContext(investigationId, [item.id])}
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Добавить в расследование
+              </Button>
+            )
+          ) : (
+            <>
+              <Button
+                size="md"
+                variant="primary"
+                className="w-full"
+                disabled={loading}
+                onClick={() => void start([item.id])}
+              >
+                <Play className="h-3.5 w-3.5" />
+                Начать расследование
+              </Button>
+              <div className="grid grid-cols-2 gap-1.5">
+                <DecoButton icon={<UserPlus className="h-3 w-3" />}>Назначить</DecoButton>
+                <DecoButton icon={<Sparkles className="h-3 w-3" />}>Обогатить</DecoButton>
+                <DecoButton icon={<ArrowUpRight className="h-3 w-3" />}>
+                  Эскалировать
+                </DecoButton>
+                <DecoButton icon={<XCircle className="h-3 w-3" />}>Закрыть</DecoButton>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </Panel>
@@ -114,11 +173,13 @@ function AlertDetails({
   onAddFilter,
   timeInterval,
   onTimeChange,
+  onTimeExecute,
 }: {
   alert: AlertEvent
   onAddFilter: (field: string, value: string) => void
   timeInterval: TimeInterval
   onTimeChange: (value: TimeInterval) => void
+  onTimeExecute: (value: TimeInterval) => void
 }) {
   return (
     <>
@@ -135,6 +196,7 @@ function AlertDetails({
         }}
         timeInterval={timeInterval}
         onTimeChange={onTimeChange}
+        onTimeExecute={onTimeExecute}
         onAddFilter={onAddFilter}
       />
     </>

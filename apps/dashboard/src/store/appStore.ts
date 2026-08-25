@@ -58,12 +58,16 @@ export const emptyContextQueue: ContextQueueState = {
   chips: [],
   pdql: DEFAULT_QUEUE_PDQL,
   timeInterval: DEFAULT_TIME_INTERVAL,
-  executedFingerprint: filterFingerprint(DEFAULT_QUEUE_PDQL, DEFAULT_TIME_INTERVAL),
+  queueSource: 'findings',
+  executedFingerprint: null,
   queryHistory: [],
   selectedIds: [],
   hideAdded: false,
   originFilter: 'all',
   reviewFilter: 'all',
+  alerts: {},
+  queueOrder: [],
+  loading: false,
 }
 
 function pushQueryHistory(
@@ -150,7 +154,7 @@ interface AppState {
   ) => void
   setContextQueue: (investigationId: string, patch: Partial<ContextQueueState>) => void
   addContextChip: (investigationId: string, field: FilterField, value: string) => void
-  executeContextQuery: (investigationId: string) => boolean
+  executeContextQuery: (investigationId: string) => Promise<boolean>
   addEventsToContext: (investigationId: string, eventIds: string[]) => Promise<void>
   appendPdqlFilter: (investigationId: string | null, field: string, value: string) => void
   addFieldToContext: (
@@ -256,7 +260,8 @@ function applyBundle(
         selectedNodeId: keepView?.selectedNodeId,
         seedEventIds: keepView?.seedEventIds ?? bundle.investigation.seedEventIds,
         issueIds: keepView?.issueIds ?? bundle.investigation.issueIds,
-        findingIds: keepView?.findingIds ?? bundle.investigation.findingIds,
+        findingIds: bundle.investigation.findingIds,
+        findingSourceKeys: bundle.investigation.findingSourceKeys,
       },
     },
     contextEvents: { ...get().contextEvents, ...bundle.events },
@@ -615,7 +620,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       },
     })
   },
-  executeContextQuery: (investigationId) => {
+  executeContextQuery: async (investigationId) => {
     const cur = get().contextQueue[investigationId] ?? emptyContextQueue
     const parsed = parseQueuePdql(cur.pdql)
     if (parsed.ok === false) {
@@ -625,31 +630,75 @@ export const useAppStore = create<AppState>((set, get) => ({
       })
       return false
     }
-    const canonical = serialize(parsed.ast)
     const chips = astToFilterChips(parsed.ast)
+    const query = pdqlToSearchParts(parsed.ast).query
+    const timeInterval = cur.timeInterval
+    const queueSource = cur.queueSource
+    const canonical = serialize(parsed.ast)
     set({
       lastError: null,
       contextQueue: {
         ...get().contextQueue,
-        [investigationId]: {
-          ...cur,
-          pdql: canonical,
-          chips,
-          executedFingerprint: filterFingerprint(canonical, cur.timeInterval),
-          queryHistory: pushQueryHistory(cur.queryHistory, {
-            pdql: canonical,
-            timeInterval: cur.timeInterval,
-          }),
-        },
+        [investigationId]: { ...cur, chips, pdql: canonical, loading: true },
       },
     })
-    return true
+    try {
+      const result = await searchQueue(chips, timeInterval, query, queueSource)
+      const hosts = new Set(get().filterValueOptions.host ?? [])
+      const ips = new Set(get().filterValueOptions.ip ?? [])
+      for (const e of Object.values(result.entities)) {
+        if (e.kind === 'host') hosts.add(e.label)
+        if (e.kind === 'ip') ips.add(e.label)
+      }
+      const latest = get().contextQueue[investigationId] ?? emptyContextQueue
+      set({
+        entities: mergeEntities(get().entities, result.entities),
+        filterValueOptions: {
+          ...get().filterValueOptions,
+          host: [...hosts],
+          ip: [...ips],
+          source: result.availableSources,
+        },
+        lastError: result.sourceErrors.length ? result.sourceErrors.join('; ') : null,
+        contextQueue: {
+          ...get().contextQueue,
+          [investigationId]: {
+            ...latest,
+            chips,
+            pdql: canonical,
+            queueSource,
+            alerts: result.alerts,
+            queueOrder: result.queueOrder,
+            loading: false,
+            executedFingerprint: filterFingerprint(canonical, timeInterval, queueSource),
+            queryHistory: pushQueryHistory(latest.queryHistory, {
+              pdql: canonical,
+              timeInterval,
+              queueSource,
+            }),
+            selectedIds: [],
+          },
+        },
+      })
+      return true
+    } catch (err) {
+      const latest = get().contextQueue[investigationId] ?? emptyContextQueue
+      set({
+        lastError: errorMessage(err),
+        contextQueue: {
+          ...get().contextQueue,
+          [investigationId]: { ...latest, loading: false },
+        },
+      })
+      return false
+    }
   },
 
   addEventsToContext: async (investigationId, eventIds) => {
+    const queue = get().contextQueue[investigationId]
     const refs = contextRefsFromIds(
       eventIds,
-      get().alerts,
+      { ...get().alerts, ...queue?.alerts },
       get().correlations,
       get().contextEvents,
     )

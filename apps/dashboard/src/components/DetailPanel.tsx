@@ -32,6 +32,7 @@ export function DetailPanel({ investigationId }: { investigationId: string }) {
   const appendPdqlFilter = useAppStore((s) => s.appendPdqlFilter)
   const addFieldToContext = useAppStore((s) => s.addFieldToContext)
   const setContextQueue = useAppStore((s) => s.setContextQueue)
+  const executeContextQuery = useAppStore((s) => s.executeContextQuery)
   const contextQueue = useAppStore((s) => s.contextQueue[investigationId]) ?? emptyContextQueue
 
   if (!inv || !detailPanelOpen) return null
@@ -335,6 +336,10 @@ export function DetailPanel({ investigationId }: { investigationId: string }) {
               onTimeChange={(interval) =>
                 setContextQueue(investigationId, { timeInterval: interval })
               }
+              onTimeExecute={(interval) => {
+                setContextQueue(investigationId, { timeInterval: interval })
+                void executeContextQuery(investigationId)
+              }}
               onAddFilter={(field, value) => appendPdqlFilter(investigationId, field, value)}
               onAddToContext={(field, value, includeEvent) =>
                 addFieldToContext(investigationId, {

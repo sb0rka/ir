@@ -151,7 +151,14 @@ export function QueryComposer({
   return (
     <div className="border-b border-border bg-surface-1 px-4 py-3">
       <div className="flex flex-wrap items-center gap-2">
-        <TimeIntervalButton value={timeInterval} onChange={onTimeChange} />
+        <TimeIntervalButton
+          value={timeInterval}
+          onChange={onTimeChange}
+          onExecute={(interval) => {
+            onTimeChange(interval)
+            onExecute()
+          }}
+        />
         {queueSource && onQueueSourceChange && (
           <QueueSourceToggle value={queueSource} onChange={onQueueSourceChange} />
         )}
@@ -418,16 +425,23 @@ export function ContextQueryComposer({
     <QueryComposer
       pdql={queue.pdql}
       timeInterval={queue.timeInterval}
+      queueSource={queue.queueSource}
       executedFingerprint={queue.executedFingerprint}
       history={queue.queryHistory}
+      executing={queue.loading}
       extra={extra}
       onPdqlChange={(pdql) => setContextQueue(investigationId, { pdql })}
       onTimeChange={(timeInterval) => setContextQueue(investigationId, { timeInterval })}
+      onQueueSourceChange={(queueSource) => setContextQueue(investigationId, { queueSource })}
       onApplyHistory={(entry) =>
-        setContextQueue(investigationId, { pdql: entry.pdql, timeInterval: entry.timeInterval })
+        setContextQueue(investigationId, {
+          pdql: entry.pdql,
+          timeInterval: entry.timeInterval,
+          queueSource: entry.queueSource ?? 'findings',
+        })
       }
       onExecute={() => {
-        executeContextQuery(investigationId)
+        void executeContextQuery(investigationId)
       }}
     />
   )

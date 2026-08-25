@@ -1,20 +1,24 @@
-import { useAppStore } from '../store/appStore'
+import { useAppStore, emptyContextQueue } from '../store/appStore'
 import type { AlertEvent, CorrelationGroup, Entity, QueueItem } from '../types'
 import { Button, Chip, SeverityBadge } from './ui'
 import { clsx, formatTime } from '../lib/utils'
 import { fieldForEntityKind } from '../lib/filters'
-import { ChevronDown, ChevronRight, Layers, Play } from 'lucide-react'
+import { alertIsInContext, contextEventKeys } from '../lib/queueContext'
+import { ChevronDown, ChevronRight, Layers, Play, Plus } from 'lucide-react'
 
 function EntityChips({
   entityIds,
   max = 4,
   entities,
+  investigationId,
 }: {
   entityIds: string[]
   max?: number
   entities: Record<string, Entity>
+  investigationId?: string
 }) {
   const addChip = useAppStore((s) => s.addChip)
+  const addContextChip = useAppStore((s) => s.addContextChip)
   const shown = entityIds.slice(0, max)
   const rest = entityIds.length - shown.length
 
@@ -32,7 +36,10 @@ function EntityChips({
             title="Найти связанные"
             onClick={(ev) => {
               ev.stopPropagation()
-              if (field) addChip(field, e.label.replaceAll('[', '').replaceAll(']', ''))
+              if (!field) return
+              const value = e.label.replaceAll('[', '').replaceAll(']', '')
+              if (investigationId) addContextChip(investigationId, field, value)
+              else addChip(field, value)
             }}
           >
             <span className="text-fg-dim">{e.kind}:</span> {e.label}
@@ -52,20 +59,28 @@ function AlertRow({
   alert,
   nested,
   entities,
+  investigationId,
+  inContext,
+  selected,
+  onToggle,
 }: {
   alert: AlertEvent
   nested?: boolean
   entities: Record<string, Entity>
+  investigationId?: string
+  inContext?: boolean
+  selected: boolean
+  onToggle: () => void
 }) {
-  const selected = useAppStore((s) => s.selectedAlertIds.includes(alert.id))
-  const toggle = useAppStore((s) => s.toggleAlertSelect)
   const inspect = useAppStore((s) => s.inspectQueueItem)
+  const addEventsToContext = useAppStore((s) => s.addEventsToContext)
   const inspected = useAppStore((s) => isInspected(s.inspectedQueueItem, 'alert', alert.id))
 
   return (
     <tr
       className={clsx(
         'cursor-pointer border-b border-border/60 hover:bg-surface-2/60',
+        inContext && 'bg-surface-0/40',
         selected && 'bg-surface-2',
         inspected && 'bg-surface-3/70',
         nested && !inspected && 'bg-surface-0/40',
@@ -76,7 +91,8 @@ function AlertRow({
         <input
           type="checkbox"
           checked={selected}
-          onChange={() => toggle(alert.id)}
+          disabled={Boolean(inContext)}
+          onChange={() => onToggle()}
           onClick={(ev) => ev.stopPropagation()}
           className="accent-fg"
         />
@@ -88,17 +104,39 @@ function AlertRow({
         {formatTime(alert.time)}
       </td>
       <td className="px-3 py-2">
-        <div className="text-sm">{alert.title}</div>
+        <div className="flex items-center gap-2">
+          <div className={clsx('text-sm', inContext && 'text-fg-muted')}>{alert.title}</div>
+          {inContext && (
+            <Chip tone="confirmed">в контексте</Chip>
+          )}
+        </div>
         <div className="text-xs text-fg-dim">{alert.rule}</div>
       </td>
       <td className="px-3 py-2">
-        <EntityChips entityIds={alert.entityIds} entities={entities} />
+        <EntityChips entityIds={alert.entityIds} entities={entities} investigationId={investigationId} />
       </td>
       <td className="px-3 py-2">
         <span className="rounded border border-border px-1.5 py-0.5 font-mono text-[11px]">
           {alert.source}
         </span>
       </td>
+      {investigationId && (
+        <td className="px-3 py-2">
+          {!inContext && (
+            <Button
+              size="sm"
+              variant="ghost"
+              title="Добавить в расследование"
+              onClick={(e) => {
+                e.stopPropagation()
+                void addEventsToContext(investigationId, [alert.id])
+              }}
+            >
+              <Plus className="h-3 w-3" />
+            </Button>
+          )}
+        </td>
+      )}
     </tr>
   )
 }
@@ -194,25 +232,57 @@ function CorrelationRow({
       {expanded &&
         group.eventIds.map((eid) => {
           const a = alerts[eid]
-          return a ? <AlertRow key={eid} alert={a} nested entities={entities} /> : null
+          return a ? (
+            <AlertRow
+              key={eid}
+              alert={a}
+              nested
+              entities={entities}
+              selected={false}
+              onToggle={() => {}}
+            />
+          ) : null
         })}
     </>
   )
 }
 
-export function AlertTable() {
-  const selected = useAppStore((s) => s.selectedAlertIds)
+export function AlertTable({ investigationId }: { investigationId?: string } = {}) {
+  const globalSelected = useAppStore((s) => s.selectedAlertIds)
   const start = useAppStore((s) => s.startInvestigation)
   const clear = useAppStore((s) => s.clearAlertSelection)
-  const alerts = useAppStore((s) => s.alerts)
+  const globalAlerts = useAppStore((s) => s.alerts)
   const correlations = useAppStore((s) => s.correlations)
-  const queueOrder = useAppStore((s) => s.queueOrder)
+  const globalOrder = useAppStore((s) => s.queueOrder)
   const entities = useAppStore((s) => s.entities)
-  const loading = useAppStore((s) => s.queueLoading)
+  const globalLoading = useAppStore((s) => s.queueLoading)
+  const queue = useAppStore((s) =>
+    investigationId ? (s.contextQueue[investigationId] ?? emptyContextQueue) : null,
+  )
+  const inv = useAppStore((s) => (investigationId ? s.investigations[investigationId] : undefined))
+  const contextEvents = useAppStore((s) => s.contextEvents)
+  const setContextQueue = useAppStore((s) => s.setContextQueue)
+  const addEventsToContext = useAppStore((s) => s.addEventsToContext)
+  const toggleAlertSelect = useAppStore((s) => s.toggleAlertSelect)
+
+  const alerts = queue?.alerts ?? globalAlerts
+  const queueOrder = queue?.queueOrder ?? globalOrder
+  const loading = queue?.loading ?? globalLoading
+  const eventKeys = inv ? contextEventKeys(inv.eventIds, contextEvents) : new Set<string>()
+  const findingKeys = new Set(inv?.findingSourceKeys ?? [])
+
+  const inContextOf = (alert: AlertEvent) =>
+    Boolean(investigationId && alertIsInContext(alert, findingKeys, eventKeys))
 
   const rows = queueOrder.filter((item) => {
-    if (item.kind === 'correlation') return Boolean(correlations[item.id])
-    return Boolean(alerts[item.id])
+    if (item.kind === 'correlation') {
+      if (investigationId) return false
+      return Boolean(correlations[item.id])
+    }
+    const alert = alerts[item.id]
+    if (!alert) return false
+    if (investigationId && queue?.hideAdded && inContextOf(alert)) return false
+    return true
   })
 
   const criticalCount = rows.filter((r) => {
@@ -223,8 +293,44 @@ export function AlertTable() {
     return s === 'critical' || s === 'high'
   }).length
 
+  const inContextCount = investigationId
+    ? rows.filter((r) => r.kind === 'alert' && alerts[r.id] && inContextOf(alerts[r.id])).length
+    : 0
+
+  const selected = investigationId ? (queue?.selectedIds ?? []) : globalSelected
+
+  const toggleRow = (id: string) => {
+    if (!investigationId) {
+      toggleAlertSelect(id)
+      return
+    }
+    const alert = alerts[id]
+    if (alert && inContextOf(alert)) return
+    const cur = queue ?? emptyContextQueue
+    setContextQueue(investigationId, {
+      selectedIds: cur.selectedIds.includes(id)
+        ? cur.selectedIds.filter((x) => x !== id)
+        : [...cur.selectedIds, id],
+    })
+  }
+
+  const addSelected = () => {
+    if (!investigationId) return
+    const ids = selected.filter((id) => {
+      const alert = alerts[id]
+      return alert && !inContextOf(alert)
+    })
+    if (ids.length === 0) return
+    void addEventsToContext(investigationId, ids)
+  }
+
+  const clearSelection = () => {
+    if (investigationId) setContextQueue(investigationId, { selectedIds: [] })
+    else clear()
+  }
+
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full min-h-0 flex-col">
       <div className="flex items-center justify-between border-b border-border px-4 py-2">
         <div className="flex items-center gap-3 text-sm">
           <span className="text-fg-muted">
@@ -234,15 +340,31 @@ export function AlertTable() {
           <span className="text-fg-muted">
             critical/high: <span className="text-high">{criticalCount}</span>
           </span>
+          {investigationId && !queue?.hideAdded && (
+            <span className="text-fg-muted">
+              в контексте: <span className="text-fg">{inContextCount}</span>
+            </span>
+          )}
         </div>
         {selected.length > 0 && (
           <div className="flex items-center gap-2">
             <span className="text-xs text-fg-muted">Выбрано: {selected.length}</span>
-            <Button size="sm" onClick={() => start(selected)}>
-              <Play className="h-3 w-3" />
-              Начать расследование
-            </Button>
-            <Button size="sm" variant="ghost" onClick={clear}>
+            {investigationId ? (
+              <Button
+                size="sm"
+                variant="primary"
+                onClick={addSelected}
+              >
+                <Plus className="h-3 w-3" />
+                Добавить в расследование
+              </Button>
+            ) : (
+              <Button size="sm" onClick={() => start(selected)}>
+                <Play className="h-3 w-3" />
+                Начать расследование
+              </Button>
+            )}
+            <Button size="sm" variant="ghost" onClick={clearSelection}>
               Сбросить
             </Button>
           </div>
@@ -258,6 +380,7 @@ export function AlertTable() {
               <th className="px-3 py-2">Срабатывание</th>
               <th className="px-3 py-2">Сущности</th>
               <th className="px-3 py-2">Источник</th>
+              {investigationId && <th className="w-28 px-3 py-2" />}
             </tr>
           </thead>
           <tbody>
@@ -270,12 +393,20 @@ export function AlertTable() {
                   entities={entities}
                 />
               ) : (
-                <AlertRow key={item.id} alert={alerts[item.id]} entities={entities} />
+                <AlertRow
+                  key={item.id}
+                  alert={alerts[item.id]}
+                  entities={entities}
+                  investigationId={investigationId}
+                  inContext={inContextOf(alerts[item.id])}
+                  selected={selected.includes(item.id)}
+                  onToggle={() => toggleRow(item.id)}
+                />
               ),
             )}
             {rows.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-12 text-center">
+                <td colSpan={investigationId ? 7 : 6} className="px-4 py-12 text-center">
                   <div className="text-sm text-fg-muted">
                     Нет срабатываний по текущим фильтрам
                   </div>

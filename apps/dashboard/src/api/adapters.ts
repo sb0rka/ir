@@ -297,6 +297,7 @@ export function mapIrInvestigation(
     nodeIds: extras?.nodeIds ?? [],
     edgeIds: extras?.edgeIds ?? [],
     findingIds: extras?.findingIds ?? [],
+    findingSourceKeys: extras?.findingSourceKeys ?? [],
     issueIds: extras?.issueIds ?? [],
     createdAt: inv.created_at,
     view: extras?.view ?? 'graph',
