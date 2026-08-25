@@ -27,6 +27,7 @@ export {
   astToFilterChips,
   drillGroupValues,
   pdqlToSearchParts,
+  queueSelectFields,
 } from './toSearch'
 export type {
   EventSearchParts,

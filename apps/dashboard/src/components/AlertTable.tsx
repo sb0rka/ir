@@ -1,75 +1,90 @@
 import { useAppStore, emptyContextQueue } from '../store/appStore'
-import type { AlertEvent, CorrelationGroup, Entity, QueueItem } from '../types'
+import type { AlertEvent, CorrelationGroup, QueueItem } from '../types'
 import { Button, Chip, SeverityBadge } from './ui'
 import { clsx, formatTime } from '../lib/utils'
-import { fieldForEntityKind } from '../lib/filters'
+import { parseQueuePdql, queueSelectFields } from '../lib/pdql'
 import { alertIsInContext, contextEventKeys } from '../lib/queueContext'
 import { ChevronDown, ChevronRight, Layers, Play, Plus } from 'lucide-react'
-
-function EntityChips({
-  entityIds,
-  max = 4,
-  entities,
-  investigationId,
-}: {
-  entityIds: string[]
-  max?: number
-  entities: Record<string, Entity>
-  investigationId?: string
-}) {
-  const addChip = useAppStore((s) => s.addChip)
-  const addContextChip = useAppStore((s) => s.addContextChip)
-  const shown = entityIds.slice(0, max)
-  const rest = entityIds.length - shown.length
-
-  return (
-    <div className="flex flex-wrap gap-1">
-      {shown.map((id) => {
-        const e = entities[id]
-        if (!e) return null
-        const field = fieldForEntityKind(e.kind)
-        return (
-          <button
-            key={id}
-            type="button"
-            className="rounded border border-border bg-surface-2 px-1.5 py-0.5 font-mono text-[11px] text-fg-muted hover:border-fg/30 hover:text-fg"
-            title="Найти связанные"
-            onClick={(ev) => {
-              ev.stopPropagation()
-              if (!field) return
-              const value = e.label.replaceAll('[', '').replaceAll(']', '')
-              if (investigationId) addContextChip(investigationId, field, value)
-              else addChip(field, value)
-            }}
-          >
-            <span className="text-fg-dim">{e.kind}:</span> {e.label}
-          </button>
-        )
-      })}
-      {rest > 0 && <span className="text-[11px] text-fg-dim">+{rest}</span>}
-    </div>
-  )
-}
 
 function isInspected(item: QueueItem | null, kind: QueueItem['kind'], id: string) {
   return item?.kind === kind && item.id === id
 }
 
+function queueFieldValue(alert: AlertEvent, field: string): string {
+  if (field === 'time') return alert.time
+  return alert.raw?.[field] ?? ''
+}
+
+function formatQueueFieldValue(field: string, value: string): string {
+  if (!value) return value
+  if (
+    field === 'time' ||
+    field === 'original_time' ||
+    field.endsWith('_time') ||
+    field.endsWith('.time')
+  ) {
+    const parsed = Date.parse(value)
+    if (!Number.isNaN(parsed)) {
+      return new Date(parsed).toLocaleString('ru-RU', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+      })
+    }
+  }
+  return value
+}
+
+function SelectFieldCell({
+  field,
+  value,
+  investigationId,
+}: {
+  field: string
+  value: string
+  investigationId?: string
+}) {
+  const appendPdqlFilter = useAppStore((s) => s.appendPdqlFilter)
+  const display = formatQueueFieldValue(field, value)
+  return (
+    <td className="max-w-[16rem] px-3 py-2">
+      {value ? (
+        <button
+          type="button"
+          title={display}
+          className="block w-full truncate text-left font-mono text-xs text-fg hover:underline"
+          onClick={(ev) => {
+            ev.stopPropagation()
+            appendPdqlFilter(investigationId ?? null, field, value)
+          }}
+        >
+          {display}
+        </button>
+      ) : (
+        <span className="text-fg-dim">&nbsp;</span>
+      )}
+    </td>
+  )
+}
+
 function AlertRow({
   alert,
   nested,
-  entities,
   investigationId,
   inContext,
   selected,
+  selectFields,
   onToggle,
 }: {
   alert: AlertEvent
   nested?: boolean
-  entities: Record<string, Entity>
   investigationId?: string
   inContext?: boolean
   selected: boolean
+  selectFields: string[]
   onToggle: () => void
 }) {
   const inspect = useAppStore((s) => s.inspectQueueItem)
@@ -112,9 +127,14 @@ function AlertRow({
         </div>
         <div className="text-xs text-fg-dim">{alert.rule}</div>
       </td>
-      <td className="px-3 py-2">
-        <EntityChips entityIds={alert.entityIds} entities={entities} investigationId={investigationId} />
-      </td>
+      {selectFields.map((field) => (
+        <SelectFieldCell
+          key={field}
+          field={field}
+          value={queueFieldValue(alert, field)}
+          investigationId={investigationId}
+        />
+      ))}
       <td className="px-3 py-2">
         <span className="rounded border border-border px-1.5 py-0.5 font-mono text-[11px]">
           {alert.source}
@@ -144,11 +164,11 @@ function AlertRow({
 function CorrelationRow({
   group,
   alerts,
-  entities,
+  selectFields,
 }: {
   group: CorrelationGroup
   alerts: Record<string, AlertEvent>
-  entities: Record<string, Entity>
+  selectFields: string[]
 }) {
   const expanded = useAppStore((s) => s.expandedCorrelationIds.includes(group.id))
   const toggleExpand = useAppStore((s) => s.toggleCorrelationExpand)
@@ -213,9 +233,9 @@ function CorrelationRow({
             </div>
           </div>
         </td>
-        <td className="px-3 py-2.5">
-          <EntityChips entityIds={group.entityIds} max={5} entities={entities} />
-        </td>
+        {selectFields.map((field) => (
+          <td key={field} className="px-3 py-2.5" />
+        ))}
         <td className="px-3 py-2.5">
           <div className="flex flex-wrap gap-1">
             {Object.entries(group.sourceCounts).map(([src, n]) => (
@@ -237,7 +257,7 @@ function CorrelationRow({
               key={eid}
               alert={a}
               nested
-              entities={entities}
+              selectFields={selectFields}
               selected={false}
               onToggle={() => {}}
             />
@@ -254,8 +274,8 @@ export function AlertTable({ investigationId }: { investigationId?: string } = {
   const globalAlerts = useAppStore((s) => s.alerts)
   const correlations = useAppStore((s) => s.correlations)
   const globalOrder = useAppStore((s) => s.queueOrder)
-  const entities = useAppStore((s) => s.entities)
   const globalLoading = useAppStore((s) => s.queueLoading)
+  const globalPdql = useAppStore((s) => s.queuePdql)
   const queue = useAppStore((s) =>
     investigationId ? (s.contextQueue[investigationId] ?? emptyContextQueue) : null,
   )
@@ -270,6 +290,9 @@ export function AlertTable({ investigationId }: { investigationId?: string } = {
   const loading = queue?.loading ?? globalLoading
   const eventKeys = inv ? contextEventKeys(inv.eventIds, contextEvents) : new Set<string>()
   const findingKeys = new Set(inv?.findingSourceKeys ?? [])
+  const parsed = parseQueuePdql(queue?.pdql ?? globalPdql)
+  const selectFields = parsed.ok ? queueSelectFields(parsed.ast) : []
+  const colSpan = 5 + selectFields.length + (investigationId ? 1 : 0)
 
   const inContextOf = (alert: AlertEvent) =>
     Boolean(investigationId && alertIsInContext(alert, findingKeys, eventKeys))
@@ -378,7 +401,11 @@ export function AlertTable({ investigationId }: { investigationId?: string } = {
               <th className="px-3 py-2">Крит.</th>
               <th className="px-3 py-2">Время</th>
               <th className="px-3 py-2">Срабатывание</th>
-              <th className="px-3 py-2">Сущности</th>
+              {selectFields.map((field) => (
+                <th key={field} className="px-3 py-2 font-mono normal-case tracking-normal">
+                  {field}
+                </th>
+              ))}
               <th className="px-3 py-2">Источник</th>
               {investigationId && <th className="w-28 px-3 py-2" />}
             </tr>
@@ -390,23 +417,23 @@ export function AlertTable({ investigationId }: { investigationId?: string } = {
                   key={item.id}
                   group={correlations[item.id]}
                   alerts={alerts}
-                  entities={entities}
+                  selectFields={selectFields}
                 />
               ) : (
                 <AlertRow
                   key={item.id}
                   alert={alerts[item.id]}
-                  entities={entities}
                   investigationId={investigationId}
                   inContext={inContextOf(alerts[item.id])}
                   selected={selected.includes(item.id)}
+                  selectFields={selectFields}
                   onToggle={() => toggleRow(item.id)}
                 />
               ),
             )}
             {rows.length === 0 && (
               <tr>
-                <td colSpan={investigationId ? 7 : 6} className="px-4 py-12 text-center">
+                <td colSpan={colSpan} className="px-4 py-12 text-center">
                   <div className="text-sm text-fg-muted">
                     Нет срабатываний по текущим фильтрам
                   </div>

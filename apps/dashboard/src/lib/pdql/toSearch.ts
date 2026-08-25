@@ -122,6 +122,18 @@ function uniqueFields(fields: string[]): string[] {
   return out
 }
 
+function eventSearchFields(ast: QueryAst): string[] {
+  return uniqueFields([
+    ...ast.groups.map((group) => group.field),
+    ...ast.columns.filter((column) => column.field && !column.aggregate).map((column) => column.field),
+  ])
+}
+
+/** Select fields to show as extra queue columns. `time` already has a dedicated column. */
+export function queueSelectFields(ast: QueryAst): string[] {
+  return eventSearchFields(ast).filter((field) => field !== 'time')
+}
+
 function isDefaultSort(sort: { field: string; direction: 'asc' | 'desc' }[]): boolean {
   return sort.length === 1 && sort[0]?.field === 'time' && sort[0]?.direction === 'desc'
 }
@@ -181,10 +193,7 @@ export function astToEventSearch(
   groupValues?: (string | null)[],
 ): EventSearchParts {
   const filter = formatCondition(ast).trim()
-  const columns = uniqueFields([
-    ...ast.groups.map((group) => group.field),
-    ...ast.columns.filter((column) => column.field && !column.aggregate).map((column) => column.field),
-  ])
+  const columns = eventSearchFields(ast)
   const sort = ast.columns
     .filter((column) => column.sort && column.field && !column.aggregate)
     .slice()

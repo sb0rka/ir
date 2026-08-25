@@ -3,7 +3,7 @@ import { defaultQuery, withoutIds, type QueryAst } from './model'
 import { parse } from './parse'
 import { serialize } from './serialize'
 import { pdqlToChips, serializeWithoutChip } from './chips'
-import { astToEventSearch, astToFilterChips, drillGroupValues, pdqlToSearchParts } from './toSearch'
+import { astToEventSearch, astToFilterChips, drillGroupValues, pdqlToSearchParts, queueSelectFields } from './toSearch'
 import { addFieldToAst, addFieldToPdql, setGroupAggregate } from './ast'
 import { appendCondition } from './append'
 import { relatedFieldColumns } from './relatedFields'
@@ -415,6 +415,36 @@ describe('astToEventSearch', () => {
       group_values: ['dc01', 'login'],
       hasControls: true,
     })
+  })
+})
+
+describe('queueSelectFields', () => {
+  it('omits time from a default select', () => {
+    expect(queueSelectFields(mustParse('select(time) | sort(time desc)'))).toEqual([])
+  })
+
+  it('keeps extra select fields in order', () => {
+    expect(
+      queueSelectFields(mustParse('select(time, event_src.host, text) | sort(time desc)')),
+    ).toEqual(['event_src.host', 'text'])
+  })
+
+  it('includes group dimensions and skips aggregates', () => {
+    expect(
+      queueSelectFields(
+        mustParse('group(event_src.host) | select(event_src.host, uniq(src.ip), count(), time)'),
+      ),
+    ).toEqual(['event_src.host'])
+  })
+
+  it('puts group keys before extra columns', () => {
+    expect(
+      queueSelectFields(
+        mustParse(
+          'filter(event_src.host = "dkrylova.plat.form") | select(time, event_src.host, text, object.process.cmdline) | sort(time asc) | group(key: [action], agg: COUNT(*) as Cnt)',
+        ),
+      ),
+    ).toEqual(['action', 'event_src.host', 'text', 'object.process.cmdline'])
   })
 })
 
