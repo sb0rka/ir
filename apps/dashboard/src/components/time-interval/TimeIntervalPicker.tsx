@@ -66,7 +66,6 @@ export function TimeIntervalPicker({
   }, [value])
 
   useEffect(() => {
-    if (focusNonce === 0) return
     const id = window.requestAnimationFrame(() => {
       const el = rootRef.current?.querySelector<HTMLInputElement>('input[aria-label="ДД"]')
       el?.focus()
@@ -128,16 +127,30 @@ export function TimeIntervalPicker({
             </ZoneToggle>
             <ZoneToggle
               active={display === 'working'}
+              onClick={() => {
+                onDisplayChange('working')
+                setZoneOpen(false)
+                setZoneQuery('')
+              }}
+            >
+              <span className="max-w-[14rem] truncate">{timeZoneLabel(workingTimeZone)}</span>
+            </ZoneToggle>
+            <button
+              type="button"
+              aria-label="Часовой пояс"
               aria-expanded={zoneOpen}
               aria-haspopup="listbox"
               onClick={() => {
                 onDisplayChange('working')
                 setZoneOpen((open) => !open)
               }}
+              className={clsx(
+                'inline-flex items-center rounded px-1.5 py-1.5',
+                zoneOpen ? 'bg-surface-3 text-fg' : 'text-fg-muted hover:text-fg',
+              )}
             >
-              <span className="max-w-[14rem] truncate">{timeZoneLabel(workingTimeZone)}</span>
-              <ChevronDown className="h-3 w-3 shrink-0 text-fg-dim" />
-            </ZoneToggle>
+              <ChevronDown className="h-3 w-3 shrink-0" />
+            </button>
           </div>
           {zoneOpen && (
             <div className="absolute right-0 top-full z-50 mt-1 w-[min(20rem,calc(100vw-4rem))] rounded-md border border-border bg-surface-0 p-2 shadow-xl">
