@@ -138,8 +138,9 @@ services:
       - "${GATEWAY_PORT:-8091}:8091"
     extra_hosts:
       - "host.docker.internal:host-gateway"
-      # Lab VPN DNS may not publish pt-nad; set PT_NAD_HOST_IP in .env when needed.
+      # Lab VPN DNS may not publish these hosts; set IPs in .env when needed.
       - "pt-nad.edtechlab.local:${PT_NAD_HOST_IP:-127.0.0.1}"
+      - "mp-siem.edtechlab.local:${PT_SIEM_HOST_IP:-127.0.0.1}"
     healthcheck:
       test: ["CMD-SHELL", "ip link show tun0 >/dev/null 2>&1"]
       interval: 10s
