@@ -97,6 +97,7 @@ export interface ContextEvent {
   review: ReviewState
   description: string
   sourceEventId?: string
+  raw?: Record<string, string>
 }
 
 export interface GraphNode {
@@ -188,9 +189,13 @@ export interface FilterChip {
   values: string[]
 }
 
+/** Global queue search target: coarse findings or normalized events. */
+export type QueueSource = 'findings' | 'events'
+
 export interface QueryHistoryEntry {
   pdql: string
   timeInterval: TimeInterval
+  queueSource?: QueueSource
 }
 
 /** Per-investigation state of the context event queue (search + filters). */

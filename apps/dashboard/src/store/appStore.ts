@@ -14,6 +14,7 @@ import type {
   Investigation,
   Issue,
   QueueItem,
+  QueueSource,
   QueryHistoryEntry,
   ReviewState,
 } from '../types'
@@ -26,13 +27,14 @@ import {
   lookupEntity,
   searchQueue,
 } from '../api/search'
-import { appendCondition, astToFilterChips, defaultQuery, parseQueuePdql, pdqlToSearchParts, serialize } from '../lib/pdql'
+import { appendCondition, astToFilterChips, defaultQuery, entityKindForField, parseQueuePdql, pdqlToSearchParts, serialize } from '../lib/pdql'
 import { pdqlFieldForFilterField } from '../lib/filters'
 import { filterFingerprint } from '../lib/queryFingerprint'
 import { demoDayInterval, type TimeInterval } from '../components/time-interval'
 import {
   addContext,
   countProposedAgentEdges,
+  createEntity,
   createInvestigation,
   getEntityCard,
   getSomEnvironment,
@@ -68,10 +70,12 @@ function pushQueryHistory(
   history: QueryHistoryEntry[],
   entry: QueryHistoryEntry,
 ): QueryHistoryEntry[] {
-  const key = filterFingerprint(entry.pdql, entry.timeInterval)
+  const key = filterFingerprint(entry.pdql, entry.timeInterval, entry.queueSource)
   return [
     entry,
-    ...history.filter((item) => filterFingerprint(item.pdql, item.timeInterval) !== key),
+    ...history.filter(
+      (item) => filterFingerprint(item.pdql, item.timeInterval, item.queueSource) !== key,
+    ),
   ].slice(0, HISTORY_LIMIT)
 }
 
@@ -79,6 +83,7 @@ interface AppState {
   chips: FilterChip[]
   timeInterval: TimeInterval
   queuePdql: string
+  queueSource: QueueSource
   executedFingerprint: string | null
   queryHistory: QueryHistoryEntry[]
   selectedAlertIds: string[]
@@ -119,6 +124,7 @@ interface AppState {
   addChip: (field: FilterField, value: string) => void
   setQueuePdql: (pdql: string) => void
   setTimeInterval: (interval: TimeInterval) => void
+  setQueueSource: (source: QueueSource) => void
   applyQueueHistory: (entry: QueryHistoryEntry) => void
   toggleAlertSelect: (id: string) => void
   clearAlertSelection: () => void
@@ -146,6 +152,11 @@ interface AppState {
   addContextChip: (investigationId: string, field: FilterField, value: string) => void
   executeContextQuery: (investigationId: string) => boolean
   addEventsToContext: (investigationId: string, eventIds: string[]) => Promise<void>
+  appendPdqlFilter: (investigationId: string | null, field: string, value: string) => void
+  addFieldToContext: (
+    investigationId: string,
+    input: { field: string; value: string; eventId: string; includeEvent: boolean },
+  ) => Promise<void>
   setAgentPanelOpen: (open: boolean) => void
   setDetailPanelOpen: (open: boolean) => void
   loadSomCatalog: () => Promise<void>
@@ -262,6 +273,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   chips: [],
   timeInterval: DEFAULT_TIME_INTERVAL,
   queuePdql: DEFAULT_QUEUE_PDQL,
+  queueSource: 'findings',
   executedFingerprint: null,
   queryHistory: [],
   selectedAlertIds: [],
@@ -306,7 +318,13 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
   setQueuePdql: (queuePdql) => set({ queuePdql }),
   setTimeInterval: (timeInterval) => set({ timeInterval }),
-  applyQueueHistory: (entry) => set({ queuePdql: entry.pdql, timeInterval: entry.timeInterval }),
+  setQueueSource: (queueSource) => set({ queueSource }),
+  applyQueueHistory: (entry) =>
+    set({
+      queuePdql: entry.pdql,
+      timeInterval: entry.timeInterval,
+      queueSource: entry.queueSource ?? 'findings',
+    }),
   toggleAlertSelect: (id) => {
     const sel = get().selectedAlertIds
     set({
@@ -363,22 +381,25 @@ export const useAppStore = create<AppState>((set, get) => ({
     const chips = astToFilterChips(parsed.ast)
     const query = pdqlToSearchParts(parsed.ast).query
     const timeInterval = get().timeInterval
+    const queueSource = get().queueSource
     set({ queueLoading: true, lastError: null, mockSources: [] })
     try {
-      const result = await searchQueue(chips, timeInterval, query)
+      const result = await searchQueue(chips, timeInterval, query, queueSource)
       const hosts = new Set(get().filterValueOptions.host ?? [])
       const ips = new Set(get().filterValueOptions.ip ?? [])
       for (const e of Object.values(result.entities)) {
         if (e.kind === 'host') hosts.add(e.label)
         if (e.kind === 'ip') ips.add(e.label)
       }
+      const canonical = serialize(parsed.ast)
       set({
         chips,
-        queuePdql: serialize(parsed.ast),
-        executedFingerprint: filterFingerprint(serialize(parsed.ast), timeInterval),
+        queuePdql: canonical,
+        executedFingerprint: filterFingerprint(canonical, timeInterval, queueSource),
         queryHistory: pushQueryHistory(get().queryHistory, {
-          pdql: serialize(parsed.ast),
+          pdql: canonical,
           timeInterval,
+          queueSource,
         }),
         alerts: result.alerts,
         correlations: result.correlations,
@@ -642,6 +663,43 @@ export const useAppStore = create<AppState>((set, get) => ({
           [investigationId]: { ...cur, selectedIds: [] },
         },
       })
+      await get().loadInvestigation(investigationId)
+    } catch (err) {
+      set({ lastError: errorMessage(err) })
+    }
+  },
+
+  appendPdqlFilter: (investigationId, field, value) => {
+    if (!investigationId) {
+      set({ queuePdql: appendCondition(get().queuePdql, field, '=', value) })
+      return
+    }
+    const cur = get().contextQueue[investigationId] ?? emptyContextQueue
+    set({
+      contextQueue: {
+        ...get().contextQueue,
+        [investigationId]: { ...cur, pdql: appendCondition(cur.pdql, field, '=', value) },
+      },
+    })
+  },
+
+  addFieldToContext: async (investigationId, input) => {
+    const kind = entityKindForField(input.field)
+    try {
+      if (kind) {
+        await createEntity(investigationId, {
+          type_code: kind,
+          canonical_key: input.value,
+          display_name: input.value,
+          metadata: { field: input.field },
+        })
+      }
+      const inv = get().investigations[investigationId]
+      const alreadyInContext = Boolean(inv?.eventIds.includes(input.eventId))
+      if (input.includeEvent || alreadyInContext) {
+        await get().addEventsToContext(investigationId, [input.eventId])
+        return
+      }
       await get().loadInvestigation(investigationId)
     } catch (err) {
       set({ lastError: errorMessage(err) })

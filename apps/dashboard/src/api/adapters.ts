@@ -83,6 +83,54 @@ function stringifyAttrs(value: Record<string, unknown> | undefined): Record<stri
   return out
 }
 
+function putRaw(target: Record<string, string>, key: string, value: unknown) {
+  if (value == null || value === '') return
+  target[key] = typeof value === 'string' ? value : String(value)
+}
+
+function rawFromNormalized(data: Record<string, unknown> | undefined): Record<string, string> {
+  if (!data) return {}
+  const attrs = data.attributes
+  if (attrs && typeof attrs === 'object' && !Array.isArray(attrs)) {
+    return stringifyAttrs(attrs as Record<string, unknown>)
+  }
+  const skip = new Set(['attributes', 'source_code', 'source_event_id', 'provenance'])
+  const out: Record<string, string> = {}
+  for (const [key, value] of Object.entries(data)) {
+    if (skip.has(key) || value == null || typeof value === 'object') continue
+    out[key] = String(value)
+  }
+  return out
+}
+
+function flattenFindingRaw(finding: Gw['schemas']['Finding']): Record<string, string> {
+  const raw: Record<string, string> = { finding_kind: finding.kind }
+  putRaw(raw, 'status', finding.status)
+  putRaw(raw, 'rule.name', finding.rule?.name)
+  const correlation = finding.correlation
+  if (correlation) {
+    putRaw(raw, 'correlation_type', correlation.correlation_type)
+    putRaw(raw, 'count.subevents', correlation.subevent_count)
+  }
+  const incident = finding.incident
+  if (incident) {
+    putRaw(raw, 'incident.key', incident.key)
+    putRaw(raw, 'incident.external_key', incident.external_key)
+    putRaw(raw, 'incident.verdict', incident.verdict)
+    putRaw(raw, 'incident.damage', incident.damage)
+    putRaw(raw, 'incident.recommendation', incident.recommendation)
+    putRaw(raw, 'incident.assigned_to', incident.assigned_to)
+  }
+  const attack = finding.nad_attack
+  if (attack) {
+    putRaw(raw, 'nad.class', attack.class)
+    putRaw(raw, 'nad.gid', attack.gid)
+    putRaw(raw, 'nad.sid', attack.sid)
+    putRaw(raw, 'nad.revision', attack.revision)
+  }
+  return raw
+}
+
 export function mapGatewayEntity(entity: GwEntity): Entity {
   const id = gatewayEntityId(entity)
   return {
@@ -159,10 +207,7 @@ export function mapGatewayFinding(
     status: 'new',
     entityIds,
     description: finding.description ?? finding.title,
-    raw: {
-      finding_kind: finding.kind,
-      ...(finding.status ? { status: finding.status } : {}),
-    },
+    raw: flattenFindingRaw(finding),
     sourceEventId: ref.external_id,
     findingRef,
   }
@@ -206,6 +251,7 @@ export function mapGatewayContextEvent(
     review: 'confirmed',
     description: alert.description,
     sourceEventId: event.source_event_id,
+    raw: alert.raw,
   }
 }
 
@@ -217,10 +263,11 @@ function severityFromNormalized(data: Record<string, unknown> | undefined): Seve
 export function mapIrEvent(event: IrEvent, entityIds: string[]): ContextEvent {
   const origin = mapOrigin(event.attached_by)
   const review: ReviewState = origin === 'agent' || origin === 'rule' ? 'proposed' : 'confirmed'
+  const normalized = event.normalized_data as Record<string, unknown> | undefined
   return {
     id: event.id,
     time: event.occurred_at,
-    severity: severityFromNormalized(event.normalized_data as Record<string, unknown> | undefined),
+    severity: severityFromNormalized(normalized),
     title: event.title,
     type: event.event_type,
     source: event.source_code,
@@ -229,6 +276,7 @@ export function mapIrEvent(event: IrEvent, entityIds: string[]): ContextEvent {
     review,
     description: event.reason || event.title,
     sourceEventId: event.source_event_id,
+    raw: rawFromNormalized(normalized),
   }
 }
 

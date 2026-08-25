@@ -189,10 +189,10 @@ describe('appendCondition', () => {
 })
 
 describe('relatedFieldColumns', () => {
-  it('pairs src/dst IP with event_src', () => {
-    expect(relatedFieldColumns('src.ip')).toEqual([
-      { title: 'Источник', fields: ['src.ip', 'event_src.ip'] },
-      { title: 'Назначение', fields: ['dst.ip'] },
+  it('pairs src/dst host with event_src', () => {
+    expect(relatedFieldColumns('src.host')).toEqual([
+      { title: 'Источник', fields: ['src.host', 'event_src.host'] },
+      { title: 'Назначение', fields: ['dst.host'] },
     ])
   })
 

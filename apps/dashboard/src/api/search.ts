@@ -1,8 +1,8 @@
-import type { FilterChip } from '../types'
+import type { FilterChip, QueueSource } from '../types'
 import { getProjectId, resolveTimeRange } from './env'
 import { gatewayClient } from './clients'
 import { unwrapError } from './error'
-import { mapGatewayFinding } from './adapters'
+import { mapGatewayEntity, mapGatewayEvent, mapGatewayFinding } from './adapters'
 import { matchesChips } from '../lib/filters'
 import { resolve, type TimeInterval } from '../components/time-interval/model'
 import type { AlertEvent, ContextEvent, CorrelationGroup, Entity, QueueItem } from '../types'
@@ -10,6 +10,8 @@ import type { components as Gw } from '@ir/contract/gateway'
 
 type FindingsBody = Gw['schemas']['SearchFindingsRequest']
 type FindingKind = Gw['schemas']['FindingKind']
+type EventsBody = Gw['schemas']['SearchEventsRequest']
+type Capability = Gw['schemas']['Capability']
 
 const FINDING_KINDS: FindingKind[] = ['siem_incident', 'siem_correlation', 'nad_attack']
 const PAGE_LIMIT = 100
@@ -33,6 +35,19 @@ export interface QueueSearchResult {
   mockSources: string[]
 }
 
+function emptyQueue(sourceErrors: string[], availableSources: string[]): QueueSearchResult {
+  return {
+    alerts: {},
+    correlations: {},
+    queueOrder: [],
+    entities: {},
+    contextEvents: {},
+    sourceErrors,
+    availableSources,
+    mockSources: [],
+  }
+}
+
 function buildFindingsBody(
   chips: FilterChip[],
   timeInterval: TimeInterval,
@@ -48,28 +63,87 @@ function buildFindingsBody(
   return body
 }
 
+function eventEntitiesFromChips(chips: FilterChip[]): NonNullable<EventsBody['entities']> {
+  const entities: NonNullable<EventsBody['entities']> = []
+  for (const chip of chips) {
+    const type =
+      chip.field === 'ip' ? 'ip' : chip.field === 'host' ? 'host' : chip.field === 'user' ? 'account' : null
+    if (!type) continue
+    for (const value of chip.values) {
+      const trimmed = value.trim()
+      if (trimmed) entities.push({ type, value: trimmed })
+    }
+  }
+  return entities
+}
+
 function matchesQuery(alert: AlertEvent, query?: string): boolean {
   if (!query?.trim()) return true
   const needle = query.trim().toLowerCase()
-  const haystack = [alert.title, alert.rule, alert.description, alert.raw?.finding_kind]
+  const haystack = [
+    alert.title,
+    alert.rule,
+    alert.description,
+    ...Object.values(alert.raw ?? {}),
+  ]
     .filter(Boolean)
     .join(' ')
     .toLowerCase()
   return haystack.includes(needle)
 }
 
-async function findingSources(): Promise<{ defaults: string[]; available: string[] }> {
+async function capableSources(capability: Capability): Promise<{ defaults: string[]; available: string[] }> {
   const { data, error, response } = await gatewayClient.GET('/api/v1/sources', {
     params: projectHeader(),
   })
   if (error || !data) throw unwrapError(error, response.status)
-  const findingCapable = (data.items ?? []).filter((item) =>
-    item.capabilities?.includes('findings'),
-  )
-  const online = findingCapable.filter((item) => item.status === 'online')
+  const capable = (data.items ?? []).filter((item) => item.capabilities?.includes(capability))
+  const online = capable.filter((item) => item.status === 'online')
   return {
     defaults: online.map((item) => item.code),
-    available: findingCapable.map((item) => item.code),
+    available: capable.map((item) => item.code),
+  }
+}
+
+function resolveAllowedSources(
+  chips: FilterChip[],
+  sources: { defaults: string[]; available: string[] },
+): string[] {
+  const selectedSources = chips.find((c) => c.field === 'source')?.values
+  if (selectedSources?.length) return selectedSources
+  return sources.defaults.length ? sources.defaults : sources.available
+}
+
+function finishQueue(
+  alertList: AlertEvent[],
+  entities: Record<string, Entity>,
+  chips: FilterChip[],
+  query: string | undefined,
+  sourceErrors: string[],
+  availableSources: string[],
+): QueueSearchResult {
+  const filtered = alertList
+    .filter((alert) => matchesQuery(alert, query))
+    .filter((alert) =>
+      matchesChips(alert.entityIds, alert.severity, alert.source, alert.status, chips, entities),
+    )
+    .sort((a, b) => b.time.localeCompare(a.time))
+
+  const queueAlerts: Record<string, AlertEvent> = {}
+  const queueOrder: QueueItem[] = []
+  for (const alert of filtered) {
+    queueAlerts[alert.id] = alert
+    queueOrder.push({ kind: 'alert', id: alert.id })
+  }
+  return {
+    alerts: queueAlerts,
+    correlations: {},
+    queueOrder,
+    entities,
+    contextEvents: {},
+    sourceErrors: [...new Set(sourceErrors)],
+    availableSources,
+    mockSources: [],
   }
 }
 
@@ -96,28 +170,17 @@ async function searchFindingKind(body: FindingsBody): Promise<{
   return { findings, sourceErrors }
 }
 
-export async function searchQueue(
+async function searchFindingsQueue(
   chips: FilterChip[],
   timeInterval: TimeInterval,
   query?: string,
 ): Promise<QueueSearchResult> {
-  const sources = await findingSources()
+  const sources = await capableSources('findings')
   const sourceErrors: string[] = []
-  const selectedSources = chips.find((c) => c.field === 'source')?.values
-  const allowedSources =
-    selectedSources?.length ? selectedSources : sources.defaults.length ? sources.defaults : sources.available
+  const allowedSources = resolveAllowedSources(chips, sources)
 
   if (!allowedSources.length) {
-    return {
-      alerts: {},
-      correlations: {},
-      queueOrder: [],
-      entities: {},
-      contextEvents: {},
-      sourceErrors: ['Нет доступных online-источников findings'],
-      availableSources: sources.available,
-      mockSources: [],
-    }
+    return emptyQueue(['Нет доступных online-источников findings'], sources.available)
   }
 
   const merged = new Map<string, Gw['schemas']['Finding']>()
@@ -132,40 +195,90 @@ export async function searchQueue(
     }
   }
 
-  const alerts: Record<string, AlertEvent> = {}
   const entities: Record<string, Entity> = {}
   const alertList: AlertEvent[] = []
   for (const finding of merged.values()) {
     const mapped = mapGatewayFinding(finding)
     for (const entity of mapped.entities) entities[entity.id] = entity
-    alerts[mapped.alert.id] = mapped.alert
     alertList.push(mapped.alert)
   }
+  return finishQueue(alertList, entities, chips, query, sourceErrors, sources.available)
+}
 
-  const filtered = alertList
-    .filter((alert) => matchesQuery(alert, query))
-    .filter((alert) =>
-      matchesChips(alert.entityIds, alert.severity, alert.source, alert.status, chips, entities),
-    )
-    .sort((a, b) => b.time.localeCompare(a.time))
-
-  const queueAlerts: Record<string, AlertEvent> = {}
-  const queueOrder: QueueItem[] = []
-  for (const alert of filtered) {
-    queueAlerts[alert.id] = alert
-    queueOrder.push({ kind: 'alert', id: alert.id })
+async function searchEventsQueue(
+  chips: FilterChip[],
+  timeInterval: TimeInterval,
+  query?: string,
+): Promise<QueueSearchResult> {
+  const sources = await capableSources('events')
+  const allowedSources = resolveAllowedSources(chips, sources)
+  if (!allowedSources.length) {
+    return emptyQueue(['Нет доступных online-источников events'], sources.available)
   }
 
-  return {
-    alerts: queueAlerts,
-    correlations: {},
-    queueOrder,
-    entities,
-    contextEvents: {},
-    sourceErrors: [...new Set(sourceErrors)],
-    availableSources: sources.available,
-    mockSources: [],
+  const body: EventsBody = {
+    time_range: resolve(timeInterval),
+    limit: PAGE_LIMIT,
+    sources: allowedSources,
   }
+  const entityFilters = eventEntitiesFromChips(chips)
+  if (entityFilters.length) body.entities = entityFilters
+
+  const events: Gw['schemas']['Event'][] = []
+  const gatewayEntities: Gw['schemas']['Entity'][] = []
+  const sourceErrors: string[] = []
+  let cursor: string | undefined
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const { data, error, response } = await gatewayClient.POST('/api/v1/events/search', {
+      params: projectHeader(),
+      body: { ...body, cursor },
+    })
+    if (error || !data) throw unwrapError(error, response.status)
+    events.push(...(data.events ?? []))
+    gatewayEntities.push(...(data.entities ?? []))
+    for (const err of data.source_errors ?? []) {
+      sourceErrors.push(`${err.source}: ${err.message}`)
+    }
+    if (!data.next_cursor) break
+    cursor = data.next_cursor
+  }
+
+  const entities: Record<string, Entity> = {}
+  for (const entity of gatewayEntities) {
+    const mapped = mapGatewayEntity(entity)
+    entities[mapped.id] = mapped
+  }
+  const alertList: AlertEvent[] = []
+  const seen = new Set<string>()
+  for (const event of events) {
+    const entityIds: string[] = []
+    for (const mention of event.entities ?? []) {
+      if (!mention.type || !mention.value) continue
+      const mapped = mapGatewayEntity({
+        type: mention.type,
+        value: mention.value,
+        attributes: {},
+        sources: [],
+      })
+      entities[mapped.id] = entities[mapped.id] ?? mapped
+      entityIds.push(mapped.id)
+    }
+    const alert = mapGatewayEvent(event, entityIds)
+    if (seen.has(alert.id)) continue
+    seen.add(alert.id)
+    alertList.push(alert)
+  }
+  return finishQueue(alertList, entities, chips, query, sourceErrors, sources.available)
+}
+
+export async function searchQueue(
+  chips: FilterChip[],
+  timeInterval: TimeInterval,
+  query?: string,
+  queueSource: QueueSource = 'findings',
+): Promise<QueueSearchResult> {
+  if (queueSource === 'events') return searchEventsQueue(chips, timeInterval, query)
+  return searchFindingsQueue(chips, timeInterval, query)
 }
 
 export async function lookupEntity(type: string, value: string): Promise<string> {

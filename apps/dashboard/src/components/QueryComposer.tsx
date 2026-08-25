@@ -13,7 +13,7 @@ import { filterFingerprint } from '../lib/queryFingerprint'
 import { clsx } from '../lib/utils'
 import { emptyContextQueue, useAppStore } from '../store/appStore'
 import { usePdqlStore } from '../store/pdqlStore'
-import type { QueryHistoryEntry } from '../types'
+import type { QueryHistoryEntry, QueueSource } from '../types'
 import { PdqlBuilderModal } from './pdql/PdqlBuilderModal'
 import { FieldSearchList } from './pdql/FieldSearchList'
 import {
@@ -30,6 +30,40 @@ const SECTION_LABELS: { id: ActiveSection; label: string }[] = [
   { id: 'columns', label: 'Поля' },
   { id: 'groups', label: 'Группы' },
 ]
+const QUEUE_SOURCE_OPTIONS: { id: QueueSource; label: string }[] = [
+  { id: 'findings', label: 'Инциденты' },
+  { id: 'events', label: 'События' },
+]
+
+function QueueSourceToggle({
+  value,
+  onChange,
+}: {
+  value: QueueSource
+  onChange: (value: QueueSource) => void
+}) {
+  return (
+    <div
+      className="inline-flex min-h-9 overflow-hidden rounded border border-border bg-surface-0"
+      role="group"
+      aria-label="Источник очереди"
+    >
+      {QUEUE_SOURCE_OPTIONS.map((option) => (
+        <button
+          key={option.id}
+          type="button"
+          onClick={() => onChange(option.id)}
+          className={clsx(
+            'px-2.5 py-1.5 text-xs',
+            value === option.id ? 'bg-surface-3 text-fg' : 'text-fg-muted hover:text-fg',
+          )}
+        >
+          {option.label}
+        </button>
+      ))}
+    </div>
+  )
+}
 
 export function QueryComposer({
   pdql,
@@ -38,8 +72,10 @@ export function QueryComposer({
   history,
   extra,
   executing,
+  queueSource,
   onPdqlChange,
   onTimeChange,
+  onQueueSourceChange,
   onExecute,
   onApplyHistory,
 }: {
@@ -49,8 +85,10 @@ export function QueryComposer({
   history: QueryHistoryEntry[]
   extra?: React.ReactNode
   executing?: boolean
+  queueSource?: QueueSource
   onPdqlChange: (pdql: string) => void
   onTimeChange: (interval: TimeInterval) => void
+  onQueueSourceChange?: (source: QueueSource) => void
   onExecute: () => void
   onApplyHistory: (entry: QueryHistoryEntry) => void
 }) {
@@ -81,7 +119,7 @@ export function QueryComposer({
   const filters = chips.filter((chip) => chip.kind === 'filter')
   const columns = chips.filter((chip) => chip.kind === 'column')
   const groups = chips.filter((chip) => chip.kind === 'group')
-  const stale = filterFingerprint(pdql, timeInterval) !== executedFingerprint
+  const stale = filterFingerprint(pdql, timeInterval, queueSource) !== executedFingerprint
   const parseError = parsed.ok
     ? null
     : `${parsed.error.message}${parsed.error.position > 0 ? ` (позиция ${parsed.error.position})` : ''}`
@@ -114,6 +152,9 @@ export function QueryComposer({
     <div className="border-b border-border bg-surface-1 px-4 py-3">
       <div className="flex flex-wrap items-center gap-2">
         <TimeIntervalButton value={timeInterval} onChange={onTimeChange} />
+        {queueSource && onQueueSourceChange && (
+          <QueueSourceToggle value={queueSource} onChange={onQueueSourceChange} />
+        )}
         {filters.map((chip) => (
           <Chip key={chip.id} onRemove={() => removeChip(chip.id)}>
             {chip.label}
@@ -219,7 +260,7 @@ export function QueryComposer({
                 )}
                 {history.map((entry) => (
                   <button
-                    key={filterFingerprint(entry.pdql, entry.timeInterval)}
+                    key={filterFingerprint(entry.pdql, entry.timeInterval, entry.queueSource)}
                     type="button"
                     className="flex w-full flex-col items-start gap-0.5 px-3 py-2 text-left hover:bg-surface-3"
                     onClick={() => {
@@ -232,6 +273,7 @@ export function QueryComposer({
                     </span>
                     <span className="font-mono text-[11px] text-fg-dim">
                       {intervalButtonLabel(entry.timeInterval)}
+                      {entry.queueSource === 'events' ? ' · события' : ''}
                     </span>
                   </button>
                 ))}
@@ -334,11 +376,13 @@ export function QueryComposer({
 export function GlobalQueryComposer() {
   const pdql = useAppStore((s) => s.queuePdql)
   const timeInterval = useAppStore((s) => s.timeInterval)
+  const queueSource = useAppStore((s) => s.queueSource)
   const executedFingerprint = useAppStore((s) => s.executedFingerprint)
   const history = useAppStore((s) => s.queryHistory)
   const executing = useAppStore((s) => s.queueLoading)
   const setQueuePdql = useAppStore((s) => s.setQueuePdql)
   const setTimeInterval = useAppStore((s) => s.setTimeInterval)
+  const setQueueSource = useAppStore((s) => s.setQueueSource)
   const applyQueueHistory = useAppStore((s) => s.applyQueueHistory)
   const loadQueue = useAppStore((s) => s.loadQueue)
 
@@ -346,11 +390,13 @@ export function GlobalQueryComposer() {
     <QueryComposer
       pdql={pdql}
       timeInterval={timeInterval}
+      queueSource={queueSource}
       executedFingerprint={executedFingerprint}
       history={history}
       executing={executing}
       onPdqlChange={setQueuePdql}
       onTimeChange={setTimeInterval}
+      onQueueSourceChange={setQueueSource}
       onApplyHistory={applyQueueHistory}
       onExecute={() => void loadQueue()}
     />

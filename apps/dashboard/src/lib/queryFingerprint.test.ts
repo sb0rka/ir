@@ -3,7 +3,7 @@ import { filterFingerprint } from './queryFingerprint'
 import { demoDayInterval } from '../components/time-interval/model'
 
 describe('filterFingerprint', () => {
-  it('changes when pdql or the interval changes', () => {
+  it('changes when pdql, the interval, or queue source changes', () => {
     const day = demoDayInterval('Europe/Moscow')
     const hour = {
       kind: 'relative' as const,
@@ -14,7 +14,9 @@ describe('filterFingerprint', () => {
     }
     const base = filterFingerprint('select(time)', day)
     expect(filterFingerprint('select(time)', day)).toBe(base)
+    expect(filterFingerprint('select(time)', day, 'findings')).toBe(base)
     expect(filterFingerprint('select(time) | sort(time desc)', day)).not.toBe(base)
     expect(filterFingerprint('select(time)', hour)).not.toBe(base)
+    expect(filterFingerprint('select(time)', day, 'events')).not.toBe(base)
   })
 })

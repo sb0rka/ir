@@ -4,6 +4,14 @@ export { appendCondition } from './append'
 export { addFieldToAst, addFieldToPdql, applyGroupInvariant, parseQueuePdql } from './ast'
 export { KNOWN_EVENT_FIELDS, relatedFieldColumns } from './relatedFields'
 export type { RelatedFieldColumn } from './relatedFields'
+export { entityKindForField, roleForField } from './entityKind'
+export {
+  eventHeaderMeta,
+  groupEventFields,
+  isCorrelationRecord,
+  isSiemSource,
+} from './siemGroups'
+export type { EventHeaderMeta, FieldColumn, FieldGroup, FieldRow } from './siemGroups'
 export { pdqlToChips, removePdqlChip, serializeWithoutChip } from './chips'
 export type { PdqlChip, PdqlChipKind } from './chips'
 export { astToFilterChips, pdqlToSearchParts } from './toSearch'

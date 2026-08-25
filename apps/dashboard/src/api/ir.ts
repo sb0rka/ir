@@ -321,6 +321,18 @@ export async function countProposedAgentEdges(investigationId: string): Promise<
   return page.edges.length
 }
 
+export async function createEntity(
+  investigationId: string,
+  body: Ir['schemas']['EntityCreate'],
+): Promise<Ir['schemas']['Entity']> {
+  return throwIfError(
+    await irClient.POST('/investigations/{investigation_id}/entities', {
+      params: { ...projectParams(), path: { investigation_id: investigationId } },
+      body,
+    }),
+  )
+}
+
 export async function getEntityCard(entityId: string): Promise<Ir['schemas']['EntityCard']> {
   return throwIfError(
     await irClient.GET('/entities/{entity_id}', {
