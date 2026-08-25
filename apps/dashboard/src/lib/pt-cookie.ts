@@ -1,3 +1,5 @@
+import { cookieSegmentError, normalizeCookieSegment } from './cookie-segment'
+
 export const PT_SIEM_COOKIE_CORE_PORTAL = 'CorePortalCookie'
 export const PT_SIEM_COOKIE_IDSRV_SESSION = 'idsrv.session'
 export const PT_SIEM_COOKIE_IDSRV = 'idsrv'
@@ -22,15 +24,10 @@ const siemFields: PtSiemCookieField[] = [...eventsFields, PT_SIEM_COOKIE_PORTAL]
 export function buildPtSiemCookie(parts: PtSiemCookieParts): string {
   const segments: string[] = []
   for (const field of siemFields) {
-    const value = parts[field].trim()
-    if (value === '') {
-      continue
+    const segment = normalizeCookieSegment(field, parts[field])
+    if (segment) {
+      segments.push(segment)
     }
-    if (value.includes('=')) {
-      segments.push(value)
-      continue
-    }
-    segments.push(`${field}=${value}`)
   }
   return segments.join('; ')
 }
@@ -39,6 +36,12 @@ export function validatePtSiemCookieParts(parts: PtSiemCookieParts): string | nu
   const values = Object.values(parts).map((value) => value.trim())
   if (values.every((value) => value === '')) {
     return null
+  }
+  for (const field of siemFields) {
+    const err = cookieSegmentError(field, parts[field])
+    if (err) {
+      return err
+    }
   }
   const eventsFilled = eventsFields.filter((field) => parts[field].trim() !== '').length
   if (eventsFilled > 0 && eventsFilled < eventsFields.length) {
