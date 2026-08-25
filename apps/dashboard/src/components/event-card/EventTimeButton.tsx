@@ -32,7 +32,7 @@ export function EventTimeButton({
         title="Задать окно времени вокруг события"
         aria-expanded={open}
         aria-haspopup="dialog"
-        className="inline-flex items-center gap-1 font-mono text-xs text-low hover:underline"
+        className="inline-flex items-center gap-1 font-mono text-xs text-fg hover:underline"
         onClick={() => setOpen((value) => !value)}
       >
         <Clock className="h-3 w-3 text-fg-dim" />

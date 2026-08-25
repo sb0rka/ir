@@ -217,7 +217,7 @@ function ValueButton({
   return (
     <button
       type="button"
-      className="block w-full whitespace-normal break-all text-right font-mono text-low hover:underline"
+      className="block w-full whitespace-normal break-all text-right font-mono text-fg hover:underline"
       onClick={() => onValueClick(row.field, row.value)}
     >
       {display}
