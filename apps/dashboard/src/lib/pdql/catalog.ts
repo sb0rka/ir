@@ -20,7 +20,24 @@ export const DEFAULT_FIELD_FREQ: Record<string, number> = {
 const ENUM_VALUES: Record<string, string[]> = {
   importance: ['low', 'medium', 'high'],
   status: ['new', 'investigating', 'closed'],
-  action: ['login', 'logout', 'create', 'delete', 'modify', 'execute'],
+  action: [
+    'start',
+    'access',
+    'elevate',
+    'login',
+    'open',
+    'create',
+    'remove',
+    'modify',
+    'assign',
+    'logout',
+    'rename',
+    'deelevate',
+    'execute',
+    'stop',
+    'configure',
+    'initiate',
+  ],
 }
 
 function fieldType(name: string): FieldType {
