@@ -187,8 +187,11 @@ type safeEventRecord struct {
 	ExternalDestinationHost     string    `json:"external_dst.host"`
 	ExternalDestinationHostname string    `json:"external_dst.hostname"`
 	ExternalDestinationFQDN     string    `json:"external_dst.fqdn"`
+	Subject                     string    `json:"subject"`
 	SubjectAccountName          string    `json:"subject.account.name"`
 	SubjectAccountDomain        string    `json:"subject.account.domain"`
+	SubjectAccountProvider      string    `json:"subject.account.provider"`
+	SubjectAccountSessionID     string    `json:"subject.account.session_id"`
 	SubjectAccountID            string    `json:"subject.account.id"`
 	ObjectAccountName           string    `json:"object.account.name"`
 	ObjectAccountDomain         string    `json:"object.account.domain"`
@@ -196,9 +199,14 @@ type safeEventRecord struct {
 	SubjectProcessName          string    `json:"subject.process.name"`
 	SubjectProcessPath          string    `json:"subject.process.fullpath"`
 	SubjectProcessCommand       string    `json:"subject.process.cmdline"`
+	SubjectProcessID            string    `json:"subject.process.id"`
+	SubjectProcessChain         string    `json:"subject.process.chain"`
 	ObjectProcessName           string    `json:"object.process.name"`
 	ObjectProcessPath           string    `json:"object.process.fullpath"`
 	ObjectProcessCommand        string    `json:"object.process.cmdline"`
+	ObjectProcessID             string    `json:"object.process.id"`
+	ObjectProcessChain          string    `json:"object.process.chain"`
+	Object                      string    `json:"object"`
 	ObjectName                  string    `json:"object.name"`
 	ObjectPath                  string    `json:"object.path"`
 	CategoryGeneric             string    `json:"category.generic"`

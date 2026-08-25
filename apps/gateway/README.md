@@ -37,4 +37,15 @@ Outbound TLS requires TLS 1.2 or newer and redirects are not followed. `GATEWAY_
 
 Development and contract tests use reviewed, sanitized captures from `docs-internal/pt-cases` and local `httptest` servers. They do not contact the OpenVPN-only hosts.
 
+## Advanced event search
+
+`POST /api/v1/events/search` accepts the source-independent `sources`, `time_range`, `entities`, `limit`, and `cursor` fields. For `pt-maxpatrol-siem`, it additionally accepts:
+
+- `filter` — a PDQL predicate only, without `filter(...)`, pipelines, comments, or control characters;
+- `columns` — allowlisted event fields to fetch;
+- `sort` — ordered `{ "field": "time", "direction": "asc" | "desc" }` rules;
+- `group_by` and aligned `group_values` — the selected MaxPatrol group path. A `null` item selects the source null group.
+
+Gateway builds the vendor query itself and always fetches the canonical identity fields required to return normalized events. Unknown fields and unsafe predicate syntax are rejected before an outbound call. These controls are source-specific: a request that selects `pt-nad` with any of them returns a source error instead of silently ignoring the options.
+
 See [architecture](docs/architecture.md), [provider mappings](docs/providers.md), and the [OpenAPI contract](../../api/gateway/openapi.yaml).

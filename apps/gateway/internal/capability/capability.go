@@ -49,11 +49,21 @@ type SessionSource interface {
 }
 
 type SearchEventsRequest struct {
-	TimeFrom time.Time
-	TimeTo   time.Time
-	Entities []domain.EntityRef
-	Limit    int
-	Cursor   string
+	TimeFrom    time.Time
+	TimeTo      time.Time
+	Entities    []domain.EntityRef
+	Filter      string
+	Columns     []string
+	Sort        []EventSort
+	GroupBy     []string
+	GroupValues []*string
+	Limit       int
+	Cursor      string
+}
+
+type EventSort struct {
+	Field     string
+	Direction string
 }
 
 type EventPage struct {

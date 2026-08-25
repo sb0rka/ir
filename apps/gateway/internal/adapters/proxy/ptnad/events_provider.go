@@ -15,6 +15,9 @@ func (provider *Provider) SearchEvents(ctx context.Context, access capability.Ac
 	if strings.TrimSpace(request.Cursor) != "" {
 		return capability.EventPage{}, invalidRequest("PT NAD does not expose a confirmed event cursor")
 	}
+	if hasSourceEventControls(request) {
+		return capability.EventPage{}, invalidRequest("PT NAD does not support filter, columns, sort, or grouping")
+	}
 	timeRange := domain.TimeRange{From: request.TimeFrom, To: request.TimeTo}
 	if err := validateDomainTimeRange(timeRange); err != nil {
 		return capability.EventPage{}, err
@@ -82,6 +85,11 @@ func (provider *Provider) SearchEvents(ctx context.Context, access capability.Ac
 		page.Status = "truncated"
 	}
 	return page, nil
+}
+
+func hasSourceEventControls(request capability.SearchEventsRequest) bool {
+	return strings.TrimSpace(request.Filter) != "" || len(request.Columns) > 0 || len(request.Sort) > 0 ||
+		len(request.GroupBy) > 0 || len(request.GroupValues) > 0
 }
 
 func (provider *Provider) ResolveContext(ctx context.Context, access capability.Access, request capability.ResolveContextRequest) (capability.ContextPage, error) {

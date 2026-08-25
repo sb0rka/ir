@@ -147,6 +147,13 @@ services:
       timeout: 5s
       retries: 12
       start_period: 45s
+    # Gateway shares this netns; join som_selfrun so selfrun can reach :8091.
+    networks:
+      default: {}
+      som_selfrun:
+        aliases:
+          - gateway
+          - openvpn
     profiles:
       - apps
 

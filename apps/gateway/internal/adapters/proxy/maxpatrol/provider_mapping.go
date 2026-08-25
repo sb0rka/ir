@@ -201,6 +201,21 @@ func domainEventFromRecord(record safeEventRecord, fetchedAt time.Time, parentCo
 		return domain.Event{}, nil, nil, err
 	}
 	event, entities, relations := domainEventFromRaw(raw, fetchedAt, parentCorrelationID)
+	putSafeAttribute(event.Attributes, "alert.context", cleanText(record.AlertContext, maxAttributeLength))
+	putSafeAttribute(event.Attributes, "alert.key", cleanText(record.AlertKey, maxAttributeLength))
+	putSafeAttribute(event.Attributes, "alert.regex_match", cleanText(record.AlertRegexMatch, maxAttributeLength))
+	putSafeAttribute(event.Attributes, "event_src.vendor", cleanText(record.EventSourceVendor, maxNameLength))
+	putSafeAttribute(event.Attributes, "event_src.title", cleanText(record.EventSourceTitle, maxNameLength))
+	putSafeAttribute(event.Attributes, "event_src.subsys", cleanText(record.EventSourceSubsystem, maxNameLength))
+	putSafeAttribute(event.Attributes, "subject", cleanText(record.Subject, maxAttributeLength))
+	putSafeAttribute(event.Attributes, "subject.account.id", cleanText(record.SubjectAccountID, maxNameLength))
+	putSafeAttribute(event.Attributes, "subject.account.provider", cleanText(record.SubjectAccountProvider, maxNameLength))
+	putSafeAttribute(event.Attributes, "subject.account.session_id", cleanText(record.SubjectAccountSessionID, maxNameLength))
+	putSafeAttribute(event.Attributes, "subject.process.id", cleanText(record.SubjectProcessID, maxNameLength))
+	putSafeAttribute(event.Attributes, "subject.process.chain", cleanText(record.SubjectProcessChain, maxAttributeLength))
+	putSafeAttribute(event.Attributes, "object", cleanText(record.Object, maxAttributeLength))
+	putSafeAttribute(event.Attributes, "object.process.id", cleanText(record.ObjectProcessID, maxNameLength))
+	putSafeAttribute(event.Attributes, "object.process.chain", cleanText(record.ObjectProcessChain, maxAttributeLength))
 	if strings.TrimSpace(record.CorrelationName) != "" {
 		event.Type = CorrelationRecordType
 		event.Attributes["correlation_name"] = cleanText(record.CorrelationName, maxNameLength)

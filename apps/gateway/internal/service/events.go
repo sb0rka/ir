@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"sort"
 	"strings"
 	"time"
@@ -14,12 +15,17 @@ import (
 )
 
 type SearchEventsRequest struct {
-	Sources  []string
-	TimeFrom time.Time
-	TimeTo   time.Time
-	Entities []domain.EntityRef
-	Limit    int
-	Cursor   string
+	Sources     []string
+	TimeFrom    time.Time
+	TimeTo      time.Time
+	Entities    []domain.EntityRef
+	Filter      string
+	Columns     []string
+	Sort        []capability.EventSort
+	GroupBy     []string
+	GroupValues []*string
+	Limit       int
+	Cursor      string
 }
 
 type SearchEventsResult struct {
@@ -37,7 +43,7 @@ func (service *Service) SearchEvents(ctx context.Context, access ProjectAccess, 
 		return SearchEventsResult{}, err
 	}
 	limit := normalizeLimit(request.Limit)
-	fingerprint := requestFingerprint(request.Sources, request.TimeFrom, request.TimeTo, request.Entities)
+	fingerprint := requestFingerprint(request)
 	state, err := decodeCursor(request.Cursor, fingerprint)
 	if err != nil {
 		return SearchEventsResult{}, err
@@ -65,6 +71,8 @@ func (service *Service) SearchEvents(ctx context.Context, access ProjectAccess, 
 				var innerErr error
 				page, innerErr = provider.Events.SearchEvents(attemptCtx, providerAccess, capability.SearchEventsRequest{
 					TimeFrom: request.TimeFrom, TimeTo: request.TimeTo, Entities: request.Entities,
+					Filter: request.Filter, Columns: request.Columns, Sort: request.Sort,
+					GroupBy: request.GroupBy, GroupValues: request.GroupValues,
 					Limit: limit, Cursor: positions[provider.Source.Code],
 				})
 				return innerErr
@@ -115,6 +123,7 @@ func (service *Service) SearchEvents(ctx context.Context, access ProjectAccess, 
 	}
 
 	result.Events = normalization.Events(result.Events)
+	sortEvents(result.Events, request.Sort)
 	if len(result.Events) > limit {
 		result.Events = result.Events[:limit]
 		markCompleteStatesTruncated(result.SourceStates)
@@ -140,18 +149,80 @@ func (service *Service) SearchEvents(ctx context.Context, access ProjectAccess, 
 	return result, nil
 }
 
-func requestFingerprint(sources []string, from, to time.Time, entities []domain.EntityRef) string {
-	sources = append([]string(nil), sources...)
+func requestFingerprint(request SearchEventsRequest) string {
+	sources := append([]string(nil), request.Sources...)
 	sort.Strings(sources)
-	entityKeys := make([]string, 0, len(entities))
-	for _, entity := range entities {
+	entityKeys := make([]string, 0, len(request.Entities))
+	for _, entity := range request.Entities {
 		entityKeys = append(entityKeys, strings.ToLower(entity.Type)+":"+domain.CanonicalValue(entity.Type, entity.Value))
 	}
 	sort.Strings(entityKeys)
-	raw := strings.Join(sources, ",") + "\x00" + from.UTC().Format(time.RFC3339Nano) + "\x00" +
-		to.UTC().Format(time.RFC3339Nano) + "\x00" + strings.Join(entityKeys, ",")
+	sortKeys := make([]string, 0, len(request.Sort))
+	for _, item := range request.Sort {
+		sortKeys = append(sortKeys, item.Field+":"+item.Direction)
+	}
+	groupValues := make([]string, 0, len(request.GroupValues))
+	for _, value := range request.GroupValues {
+		if value == nil {
+			groupValues = append(groupValues, "<null>")
+			continue
+		}
+		groupValues = append(groupValues, *value)
+	}
+	raw := strings.Join(sources, ",") + "\x00" + request.TimeFrom.UTC().Format(time.RFC3339Nano) + "\x00" +
+		request.TimeTo.UTC().Format(time.RFC3339Nano) + "\x00" + strings.Join(entityKeys, ",") + "\x00" +
+		strings.TrimSpace(request.Filter) + "\x00" + strings.Join(request.Columns, ",") + "\x00" +
+		strings.Join(sortKeys, ",") + "\x00" + strings.Join(request.GroupBy, ",") + "\x00" +
+		strings.Join(groupValues, "\x1f")
 	sum := sha256.Sum256([]byte(raw))
 	return hex.EncodeToString(sum[:])
+}
+
+func sortEvents(events []domain.Event, rules []capability.EventSort) {
+	if len(rules) == 0 {
+		return
+	}
+	sort.SliceStable(events, func(left, right int) bool {
+		for _, rule := range rules {
+			comparison := compareEventField(events[left], events[right], rule.Field)
+			if comparison == 0 {
+				continue
+			}
+			if rule.Direction == "asc" {
+				return comparison < 0
+			}
+			return comparison > 0
+		}
+		return false
+	})
+}
+
+func compareEventField(left, right domain.Event, field string) int {
+	if field == "time" {
+		if left.OccurredAt.Before(right.OccurredAt) {
+			return -1
+		}
+		if left.OccurredAt.After(right.OccurredAt) {
+			return 1
+		}
+		return 0
+	}
+	leftValue := eventFieldValue(left, field)
+	rightValue := eventFieldValue(right, field)
+	return strings.Compare(leftValue, rightValue)
+}
+
+func eventFieldValue(event domain.Event, field string) string {
+	switch field {
+	case "text":
+		return event.Title
+	case "importance":
+		return event.Severity
+	case "uuid":
+		return event.Provenance.ExternalID
+	default:
+		return fmt.Sprint(event.Attributes[field])
+	}
 }
 
 func filterEntities(items []domain.Entity, selected map[string]struct{}) []domain.Entity {
