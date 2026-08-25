@@ -6,6 +6,7 @@ import { mapGatewayEntity, mapGatewayEvent, mapGatewayFinding } from './adapters
 import { pickFindingChildEvents, type FindingResolveKey } from '../lib/correlationSubevents'
 import { matchesChips } from '../lib/filters'
 import { astToEventSearch, astToFilterChips, pdqlToSearchParts, type QueryAst } from '../lib/pdql'
+import { sortQueueAlerts, type QueueSort } from '../lib/queueSort'
 import { resolve, type TimeInterval } from '../components/time-interval/model'
 import type { AlertEvent, ContextEvent, CorrelationGroup, Entity, QueueItem } from '../types'
 import type { components as Gw } from '@ir/contract/gateway'
@@ -109,13 +110,16 @@ function finishQueue(
   query: string | undefined,
   sourceErrors: string[],
   availableSources: string[],
+  sort?: QueueSort,
 ): QueueSearchResult {
-  const filtered = alertList
-    .filter((alert) => matchesQuery(alert, query))
-    .filter((alert) =>
-      matchesChips(alert.entityIds, alert.severity, alert.source, alert.status, chips, entities),
-    )
-    .sort((a, b) => b.time.localeCompare(a.time))
+  const filtered = sortQueueAlerts(
+    alertList
+      .filter((alert) => matchesQuery(alert, query))
+      .filter((alert) =>
+        matchesChips(alert.entityIds, alert.severity, alert.source, alert.status, chips, entities),
+      ),
+    sort,
+  )
 
   const queueAlerts: Record<string, AlertEvent> = {}
   const queueOrder: QueueItem[] = []
@@ -276,7 +280,7 @@ async function searchEventsQueue(
     seen.add(alert.id)
     alertList.push(alert)
   }
-  return finishQueue(alertList, entities, [], undefined, sourceErrors, sources.available)
+  return finishQueue(alertList, entities, [], undefined, sourceErrors, sources.available, parts.sort)
 }
 
 export async function searchQueue(
