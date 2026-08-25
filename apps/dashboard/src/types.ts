@@ -191,8 +191,17 @@ export interface FilterChip {
   values: string[]
 }
 
-/** Global queue search target: coarse findings or normalized events. */
-export type QueueSource = 'findings' | 'events'
+/** High-level queue search target: a finding kind or normalized events. */
+export type QueueSource = 'siem_incident' | 'siem_correlation' | 'nad_attack' | 'events'
+
+export const DEFAULT_QUEUE_SOURCE: QueueSource = 'siem_incident'
+
+export const QUEUE_SOURCE_OPTIONS: { id: QueueSource; label: string }[] = [
+  { id: 'siem_incident', label: 'Инциденты' },
+  { id: 'siem_correlation', label: 'Корреляции' },
+  { id: 'nad_attack', label: 'Атаки NAD' },
+  { id: 'events', label: 'События' },
+]
 
 export interface QueryHistoryEntry {
   pdql: string

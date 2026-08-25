@@ -13,7 +13,12 @@ import { filterFingerprint } from '../lib/queryFingerprint'
 import { clsx } from '../lib/utils'
 import { emptyContextQueue, useAppStore } from '../store/appStore'
 import { usePdqlStore } from '../store/pdqlStore'
-import type { QueryHistoryEntry, QueueSource } from '../types'
+import {
+  DEFAULT_QUEUE_SOURCE,
+  QUEUE_SOURCE_OPTIONS,
+  type QueryHistoryEntry,
+  type QueueSource,
+} from '../types'
 import { PdqlBuilderModal } from './pdql/PdqlBuilderModal'
 import { FieldSearchList } from './pdql/FieldSearchList'
 import {
@@ -30,10 +35,10 @@ const SECTION_LABELS: { id: ActiveSection; label: string }[] = [
   { id: 'columns', label: 'Поля' },
   { id: 'groups', label: 'Группы' },
 ]
-const QUEUE_SOURCE_OPTIONS: { id: QueueSource; label: string }[] = [
-  { id: 'findings', label: 'Инциденты' },
-  { id: 'events', label: 'События' },
-]
+
+function queueSourceLabel(source: QueueSource | undefined): string | undefined {
+  return QUEUE_SOURCE_OPTIONS.find((option) => option.id === source)?.label
+}
 
 function QueueSourceToggle({
   value,
@@ -46,7 +51,7 @@ function QueueSourceToggle({
     <div
       className="inline-flex min-h-9 overflow-hidden rounded border border-border bg-surface-0"
       role="group"
-      aria-label="Источник очереди"
+      aria-label="Тип сущности"
     >
       {QUEUE_SOURCE_OPTIONS.map((option) => (
         <button
@@ -150,6 +155,11 @@ export function QueryComposer({
 
   return (
     <div className="border-b border-border bg-surface-1 px-4 py-3">
+      {queueSource && onQueueSourceChange && (
+        <div className="mb-2">
+          <QueueSourceToggle value={queueSource} onChange={onQueueSourceChange} />
+        </div>
+      )}
       <div className="flex flex-wrap items-center gap-2">
         <TimeIntervalButton
           value={timeInterval}
@@ -159,9 +169,6 @@ export function QueryComposer({
             onExecute()
           }}
         />
-        {queueSource && onQueueSourceChange && (
-          <QueueSourceToggle value={queueSource} onChange={onQueueSourceChange} />
-        )}
         {filters.map((chip) => (
           <Chip key={chip.id} onRemove={() => removeChip(chip.id)}>
             {chip.label}
@@ -280,7 +287,9 @@ export function QueryComposer({
                     </span>
                     <span className="font-mono text-[11px] text-fg-dim">
                       {intervalButtonLabel(entry.timeInterval)}
-                      {entry.queueSource === 'events' ? ' · события' : ''}
+                      {queueSourceLabel(entry.queueSource)
+                        ? ` · ${queueSourceLabel(entry.queueSource)}`
+                        : ''}
                     </span>
                   </button>
                 ))}
@@ -437,7 +446,7 @@ export function ContextQueryComposer({
         setContextQueue(investigationId, {
           pdql: entry.pdql,
           timeInterval: entry.timeInterval,
-          queueSource: entry.queueSource ?? 'findings',
+          queueSource: entry.queueSource ?? DEFAULT_QUEUE_SOURCE,
         })
       }
       onExecute={() => {

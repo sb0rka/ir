@@ -1,22 +1,23 @@
 import { create } from 'zustand'
-import type {
-  ActionResult,
-  AlertEvent,
-  ContextEvent,
-  ContextQueueState,
-  CorrelationGroup,
-  Entity,
-  FilterChip,
-  FilterField,
-  Finding,
-  GraphEdge,
-  GraphNode,
-  Investigation,
-  Issue,
-  QueueItem,
-  QueueSource,
-  QueryHistoryEntry,
-  ReviewState,
+import {
+  DEFAULT_QUEUE_SOURCE,
+  type ActionResult,
+  type AlertEvent,
+  type ContextEvent,
+  type ContextQueueState,
+  type CorrelationGroup,
+  type Entity,
+  type FilterChip,
+  type FilterField,
+  type Finding,
+  type GraphEdge,
+  type GraphNode,
+  type Investigation,
+  type Issue,
+  type QueueItem,
+  type QueueSource,
+  type QueryHistoryEntry,
+  type ReviewState,
 } from '../types'
 import { uid } from '../lib/utils'
 import { defaultFilterValueOptions, issueTemplates } from '../lib/catalog'
@@ -58,7 +59,7 @@ export const emptyContextQueue: ContextQueueState = {
   chips: [],
   pdql: DEFAULT_QUEUE_PDQL,
   timeInterval: DEFAULT_TIME_INTERVAL,
-  queueSource: 'findings',
+  queueSource: DEFAULT_QUEUE_SOURCE,
   executedFingerprint: null,
   queryHistory: [],
   selectedIds: [],
@@ -278,7 +279,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   chips: [],
   timeInterval: DEFAULT_TIME_INTERVAL,
   queuePdql: DEFAULT_QUEUE_PDQL,
-  queueSource: 'findings',
+  queueSource: DEFAULT_QUEUE_SOURCE,
   executedFingerprint: null,
   queryHistory: [],
   selectedAlertIds: [],
@@ -328,7 +329,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({
       queuePdql: entry.pdql,
       timeInterval: entry.timeInterval,
-      queueSource: entry.queueSource ?? 'findings',
+      queueSource: entry.queueSource ?? DEFAULT_QUEUE_SOURCE,
     }),
   toggleAlertSelect: (id) => {
     const sel = get().selectedAlertIds

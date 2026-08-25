@@ -14,9 +14,11 @@ describe('filterFingerprint', () => {
     }
     const base = filterFingerprint('select(time)', day)
     expect(filterFingerprint('select(time)', day)).toBe(base)
-    expect(filterFingerprint('select(time)', day, 'findings')).toBe(base)
+    expect(filterFingerprint('select(time)', day, 'siem_incident')).toBe(base)
     expect(filterFingerprint('select(time) | sort(time desc)', day)).not.toBe(base)
     expect(filterFingerprint('select(time)', hour)).not.toBe(base)
+    expect(filterFingerprint('select(time)', day, 'siem_correlation')).not.toBe(base)
+    expect(filterFingerprint('select(time)', day, 'nad_attack')).not.toBe(base)
     expect(filterFingerprint('select(time)', day, 'events')).not.toBe(base)
   })
 })

@@ -8,7 +8,7 @@ import {
   type FieldGroup,
   type FieldRow,
 } from '../../lib/pdql'
-import type { Severity } from '../../types'
+import type { AlertEvent, Severity } from '../../types'
 import { SeverityBadge } from '../ui'
 
 export interface EventCardModel {
@@ -19,6 +19,22 @@ export interface EventCardModel {
   source: string
   severity?: Severity
   raw: Record<string, string>
+  sourceEventId?: string
+  findingRef?: AlertEvent['findingRef']
+}
+
+export function eventCardModelFromAlert(event: AlertEvent): EventCardModel {
+  return {
+    id: event.id,
+    time: event.time,
+    title: event.title,
+    description: event.description,
+    source: event.source,
+    severity: event.severity,
+    raw: event.raw ?? {},
+    sourceEventId: event.sourceEventId,
+    findingRef: event.findingRef,
+  }
 }
 
 export function EventFields({

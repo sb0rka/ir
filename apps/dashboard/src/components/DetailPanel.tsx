@@ -329,6 +329,7 @@ export function DetailPanel({ investigationId }: { investigationId: string }) {
                 source: event.source,
                 severity: event.severity,
                 raw: event.raw ?? {},
+                sourceEventId: event.sourceEventId,
               }}
               investigationId={investigationId}
               eventInContext={inv.eventIds.includes(event.id)}

@@ -105,8 +105,12 @@ function rawFromNormalized(data: Record<string, unknown> | undefined): Record<st
 
 function flattenFindingRaw(finding: Gw['schemas']['Finding']): Record<string, string> {
   const raw: Record<string, string> = { finding_kind: finding.kind }
+  putRaw(raw, 'uuid', finding.ref.external_id)
   putRaw(raw, 'status', finding.status)
   putRaw(raw, 'rule.name', finding.rule?.name)
+  if (finding.kind === 'siem_correlation') {
+    putRaw(raw, 'correlation_name', finding.rule?.name)
+  }
   const correlation = finding.correlation
   if (correlation) {
     putRaw(raw, 'correlation_type', correlation.correlation_type)

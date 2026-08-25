@@ -13,7 +13,7 @@ import type { AlertEvent, CorrelationGroup } from '../types'
 import { Button, Chip, Panel, SeverityBadge } from './ui'
 import { formatTime, statusLabel } from '../lib/utils'
 import { alertIsInContext, contextEventKeys } from '../lib/queueContext'
-import { EventCard } from './event-card'
+import { EventCard, eventCardModelFromAlert } from './event-card'
 import type { TimeInterval } from './time-interval'
 
 export function QueueDetailPanel({
@@ -185,15 +185,7 @@ function AlertDetails({
     <>
       <span className="text-xs text-fg-dim">{statusLabel[alert.status]}</span>
       <EventCard
-        event={{
-          id: alert.id,
-          time: alert.time,
-          title: alert.title,
-          description: alert.description,
-          source: alert.source,
-          severity: alert.severity,
-          raw: alert.raw ?? {},
-        }}
+        event={eventCardModelFromAlert(alert)}
         timeInterval={timeInterval}
         onTimeChange={onTimeChange}
         onTimeExecute={onTimeExecute}

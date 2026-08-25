@@ -1,5 +1,5 @@
 export { EventCard } from './EventCard'
-export { EventFields, EventHeaderFacts } from './EventFields'
+export { EventFields, EventHeaderFacts, eventCardModelFromAlert } from './EventFields'
 export type { EventCardModel } from './EventFields'
 export { EventFieldModal } from './EventFieldModal'
 export { EventTimeButton } from './EventTimeButton'
