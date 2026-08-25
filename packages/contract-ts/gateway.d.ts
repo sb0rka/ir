@@ -587,6 +587,12 @@ export interface components {
             resolutions: components["schemas"]["ObjectResolution"][];
             source_errors: components["schemas"]["SourceError"][];
         };
+        /** @description Source event field and direction used to order matching events. */
+        EventSort: {
+            field: string;
+            /** @enum {string} */
+            direction: "asc" | "desc";
+        };
         /** @description Filters for a normalized multi-source event search. */
         SearchEventsRequest: {
             /** @description Source codes to query; omit to use every allowed source with event search. */
@@ -595,6 +601,16 @@ export interface components {
             time_range: components["schemas"]["TimeRange"];
             /** @description Entity conditions; an event matches when it contains at least one listed entity. */
             entities?: components["schemas"]["EntityRef"][];
+            /** @description Bounded source predicate without a query pipeline. Currently supported by pt-maxpatrol-siem; pipeline separators and control characters are rejected. */
+            filter?: string;
+            /** @description Allowlisted source event fields to fetch and expose through canonical event fields or attributes. Currently supported by pt-maxpatrol-siem. */
+            columns?: string[];
+            /** @description Ordered source event sort rules. Currently supported by pt-maxpatrol-siem. */
+            sort?: components["schemas"]["EventSort"][];
+            /** @description Allowlisted source fields whose selected group is searched. Currently supported by pt-maxpatrol-siem. */
+            group_by?: string[];
+            /** @description Group values aligned by position with group_by. A null item selects the source null group. Currently supported by pt-maxpatrol-siem. */
+            group_values?: (string | null)[];
             /**
              * @description Maximum number of events returned after merging all sources.
              * @default 50

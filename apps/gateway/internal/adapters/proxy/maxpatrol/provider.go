@@ -191,8 +191,12 @@ func (provider *Provider) SearchEvents(ctx context.Context, access capability.Ac
 	if err != nil {
 		return capability.EventPage{}, err
 	}
+	query, err := buildEventSearchQuery(request, where)
+	if err != nil {
+		return capability.EventPage{}, err
+	}
 	vendorRange := TimeRange{From: request.TimeFrom, To: request.TimeTo}
-	response, err := provider.client.queryEvents(ctx, Access{Cookie: access.Cookie}, "event search", vendorRange, where, request.Limit)
+	response, err := provider.client.searchEventsWithQuery(ctx, Access{Cookie: access.Cookie}, vendorRange, query)
 	if err != nil {
 		return capability.EventPage{}, translateError(err)
 	}

@@ -179,6 +179,19 @@ components:
           items:
             $ref: '../shared/schemas.yaml#/SourceError'
 
+    EventSort:
+      type: object
+      description: Source event field and direction used to order matching events.
+      required: [field, direction]
+      properties:
+        field:
+          type: string
+          minLength: 1
+          maxLength: 128
+        direction:
+          type: string
+          enum: [asc, desc]
+
     SearchEventsRequest:
       type: object
       description: Filters for a normalized multi-source event search.
@@ -200,6 +213,50 @@ components:
           description: Entity conditions; an event matches when it contains at least one listed entity.
           items:
             $ref: '../shared/schemas.yaml#/EntityRef'
+        filter:
+          type: string
+          maxLength: 4096
+          description: >-
+            Bounded source predicate without a query pipeline. Currently supported by
+            pt-maxpatrol-siem; pipeline separators and control characters are rejected.
+        columns:
+          type: array
+          maxItems: 64
+          uniqueItems: true
+          description: >-
+            Allowlisted source event fields to fetch and expose through canonical event
+            fields or attributes. Currently supported by pt-maxpatrol-siem.
+          items:
+            type: string
+            minLength: 1
+            maxLength: 128
+        sort:
+          type: array
+          maxItems: 8
+          description: Ordered source event sort rules. Currently supported by pt-maxpatrol-siem.
+          items:
+            $ref: '#/components/schemas/EventSort'
+        group_by:
+          type: array
+          maxItems: 8
+          uniqueItems: true
+          description: >-
+            Allowlisted source fields whose selected group is searched. Currently supported
+            by pt-maxpatrol-siem.
+          items:
+            type: string
+            minLength: 1
+            maxLength: 128
+        group_values:
+          type: array
+          maxItems: 8
+          description: >-
+            Group values aligned by position with group_by. A null item selects the source
+            null group. Currently supported by pt-maxpatrol-siem.
+          items:
+            type: string
+            nullable: true
+            maxLength: 1024
         limit:
           type: integer
           minimum: 1
