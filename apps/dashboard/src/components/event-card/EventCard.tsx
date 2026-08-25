@@ -10,6 +10,7 @@ export function EventCard({
   eventInContext = false,
   timeInterval,
   onTimeChange,
+  onTimeExecute,
   onAddFilter,
   onAddToContext,
 }: {
@@ -18,6 +19,7 @@ export function EventCard({
   eventInContext?: boolean
   timeInterval: TimeInterval
   onTimeChange: (value: TimeInterval) => void
+  onTimeExecute: (value: TimeInterval) => void
   onAddFilter: (field: string, value: string) => void
   onAddToContext?: (field: string, value: string, includeEvent: boolean) => Promise<void>
 }) {
@@ -27,7 +29,12 @@ export function EventCard({
   return (
     <div className="space-y-3">
       <div className="space-y-1.5">
-        <EventTimeButton time={event.time} current={timeInterval} onChange={onTimeChange} />
+        <EventTimeButton
+          time={event.time}
+          current={timeInterval}
+          onChange={onTimeChange}
+          onExecute={onTimeExecute}
+        />
         <div className="text-sm font-medium leading-snug">{event.title}</div>
         {event.description && event.description !== event.title && (
           <p className="text-xs leading-relaxed text-fg-muted">{event.description}</p>
