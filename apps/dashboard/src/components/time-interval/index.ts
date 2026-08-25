@@ -26,6 +26,7 @@ export {
   parseTimestamp,
   resolve,
   windowSpanMs,
+  intervalAroundInstant,
 } from './model'
 export { TimeIntervalPicker } from './TimeIntervalPicker'
 export type { TimeIntervalPickerProps } from './TimeIntervalPicker'

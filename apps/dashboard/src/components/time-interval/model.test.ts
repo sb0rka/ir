@@ -10,6 +10,7 @@ import {
   intervalButtonLabel,
   RANGE_SEPARATOR,
   intervalFromLegacyPreset,
+  intervalAroundInstant,
   normalizeRange,
   parseTimestamp,
   PRESET_MS,
@@ -298,5 +299,17 @@ describe('demoDayInterval', () => {
     const resolved = resolve(interval)
     expect(formatInstant(resolved.from, 'Europe/Moscow')).toBe('2025-10-23 00:00:00')
     expect(formatInstant(resolved.to, 'Europe/Moscow')).toBe('2025-10-23 23:59:59')
+  })
+})
+
+describe('intervalAroundInstant', () => {
+  it('centers the current duration on the event timestamp', () => {
+    expect(intervalAroundInstant('2025-10-23T15:58:37.000Z', relative())).toEqual({
+      kind: 'relative',
+      live: false,
+      anchor: '2025-10-23T15:58:37.000Z',
+      direction: 'around',
+      duration: { kind: 'preset', id: '1h' },
+    })
   })
 })

@@ -317,6 +317,21 @@ export function windowSpanMs(value: TimeInterval): number {
   return value.direction === 'around' ? d * 2 : d
 }
 
+/** Center a relative window on an event timestamp, keeping the current duration. */
+export function intervalAroundInstant(iso: string, current: TimeInterval): TimeInterval {
+  const duration =
+    current.kind === 'relative'
+      ? current.duration
+      : durationFromMs(Math.max(windowSpanMs(current), PRESET_MS['1h']))
+  return {
+    kind: 'relative',
+    live: false,
+    anchor: iso,
+    direction: 'around',
+    duration,
+  }
+}
+
 export function resolve(value: TimeInterval, now: Date = new Date()): ResolvedInterval {
   if (value.kind === 'range') {
     const { from, to } = normalizeRange(value.from, value.to)
