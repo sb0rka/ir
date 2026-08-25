@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
-import { clsx } from '../../lib/utils'
 import {
   eventHeaderMeta,
   groupEventFields,
@@ -134,7 +133,6 @@ function FieldGroupBlock({
   onToggle: () => void
   onValueClick: (field: string, value: string) => void
 }) {
-  const twoCol = group.columns.length > 1
   return (
     <div>
       <button
@@ -150,7 +148,7 @@ function FieldGroupBlock({
         {group.title}
       </button>
       {!collapsed && (
-        <div className={clsx('mt-1 pl-1', twoCol ? 'grid grid-cols-2 gap-3' : 'space-y-2')}>
+        <div className="mt-1 space-y-2 pl-1">
           {group.columns.map((column) => (
             <FieldColumnBlock
               key={column.title || group.id}
@@ -195,11 +193,9 @@ function FieldValueRow({
   onValueClick: (field: string, value: string) => void
 }) {
   return (
-    <div className="flex items-baseline justify-between gap-2 text-xs">
-      <dt className="min-w-0 shrink truncate text-fg-dim" title={row.field}>
-        {row.field}
-      </dt>
-      <dd className="min-w-0 text-right">
+    <div className="flex items-start justify-between gap-2 text-xs">
+      <dt className="min-w-0 max-w-[45%] break-all text-fg-dim">{row.field}</dt>
+      <dd className="min-w-0 flex-1 break-all text-right">
         {row.value ? (
           <ValueButton row={row} onValueClick={onValueClick} />
         ) : (
@@ -221,8 +217,7 @@ function ValueButton({
   return (
     <button
       type="button"
-      className="max-w-full truncate text-right font-mono text-low hover:underline"
-      title={row.value}
+      className="block w-full whitespace-normal break-all text-right font-mono text-low hover:underline"
       onClick={() => onValueClick(row.field, row.value)}
     >
       {display}
