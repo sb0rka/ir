@@ -1,5 +1,6 @@
 import { GlobalQueryComposer } from '../components/QueryComposer'
 import { AlertTable } from '../components/AlertTable'
+import { EventGroupFilter } from '../components/EventGroupFilter'
 import { QueueDetailPanel } from '../components/QueueDetailPanel'
 import { useAppStore } from '../store/appStore'
 
@@ -30,7 +31,8 @@ export function QueuePage() {
       </div>
       <GlobalQueryComposer />
       <div className="flex min-h-0 flex-1">
-        <div className="min-w-0 flex-1">
+        <EventGroupFilter />
+        <div className="min-h-0 min-w-0 flex-1">
           <AlertTable />
         </div>
         <QueueDetailPanel />

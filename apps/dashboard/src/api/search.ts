@@ -1,19 +1,35 @@
-import { DEFAULT_QUEUE_SOURCE, type FilterChip, type QueueSource } from '../types'
+import {
+  DEFAULT_QUEUE_SOURCE,
+  type AlertEvent,
+  type ContextEvent,
+  type CorrelationGroup,
+  type Entity,
+  type EventGroupItem,
+  type FilterChip,
+  type QueueItem,
+  type QueueSource,
+} from '../types'
 import { getProjectId, resolveTimeRange } from './env'
 import { gatewayClient } from './clients'
 import { unwrapError } from './error'
 import { mapGatewayEntity, mapGatewayEvent, mapGatewayFinding } from './adapters'
 import { pickFindingChildEvents, type FindingResolveKey } from '../lib/correlationSubevents'
 import { matchesChips } from '../lib/filters'
-import { astToEventSearch, astToFilterChips, pdqlToSearchParts, type QueryAst } from '../lib/pdql'
+import {
+  astToEventAggregate,
+  astToEventSearch,
+  astToFilterChips,
+  pdqlToSearchParts,
+  type QueryAst,
+} from '../lib/pdql'
 import { sortQueueAlerts, type QueueSort } from '../lib/queueSort'
 import { resolve, type TimeInterval } from '../components/time-interval/model'
-import type { AlertEvent, ContextEvent, CorrelationGroup, Entity, QueueItem } from '../types'
 import type { components as Gw } from '@ir/contract/gateway'
 
 type FindingsBody = Gw['schemas']['SearchFindingsRequest']
 type FindingKind = Gw['schemas']['FindingKind']
 type EventsBody = Gw['schemas']['SearchEventsRequest']
+type AggregateBody = Gw['schemas']['AggregateEventsRequest']
 type Capability = Gw['schemas']['Capability']
 
 const PAGE_LIMIT = 100
@@ -32,6 +48,7 @@ export interface QueueSearchResult {
   queueOrder: QueueItem[]
   entities: Record<string, Entity>
   contextEvents: Record<string, ContextEvent>
+  eventGroups: EventGroupItem[]
   sourceErrors: string[]
   availableSources: string[]
   /** @deprecated Mock sources removed from Gateway; always empty. */
@@ -45,6 +62,7 @@ function emptyQueue(sourceErrors: string[], availableSources: string[]): QueueSe
     queueOrder: [],
     entities: {},
     contextEvents: {},
+    eventGroups: [],
     sourceErrors,
     availableSources,
     mockSources: [],
@@ -111,6 +129,7 @@ function finishQueue(
   sourceErrors: string[],
   availableSources: string[],
   sort?: QueueSort,
+  eventGroups: EventGroupItem[] = [],
 ): QueueSearchResult {
   const filtered = sortQueueAlerts(
     alertList
@@ -136,6 +155,7 @@ function finishQueue(
     sourceErrors: [...new Set(sourceErrors)],
     availableSources,
     mockSources: [],
+    eventGroups,
   }
 }
 
@@ -201,6 +221,51 @@ function sourcesForEventSearch(allowed: string[], hasControls: boolean): string[
   return allowed.filter((code) => code !== NAD_SOURCE)
 }
 
+function mergeEventGroups(groups: Gw['schemas']['EventGroup'][]): EventGroupItem[] {
+  const merged = new Map<string, EventGroupItem>()
+  for (const group of groups) {
+    const values = group.values ?? []
+    const key = JSON.stringify(values)
+    const prev = merged.get(key)
+    if (prev) {
+      prev.count += group.count
+      continue
+    }
+    merged.set(key, {
+      source_code: group.source_code,
+      values,
+      count: group.count,
+    })
+  }
+  return [...merged.values()].sort((a, b) => b.count - a.count)
+}
+
+async function aggregateEventsQueue(
+  ast: QueryAst,
+  timeInterval: TimeInterval,
+  allowedSources: string[],
+): Promise<{ groups: EventGroupItem[]; sourceErrors: string[] }> {
+  const parts = astToEventAggregate(ast)
+  if (!parts) return { groups: [], sourceErrors: [] }
+  const body: AggregateBody = {
+    time_range: resolve(timeInterval),
+    limit: PAGE_LIMIT,
+    sources: allowedSources,
+    group_by: parts.group_by,
+  }
+  if (parts.filter) body.filter = parts.filter
+  if (parts.sort) body.sort = parts.sort
+  const { data, error, response } = await gatewayClient.POST('/api/v1/events/aggregate', {
+    params: projectHeader(),
+    body,
+  })
+  if (error || !data) throw unwrapError(error, response.status)
+  return {
+    groups: mergeEventGroups(data.groups ?? []),
+    sourceErrors: (data.source_errors ?? []).map((err) => `${err.source}: ${err.message}`),
+  }
+}
+
 async function searchEventsQueue(
   ast: QueryAst,
   timeInterval: TimeInterval,
@@ -208,19 +273,34 @@ async function searchEventsQueue(
 ): Promise<QueueSearchResult> {
   const sources = await capableSources('events')
   const parts = astToEventSearch(ast, groupValues)
+  const hasGroups = ast.groups.length > 0
   const allowedSources = sourcesForEventSearch(
     sources.defaults.length ? sources.defaults : sources.available,
-    parts.hasControls,
+    parts.hasControls || hasGroups,
   )
   if (!allowedSources.length) {
     return emptyQueue(
       [
-        parts.hasControls
+        parts.hasControls || hasGroups
           ? 'Нет SIEM-источников для PDQL-поиска событий'
           : 'Нет доступных online-источников events',
       ],
       sources.available,
     )
+  }
+
+  const sourceErrors: string[] = []
+  let eventGroups: EventGroupItem[] = []
+  if (hasGroups) {
+    const aggregated = await aggregateEventsQueue(ast, timeInterval, allowedSources)
+    eventGroups = aggregated.groups
+    sourceErrors.push(...aggregated.sourceErrors)
+    if (!parts.group_by) {
+      return {
+        ...emptyQueue([...new Set(sourceErrors)], sources.available),
+        eventGroups,
+      }
+    }
   }
 
   const body: EventsBody = {
@@ -237,7 +317,6 @@ async function searchEventsQueue(
 
   const events: Gw['schemas']['Event'][] = []
   const gatewayEntities: Gw['schemas']['Entity'][] = []
-  const sourceErrors: string[] = []
   let cursor: string | undefined
   for (let page = 0; page < MAX_PAGES; page++) {
     const { data, error, response } = await gatewayClient.POST('/api/v1/events/search', {
@@ -279,7 +358,16 @@ async function searchEventsQueue(
     seen.add(alert.id)
     alertList.push(alert)
   }
-  return finishQueue(alertList, entities, [], undefined, sourceErrors, sources.available, parts.sort)
+  return finishQueue(
+    alertList,
+    entities,
+    [],
+    undefined,
+    sourceErrors,
+    sources.available,
+    parts.sort,
+    eventGroups,
+  )
 }
 
 export async function searchQueue(

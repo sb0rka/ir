@@ -103,12 +103,15 @@ describe('resolve', () => {
 describe('duration mapping', () => {
   it('maps exact preset milliseconds back to a preset', () => {
     expect(durationFromMs(PRESET_MS['12h'])).toEqual({ kind: 'preset', id: '12h' })
+    expect(durationFromMs(PRESET_MS['1s'])).toEqual({ kind: 'preset', id: '1s' })
+    expect(durationFromMs(PRESET_MS['1m'])).toEqual({ kind: 'preset', id: '1m' })
+    expect(durationFromMs(PRESET_MS['5m'])).toEqual({ kind: 'preset', id: '5m' })
   })
 
   it('keeps a non-preset length as custom', () => {
     const duration = durationFromMs(3 * PRESET_MS['1h'] + 17 * 60 * 1000)
     expect(duration).toEqual({ kind: 'custom', ms: 3 * PRESET_MS['1h'] + 17 * 60 * 1000 })
-    expect(formatDurationMs(durationMs(duration))).toBe('3 ч 17 мин')
+    expect(formatDurationMs(durationMs(duration))).toBe('3ч 17м')
   })
 
   it('builds custom duration from hours and minutes', () => {
@@ -284,7 +287,7 @@ describe('legacy queue presets', () => {
       direction: 'before',
       duration: { kind: 'custom', ms: 30 * PRESET_MS['24h'] },
     })
-    expect(intervalButtonLabel(interval)).toBe('30 дней')
+    expect(intervalButtonLabel(interval)).toBe('30д')
   })
 })
 

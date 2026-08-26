@@ -3,6 +3,7 @@ import { useAppStore, emptyContextQueue } from '../store/appStore'
 import type { EventOrigin, ReviewState } from '../types'
 import { ContextQueryComposer } from './QueryComposer'
 import { AlertTable } from './AlertTable'
+import { EventGroupFilter } from './EventGroupFilter'
 import { Button } from './ui'
 import { clsx } from '../lib/utils'
 import { filterFingerprint } from '../lib/queryFingerprint'
@@ -174,7 +175,12 @@ export function ContextQueuePage({ investigationId }: { investigationId: string 
           </button>
         }
       />
-      <AlertTable investigationId={investigationId} />
+      <div className="flex min-h-0 flex-1">
+        <EventGroupFilter investigationId={investigationId} />
+        <div className="min-h-0 min-w-0 flex-1">
+          <AlertTable investigationId={investigationId} />
+        </div>
+      </div>
       <div className="border-t border-border px-4 py-1.5 text-[11px] text-fg-dim">
         Очередь расследования · тот же поиск, что глобальная · строки в контексте выделены
       </div>

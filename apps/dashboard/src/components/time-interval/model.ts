@@ -1,6 +1,6 @@
 import { CalendarDateTime, fromAbsolute, parseAbsolute, parseDateTime, toZoned } from '@internationalized/date'
 
-export type PresetId = '15m' | '1h' | '4h' | '12h' | '24h' | '7d'
+export type PresetId = '1s' | '1m' | '5m' | '15m' | '1h' | '4h' | '12h' | '24h' | '7d'
 export type Direction = 'before' | 'after' | 'around'
 export type DisplayZone = 'utc' | 'working'
 
@@ -21,27 +21,34 @@ export type TimeInterval =
 
 export type ResolvedInterval = { from: string; to: string }
 
-export const PRESET_IDS: readonly PresetId[] = ['15m', '1h', '4h', '12h', '24h', '7d']
+export const PRESET_IDS: readonly PresetId[] = ['1s', '1m', '5m', '15m', '1h', '4h', '12h', '24h', '7d']
 
 export const PRESET_MS: Record<PresetId, number> = {
+  '1s': 1000,
+  '1m': 60 * 1000,
+  '5m': 5 * 60 * 1000,
   '15m': 15 * 60 * 1000,
   '1h': 60 * 60 * 1000,
   '4h': 4 * 60 * 60 * 1000,
   '12h': 12 * 60 * 60 * 1000,
   '24h': 24 * 60 * 60 * 1000,
-  '7d': 7 * 24 * 60 * 60 * 1000,
+  '7d': 7 * 24 * 60 * 1000,
 }
 
 export const PRESET_LABELS: Record<PresetId, string> = {
-  '15m': '15 мин',
-  '1h': '1 ч',
-  '4h': '4 ч',
-  '12h': '12 ч',
-  '24h': '24 ч',
-  '7d': '7 дней',
+  '1s': '1с',
+  '1m': '1м',
+  '5m': '5м',
+  '15m': '15м',
+  '1h': '1ч',
+  '4h': '4ч',
+  '12h': '12ч',
+  '24h': '24ч',
+  '7d': '7д',
 }
 
-const MINUTE_MS = 60 * 1000
+const SECOND_MS = 1000
+const MINUTE_MS = 60 * SECOND_MS
 
 export function defaultWorkingTimeZone(): string {
   return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
@@ -259,7 +266,7 @@ export function durationMs(duration: Duration): number {
 }
 
 export function durationFromMs(ms: number): Duration {
-  const rounded = Math.max(MINUTE_MS, Math.round(ms))
+  const rounded = Math.max(SECOND_MS, Math.round(ms))
   for (const id of PRESET_IDS) {
     if (PRESET_MS[id] === rounded) return { kind: 'preset', id }
   }
@@ -288,20 +295,11 @@ export function formatDurationMs(ms: number): string {
   const seconds = Math.floor(rest / 1000)
 
   const parts: string[] = []
-  if (days) parts.push(formatDays(days))
-  if (hours) parts.push(`${hours} ч`)
-  if (minutes) parts.push(`${minutes} мин`)
-  if (parts.length === 0) return seconds ? `${seconds} с` : '0 мин'
+  if (days) parts.push(`${days}д`)
+  if (hours) parts.push(`${hours}ч`)
+  if (minutes) parts.push(`${minutes}м`)
+  if (parts.length === 0) return seconds ? `${seconds}с` : '0м'
   return parts.join(' ')
-}
-
-function formatDays(days: number): string {
-  const n = Math.abs(days) % 100
-  const n1 = n % 10
-  if (n > 10 && n < 20) return `${days} дней`
-  if (n1 === 1) return `${days} день`
-  if (n1 >= 2 && n1 <= 4) return `${days} дня`
-  return `${days} дней`
 }
 
 export function durationLabel(duration: Duration): string {

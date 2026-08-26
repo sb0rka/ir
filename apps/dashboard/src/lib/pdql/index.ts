@@ -23,13 +23,16 @@ export { pdqlToChips, removePdqlChip, serializeWithoutChip } from './chips'
 export type { PdqlChip, PdqlChipKind } from './chips'
 export {
   alignGroupValues,
+  astToEventAggregate,
   astToEventSearch,
   astToFilterChips,
   drillGroupValues,
+  hasGroupValueSelection,
   pdqlToSearchParts,
   queueSelectFields,
 } from './toSearch'
 export type {
+  EventAggregateParts,
   EventSearchParts,
   PdqlSearchEntity,
   PdqlSearchParts,

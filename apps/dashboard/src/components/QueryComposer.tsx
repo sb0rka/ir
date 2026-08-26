@@ -322,13 +322,15 @@ export function QueryComposer({
               {index > 0 && <span className="text-fg-dim">/</span>}
               <Chip
                 onRemove={
-                  groupValues[index] && onClearGroupFrom
+                  index < groupValues.length && onClearGroupFrom
                     ? () => onClearGroupFrom(index)
                     : undefined
                 }
               >
                 <span className="text-fg-dim">{group.field}</span>
-                {groupValues[index] ? ` = ${groupValues[index]}` : ' · выберите'}
+                {index < groupValues.length
+                  ? ` = ${groupValues[index] ?? 'Нет данных'}`
+                  : ' · выберите'}
               </Chip>
             </span>
           ))}

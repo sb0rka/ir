@@ -7,6 +7,7 @@ import {
   type ContextQueueState,
   type CorrelationGroup,
   type Entity,
+  type EventGroupItem,
   type FilterChip,
   type FilterField,
   type Finding,
@@ -61,6 +62,7 @@ export const emptyContextQueue: ContextQueueState = {
   timeInterval: DEFAULT_TIME_INTERVAL,
   queueSource: DEFAULT_QUEUE_SOURCE,
   groupValues: [],
+  eventGroups: [],
   executedFingerprint: null,
   queryHistory: [],
   selectedIds: [],
@@ -97,6 +99,7 @@ interface AppState {
   queuePdql: string
   queueSource: QueueSource
   groupValues: (string | null)[]
+  eventGroups: EventGroupItem[]
   executedFingerprint: string | null
   queryHistory: QueryHistoryEntry[]
   selectedAlertIds: string[]
@@ -140,6 +143,8 @@ interface AppState {
   setQueueSource: (source: QueueSource) => void
   applyQueueHistory: (entry: QueryHistoryEntry) => void
   drillGroupValue: (investigationId: string | null, field: string, value: string) => void
+  selectGroupValue: (investigationId: string | null, value: string | null) => void
+  clearGroupSelection: (investigationId: string | null) => void
   clearGroupPathFrom: (investigationId: string | null, index: number) => void
   toggleAlertSelect: (id: string) => void
   clearAlertSelection: () => void
@@ -291,6 +296,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   queuePdql: DEFAULT_QUEUE_PDQL,
   queueSource: DEFAULT_QUEUE_SOURCE,
   groupValues: [],
+  eventGroups: [],
   executedFingerprint: null,
   queryHistory: [],
   selectedAlertIds: [],
@@ -372,11 +378,41 @@ export const useAppStore = create<AppState>((set, get) => ({
     })
     void get().executeContextQuery(investigationId)
   },
+  selectGroupValue: (investigationId, value) => {
+    const nextFor = (current: (string | null)[]) =>
+      current.length === 1 && current[0] === value ? [] : [value]
+    if (!investigationId) {
+      set({ groupValues: nextFor(get().groupValues) })
+      void get().loadQueue()
+      return
+    }
+    const cur = get().contextQueue[investigationId] ?? emptyContextQueue
+    set({
+      contextQueue: {
+        ...get().contextQueue,
+        [investigationId]: { ...cur, groupValues: nextFor(cur.groupValues) },
+      },
+    })
+    void get().executeContextQuery(investigationId)
+  },
+  clearGroupSelection: (investigationId) => {
+    if (!investigationId) {
+      set({ groupValues: [] })
+      void get().loadQueue()
+      return
+    }
+    const cur = get().contextQueue[investigationId] ?? emptyContextQueue
+    set({
+      contextQueue: {
+        ...get().contextQueue,
+        [investigationId]: { ...cur, groupValues: [] },
+      },
+    })
+    void get().executeContextQuery(investigationId)
+  },
   clearGroupPathFrom: (investigationId, index) => {
     if (!investigationId) {
-      set({
-        groupValues: get().groupValues.map((value, i) => (i >= index ? null : value)),
-      })
+      set({ groupValues: get().groupValues.slice(0, index) })
       void get().loadQueue()
       return
     }
@@ -386,7 +422,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         ...get().contextQueue,
         [investigationId]: {
           ...cur,
-          groupValues: cur.groupValues.map((value, i) => (i >= index ? null : value)),
+          groupValues: cur.groupValues.slice(0, index),
         },
       },
     })
@@ -473,6 +509,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         alerts: result.alerts,
         correlations: result.correlations,
         queueOrder: result.queueOrder,
+        eventGroups: result.eventGroups,
         entities: mergeEntities(get().entities, result.entities),
         contextEvents: { ...get().contextEvents, ...result.contextEvents },
         expandedCorrelationIds: result.queueOrder
@@ -737,6 +774,7 @@ export const useAppStore = create<AppState>((set, get) => ({
             pdql: canonical,
             queueSource,
             groupValues,
+            eventGroups: result.eventGroups,
             alerts: result.alerts,
             queueOrder: result.queueOrder,
             loading: false,

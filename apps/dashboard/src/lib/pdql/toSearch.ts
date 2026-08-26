@@ -137,14 +137,28 @@ function isDefaultSort(sort: { field: string; direction: 'asc' | 'desc' }[]): bo
   return sort.length === 1 && sort[0]?.field === 'time' && sort[0]?.direction === 'desc'
 }
 
+/**
+ * Align selected group values to the current PDQL groups.
+ * A missing or empty slot means "not chosen yet". JSON null is the source
+ * null group ("Нет данных") and must be kept as an explicit selection.
+ */
 export function alignGroupValues(
   ast: QueryAst,
   values: (string | null)[] | undefined,
 ): (string | null)[] {
-  return ast.groups.map((_, index) => {
-    const value = values?.[index]
-    return value == null || value === '' ? null : value
-  })
+  if (ast.groups.length === 0) return []
+  const aligned: (string | null)[] = []
+  for (let index = 0; index < ast.groups.length; index++) {
+    if (index >= (values?.length ?? 0)) break
+    const value = values![index]
+    if (value === '') break
+    aligned.push(value ?? null)
+  }
+  return aligned
+}
+
+export function hasGroupValueSelection(values: (string | null)[] | undefined): boolean {
+  return (values?.length ?? 0) > 0
 }
 
 /**
@@ -159,10 +173,11 @@ export function groupPathPrefix(
   const group_by: string[] = []
   const group_values: (string | null)[] = []
   for (let index = 0; index < ast.groups.length; index++) {
-    const value = values?.[index]
-    if (value == null || value === '') break
+    if (index >= (values?.length ?? 0)) break
+    const value = values![index]
+    if (value === '') break
     group_by.push(ast.groups[index]!.field)
-    group_values.push(value)
+    group_values.push(value ?? null)
   }
   if (group_by.length === 0) return undefined
   return { group_by, group_values }
@@ -176,11 +191,34 @@ export function drillGroupValues(
 ): (string | null)[] | null {
   const index = ast.groups.findIndex((group) => group.field === field)
   if (index < 0) return null
-  return ast.groups.map((_, i) => {
-    if (i < index) return values?.[i] ?? null
-    if (i === index) return value
-    return null
-  })
+  const next = ast.groups.slice(0, index).map((_, i) => values?.[i] ?? null)
+  next.push(value)
+  return next
+}
+
+export interface EventAggregateParts {
+  group_by: string[]
+  filter?: string
+  sort?: { field: string; direction: 'asc' | 'desc' }[]
+}
+
+/** First group only: dashboard aggregate filter assumes a single group field. */
+export function astToEventAggregate(ast: QueryAst): EventAggregateParts | undefined {
+  const field = ast.groups[0]?.field
+  if (!field) return undefined
+  const filter = formatCondition(ast).trim()
+  const parts: EventAggregateParts = { group_by: [field] }
+  if (filter) parts.filter = filter
+
+  const countSort = ast.columns.find((column) => column.aggregate && !column.field && column.sort)
+  const groupSort = ast.columns.find(
+    (column) => column.field === field && column.sort && !column.aggregate,
+  )
+  const sort: { field: string; direction: 'asc' | 'desc' }[] = []
+  if (countSort?.sort) sort.push({ field: 'count', direction: countSort.sort.dir })
+  if (groupSort?.sort) sort.push({ field, direction: groupSort.sort.dir })
+  if (sort.length) parts.sort = sort
+  return parts
 }
 
 export function astToEventSearch(

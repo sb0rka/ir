@@ -210,6 +210,13 @@ export interface QueryHistoryEntry {
   groupValues?: (string | null)[]
 }
 
+/** One source-local (or merged) event group from Gateway aggregate. */
+export interface EventGroupItem {
+  source_code: string
+  values: (string | null)[]
+  count: number
+}
+
 /** Per-investigation state of the context event queue (search + filters). */
 export interface ContextQueueState {
   /** Last executed entity chips used to filter the table. */
@@ -218,6 +225,7 @@ export interface ContextQueueState {
   timeInterval: TimeInterval
   queueSource: QueueSource
   groupValues: (string | null)[]
+  eventGroups: EventGroupItem[]
   executedFingerprint: string | null
   queryHistory: QueryHistoryEntry[]
   selectedIds: string[]

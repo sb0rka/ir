@@ -3,7 +3,16 @@ import { defaultQuery, withoutIds, type QueryAst } from './model'
 import { parse } from './parse'
 import { serialize } from './serialize'
 import { pdqlToChips, serializeWithoutChip } from './chips'
-import { astToEventSearch, astToFilterChips, drillGroupValues, pdqlToSearchParts, queueSelectFields } from './toSearch'
+import {
+  alignGroupValues,
+  astToEventAggregate,
+  astToEventSearch,
+  astToFilterChips,
+  drillGroupValues,
+  hasGroupValueSelection,
+  pdqlToSearchParts,
+  queueSelectFields,
+} from './toSearch'
 import { addFieldToAst, addFieldToPdql, setGroupAggregate } from './ast'
 import { appendCondition } from './append'
 import { relatedFieldColumns } from './relatedFields'
@@ -411,6 +420,56 @@ describe('astToEventSearch', () => {
       hasControls: true,
     })
   })
+
+  it('sends JSON null as the source null group, not as unselected', () => {
+    const ast = mustParse('group(event_src.host) | select(time)')
+    expect(astToEventSearch(ast, [])).toEqual({ hasControls: false })
+    expect(astToEventSearch(ast, [null])).toEqual({
+      group_by: ['event_src.host'],
+      group_values: [null],
+      hasControls: true,
+    })
+  })
+})
+
+describe('alignGroupValues', () => {
+  it('keeps an empty selection empty and preserves explicit null', () => {
+    const ast = mustParse('group(event_src.host) | select(time)')
+    expect(alignGroupValues(ast, undefined)).toEqual([])
+    expect(alignGroupValues(ast, [])).toEqual([])
+    expect(alignGroupValues(ast, ['dc01'])).toEqual(['dc01'])
+    expect(alignGroupValues(ast, [null])).toEqual([null])
+    expect(hasGroupValueSelection([])).toBe(false)
+    expect(hasGroupValueSelection([null])).toBe(true)
+  })
+
+  it('drops values when groups are removed from the query', () => {
+    const ast = mustParse('select(time)')
+    expect(alignGroupValues(ast, ['dc01'])).toEqual([])
+  })
+})
+
+describe('astToEventAggregate', () => {
+  it('returns undefined without groups', () => {
+    expect(astToEventAggregate(mustParse('select(time) | sort(time desc)'))).toBeUndefined()
+  })
+
+  it('uses the first group field, filter, and count sort', () => {
+    const ast = mustParse(
+      'filter(action = "login") | group(event_src.host) | select(event_src.host, count()) | sort(count() desc)',
+    )
+    expect(astToEventAggregate(ast)).toEqual({
+      filter: 'action = "login"',
+      group_by: ['event_src.host'],
+      sort: [{ field: 'count', direction: 'desc' }],
+    })
+  })
+
+  it('ignores extra groups beyond the first', () => {
+    expect(astToEventAggregate(mustParse('group(event_src.host, action) | select(time)'))).toEqual({
+      group_by: ['event_src.host'],
+    })
+  })
 })
 
 describe('queueSelectFields', () => {
@@ -444,12 +503,9 @@ describe('queueSelectFields', () => {
 })
 
 describe('drillGroupValues', () => {
-  it('sets the field and clears deeper levels', () => {
+  it('sets the field and omits unselected deeper levels', () => {
     const ast = mustParse('group(event_src.host, action) | select(time)')
-    expect(drillGroupValues(ast, ['dc01', 'login'], 'event_src.host', 'ws01')).toEqual([
-      'ws01',
-      null,
-    ])
+    expect(drillGroupValues(ast, ['dc01', 'login'], 'event_src.host', 'ws01')).toEqual(['ws01'])
     expect(drillGroupValues(ast, ['dc01'], 'action', 'login')).toEqual(['dc01', 'login'])
     expect(drillGroupValues(ast, [], 'src.ip', '1.1.1.1')).toBeNull()
   })

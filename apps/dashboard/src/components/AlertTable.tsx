@@ -2,7 +2,7 @@ import { useAppStore, emptyContextQueue } from '../store/appStore'
 import type { AlertEvent, CorrelationGroup, QueueItem } from '../types'
 import { Button, Chip, SeverityBadge } from './ui'
 import { clsx, formatTime } from '../lib/utils'
-import { parseQueuePdql, queueSelectFields } from '../lib/pdql'
+import { hasGroupValueSelection, parseQueuePdql, queueSelectFields } from '../lib/pdql'
 import { alertIsInContext, contextEventKeys } from '../lib/queueContext'
 import { ChevronDown, ChevronRight, Layers, Play, Plus } from 'lucide-react'
 
@@ -118,7 +118,7 @@ function AlertRow({
       <td className="whitespace-nowrap px-3 py-2 font-mono text-xs text-fg-muted">
         {formatTime(alert.time)}
       </td>
-      <td className="px-3 py-2">
+      <td className="w-px whitespace-nowrap px-3 py-2">
         <div className="flex items-center gap-2">
           <div className={clsx('text-sm', inContext && 'text-fg-muted')}>{alert.title}</div>
           {inContext && (
@@ -204,7 +204,7 @@ function CorrelationRow({
         <td className="whitespace-nowrap px-3 py-2.5 font-mono text-xs text-fg-muted">
           {formatTime(group.time)}
         </td>
-        <td className="px-3 py-2.5">
+        <td className="w-px whitespace-nowrap px-3 py-2.5">
           <div className="flex items-start gap-2 text-left">
             <button
               type="button"
@@ -276,6 +276,8 @@ export function AlertTable({ investigationId }: { investigationId?: string } = {
   const globalOrder = useAppStore((s) => s.queueOrder)
   const globalLoading = useAppStore((s) => s.queueLoading)
   const globalPdql = useAppStore((s) => s.queuePdql)
+  const globalSource = useAppStore((s) => s.queueSource)
+  const globalGroupValues = useAppStore((s) => s.groupValues)
   const queue = useAppStore((s) =>
     investigationId ? (s.contextQueue[investigationId] ?? emptyContextQueue) : null,
   )
@@ -293,6 +295,13 @@ export function AlertTable({ investigationId }: { investigationId?: string } = {
   const parsed = parseQueuePdql(queue?.pdql ?? globalPdql)
   const selectFields = parsed.ok ? queueSelectFields(parsed.ast) : []
   const colSpan = 5 + selectFields.length + (investigationId ? 1 : 0)
+  const queueSource = queue?.queueSource ?? globalSource
+  const groupValues = queue?.groupValues ?? globalGroupValues
+  const waitingForGroup =
+    queueSource === 'events' &&
+    parsed.ok &&
+    parsed.ast.groups.length > 0 &&
+    !hasGroupValueSelection(groupValues)
 
   const inContextOf = (alert: AlertEvent) =>
     Boolean(investigationId && alertIsInContext(alert, findingKeys, eventKeys))
@@ -400,7 +409,7 @@ export function AlertTable({ investigationId }: { investigationId?: string } = {
               <th className="w-10 px-3 py-2" />
               <th className="px-3 py-2">Крит.</th>
               <th className="px-3 py-2">Время</th>
-              <th className="px-3 py-2">Срабатывание</th>
+              <th className="w-px whitespace-nowrap px-3 py-2">Срабатывание</th>
               {selectFields.map((field) => (
                 <th key={field} className="px-3 py-2 font-mono normal-case tracking-normal">
                   {field}
@@ -434,12 +443,25 @@ export function AlertTable({ investigationId }: { investigationId?: string } = {
             {rows.length === 0 && (
               <tr>
                 <td colSpan={colSpan} className="px-4 py-12 text-center">
-                  <div className="text-sm text-fg-muted">
-                    Нет срабатываний по текущим фильтрам
-                  </div>
-                  <div className="mt-1 text-xs text-fg-dim">
-                    Удалите часть чипов или расширьте окно времени
-                  </div>
+                  {waitingForGroup ? (
+                    <>
+                      <div className="text-sm text-fg-muted">
+                        Выберите группу слева для просмотра событий
+                      </div>
+                      <div className="mt-1 text-xs text-fg-dim">
+                        Сначала загружаются агрегаты, поиск событий запускается после выбора значения
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="text-sm text-fg-muted">
+                        Нет срабатываний по текущим фильтрам
+                      </div>
+                      <div className="mt-1 text-xs text-fg-dim">
+                        Удалите часть чипов или расширьте окно времени
+                      </div>
+                    </>
+                  )}
                 </td>
               </tr>
             )}
