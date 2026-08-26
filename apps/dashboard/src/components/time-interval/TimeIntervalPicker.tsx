@@ -111,7 +111,7 @@ export function TimeIntervalPicker({
     >
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-fg-dim">
-          Окно времени
+          Интервал расследования
         </div>
         <div className="relative">
           <div className="flex rounded border border-border bg-surface-0 p-0.5">
@@ -194,7 +194,7 @@ export function TimeIntervalPicker({
       </header>
 
       <div className="space-y-2">
-        <div className="text-sm text-fg-muted">Интервал расследования</div>
+        <div className="text-sm text-fg-muted"></div>
         <Readout
           from={resolved.from}
           to={resolved.to}
@@ -257,17 +257,20 @@ function Readout({
 }) {
   return (
     <div
+      aria-live="polite"
       className={clsx(
-        'whitespace-nowrap rounded-md border bg-surface-0 px-4 py-4 font-mono text-sm tabular-nums leading-none text-fg',
-        flash ? 'border-interval' : 'border-border',
+        'mb-12 whitespace-nowrap rounded-md border-l-2 pl-3 pr-3 py-3 font-mono text-base tabular-nums leading-none',
+        flash ? 'border-l-interval bg-interval/10' : 'border-l-interval/30 bg-surface-2/50',
       )}
-      style={{ transition: 'border-color 180ms ease' }}
+      style={{ transition: 'background-color 180ms ease, border-color 180ms ease' }}
     >
-      <span className="inline-block" style={{ width: `${RANGE_READOUT_WIDTH_EM}em` }}>
+      <span className="inline-block text-fg" style={{ width: `${RANGE_READOUT_WIDTH_EM}em` }}>
         {formatRange(from, to, zone)}
       </span>
-      {' · '}
-      {abbrev}
+      <span className="text-fg-muted">
+        {' · '}
+        {abbrev}
+      </span>
     </div>
   )
 }
