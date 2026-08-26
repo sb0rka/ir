@@ -259,7 +259,7 @@ function Readout({
     <div
       aria-live="polite"
       className={clsx(
-        'mb-12 whitespace-nowrap rounded-md border-l-2 pl-3 pr-3 py-3 font-mono text-base tabular-nums leading-none',
+        'mb-12 whitespace-nowrap rounded-md  pl-3 pr-3 py-3 font-mono text-base tabular-nums leading-none',
         flash ? 'border-l-interval bg-interval/10' : 'border-l-interval/30 bg-surface-2/50',
       )}
       style={{ transition: 'background-color 180ms ease, border-color 180ms ease' }}
@@ -339,7 +339,7 @@ function RelativeControls({
               onChange={(hours) => onChange({ ...value, duration: customDurationFromHm(hours, custom.minutes) })}
             />
             <NumberField
-              label="мин"
+              label="м"
               value={custom.minutes}
               onChange={(minutes) => onChange({ ...value, duration: customDurationFromHm(custom.hours, minutes) })}
             />
