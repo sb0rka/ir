@@ -3,11 +3,14 @@ package server
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -32,6 +35,15 @@ type Server struct {
 	somAuth somTokenCache
 	gateway *gatewayclient.Client
 	prompt  config.PromptConfig
+
+	mcpTokensMu sync.Mutex
+	mcpTokens   map[string]mcpCapability
+}
+
+type mcpCapability struct {
+	ProjectID       string
+	InvestigationID string
+	ExpiresAt       time.Time
 }
 
 type cursorPayload struct {
@@ -72,7 +84,43 @@ func New(
 	gateway *gatewayclient.Client,
 	prompt config.PromptConfig,
 ) *Server {
-	return &Server{db: db, log: log, som: som, secrets: secrets, gateway: gateway, prompt: prompt}
+	return &Server{
+		db: db, log: log, som: som, secrets: secrets, gateway: gateway, prompt: prompt,
+		mcpTokens: make(map[string]mcpCapability),
+	}
+}
+
+// issueMCPToken creates a short-lived capability for exactly one project and
+// investigation. It is not a REST credential and carries no human OAuth token.
+func (s *Server) issueMCPToken(projectID, investigationID string) (string, error) {
+	raw := make([]byte, 32)
+	if _, err := rand.Read(raw); err != nil {
+		return "", fmt.Errorf("generate MCP capability: %w", err)
+	}
+	token := base64.RawURLEncoding.EncodeToString(raw)
+	now := time.Now()
+	s.mcpTokensMu.Lock()
+	defer s.mcpTokensMu.Unlock()
+	for value, capability := range s.mcpTokens {
+		if !capability.ExpiresAt.After(now) {
+			delete(s.mcpTokens, value)
+		}
+	}
+	s.mcpTokens[token] = mcpCapability{
+		ProjectID: projectID, InvestigationID: investigationID, ExpiresAt: now.Add(4 * time.Hour),
+	}
+	return token, nil
+}
+
+func (s *Server) consumeMCPToken(token string) (mcpCapability, bool) {
+	s.mcpTokensMu.Lock()
+	defer s.mcpTokensMu.Unlock()
+	capability, ok := s.mcpTokens[token]
+	if !ok || !capability.ExpiresAt.After(time.Now()) {
+		delete(s.mcpTokens, token)
+		return mcpCapability{}, false
+	}
+	return capability, true
 }
 
 // Хелперы живут здесь, а не в отдельном файле: gen-prune удаляет из пакета

@@ -32,9 +32,11 @@ func TestBuildExpandsURLsAndHeaders(t *testing.T) {
 		}
 	}
 	for _, want := range []string{
-		"http://host.docker.internal:8090/api/v1/investigations/496f2041-7949-4816-8d07-734de89d121f/events",
-		"http://host.docker.internal:8090/api/v1/investigations/496f2041-7949-4816-8d07-734de89d121f/graph",
-		"http://host.docker.internal:8090/api/v1/investigations/496f2041-7949-4816-8d07-734de89d121f/agent-results",
+		"The `investigation` MCP server is already configured",
+		"list_investigation_events",
+		"get_investigation_graph",
+		"add_investigation_agent_results",
+		"investigation_id 496f2041-7949-4816-8d07-734de89d121f",
 		"http://host.docker.internal:8091/api/v1/sources",
 		"http://host.docker.internal:8091/api/v1/events/search",
 		"X-Project-ID: abcdef1234",

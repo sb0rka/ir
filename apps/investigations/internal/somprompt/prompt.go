@@ -22,9 +22,6 @@ type Context struct {
 func Build(title, description string, c Context) string {
 	ir := strings.TrimRight(c.IRBaseURL, "/")
 	gw := strings.TrimRight(c.GatewayBaseURL, "/")
-	eventsURL := ir + "/api/v1/investigations/" + c.InvestigationID + "/events"
-	graphURL := ir + "/api/v1/investigations/" + c.InvestigationID + "/graph"
-	resultsURL := ir + "/api/v1/investigations/" + c.InvestigationID + "/agent-results"
 	sourcesURL := gw + "/api/v1/sources"
 	searchURL := gw + "/api/v1/events/search"
 	irSpec := ir + "/openapi.json"
@@ -49,27 +46,28 @@ func Build(title, description string, c Context) string {
 	writeLine("investigation_id", c.InvestigationID)
 	writeLine("som_issue_id", c.SomIssueID)
 
-	fmt.Fprintf(&b, "\nMandatory headers on every ir-api and Gateway /api/v1/* request:\n"+
+	fmt.Fprintf(&b, "\nThe `investigation` MCP server is already configured for this project. Use its tools for every IR graph/timeline read and every write; do not call ir-api REST directly.\n"+
+		"Mandatory headers on every Gateway /api/v1/* request:\n"+
 		"  X-Project-ID: %s\n"+
 		"  Content-Type: application/json  (POST bodies only)\n"+
-		"A missing X-Project-ID returns 400. OpenAPI and health endpoints do not need these headers.\n",
+		"A missing X-Project-ID returns 400.\n",
 		c.ProjectID)
 
 	fmt.Fprintf(&b, "\nHow to investigate sources and report findings back to IR:\n"+
-		"1. Probe reachability first. GET %s with X-Project-ID: %s. Use only the `code` values it returns as `sources` later; do not guess source codes. Then read the investigation timeline and graph with GET %s and GET %s, always sending X-Project-ID. Follow timeline pagination until the available context is exhausted.\n"+
+		"1. Probe reachability first. GET %s with X-Project-ID: %s. Use only the `code` values it returns as `sources` later; do not guess source codes. Then call `list_investigation_events` and `get_investigation_graph` with investigation_id %s. Follow timeline pagination until the available context is exhausted.\n"+
 		"2. Search Gateway with POST %s. Start from the issue and attached alert, derive a time window from evidence timestamps, and pivot iteratively on entity type/value pairs copied from results. Keep source_code plus source_event_id/source_entity_id for every record you select.\n"+
 		"   Allowed JSON fields only: sources, time_range (from, to), query, entities (each item: type, value), limit (1-100, default 50), cursor. Any other field is rejected with 400.\n"+
 		"   query is a plain case-insensitive substring over title, class, and severity — not a query language. Operators and field:value syntax match nothing.\n"+
 		"   Entity filters: copy type and value verbatim from a prior response's entities array. Do not invent type names; the OpenAPI list is illustrative and a wrong type matches zero events.\n"+
 		"   Time windows: do not assume the data is recent. Take the window from the issue and timeline; when a search is empty, widen rather than narrow. Confirm with an unfiltered search (same sources, no query/entities/time_range) before declaring a source empty.\n"+
 		"   Pagination: next_cursor is valid only with otherwise-identical filters. On invalid_cursor, drop cursor and restart from the first page.\n"+
-		"3. Persist selected discoveries with POST %s. You may send any number of overlapping batches while investigating. Use som_issue_ids [\"%s\"] in every batch; events and entities may be submitted with empty nodes and edges to enrich the timeline without drawing them. A discovery batch can look like {\"som_issue_ids\":[\"%s\"],\"events\":[{\"ref\":\"selected-event\",\"source_code\":\"...\",\"source_event_id\":\"...\"}],\"entities\":[],\"nodes\":[],\"edges\":[]}. Replaying the same source records and graph facts is idempotent.\n"+
+		"3. Persist selected discoveries with `add_investigation_agent_results`; include investigation_id %s. You may send any number of overlapping batches while investigating. Use som_issue_ids [\"%s\"] in every batch; events and entities may be submitted with empty nodes and edges to enrich the timeline without drawing them. Replaying the same source records and graph facts is idempotent.\n"+
 		"4. Before drawing the final graph, read the complete timeline and graph again. Keep useful benign or false-positive context on the timeline, but promote only evidence-backed stages and entities needed for a minimal causal explanation. A new node points to a selected record with event_ref or entity_ref. An existing graph node is reused with node_id; include it in the final batch when it must also be linked to this SOM issue. Every node has a unique batch-local ref.\n"+
 		"5. Edges address those node refs through source_ref and target_ref. evidence_event_refs contains batch-local refs of event nodes from the same batch, including event nodes reused through node_id; it never contains event selection refs, source event IDs, or database event IDs. Every edge needs a non-empty evidence-based why. IR assigns agent origin and proposed edge status.\n"+
 		"6. Submit the final graph batch, then verify both GET endpoints again.\n",
-		sourcesURL, c.ProjectID, eventsURL, graphURL,
+		sourcesURL, c.ProjectID, c.InvestigationID,
 		searchURL,
-		resultsURL, c.SomIssueID, c.SomIssueID)
+		c.InvestigationID, c.SomIssueID)
 
 	b.WriteString("\nWhen a request is not 2xx, correct it and retry; never end the run on the first error. Handle by error.code:\n" +
 		"- bad_request: fix the JSON body (unknown field, missing X-Project-ID, malformed value). Do not retry the same body.\n" +

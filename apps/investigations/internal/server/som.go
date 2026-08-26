@@ -182,6 +182,10 @@ func (s *Server) RunSomIssue(ctx context.Context, request som.RunSomIssueRequest
 	})
 	name := runName(issue)
 	exec := somclient.ResolveExecutorConfig(request.Body.Variant, request.Body.ModelId)
+	mcpToken, err := s.issueMCPToken(scope.ProjectID, investigationID)
+	if err != nil {
+		return nil, err
+	}
 
 	var sessionID string
 	err = s.withSOMBearer(ctx, false, func(bearer string) error {
@@ -196,7 +200,10 @@ func (s *Server) RunSomIssue(ctx context.Context, request som.RunSomIssueRequest
 	if err != nil {
 		return nil, somError(err)
 	}
-	localEnvironmentID, err := s.som.StartEnvironment(ctx, sessionID, repoID, name, prompt, exec)
+	localEnvironmentID, err := s.som.StartEnvironmentWithInvestigationMCP(
+		ctx, sessionID, repoID, name, prompt, exec,
+		strings.TrimRight(s.prompt.IRBaseURL, "/")+"/mcp", scope.ProjectID, mcpToken,
+	)
 	if err != nil {
 		return nil, somError(err)
 	}
