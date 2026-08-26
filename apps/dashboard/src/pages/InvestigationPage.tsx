@@ -12,25 +12,12 @@ export function InvestigationPage({ investigationId }: { investigationId: string
   const inv = useAppStore((s) => s.investigations[investigationId])
   const detailPanelOpen = useAppStore((s) => s.detailPanelOpen)
   const agentPanelOpen = useAppStore((s) => s.agentPanelOpen)
-  const setAgentPanelOpen = useAppStore((s) => s.setAgentPanelOpen)
   const loadInvestigation = useAppStore((s) => s.loadInvestigation)
   const loading = useAppStore((s) => s.investigationLoading)
-  const edgeReviews = useAppStore((s) => s.edgeReviews)
-  const graphEdges = useAppStore((s) => s.graphEdges)
 
   useEffect(() => {
     void loadInvestigation(investigationId)
   }, [investigationId, loadInvestigation])
-
-  const hasProposedEdges = Boolean(
-    inv?.edgeIds.some(
-      (id) => (edgeReviews[id] ?? graphEdges[id]?.review) === 'proposed',
-    ),
-  )
-
-  useEffect(() => {
-    if (hasProposedEdges) setAgentPanelOpen(true)
-  }, [investigationId, hasProposedEdges, setAgentPanelOpen])
 
   // Layout (not paint): children see session on the first frame that has size.
   // Cleanup must not clear a newer tab's binding — InvestigationPage stays mounted A→B.

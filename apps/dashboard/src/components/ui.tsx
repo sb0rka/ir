@@ -13,10 +13,14 @@ export function SeverityBadge({ severity, label }: { severity: Severity; label?:
 export function Chip({
   children,
   onRemove,
+  onClick,
+  title,
   tone = 'default',
 }: {
   children: React.ReactNode
   onRemove?: () => void
+  onClick?: () => void
+  title?: string
   tone?: 'default' | 'proposed' | 'confirmed' | 'rejected'
 }) {
   const tones = {
@@ -30,7 +34,22 @@ export function Chip({
       className={clsx(
         'inline-flex items-center gap-1 rounded border px-2 py-0.5 text-xs font-mono',
         tones[tone],
+        onClick && 'cursor-pointer hover:border-fg/40',
       )}
+      title={title}
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onClick={onClick}
+      onKeyDown={
+        onClick
+          ? (e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault()
+                onClick()
+              }
+            }
+          : undefined
+      }
     >
       {children}
       {onRemove && (

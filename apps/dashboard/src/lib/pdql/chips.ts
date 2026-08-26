@@ -1,5 +1,5 @@
 import { removeGroup } from './ast'
-import { isGroupCountColumn, isGroupDimensionColumn, type QueryAst } from './model'
+import { isGroupCountColumn, isGroupDimensionColumn, type QueryAst, type SortDir } from './model'
 import { formatConditionLabel, serialize } from './serialize'
 
 export type PdqlChipKind = 'filter' | 'group' | 'column'
@@ -8,6 +8,7 @@ export interface PdqlChip {
   id: string
   kind: PdqlChipKind
   label: string
+  sort?: SortDir
 }
 
 function formatSelectLabel(ast: QueryAst, columnId: string): string {
@@ -33,9 +34,27 @@ export function pdqlToChips(ast: QueryAst): PdqlChip[] {
   }
   for (const column of ast.columns) {
     if (isGroupDimensionColumn(ast, column) || isGroupCountColumn(column)) continue
-    chips.push({ id: column.id, kind: 'column', label: formatSelectLabel(ast, column.id) })
+    chips.push({
+      id: column.id,
+      kind: 'column',
+      label: formatSelectLabel(ast, column.id),
+      sort: column.sort?.dir,
+    })
   }
   return chips
+}
+
+export function toggleChipSort(ast: QueryAst, id: string): QueryAst {
+  return {
+    ...ast,
+    columns: ast.columns.map((column) => {
+      if (column.id !== id || !column.sort) return column
+      return {
+        ...column,
+        sort: { ...column.sort, dir: column.sort.dir === 'desc' ? 'asc' : 'desc' },
+      }
+    }),
+  }
 }
 
 export function removePdqlChip(ast: QueryAst, id: string): QueryAst {
@@ -55,4 +74,8 @@ export function removePdqlChip(ast: QueryAst, id: string): QueryAst {
 
 export function serializeWithoutChip(ast: QueryAst, id: string): string {
   return serialize(removePdqlChip(ast, id))
+}
+
+export function serializeToggledChipSort(ast: QueryAst, id: string): string {
+  return serialize(toggleChipSort(ast, id))
 }

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { defaultQuery, withoutIds, type QueryAst } from './model'
 import { parse } from './parse'
 import { serialize } from './serialize'
-import { pdqlToChips, serializeWithoutChip } from './chips'
+import { pdqlToChips, serializeToggledChipSort, serializeWithoutChip } from './chips'
 import {
   alignGroupValues,
   astToEventAggregate,
@@ -232,6 +232,23 @@ describe('pdqlToChips', () => {
     const group = ast.groups[0]
     expect(group).toBeTruthy()
     expect(serializeWithoutChip(ast, group!.id)).toBe('select(action, time) | sort(time desc)')
+  })
+
+  it('toggling a sorted column chip flips direction', () => {
+    const ast = mustParse('select(time) | sort(time desc)')
+    const chip = pdqlToChips(ast).find((item) => item.kind === 'column')
+    expect(chip?.sort).toBe('desc')
+    expect(serializeToggledChipSort(ast, chip!.id)).toBe('select(time) | sort(time asc)')
+    const flipped = mustParse(serializeToggledChipSort(ast, chip!.id))
+    const flippedChip = pdqlToChips(flipped).find((item) => item.kind === 'column')
+    expect(serializeToggledChipSort(flipped, flippedChip!.id)).toBe('select(time) | sort(time desc)')
+  })
+
+  it('toggling a column without sort leaves the query unchanged', () => {
+    const ast = mustParse('select(action, time)')
+    const chip = pdqlToChips(ast).find((item) => item.label === 'action')
+    expect(chip?.sort).toBeUndefined()
+    expect(serializeToggledChipSort(ast, chip!.id)).toBe('select(action, time)')
   })
 })
 

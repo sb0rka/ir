@@ -19,7 +19,13 @@ export {
   isSiemSource,
 } from './siemGroups'
 export type { EventHeaderMeta, FieldColumn, FieldGroup, FieldRow } from './siemGroups'
-export { pdqlToChips, removePdqlChip, serializeWithoutChip } from './chips'
+export {
+  pdqlToChips,
+  removePdqlChip,
+  serializeToggledChipSort,
+  serializeWithoutChip,
+  toggleChipSort,
+} from './chips'
 export type { PdqlChip, PdqlChipKind } from './chips'
 export {
   alignGroupValues,

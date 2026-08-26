@@ -6,6 +6,7 @@ import {
   parseQueuePdql,
   pdqlToChips,
   serialize,
+  serializeToggledChipSort,
   serializeWithoutChip,
   type ActiveSection,
   type ParseError,
@@ -147,6 +148,11 @@ export function QueryComposer({
     onPdqlChange(serializeWithoutChip(parsed.ast, id))
   }
 
+  const toggleSortChip = (id: string) => {
+    if (!parsed.ok) return
+    onPdqlChange(serializeToggledChipSort(parsed.ast, id))
+  }
+
   const addField = (name: string) => {
     onPdqlChange(addFieldToPdql(pdql, name, addSection, fields))
     setAddOpen(false)
@@ -186,7 +192,12 @@ export function QueryComposer({
           </Chip>
         ))}
         {columns.map((chip) => (
-          <Chip key={chip.id} onRemove={() => removeChip(chip.id)}>
+          <Chip
+            key={chip.id}
+            title={chip.sort ? 'Сменить направление сортировки' : undefined}
+            onClick={chip.sort ? () => toggleSortChip(chip.id) : undefined}
+            onRemove={() => removeChip(chip.id)}
+          >
             <span className="text-fg-dim">select</span> {chip.label}
           </Chip>
         ))}

@@ -574,7 +574,6 @@ export const useAppStore = create<AppState>((set, get) => ({
         activeTab: created.id,
         selectedAlertIds: [],
         inspectedQueueItem: null,
-        agentPanelOpen: true,
         investigationLoading: false,
       })
       void get().loadSomCatalog()
