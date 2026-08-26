@@ -104,7 +104,6 @@ export function astToFilterChips(ast: QueryAst): FilterChip[] {
 
 export interface EventSearchParts {
   filter?: string
-  columns?: string[]
   sort?: { field: string; direction: 'asc' | 'desc' }[]
   group_by?: string[]
   group_values?: (string | null)[]
@@ -136,10 +135,6 @@ export function queueSelectFields(ast: QueryAst): string[] {
 
 function isDefaultSort(sort: { field: string; direction: 'asc' | 'desc' }[]): boolean {
   return sort.length === 1 && sort[0]?.field === 'time' && sort[0]?.direction === 'desc'
-}
-
-function isDefaultColumns(columns: string[]): boolean {
-  return columns.length === 0 || (columns.length === 1 && columns[0] === 'time')
 }
 
 export function alignGroupValues(
@@ -193,7 +188,6 @@ export function astToEventSearch(
   groupValues?: (string | null)[],
 ): EventSearchParts {
   const filter = formatCondition(ast).trim()
-  const columns = eventSearchFields(ast)
   const sort = ast.columns
     .filter((column) => column.sort && column.field && !column.aggregate)
     .slice()
@@ -202,13 +196,12 @@ export function astToEventSearch(
 
   const parts: EventSearchParts = { hasControls: false }
   if (filter) parts.filter = filter
-  if (!isDefaultColumns(columns)) parts.columns = columns
   if (sort.length && !isDefaultSort(sort)) parts.sort = sort
   const path = groupPathPrefix(ast, groupValues)
   if (path) {
     parts.group_by = path.group_by
     parts.group_values = path.group_values
   }
-  parts.hasControls = Boolean(parts.filter || parts.columns || parts.sort || parts.group_by)
+  parts.hasControls = Boolean(parts.filter || parts.sort || parts.group_by)
   return parts
 }

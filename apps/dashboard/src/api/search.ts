@@ -229,7 +229,6 @@ async function searchEventsQueue(
     sources: allowedSources,
   }
   if (parts.filter) body.filter = parts.filter
-  if (parts.columns) body.columns = parts.columns
   if (parts.sort) body.sort = parts.sort
   if (parts.group_by && parts.group_values) {
     body.group_by = parts.group_by

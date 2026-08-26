@@ -361,7 +361,6 @@ describe('astToEventSearch', () => {
     )
     expect(astToEventSearch(ast)).toEqual({
       filter: 'event_src.host = "dkrylova.plat.form"',
-      columns: ['action', 'time', 'event_src.host', 'text', 'object.process.cmdline'],
       sort: [{ field: 'time', direction: 'asc' }],
       hasControls: true,
     })
@@ -383,12 +382,11 @@ describe('astToEventSearch', () => {
     })
   })
 
-  it('sends extra columns and non-default sort without aggregates', () => {
+  it('sends non-default sort without aggregates and omits columns', () => {
     const ast = mustParse(
       'group(event_src.host) | select(event_src.host, uniq(src.ip), count(), time) | sort(time desc, event_src.host asc)',
     )
     expect(astToEventSearch(ast)).toEqual({
-      columns: ['event_src.host', 'time'],
       sort: [
         { field: 'time', direction: 'desc' },
         { field: 'event_src.host', direction: 'asc' },
@@ -400,17 +398,14 @@ describe('astToEventSearch', () => {
   it('sends group_by only after a group value is selected', () => {
     const ast = mustParse('group(event_src.host, action) | select(event_src.host, action, time)')
     expect(astToEventSearch(ast)).toEqual({
-      columns: ['event_src.host', 'action', 'time'],
-      hasControls: true,
+      hasControls: false,
     })
     expect(astToEventSearch(ast, ['dc01'])).toEqual({
-      columns: ['event_src.host', 'action', 'time'],
       group_by: ['event_src.host'],
       group_values: ['dc01'],
       hasControls: true,
     })
     expect(astToEventSearch(ast, ['dc01', 'login'])).toEqual({
-      columns: ['event_src.host', 'action', 'time'],
       group_by: ['event_src.host', 'action'],
       group_values: ['dc01', 'login'],
       hasControls: true,
