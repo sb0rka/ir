@@ -2,27 +2,45 @@ import { useEffect } from 'react'
 import {
   ArrowUpRight,
   Play,
+  Plus,
   Sparkles,
   UserPlus,
   X,
   XCircle,
 } from 'lucide-react'
-import { useAppStore } from '../store/appStore'
-import type { AlertEvent, CorrelationGroup, Entity, FilterField } from '../types'
+import { emptyContextQueue, useAppStore } from '../store/appStore'
+import type { AlertEvent, CorrelationGroup } from '../types'
 import { Button, Chip, Panel, SeverityBadge } from './ui'
-import { formatTime, kindLabel, statusLabel } from '../lib/utils'
-import { fieldForEntityKind } from '../lib/filters'
+import { formatTime, statusLabel } from '../lib/utils'
+import { alertIsInContext, contextEventKeys } from '../lib/queueContext'
+import { EventCard, eventCardModelFromAlert } from './event-card'
+import type { TimeInterval } from './time-interval'
 
-type AddChip = (field: FilterField, value: string) => void
-
-export function QueueDetailPanel() {
+export function QueueDetailPanel({
+  investigationId,
+}: {
+  investigationId?: string
+} = {}) {
   const item = useAppStore((s) => s.inspectedQueueItem)
   const inspect = useAppStore((s) => s.inspectQueueItem)
   const start = useAppStore((s) => s.startInvestigation)
-  const addChip = useAppStore((s) => s.addChip)
-  const alerts = useAppStore((s) => s.alerts)
+  const addEventsToContext = useAppStore((s) => s.addEventsToContext)
+  const appendPdqlFilter = useAppStore((s) => s.appendPdqlFilter)
+  const globalTime = useAppStore((s) => s.timeInterval)
+  const setTimeInterval = useAppStore((s) => s.setTimeInterval)
+  const loadQueue = useAppStore((s) => s.loadQueue)
+  const setContextQueue = useAppStore((s) => s.setContextQueue)
+  const executeContextQuery = useAppStore((s) => s.executeContextQuery)
+  const globalAlerts = useAppStore((s) => s.alerts)
+  const queueAlerts = useAppStore((s) =>
+    investigationId ? s.contextQueue[investigationId]?.alerts : undefined,
+  )
+  const queue = useAppStore((s) =>
+    investigationId ? (s.contextQueue[investigationId] ?? emptyContextQueue) : null,
+  )
+  const inv = useAppStore((s) => (investigationId ? s.investigations[investigationId] : undefined))
+  const contextEvents = useAppStore((s) => s.contextEvents)
   const correlations = useAppStore((s) => s.correlations)
-  const entities = useAppStore((s) => s.entities)
   const loading = useAppStore((s) => s.investigationLoading)
 
   useEffect(() => {
@@ -36,14 +54,21 @@ export function QueueDetailPanel() {
 
   if (!item) return null
 
-  const alert = item.kind === 'alert' ? alerts[item.id] : undefined
+  const alerts = queueAlerts ?? globalAlerts
+  const alert = item.kind === 'alert' ? (queueAlerts?.[item.id] ?? globalAlerts[item.id]) : undefined
   const group = item.kind === 'correlation' ? correlations[item.id] : undefined
   if (!alert && !group) return null
+
+  const timeInterval = queue?.timeInterval ?? globalTime
+  const eventKeys = inv ? contextEventKeys(inv.eventIds, contextEvents) : new Set<string>()
+  const inContext = Boolean(
+    investigationId && alert && alertIsInContext(alert, inv?.findingSourceKeys ?? [], eventKeys),
+  )
 
   return (
     <Panel
       title={alert ? 'Событие' : 'Корреляция'}
-      className="w-[22rem] shrink-0"
+      className="w-[32rem] shrink-0"
       actions={
         <button type="button" onClick={() => inspect(null)} title="Закрыть">
           <X className="h-3.5 w-3.5 text-fg-dim" />
@@ -52,37 +77,76 @@ export function QueueDetailPanel() {
     >
       <div className="flex min-h-full flex-col">
         <div className="flex-1 space-y-4 p-3">
-          {alert && <AlertDetails alert={alert} entities={entities} addChip={addChip} />}
+          {alert && inContext && <Chip tone="confirmed">в контексте</Chip>}
+          {alert && (
+            <AlertDetails
+              alert={alert}
+              onAddFilter={(field, value) =>
+                appendPdqlFilter(investigationId ?? null, field, value)
+              }
+              timeInterval={timeInterval}
+              onTimeChange={(interval) => {
+                if (investigationId) setContextQueue(investigationId, { timeInterval: interval })
+                else setTimeInterval(interval)
+              }}
+              onTimeExecute={(interval) => {
+                if (investigationId) {
+                  setContextQueue(investigationId, { timeInterval: interval })
+                  void executeContextQuery(investigationId)
+                  return
+                }
+                setTimeInterval(interval)
+                void loadQueue()
+              }}
+            />
+          )}
           {group && (
             <CorrelationDetails
               group={group}
               alerts={alerts}
-              entities={entities}
-              addChip={addChip}
               onOpenAlert={(id) => inspect({ kind: 'alert', id })}
             />
           )}
         </div>
 
         <div className="sticky bottom-0 space-y-2 border-t border-border bg-surface-1 p-3">
-          <Button
-            size="md"
-            variant="primary"
-            className="w-full"
-            disabled={loading}
-            onClick={() => void start([item.id])}
-          >
-            <Play className="h-3.5 w-3.5" />
-            Начать расследование
-          </Button>
-          <div className="grid grid-cols-2 gap-1.5">
-            <DecoButton icon={<UserPlus className="h-3 w-3" />}>Назначить</DecoButton>
-            <DecoButton icon={<Sparkles className="h-3 w-3" />}>Обогатить</DecoButton>
-            <DecoButton icon={<ArrowUpRight className="h-3 w-3" />}>
-              Эскалировать
-            </DecoButton>
-            <DecoButton icon={<XCircle className="h-3 w-3" />}>Закрыть</DecoButton>
-          </div>
+          {investigationId ? (
+            inContext ? (
+              <div className="text-xs text-fg-dim">Уже в расследовании</div>
+            ) : (
+              <Button
+                size="md"
+                variant="primary"
+                className="w-full"
+                disabled={loading || !alert}
+                onClick={() => void addEventsToContext(investigationId, [item.id])}
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Добавить в расследование
+              </Button>
+            )
+          ) : (
+            <>
+              <Button
+                size="md"
+                variant="primary"
+                className="w-full"
+                disabled={loading}
+                onClick={() => void start([item.id])}
+              >
+                <Play className="h-3.5 w-3.5" />
+                Начать расследование
+              </Button>
+              <div className="grid grid-cols-2 gap-1.5">
+                <DecoButton icon={<UserPlus className="h-3 w-3" />}>Назначить</DecoButton>
+                <DecoButton icon={<Sparkles className="h-3 w-3" />}>Обогатить</DecoButton>
+                <DecoButton icon={<ArrowUpRight className="h-3 w-3" />}>
+                  Эскалировать
+                </DecoButton>
+                <DecoButton icon={<XCircle className="h-3 w-3" />}>Закрыть</DecoButton>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </Panel>
@@ -106,52 +170,27 @@ function DecoButton({
 
 function AlertDetails({
   alert,
-  entities,
-  addChip,
+  onAddFilter,
+  timeInterval,
+  onTimeChange,
+  onTimeExecute,
 }: {
   alert: AlertEvent
-  entities: Record<string, Entity>
-  addChip: AddChip
+  onAddFilter: (field: string, value: string) => void
+  timeInterval: TimeInterval
+  onTimeChange: (value: TimeInterval) => void
+  onTimeExecute: (value: TimeInterval) => void
 }) {
   return (
     <>
-      <div>
-        <div className="flex items-center gap-2">
-          <SeverityBadge severity={alert.severity} />
-          <span className="text-xs text-fg-dim">{statusLabel[alert.status]}</span>
-        </div>
-        <div className="mt-2 text-sm font-medium leading-snug">{alert.title}</div>
-        {alert.description && (
-          <p className="mt-1.5 text-xs leading-relaxed text-fg-muted">{alert.description}</p>
-        )}
-      </div>
-
-      <MetaList
-        rows={[
-          ['Время', formatTime(alert.time)],
-          ['Правило', alert.rule],
-          ['Источник', alert.source],
-          ...(alert.sourceEventId ? ([['ID источника', alert.sourceEventId]] as const) : []),
-        ]}
+      <span className="text-xs text-fg-dim">{statusLabel[alert.status]}</span>
+      <EventCard
+        event={eventCardModelFromAlert(alert)}
+        timeInterval={timeInterval}
+        onTimeChange={onTimeChange}
+        onTimeExecute={onTimeExecute}
+        onAddFilter={onAddFilter}
       />
-
-      <EntityList entityIds={alert.entityIds} entities={entities} addChip={addChip} />
-
-      {alert.raw && Object.keys(alert.raw).length > 0 && (
-        <div>
-          <div className="mb-1 text-[10px] uppercase tracking-wider text-fg-dim">Поля</div>
-          <dl className="space-y-1">
-            {Object.entries(alert.raw).map(([k, v]) => (
-              <div key={k} className="flex justify-between gap-2 text-xs">
-                <dt className="shrink-0 text-fg-dim">{k}</dt>
-                <dd className="max-w-[180px] truncate text-right font-mono text-fg-muted" title={v}>
-                  {v}
-                </dd>
-              </div>
-            ))}
-          </dl>
-        </div>
-      )}
     </>
   )
 }
@@ -159,14 +198,10 @@ function AlertDetails({
 function CorrelationDetails({
   group,
   alerts,
-  entities,
-  addChip,
   onOpenAlert,
 }: {
   group: CorrelationGroup
   alerts: Record<string, AlertEvent>
-  entities: Record<string, Entity>
-  addChip: AddChip
   onOpenAlert: (id: string) => void
 }) {
   const eventCount = group.eventIds.length
@@ -202,8 +237,6 @@ function CorrelationDetails({
         </div>
       </div>
 
-      <EntityList entityIds={group.entityIds} entities={entities} addChip={addChip} />
-
       <div>
         <div className="mb-1.5 text-[10px] uppercase tracking-wider text-fg-dim">События</div>
         <div className="space-y-1">
@@ -228,61 +261,5 @@ function CorrelationDetails({
         </div>
       </div>
     </>
-  )
-}
-
-function MetaList({ rows }: { rows: ReadonlyArray<readonly [string, string]> }) {
-  return (
-    <div>
-      <div className="mb-1 text-[10px] uppercase tracking-wider text-fg-dim">Мета</div>
-      <dl className="space-y-1">
-        {rows.map(([k, v]) => (
-          <div key={k} className="flex justify-between gap-2 text-xs">
-            <dt className="shrink-0 text-fg-dim">{k}</dt>
-            <dd className="max-w-[180px] truncate text-right font-mono text-fg-muted" title={v}>
-              {v}
-            </dd>
-          </div>
-        ))}
-      </dl>
-    </div>
-  )
-}
-
-function EntityList({
-  entityIds,
-  entities,
-  addChip,
-}: {
-  entityIds: string[]
-  entities: Record<string, Entity>
-  addChip: AddChip
-}) {
-  if (entityIds.length === 0) return null
-  return (
-    <div>
-      <div className="mb-1.5 text-[10px] uppercase tracking-wider text-fg-dim">Сущности</div>
-      <div className="space-y-1">
-        {entityIds.map((id) => {
-          const e = entities[id]
-          if (!e) return null
-          const field = fieldForEntityKind(e.kind)
-          return (
-            <button
-              key={id}
-              type="button"
-              className="flex w-full items-center justify-between rounded border border-border px-2 py-1.5 text-left text-xs hover:bg-surface-2"
-              title={field ? 'Найти связанные' : undefined}
-              onClick={() => {
-                if (field) addChip(field, e.label.replaceAll('[', '').replaceAll(']', ''))
-              }}
-            >
-              <span className="text-fg-dim">{kindLabel[e.kind] ?? e.kind}</span>
-              <span className="font-mono text-fg">{e.label}</span>
-            </button>
-          )
-        })}
-      </div>
-    </div>
   )
 }

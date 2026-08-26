@@ -4,6 +4,7 @@ import { irClient } from './clients'
 import { unwrapError } from './error'
 import { getSomRunSettings, getSomSelectors } from './som-settings'
 import {
+  gatewayFindingId,
   layoutGraph,
   mapGraphEdge,
   mapGraphNode,
@@ -29,6 +30,7 @@ export interface InvestigationBundle {
   entities: Record<string, Entity>
   nodes: Record<string, GraphNode>
   edges: Record<string, GraphEdge>
+  findingSourceKeys: string[]
 }
 
 export interface SomCatalog {
@@ -159,7 +161,7 @@ export async function loadInvestigationBundle(
   investigationId: string,
   extras?: Partial<Investigation>,
 ): Promise<InvestigationBundle> {
-  const [inv, eventsPage, entitiesPage, graph] = await Promise.all([
+  const [inv, eventsPage, entitiesPage, findingsPage, graph] = await Promise.all([
     throwIfError(
       await irClient.GET('/investigations/{investigation_id}', {
         params: { ...projectParams(), path: { investigation_id: investigationId } },
@@ -167,6 +169,7 @@ export async function loadInvestigationBundle(
     ),
     loadAllEvents(investigationId),
     loadAllEntities(investigationId),
+    loadAllFindings(investigationId),
     throwIfError(
       await irClient.GET('/investigations/{investigation_id}/graph', {
         params: {
@@ -202,6 +205,9 @@ export async function loadInvestigationBundle(
   const edges: Record<string, GraphEdge> = {}
   for (const edge of mappedEdges) edges[edge.id] = edge
 
+  const findingIds = findingsPage.map((finding) => finding.id)
+  const findingSourceKeys = findingsPage.map((finding) => gatewayFindingId(finding.ref))
+
   return {
     investigation: mapIrInvestigation(inv, {
       ...extras,
@@ -209,11 +215,14 @@ export async function loadInvestigationBundle(
       entityIds: Object.keys(entities),
       nodeIds: Object.keys(nodes),
       edgeIds: Object.keys(edges),
+      findingIds,
+      findingSourceKeys,
     }),
     events,
     entities,
     nodes,
     edges,
+    findingSourceKeys,
   }
 }
 
@@ -231,6 +240,26 @@ async function loadAllEvents(investigationId: string) {
       }),
     )
     items.push(...page.events)
+    if (!page.next_cursor) break
+    cursor = page.next_cursor
+  }
+  return items
+}
+
+async function loadAllFindings(investigationId: string) {
+  const items: Ir['schemas']['Finding'][] = []
+  let cursor: string | undefined
+  for (let i = 0; i < 10; i++) {
+    const page = await throwIfError(
+      await irClient.GET('/investigations/{investigation_id}/findings', {
+        params: {
+          ...projectParams(),
+          path: { investigation_id: investigationId },
+          query: { limit: 100, cursor },
+        },
+      }),
+    )
+    items.push(...page.findings)
     if (!page.next_cursor) break
     cursor = page.next_cursor
   }
@@ -319,6 +348,18 @@ export async function countProposedAgentEdges(investigationId: string): Promise<
     }),
   )
   return page.edges.length
+}
+
+export async function createEntity(
+  investigationId: string,
+  body: Ir['schemas']['EntityCreate'],
+): Promise<Ir['schemas']['Entity']> {
+  return throwIfError(
+    await irClient.POST('/investigations/{investigation_id}/entities', {
+      params: { ...projectParams(), path: { investigation_id: investigationId } },
+      body,
+    }),
+  )
 }
 
 export async function getEntityCard(entityId: string): Promise<Ir['schemas']['EntityCard']> {

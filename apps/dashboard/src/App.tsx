@@ -164,12 +164,6 @@ function Dashboard({
       <header className="flex items-center justify-between gap-4 border-b border-border px-4 py-2">
         <div className="flex min-w-0 items-center gap-3">
           <div className="shrink-0 font-mono text-sm font-semibold tracking-widest">SB0RKA / IR</div>
-          <span
-            className="truncate text-[10px] uppercase tracking-wider text-fg-dim"
-            title={currentProject.id}
-          >
-            live · {currentProject.name}
-          </span>
         </div>
         <div className="flex items-center gap-1">
           <span className="hidden max-w-48 truncate px-2 font-mono text-[11px] text-fg-dim sm:block">

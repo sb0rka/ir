@@ -22,6 +22,7 @@ var eventSearchExtraFields = []string{
 	"object",
 	"object.process.id",
 	"object.process.chain",
+	"incident.id",
 }
 
 type eventSearchQuery struct {

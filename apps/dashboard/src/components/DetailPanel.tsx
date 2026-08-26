@@ -1,7 +1,7 @@
-import { useAppStore } from '../store/appStore'
-import { Button, Chip, Panel, SeverityBadge } from './ui'
+import { useAppStore, emptyContextQueue } from '../store/appStore'
+import { Button, Chip, Panel } from './ui'
 import { formatTime, kindLabel, statusLabel } from '../lib/utils'
-import type { ContextEvent, GraphEdge, GraphNode } from '../types'
+import { EventCard } from './event-card'
 import {
   Binary,
   Box,
@@ -27,9 +27,13 @@ export function DetailPanel({ investigationId }: { investigationId: string }) {
   const eventReviews = useAppStore((s) => s.eventReviews)
   const setReview = useAppStore((s) => s.setReview)
   const graphNodes = useAppStore((s) => s.graphNodes)
-  const graphEdges = useAppStore((s) => s.graphEdges)
   const entities = useAppStore((s) => s.entities)
   const contextEvents = useAppStore((s) => s.contextEvents)
+  const appendPdqlFilter = useAppStore((s) => s.appendPdqlFilter)
+  const addFieldToContext = useAppStore((s) => s.addFieldToContext)
+  const setContextQueue = useAppStore((s) => s.setContextQueue)
+  const executeContextQuery = useAppStore((s) => s.executeContextQuery)
+  const contextQueue = useAppStore((s) => s.contextQueue[investigationId]) ?? emptyContextQueue
 
   if (!inv || !detailPanelOpen) return null
 
@@ -56,18 +60,6 @@ export function DetailPanel({ investigationId }: { investigationId: string }) {
 
   const entity = entityId ? entities[entityId] : null
   const event = eventId ? contextEvents[eventId] : null
-  const eventNodeId =
-    selectedGraphNodeId && graphNodes[selectedGraphNodeId]?.kind === 'event'
-      ? selectedGraphNodeId
-      : Object.values(graphNodes).find((n) => n.kind === 'event' && n.refId === eventId)
-          ?.id
-  const eventEntityIds = linkedEntityIds(
-    event,
-    eventNodeId,
-    graphNodes,
-    graphEdges,
-    inv.edgeIds,
-  )
 
   const nodeReview = selectedGraphNodeId
     ? (nodeReviews[selectedGraphNodeId] ??
@@ -81,7 +73,7 @@ export function DetailPanel({ investigationId }: { investigationId: string }) {
     return (
       <Panel
         title="Детали"
-        className="w-80 shrink-0"
+        className="w-[32rem] shrink-0"
         actions={
           <button type="button" onClick={() => setDetailPanelOpen(false)}>
             <X className="h-3.5 w-3.5 text-fg-dim" />
@@ -104,7 +96,7 @@ export function DetailPanel({ investigationId }: { investigationId: string }) {
   return (
     <Panel
       title={entity ? `Сущность · ${kindLabel[entity.kind]}` : 'Событие'}
-      className="w-80 shrink-0"
+      className="w-[32rem] shrink-0"
       actions={
         <button type="button" onClick={() => setDetailPanelOpen(false)}>
           <X className="h-3.5 w-3.5 text-fg-dim" />
@@ -294,29 +286,19 @@ export function DetailPanel({ investigationId }: { investigationId: string }) {
 
         {event && (
           <>
-            <div>
-              <div className="flex items-center gap-2">
-                <SeverityBadge severity={event.severity} />
-                <span className="text-sm font-medium">{event.title}</span>
-              </div>
-              <div className="mt-1 font-mono text-xs text-fg-dim">{event.type}</div>
-              <div className="mt-2 text-xs text-fg-muted">{event.description}</div>
-              {eventReview && (
-                <div className="mt-2">
-                  <Chip
-                    tone={
-                      eventReview === 'proposed'
-                        ? 'proposed'
-                        : eventReview === 'rejected'
-                          ? 'rejected'
-                          : 'confirmed'
-                    }
-                  >
-                    {statusLabel[eventReview]}
-                  </Chip>
-                </div>
-              )}
-            </div>
+            {eventReview && (
+              <Chip
+                tone={
+                  eventReview === 'proposed'
+                    ? 'proposed'
+                    : eventReview === 'rejected'
+                      ? 'rejected'
+                      : 'confirmed'
+                }
+              >
+                {statusLabel[eventReview]}
+              </Chip>
+            )}
 
             {eventReview === 'proposed' && (
               <div className="flex gap-2 rounded border border-proposed/40 bg-proposed/10 p-2">
@@ -338,76 +320,40 @@ export function DetailPanel({ investigationId }: { investigationId: string }) {
               </div>
             )}
 
-            <div className="flex flex-wrap gap-1.5 text-xs">
-              <Chip>{event.source}</Chip>
-              <Chip>{statusLabel[event.origin]}</Chip>
-              <Chip>{formatTime(event.time)}</Chip>
-            </div>
-            <div>
-              <div className="mb-1 text-[10px] uppercase tracking-wider text-fg-dim">
-                Связанные сущности
-              </div>
-              <div className="space-y-1">
-                {eventEntityIds.map((id) => {
-                  const e = entities[id]
-                  const node = Object.values(graphNodes).find(
-                    (n) => n.kind !== 'event' && n.refId === id,
-                  )
-                  if (!e && !node) return null
-                  return (
-                    <button
-                      key={id}
-                      type="button"
-                      className="flex w-full items-center justify-between rounded border border-border px-2 py-1.5 text-left text-xs hover:bg-surface-2"
-                      onClick={() => {
-                        update(investigationId, {
-                          selectedEventId: undefined,
-                          selectedNodeId: node?.id,
-                          selectedEntityIds: inv.selectedEntityIds.includes(id)
-                            ? inv.selectedEntityIds
-                            : [...inv.selectedEntityIds, id],
-                        })
-                      }}
-                    >
-                      <span className="text-fg-dim">
-                        {e ? kindLabel[e.kind] : node?.kind}
-                      </span>
-                      <span className="font-mono text-fg">
-                        {e?.label ?? node?.label ?? id}
-                      </span>
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
+            <EventCard
+              event={{
+                id: event.id,
+                time: event.time,
+                title: event.title,
+                description: event.description,
+                source: event.source,
+                severity: event.severity,
+                raw: event.raw ?? {},
+                sourceEventId: event.sourceEventId,
+              }}
+              investigationId={investigationId}
+              eventInContext={inv.eventIds.includes(event.id)}
+              timeInterval={contextQueue.timeInterval}
+              onTimeChange={(interval) =>
+                setContextQueue(investigationId, { timeInterval: interval })
+              }
+              onTimeExecute={(interval) => {
+                setContextQueue(investigationId, { timeInterval: interval })
+                void executeContextQuery(investigationId)
+              }}
+              onAddFilter={(field, value) => appendPdqlFilter(investigationId, field, value)}
+              onAddToContext={(field, value, includeEvent) =>
+                addFieldToContext(investigationId, {
+                  field,
+                  value,
+                  eventId: event.id,
+                  includeEvent,
+                })
+              }
+            />
           </>
         )}
       </div>
     </Panel>
   )
-}
-
-function linkedEntityIds(
-  event: ContextEvent | null,
-  eventNodeId: string | undefined,
-  graphNodes: Record<string, GraphNode>,
-  graphEdges: Record<string, GraphEdge>,
-  edgeIds: string[],
-): string[] {
-  const ids = new Set<string>(event?.entityIds ?? [])
-  if (!eventNodeId) return [...ids]
-  for (const edgeId of edgeIds) {
-    const edge = graphEdges[edgeId]
-    if (!edge) continue
-    const otherId =
-      edge.source === eventNodeId
-        ? edge.target
-        : edge.target === eventNodeId
-          ? edge.source
-          : undefined
-    if (!otherId) continue
-    const other = graphNodes[otherId]
-    if (other && other.kind !== 'event') ids.add(other.refId)
-  }
-  return [...ids]
 }

@@ -1,24 +1,27 @@
 import { create } from 'zustand'
-import type {
-  ActionResult,
-  AlertEvent,
-  ContextEvent,
-  ContextQueueState,
-  CorrelationGroup,
-  Entity,
-  FilterChip,
-  FilterField,
-  Finding,
-  GraphEdge,
-  GraphNode,
-  Investigation,
-  Issue,
-  QueueItem,
-  ReviewState,
+import {
+  DEFAULT_QUEUE_SOURCE,
+  type ActionResult,
+  type AlertEvent,
+  type ContextEvent,
+  type ContextQueueState,
+  type CorrelationGroup,
+  type Entity,
+  type EventGroupItem,
+  type FilterChip,
+  type FilterField,
+  type Finding,
+  type GraphEdge,
+  type GraphNode,
+  type Investigation,
+  type Issue,
+  type QueueItem,
+  type QueueSource,
+  type QueryHistoryEntry,
+  type ReviewState,
 } from '../types'
-import { TIME_PRESET_CUSTOM } from '../api/env'
 import { uid } from '../lib/utils'
-import { defaultFilterValueOptions, issueTemplates, savedViews } from '../lib/catalog'
+import { defaultFilterValueOptions, issueTemplates } from '../lib/catalog'
 import { parseGatewayEventId, saveLayout } from '../api/adapters'
 import { errorMessage, isNotImplemented, isUnauthorized } from '../api/error'
 import {
@@ -26,9 +29,14 @@ import {
   lookupEntity,
   searchQueue,
 } from '../api/search'
+import { appendCondition, alignGroupValues, astToFilterChips, defaultQuery, drillGroupValues, entityKindForField, parseQueuePdql, serialize } from '../lib/pdql'
+import { pdqlFieldForFilterField } from '../lib/filters'
+import { filterFingerprint } from '../lib/queryFingerprint'
+import { demoDayInterval, type TimeInterval } from '../components/time-interval'
 import {
   addContext,
   countProposedAgentEdges,
+  createEntity,
   createInvestigation,
   getEntityCard,
   getSomEnvironment,
@@ -44,24 +52,56 @@ import type { components as Ir } from '@ir/contract'
 
 export type TabId = 'queue' | string
 
+const DEFAULT_QUEUE_PDQL = serialize(defaultQuery())
+const DEFAULT_TIME_INTERVAL = demoDayInterval()
+const HISTORY_LIMIT = 8
+
 export const emptyContextQueue: ContextQueueState = {
   chips: [],
-  timePreset: '30d',
-  timeFrom: '',
-  timeTo: '',
-  history: [],
+  pdql: DEFAULT_QUEUE_PDQL,
+  timeInterval: DEFAULT_TIME_INTERVAL,
+  queueSource: DEFAULT_QUEUE_SOURCE,
+  groupValues: [],
+  eventGroups: [],
+  executedFingerprint: null,
+  queryHistory: [],
   selectedIds: [],
   hideAdded: false,
   originFilter: 'all',
   reviewFilter: 'all',
+  alerts: {},
+  queueOrder: [],
+  loading: false,
+}
+
+function pushQueryHistory(
+  history: QueryHistoryEntry[],
+  entry: QueryHistoryEntry,
+): QueryHistoryEntry[] {
+  const key = filterFingerprint(
+    entry.pdql,
+    entry.timeInterval,
+    entry.queueSource,
+    entry.groupValues,
+  )
+  return [
+    entry,
+    ...history.filter(
+      (item) =>
+        filterFingerprint(item.pdql, item.timeInterval, item.queueSource, item.groupValues) !== key,
+    ),
+  ].slice(0, HISTORY_LIMIT)
 }
 
 interface AppState {
   chips: FilterChip[]
-  timePreset: string
-  timeFrom: string
-  timeTo: string
-  queueQuery: string
+  timeInterval: TimeInterval
+  queuePdql: string
+  queueSource: QueueSource
+  groupValues: (string | null)[]
+  eventGroups: EventGroupItem[]
+  executedFingerprint: string | null
+  queryHistory: QueryHistoryEntry[]
   selectedAlertIds: string[]
   expandedCorrelationIds: string[]
   inspectedQueueItem: QueueItem | null
@@ -97,15 +137,15 @@ interface AppState {
   somHint: string | null
   somCatalog: SomCatalog | null
 
-  setChips: (chips: FilterChip[]) => void
   addChip: (field: FilterField, value: string) => void
-  removeChip: (id: string) => void
-  removeChipValue: (id: string, value: string) => void
-  setTimePreset: (preset: string) => void
-  setTimeFrom: (from: string) => void
-  setTimeTo: (to: string) => void
-  setQueueQuery: (query: string) => void
-  applySavedView: (viewId: string) => void
+  setQueuePdql: (pdql: string) => void
+  setTimeInterval: (interval: TimeInterval) => void
+  setQueueSource: (source: QueueSource) => void
+  applyQueueHistory: (entry: QueryHistoryEntry) => void
+  drillGroupValue: (investigationId: string | null, field: string, value: string) => void
+  selectGroupValue: (investigationId: string | null, value: string | null) => void
+  clearGroupSelection: (investigationId: string | null) => void
+  clearGroupPathFrom: (investigationId: string | null, index: number) => void
   toggleAlertSelect: (id: string) => void
   clearAlertSelection: () => void
   toggleCorrelationExpand: (id: string) => void
@@ -130,10 +170,13 @@ interface AppState {
   ) => void
   setContextQueue: (investigationId: string, patch: Partial<ContextQueueState>) => void
   addContextChip: (investigationId: string, field: FilterField, value: string) => void
-  removeContextChip: (investigationId: string, chipId: string) => void
-  removeContextChipValue: (investigationId: string, chipId: string, value: string) => void
-  clearContextChips: (investigationId: string) => void
+  executeContextQuery: (investigationId: string) => Promise<boolean>
   addEventsToContext: (investigationId: string, eventIds: string[]) => Promise<void>
+  appendPdqlFilter: (investigationId: string | null, field: string, value: string) => void
+  addFieldToContext: (
+    investigationId: string,
+    input: { field: string; value: string; eventId: string; includeEvent: boolean },
+  ) => Promise<void>
   setAgentPanelOpen: (open: boolean) => void
   setDetailPanelOpen: (open: boolean) => void
   loadSomCatalog: () => Promise<void>
@@ -150,19 +193,6 @@ interface AppState {
   addIssueComment: (issueId: string, text: string) => void
   runEntityAction: (entityId: string, action: string) => Promise<void>
   addFindingFromEntity: (investigationId: string, entityId: string) => void
-}
-
-function mergeChipValue(
-  chips: FilterChip[],
-  field: FilterField,
-  value: string,
-): FilterChip[] {
-  const existing = chips.find((c) => c.field === field)
-  if (!existing) return [...chips, { id: uid('chip'), field, values: [value] }]
-  if (existing.values.includes(value)) return chips
-  return chips.map((c) =>
-    c.id === existing.id ? { ...c, values: [...c.values, value] } : c,
-  )
 }
 
 function mergeEntities(
@@ -246,7 +276,8 @@ function applyBundle(
         selectedNodeId: keepView?.selectedNodeId,
         seedEventIds: keepView?.seedEventIds ?? bundle.investigation.seedEventIds,
         issueIds: keepView?.issueIds ?? bundle.investigation.issueIds,
-        findingIds: keepView?.findingIds ?? bundle.investigation.findingIds,
+        findingIds: bundle.investigation.findingIds,
+        findingSourceKeys: bundle.investigation.findingSourceKeys,
       },
     },
     contextEvents: { ...get().contextEvents, ...bundle.events },
@@ -261,10 +292,13 @@ function applyBundle(
 
 export const useAppStore = create<AppState>((set, get) => ({
   chips: [],
-  timePreset: '30d',
-  timeFrom: '',
-  timeTo: '',
-  queueQuery: '',
+  timeInterval: DEFAULT_TIME_INTERVAL,
+  queuePdql: DEFAULT_QUEUE_PDQL,
+  queueSource: DEFAULT_QUEUE_SOURCE,
+  groupValues: [],
+  eventGroups: [],
+  executedFingerprint: null,
+  queryHistory: [],
   selectedAlertIds: [],
   expandedCorrelationIds: [],
   inspectedQueueItem: null,
@@ -300,65 +334,99 @@ export const useAppStore = create<AppState>((set, get) => ({
   somHint: null,
   somCatalog: null,
 
-  setChips: (chips) => {
-    set({ chips })
-    void get().loadQueue()
-  },
   addChip: (field, value) => {
-    set({ chips: mergeChipValue(get().chips, field, value) })
-    void get().loadQueue()
-  },
-  removeChip: (id) => {
-    set({ chips: get().chips.filter((c) => c.id !== id) })
-    void get().loadQueue()
-  },
-  removeChipValue: (id, value) => {
     set({
-      chips: get()
-        .chips.map((c) =>
-          c.id === id ? { ...c, values: c.values.filter((v) => v !== value) } : c,
-        )
-        .filter((c) => c.values.length > 0),
+      queuePdql: appendCondition(get().queuePdql, pdqlFieldForFilterField(field), '=', value),
     })
-    void get().loadQueue()
   },
-  setTimePreset: (timePreset) => {
-    set({ timePreset, timeFrom: '', timeTo: '' })
-    void get().loadQueue()
+  setQueuePdql: (queuePdql) => {
+    const parsed = parseQueuePdql(queuePdql)
+    set({
+      queuePdql,
+      groupValues: parsed.ok ? alignGroupValues(parsed.ast, get().groupValues) : get().groupValues,
+    })
   },
-  setTimeFrom: (timeFrom) => {
-    const timeTo = get().timeTo
-    if (timeFrom && timeTo) {
-      set({ timeFrom, timeTo, timePreset: TIME_PRESET_CUSTOM })
+  setTimeInterval: (timeInterval) => set({ timeInterval }),
+  setQueueSource: (queueSource) => set({ queueSource }),
+  applyQueueHistory: (entry) =>
+    set({
+      queuePdql: entry.pdql,
+      timeInterval: entry.timeInterval,
+      queueSource: entry.queueSource ?? DEFAULT_QUEUE_SOURCE,
+      groupValues: entry.groupValues ?? [],
+    }),
+  drillGroupValue: (investigationId, field, value) => {
+    if (!investigationId) {
+      const parsed = parseQueuePdql(get().queuePdql)
+      if (parsed.ok === false) return
+      const next = drillGroupValues(parsed.ast, get().groupValues, field, value)
+      if (!next) return
+      set({ groupValues: next })
       void get().loadQueue()
       return
     }
-    set({ timeFrom })
+    const cur = get().contextQueue[investigationId] ?? emptyContextQueue
+    const parsed = parseQueuePdql(cur.pdql)
+    if (parsed.ok === false) return
+    const next = drillGroupValues(parsed.ast, cur.groupValues, field, value)
+    if (!next) return
+    set({
+      contextQueue: {
+        ...get().contextQueue,
+        [investigationId]: { ...cur, groupValues: next },
+      },
+    })
+    void get().executeContextQuery(investigationId)
   },
-  setTimeTo: (timeTo) => {
-    const timeFrom = get().timeFrom
-    if (timeFrom && timeTo) {
-      set({ timeFrom, timeTo, timePreset: TIME_PRESET_CUSTOM })
+  selectGroupValue: (investigationId, value) => {
+    const nextFor = (current: (string | null)[]) =>
+      current.length === 1 && current[0] === value ? [] : [value]
+    if (!investigationId) {
+      set({ groupValues: nextFor(get().groupValues) })
       void get().loadQueue()
       return
     }
-    set({ timeTo })
-  },
-  setQueueQuery: (queueQuery) => {
-    set({ queueQuery })
-    void get().loadQueue()
-  },
-  applySavedView: (viewId) => {
-    const view = savedViews.find((v) => v.id === viewId)
-    if (!view) return
+    const cur = get().contextQueue[investigationId] ?? emptyContextQueue
     set({
-      chips: view.chips.map((c) => ({ ...c, id: uid('chip') })),
-      timePreset: view.timePreset,
-      timeFrom: view.timeFrom ?? '',
-      timeTo: view.timeTo ?? '',
-      queueQuery: view.query ?? '',
+      contextQueue: {
+        ...get().contextQueue,
+        [investigationId]: { ...cur, groupValues: nextFor(cur.groupValues) },
+      },
     })
-    void get().loadQueue()
+    void get().executeContextQuery(investigationId)
+  },
+  clearGroupSelection: (investigationId) => {
+    if (!investigationId) {
+      set({ groupValues: [] })
+      void get().loadQueue()
+      return
+    }
+    const cur = get().contextQueue[investigationId] ?? emptyContextQueue
+    set({
+      contextQueue: {
+        ...get().contextQueue,
+        [investigationId]: { ...cur, groupValues: [] },
+      },
+    })
+    void get().executeContextQuery(investigationId)
+  },
+  clearGroupPathFrom: (investigationId, index) => {
+    if (!investigationId) {
+      set({ groupValues: get().groupValues.slice(0, index) })
+      void get().loadQueue()
+      return
+    }
+    const cur = get().contextQueue[investigationId] ?? emptyContextQueue
+    set({
+      contextQueue: {
+        ...get().contextQueue,
+        [investigationId]: {
+          ...cur,
+          groupValues: cur.groupValues.slice(0, index),
+        },
+      },
+    })
+    void get().executeContextQuery(investigationId)
   },
   toggleAlertSelect: (id) => {
     const sel = get().selectedAlertIds
@@ -405,25 +473,43 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   loadQueue: async () => {
-    set({ queueLoading: true, lastError: null, mockSources: [] })
+    const parsed = parseQueuePdql(get().queuePdql)
+    if (parsed.ok === false) {
+      const { error } = parsed
+      set({
+        lastError: `${error.message}${error.position > 0 ? ` (позиция ${error.position})` : ''}`,
+      })
+      return
+    }
+    const chips = astToFilterChips(parsed.ast)
+    const timeInterval = get().timeInterval
+    const queueSource = get().queueSource
+    const groupValues = alignGroupValues(parsed.ast, get().groupValues)
+    set({ queueLoading: true, lastError: null, mockSources: [], groupValues })
     try {
-      const result = await searchQueue(
-        get().chips,
-        get().timePreset,
-        get().timeFrom,
-        get().timeTo,
-        get().queueQuery,
-      )
+      const result = await searchQueue(parsed.ast, timeInterval, queueSource, groupValues)
       const hosts = new Set(get().filterValueOptions.host ?? [])
       const ips = new Set(get().filterValueOptions.ip ?? [])
       for (const e of Object.values(result.entities)) {
         if (e.kind === 'host') hosts.add(e.label)
         if (e.kind === 'ip') ips.add(e.label)
       }
+      const canonical = serialize(parsed.ast)
       set({
+        chips,
+        queuePdql: canonical,
+        groupValues,
+        executedFingerprint: filterFingerprint(canonical, timeInterval, queueSource, groupValues),
+        queryHistory: pushQueryHistory(get().queryHistory, {
+          pdql: canonical,
+          timeInterval,
+          queueSource,
+          groupValues,
+        }),
         alerts: result.alerts,
         correlations: result.correlations,
         queueOrder: result.queueOrder,
+        eventGroups: result.eventGroups,
         entities: mergeEntities(get().entities, result.entities),
         contextEvents: { ...get().contextEvents, ...result.contextEvents },
         expandedCorrelationIds: result.queueOrder
@@ -488,7 +574,6 @@ export const useAppStore = create<AppState>((set, get) => ({
         activeTab: created.id,
         selectedAlertIds: [],
         inspectedQueueItem: null,
-        agentPanelOpen: true,
         investigationLoading: false,
       })
       void get().loadSomCatalog()
@@ -615,10 +700,15 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   setContextQueue: (investigationId, patch) => {
     const cur = get().contextQueue[investigationId] ?? emptyContextQueue
+    const next = { ...cur, ...patch }
+    if (patch.pdql != null && patch.groupValues == null) {
+      const parsed = parseQueuePdql(next.pdql)
+      if (parsed.ok) next.groupValues = alignGroupValues(parsed.ast, next.groupValues)
+    }
     set({
       contextQueue: {
         ...get().contextQueue,
-        [investigationId]: { ...cur, ...patch },
+        [investigationId]: next,
       },
     })
   },
@@ -630,61 +720,98 @@ export const useAppStore = create<AppState>((set, get) => ({
         ...get().contextQueue,
         [investigationId]: {
           ...cur,
-          chips: mergeChipValue(cur.chips, field, value),
-          history: [
-            { field, value },
-            ...cur.history.filter((h) => !(h.field === field && h.value === value)),
-          ].slice(0, 8),
-        },
-      },
-    })
-    void get().loadQueue()
-  },
-
-  removeContextChip: (investigationId, chipId) => {
-    const cur = get().contextQueue[investigationId] ?? emptyContextQueue
-    set({
-      contextQueue: {
-        ...get().contextQueue,
-        [investigationId]: {
-          ...cur,
-          chips: cur.chips.filter((c) => c.id !== chipId),
+          pdql: appendCondition(cur.pdql, pdqlFieldForFilterField(field), '=', value),
         },
       },
     })
   },
-
-  removeContextChipValue: (investigationId, chipId, value) => {
+  executeContextQuery: async (investigationId) => {
     const cur = get().contextQueue[investigationId] ?? emptyContextQueue
+    const parsed = parseQueuePdql(cur.pdql)
+    if (parsed.ok === false) {
+      const { error } = parsed
+      set({
+        lastError: `${error.message}${error.position > 0 ? ` (позиция ${error.position})` : ''}`,
+      })
+      return false
+    }
+    const chips = astToFilterChips(parsed.ast)
+    const timeInterval = cur.timeInterval
+    const queueSource = cur.queueSource
+    const groupValues = alignGroupValues(parsed.ast, cur.groupValues)
+    const canonical = serialize(parsed.ast)
     set({
+      lastError: null,
       contextQueue: {
         ...get().contextQueue,
-        [investigationId]: {
-          ...cur,
-          chips: cur.chips
-            .map((c) =>
-              c.id === chipId ? { ...c, values: c.values.filter((v) => v !== value) } : c,
-            )
-            .filter((c) => c.values.length > 0),
+        [investigationId]: { ...cur, chips, pdql: canonical, groupValues, loading: true },
+      },
+    })
+    try {
+      const result = await searchQueue(parsed.ast, timeInterval, queueSource, groupValues)
+      const hosts = new Set(get().filterValueOptions.host ?? [])
+      const ips = new Set(get().filterValueOptions.ip ?? [])
+      for (const e of Object.values(result.entities)) {
+        if (e.kind === 'host') hosts.add(e.label)
+        if (e.kind === 'ip') ips.add(e.label)
+      }
+      const latest = get().contextQueue[investigationId] ?? emptyContextQueue
+      set({
+        entities: mergeEntities(get().entities, result.entities),
+        filterValueOptions: {
+          ...get().filterValueOptions,
+          host: [...hosts],
+          ip: [...ips],
+          source: result.availableSources,
         },
-      },
-    })
-  },
-
-  clearContextChips: (investigationId) => {
-    const cur = get().contextQueue[investigationId] ?? emptyContextQueue
-    set({
-      contextQueue: {
-        ...get().contextQueue,
-        [investigationId]: { ...cur, chips: [] },
-      },
-    })
+        lastError: result.sourceErrors.length ? result.sourceErrors.join('; ') : null,
+        contextQueue: {
+          ...get().contextQueue,
+          [investigationId]: {
+            ...latest,
+            chips,
+            pdql: canonical,
+            queueSource,
+            groupValues,
+            eventGroups: result.eventGroups,
+            alerts: result.alerts,
+            queueOrder: result.queueOrder,
+            loading: false,
+            executedFingerprint: filterFingerprint(
+              canonical,
+              timeInterval,
+              queueSource,
+              groupValues,
+            ),
+            queryHistory: pushQueryHistory(latest.queryHistory, {
+              pdql: canonical,
+              timeInterval,
+              queueSource,
+              groupValues,
+            }),
+            selectedIds: [],
+          },
+        },
+      })
+      return true
+    } catch (err) {
+      const latest = get().contextQueue[investigationId] ?? emptyContextQueue
+      set({
+        lastError: errorMessage(err),
+        contextQueue: {
+          ...get().contextQueue,
+          [investigationId]: { ...latest, loading: false },
+        },
+      })
+      return false
+    }
   },
 
   addEventsToContext: async (investigationId, eventIds) => {
+    const queue = get().contextQueue[investigationId]
     const refs = contextRefsFromIds(
       eventIds,
-      get().alerts,
+      { ...get().alerts, ...queue?.alerts },
       get().correlations,
       get().contextEvents,
     )
@@ -698,6 +825,54 @@ export const useAppStore = create<AppState>((set, get) => ({
           [investigationId]: { ...cur, selectedIds: [] },
         },
       })
+      await get().loadInvestigation(investigationId)
+    } catch (err) {
+      set({ lastError: errorMessage(err) })
+    }
+  },
+
+  appendPdqlFilter: (investigationId, field, value) => {
+    const pdql = investigationId
+      ? (get().contextQueue[investigationId] ?? emptyContextQueue).pdql
+      : get().queuePdql
+    const queueSource = investigationId
+      ? (get().contextQueue[investigationId] ?? emptyContextQueue).queueSource
+      : get().queueSource
+    const parsed = parseQueuePdql(pdql)
+    if (queueSource === 'events' && parsed.ok && parsed.ast.groups.some((group) => group.field === field)) {
+      get().drillGroupValue(investigationId, field, value)
+      return
+    }
+    if (!investigationId) {
+      set({ queuePdql: appendCondition(get().queuePdql, field, '=', value) })
+      return
+    }
+    const cur = get().contextQueue[investigationId] ?? emptyContextQueue
+    set({
+      contextQueue: {
+        ...get().contextQueue,
+        [investigationId]: { ...cur, pdql: appendCondition(cur.pdql, field, '=', value) },
+      },
+    })
+  },
+
+  addFieldToContext: async (investigationId, input) => {
+    const kind = entityKindForField(input.field)
+    try {
+      if (kind) {
+        await createEntity(investigationId, {
+          type_code: kind,
+          canonical_key: input.value,
+          display_name: input.value,
+          metadata: { field: input.field },
+        })
+      }
+      const inv = get().investigations[investigationId]
+      const alreadyInContext = Boolean(inv?.eventIds.includes(input.eventId))
+      if (input.includeEvent || alreadyInContext) {
+        await get().addEventsToContext(investigationId, [input.eventId])
+        return
+      }
       await get().loadInvestigation(investigationId)
     } catch (err) {
       set({ lastError: errorMessage(err) })

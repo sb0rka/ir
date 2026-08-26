@@ -1,3 +1,5 @@
+import type { TimeInterval } from './components/time-interval/model'
+
 export type Severity = 'critical' | 'high' | 'medium' | 'low' | 'info'
 
 export type AlertStatus = 'new' | 'investigating' | 'closed'
@@ -95,6 +97,7 @@ export interface ContextEvent {
   review: ReviewState
   description: string
   sourceEventId?: string
+  raw?: Record<string, string>
 }
 
 export interface GraphNode {
@@ -169,6 +172,8 @@ export interface Investigation {
   nodeIds: string[]
   edgeIds: string[]
   findingIds: string[]
+  /** Gateway finding identities attached to this investigation (`source/instance?/kind/external_id`). */
+  findingSourceKeys: string[]
   issueIds: string[]
   createdAt: string
   view: 'table' | 'graph' | 'queue'
@@ -186,24 +191,50 @@ export interface FilterChip {
   values: string[]
 }
 
-export interface ContextFilterHistoryEntry {
-  field: FilterField
-  value: string
+/** High-level queue search target: a finding kind or normalized events. */
+export type QueueSource = 'siem_incident' | 'siem_correlation' | 'nad_attack' | 'events'
+
+export const DEFAULT_QUEUE_SOURCE: QueueSource = 'siem_incident'
+
+export const QUEUE_SOURCE_OPTIONS: { id: QueueSource; label: string }[] = [
+  { id: 'siem_incident', label: 'Инциденты' },
+  { id: 'siem_correlation', label: 'Корреляции' },
+  { id: 'nad_attack', label: 'Атаки NAD' },
+  { id: 'events', label: 'События' },
+]
+
+export interface QueryHistoryEntry {
+  pdql: string
+  timeInterval: TimeInterval
+  queueSource?: QueueSource
+  groupValues?: (string | null)[]
+}
+
+/** One source-local (or merged) event group from Gateway aggregate. */
+export interface EventGroupItem {
+  source_code: string
+  values: (string | null)[]
+  count: number
 }
 
 /** Per-investigation state of the context event queue (search + filters). */
 export interface ContextQueueState {
+  /** Last executed entity chips used to filter the table. */
   chips: FilterChip[]
-  timePreset: string
-  /** YYYY-MM-DD, used when timePreset is `custom`. */
-  timeFrom: string
-  /** YYYY-MM-DD, used when timePreset is `custom`. */
-  timeTo: string
-  history: ContextFilterHistoryEntry[]
+  pdql: string
+  timeInterval: TimeInterval
+  queueSource: QueueSource
+  groupValues: (string | null)[]
+  eventGroups: EventGroupItem[]
+  executedFingerprint: string | null
+  queryHistory: QueryHistoryEntry[]
   selectedIds: string[]
   hideAdded: boolean
   originFilter: EventOrigin | 'all'
   reviewFilter: ReviewState | 'all'
+  alerts: Record<string, AlertEvent>
+  queueOrder: QueueItem[]
+  loading: boolean
 }
 
 export interface SavedView {
