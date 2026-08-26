@@ -6,6 +6,9 @@ import { hasGroupValueSelection, parseQueuePdql, queueSelectFields } from '../li
 import { alertIsInContext, contextEventKeys } from '../lib/queueContext'
 import { ChevronDown, ChevronRight, Layers, Play, Plus } from 'lucide-react'
 
+const COL_FIT = 'w-px whitespace-nowrap'
+const COL_TITLE = 'min-w-0 w-full'
+
 function isInspected(item: QueueItem | null, kind: QueueItem['kind'], id: string) {
   return item?.kind === kind && item.id === id
 }
@@ -50,12 +53,12 @@ function SelectFieldCell({
   const appendPdqlFilter = useAppStore((s) => s.appendPdqlFilter)
   const display = formatQueueFieldValue(field, value)
   return (
-    <td className="max-w-[16rem] px-3 py-2">
+    <td className={clsx(COL_FIT, 'max-w-[16rem] px-3 py-2')}>
       {value ? (
         <button
           type="button"
           title={display}
-          className="block w-full truncate text-left font-mono text-xs text-fg hover:underline"
+          className="block max-w-[16rem] truncate text-left font-mono text-xs text-fg hover:underline"
           onClick={(ev) => {
             ev.stopPropagation()
             appendPdqlFilter(investigationId ?? null, field, value)
@@ -102,7 +105,7 @@ function AlertRow({
       )}
       onClick={() => inspect({ kind: 'alert', id: alert.id })}
     >
-      <td className="px-3 py-2">
+      <td className={clsx(COL_FIT, 'px-3 py-2')}>
         <input
           type="checkbox"
           checked={selected}
@@ -112,15 +115,15 @@ function AlertRow({
           className="accent-fg"
         />
       </td>
-      <td className="px-3 py-2">
+      <td className={clsx(COL_FIT, 'px-3 py-2')}>
         <SeverityBadge severity={alert.severity} />
       </td>
-      <td className="whitespace-nowrap px-3 py-2 font-mono text-xs text-fg-muted">
+      <td className={clsx(COL_FIT, 'px-3 py-2 font-mono text-xs text-fg-muted')}>
         {formatTime(alert.time)}
       </td>
-      <td className="w-px whitespace-nowrap px-3 py-2">
-        <div className="flex items-center gap-2">
-          <div className={clsx('text-sm', inContext && 'text-fg-muted')}>{alert.title}</div>
+      <td className={clsx(COL_TITLE, 'px-3 py-2')}>
+        <div className="flex min-w-0 items-center gap-2">
+          <div className={clsx('min-w-0 text-sm', inContext && 'text-fg-muted')}>{alert.title}</div>
           {inContext && (
             <Chip tone="confirmed">в контексте</Chip>
           )}
@@ -135,13 +138,13 @@ function AlertRow({
           investigationId={investigationId}
         />
       ))}
-      <td className="px-3 py-2">
+      <td className={clsx(COL_FIT, 'px-3 py-2')}>
         <span className="rounded border border-border px-1.5 py-0.5 font-mono text-[11px]">
           {alert.source}
         </span>
       </td>
       {investigationId && (
-        <td className="px-3 py-2">
+        <td className={clsx(COL_FIT, 'px-3 py-2')}>
           {!inContext && (
             <Button
               size="sm"
@@ -189,7 +192,7 @@ function CorrelationRow({
         )}
         onClick={() => inspect({ kind: 'correlation', id: group.id })}
       >
-        <td className="px-3 py-2.5">
+        <td className={clsx(COL_FIT, 'px-3 py-2.5')}>
           <input
             type="checkbox"
             checked={selected}
@@ -198,14 +201,14 @@ function CorrelationRow({
             className="accent-fg"
           />
         </td>
-        <td className="px-3 py-2.5">
+        <td className={clsx(COL_FIT, 'px-3 py-2.5')}>
           <SeverityBadge severity={group.severity} />
         </td>
-        <td className="whitespace-nowrap px-3 py-2.5 font-mono text-xs text-fg-muted">
+        <td className={clsx(COL_FIT, 'px-3 py-2.5 font-mono text-xs text-fg-muted')}>
           {formatTime(group.time)}
         </td>
-        <td className="w-px whitespace-nowrap px-3 py-2.5">
-          <div className="flex items-start gap-2 text-left">
+        <td className={clsx(COL_TITLE, 'px-3 py-2.5')}>
+          <div className="flex min-w-0 items-start gap-2 text-left">
             <button
               type="button"
               className="mt-0.5 shrink-0 text-fg-muted hover:text-fg"
@@ -221,8 +224,8 @@ function CorrelationRow({
                 <ChevronRight className="h-4 w-4" />
               )}
             </button>
-            <div>
-              <div className="flex items-center gap-2 text-sm font-medium">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2 text-sm font-medium">
                 <Layers className="h-3.5 w-3.5 text-proposed" />
                 {group.title}
                 <Chip>
@@ -234,9 +237,9 @@ function CorrelationRow({
           </div>
         </td>
         {selectFields.map((field) => (
-          <td key={field} className="px-3 py-2.5" />
+          <td key={field} className={clsx(COL_FIT, 'px-3 py-2.5')} />
         ))}
-        <td className="px-3 py-2.5">
+        <td className={clsx(COL_FIT, 'px-3 py-2.5')}>
           <div className="flex flex-wrap gap-1">
             {Object.entries(group.sourceCounts).map(([src, n]) => (
               <span
@@ -406,17 +409,17 @@ export function AlertTable({ investigationId }: { investigationId?: string } = {
         <table className="w-full min-w-[880px] border-collapse text-left">
           <thead className="sticky top-0 z-10 bg-surface-1 text-[11px] uppercase tracking-wider text-fg-dim">
             <tr className="border-b border-border">
-              <th className="w-10 px-3 py-2" />
-              <th className="px-3 py-2">Крит.</th>
-              <th className="px-3 py-2">Время</th>
-              <th className="w-px whitespace-nowrap px-3 py-2">Срабатывание</th>
+              <th className={clsx(COL_FIT, 'px-3 py-2')} />
+              <th className={clsx(COL_FIT, 'px-3 py-2')}>Крит.</th>
+              <th className={clsx(COL_FIT, 'px-3 py-2')}>Время</th>
+              <th className={clsx(COL_TITLE, 'px-3 py-2')}>Срабатывание</th>
               {selectFields.map((field) => (
-                <th key={field} className="px-3 py-2 font-mono normal-case tracking-normal">
+                <th key={field} className={clsx(COL_FIT, 'px-3 py-2 font-mono normal-case tracking-normal')}>
                   {field}
                 </th>
               ))}
-              <th className="px-3 py-2">Источник</th>
-              {investigationId && <th className="w-28 px-3 py-2" />}
+              <th className={clsx(COL_FIT, 'px-3 py-2')}>Источник</th>
+              {investigationId && <th className={clsx(COL_FIT, 'px-3 py-2')} />}
             </tr>
           </thead>
           <tbody>
