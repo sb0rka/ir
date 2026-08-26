@@ -1,8 +1,12 @@
 {
-  "name": "v1",
+  "name": "dashboard",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.0.1",
   "type": "module",
+  "author": {
+    "name": "Sb0rka",
+    "url": "https://sb0rka.ru"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
