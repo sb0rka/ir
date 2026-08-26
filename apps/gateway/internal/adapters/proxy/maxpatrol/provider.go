@@ -30,6 +30,7 @@ type Provider struct {
 var (
 	_ capability.FindingSource         = (*Provider)(nil)
 	_ capability.EventSource           = (*Provider)(nil)
+	_ capability.EventAggregator       = (*Provider)(nil)
 	_ capability.EntityLookup          = (*Provider)(nil)
 	_ capability.AccountUserinfoSource = (*Provider)(nil)
 	_ capability.SourceProber          = (*Provider)(nil)
@@ -60,6 +61,7 @@ func NewProvider(config ClientConfig) (registry.Provider, error) {
 		CredentialSecret: CredentialSecretName,
 		Findings:         adapter,
 		Events:           adapter,
+		EventAggregation: adapter,
 		EntityLookup:     adapter,
 		AccountUserinfo:  adapter,
 		Prober:           adapter,

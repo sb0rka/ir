@@ -186,6 +186,12 @@ type EventSourceRef struct {
 	SourceEventID string
 }
 
+type EventGroup struct {
+	SourceCode string
+	Values     []*string
+	Count      int64
+}
+
 type EntitySourceRef struct {
 	SourceCode     string
 	SourceEntityID string

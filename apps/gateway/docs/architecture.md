@@ -17,6 +17,8 @@ Providers register only implemented capabilities. The composition root construct
 
 Search calls fan out concurrently to the selected allowed providers. Each response carries `complete`, `truncated`, or `failed` source state. Gateway emits a cursor only when the provider confirmed a real continuation mechanism; it never invents a SIEM token or NAD continuation.
 
+Event aggregation uses the same project-scoped fan-out and retry boundary, but returns source-local groups instead of canonical event records. Counts from different sources are never merged. A provider may support event search without implementing the narrower aggregation interface; mixed requests report that source as unsupported while retaining successful groups from other sources.
+
 The bounded credential cache is keyed by `{project_id, source_code}` and serializes concurrent loads. A retryable network/timeout, `401/403`, or `5xx` failure invalidates only that entry, resolves its Secret again, and repeats the provider operation once. Redirects are rejected before credentials can move to another request.
 
 ## Object identity and context

@@ -450,6 +450,39 @@ type AccountUserinfo struct {
 	UserName string `json:"user_name"`
 }
 
+// AggregateEventsRequest Filters for source-local event group counts.
+type AggregateEventsRequest struct {
+	// Entities Entity conditions; an event matches when it contains at least one listed entity.
+	Entities *[]EntityRef `json:"entities,omitempty"`
+
+	// Filter Bounded source predicate without a query pipeline. Pipeline separators, comments, and control characters are rejected.
+	Filter *string `json:"filter,omitempty"`
+
+	// GroupBy Allowlisted source event fields whose values form each group.
+	GroupBy []string `json:"group_by"`
+
+	// Limit Maximum number of groups returned by each selected source.
+	Limit *int `json:"limit,omitempty"`
+
+	// Sort Ordered group sort rules. A field must be count or one of group_by; defaults to count descending.
+	Sort *[]EventSort `json:"sort,omitempty"`
+
+	// Sources Source codes to query; omit to use every allowed event source.
+	Sources *[]string `json:"sources,omitempty"`
+
+	// TimeRange Required occurrence-time interval.
+	TimeRange TimeRange `json:"time_range"`
+}
+
+// AggregateEventsResponse Source-local event groups without cross-source merging.
+type AggregateEventsResponse struct {
+	Groups []EventGroup `json:"groups"`
+
+	// SourceErrors Per-source failures when at least one selected source succeeded.
+	SourceErrors []SourceError `json:"source_errors"`
+	SourceStates []SourceState `json:"source_states"`
+}
+
 // Analysis Normalized result of an artifact analysis.
 type Analysis struct {
 	// Artifact Primary artifact that was analyzed.
@@ -653,7 +686,19 @@ type Event struct {
 // EventSeverity Severity mapped to the Gateway scale.
 type EventSeverity string
 
-// EventSort Source event field and direction used to order matching events.
+// EventGroup One source-local group and its event count.
+type EventGroup struct {
+	// Count Number of source events in the group.
+	Count int64 `json:"count"`
+
+	// SourceCode Source that calculated the group.
+	SourceCode string `json:"source_code"`
+
+	// Values Group values aligned by position with the request group_by fields.
+	Values []*string `json:"values"`
+}
+
+// EventSort Field and direction used to order matching events or event groups.
 type EventSort struct {
 	Direction EventSortDirection `json:"direction"`
 	Field     string             `json:"field"`
@@ -1211,6 +1256,12 @@ type LookupEntityParams struct {
 	XProjectID ProjectId `json:"X-Project-ID"`
 }
 
+// AggregateEventsParams defines parameters for AggregateEvents.
+type AggregateEventsParams struct {
+	// XProjectID Sb0rka project whose integration allowlist is used.
+	XProjectID ProjectId `json:"X-Project-ID"`
+}
+
 // SearchEventsParams defines parameters for SearchEvents.
 type SearchEventsParams struct {
 	// XProjectID Sb0rka project whose integration allowlist is used.
@@ -1285,6 +1336,9 @@ type SearchEndpointsJSONRequestBody = SearchEndpointsRequest
 // LookupEntityJSONRequestBody defines body for LookupEntity for application/json ContentType.
 type LookupEntityJSONRequestBody = LookupEntityRequest
 
+// AggregateEventsJSONRequestBody defines body for AggregateEvents for application/json ContentType.
+type AggregateEventsJSONRequestBody = AggregateEventsRequest
+
 // SearchEventsJSONRequestBody defines body for SearchEvents for application/json ContentType.
 type SearchEventsJSONRequestBody = SearchEventsRequest
 
@@ -1311,6 +1365,9 @@ type ServerInterface interface {
 	// LookupEntity Look up an entity
 	// (POST /api/v1/entities/lookup)
 	LookupEntity(w http.ResponseWriter, r *http.Request, params LookupEntityParams)
+	// AggregateEvents Aggregate events into source-local groups
+	// (POST /api/v1/events/aggregate)
+	AggregateEvents(w http.ResponseWriter, r *http.Request, params AggregateEventsParams)
 	// SearchEvents Search normalized events
 	// (POST /api/v1/events/search)
 	SearchEvents(w http.ResponseWriter, r *http.Request, params SearchEventsParams)
@@ -1577,6 +1634,51 @@ func (siw *ServerInterfaceWrapper) LookupEntity(w http.ResponseWriter, r *http.R
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.LookupEntity(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// AggregateEvents operation middleware
+func (siw *ServerInterfaceWrapper) AggregateEvents(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params AggregateEventsParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "X-Project-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Project-ID")]; found {
+		var XProjectID ProjectId
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Project-ID", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Project-ID", valueList[0], &XProjectID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Project-ID", Err: err})
+			return
+		}
+
+		params.XProjectID = XProjectID
+
+	} else {
+		err := fmt.Errorf("Header parameter X-Project-ID is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Project-ID", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.AggregateEvents(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -2264,6 +2366,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/sources/{source}/endpoints/{external_id}/response-actions", wrapper.ListResponseActions)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/entities/lookup", wrapper.LookupEntity)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/events/search", wrapper.SearchEvents)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/events/aggregate", wrapper.AggregateEvents)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/context/resolve", wrapper.ResolveContext)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/findings/search", wrapper.SearchFindings)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/sources/{source}/findings/{kind}/{external_id}", wrapper.GetFinding)

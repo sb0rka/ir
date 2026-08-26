@@ -453,6 +453,39 @@ type AccountUserinfo struct {
 	UserName string `json:"user_name"`
 }
 
+// AggregateEventsRequest Filters for source-local event group counts.
+type AggregateEventsRequest struct {
+	// Entities Entity conditions; an event matches when it contains at least one listed entity.
+	Entities *[]EntityRef `json:"entities,omitempty"`
+
+	// Filter Bounded source predicate without a query pipeline. Pipeline separators, comments, and control characters are rejected.
+	Filter *string `json:"filter,omitempty"`
+
+	// GroupBy Allowlisted source event fields whose values form each group.
+	GroupBy []string `json:"group_by"`
+
+	// Limit Maximum number of groups returned by each selected source.
+	Limit *int `json:"limit,omitempty"`
+
+	// Sort Ordered group sort rules. A field must be count or one of group_by; defaults to count descending.
+	Sort *[]EventSort `json:"sort,omitempty"`
+
+	// Sources Source codes to query; omit to use every allowed event source.
+	Sources *[]string `json:"sources,omitempty"`
+
+	// TimeRange Required occurrence-time interval.
+	TimeRange TimeRange `json:"time_range"`
+}
+
+// AggregateEventsResponse Source-local event groups without cross-source merging.
+type AggregateEventsResponse struct {
+	Groups []EventGroup `json:"groups"`
+
+	// SourceErrors Per-source failures when at least one selected source succeeded.
+	SourceErrors []SourceError `json:"source_errors"`
+	SourceStates []SourceState `json:"source_states"`
+}
+
 // Analysis Normalized result of an artifact analysis.
 type Analysis struct {
 	// Artifact Primary artifact that was analyzed.
@@ -656,7 +689,19 @@ type Event struct {
 // EventSeverity Severity mapped to the Gateway scale.
 type EventSeverity string
 
-// EventSort Source event field and direction used to order matching events.
+// EventGroup One source-local group and its event count.
+type EventGroup struct {
+	// Count Number of source events in the group.
+	Count int64 `json:"count"`
+
+	// SourceCode Source that calculated the group.
+	SourceCode string `json:"source_code"`
+
+	// Values Group values aligned by position with the request group_by fields.
+	Values []*string `json:"values"`
+}
+
+// EventSort Field and direction used to order matching events or event groups.
 type EventSort struct {
 	Direction EventSortDirection `json:"direction"`
 	Field     string             `json:"field"`
@@ -1214,6 +1259,12 @@ type LookupEntityParams struct {
 	XProjectID ProjectId `json:"X-Project-ID"`
 }
 
+// AggregateEventsParams defines parameters for AggregateEvents.
+type AggregateEventsParams struct {
+	// XProjectID Sb0rka project whose integration allowlist is used.
+	XProjectID ProjectId `json:"X-Project-ID"`
+}
+
 // SearchEventsParams defines parameters for SearchEvents.
 type SearchEventsParams struct {
 	// XProjectID Sb0rka project whose integration allowlist is used.
@@ -1287,6 +1338,9 @@ type SearchEndpointsJSONRequestBody = SearchEndpointsRequest
 
 // LookupEntityJSONRequestBody defines body for LookupEntity for application/json ContentType.
 type LookupEntityJSONRequestBody = LookupEntityRequest
+
+// AggregateEventsJSONRequestBody defines body for AggregateEvents for application/json ContentType.
+type AggregateEventsJSONRequestBody = AggregateEventsRequest
 
 // SearchEventsJSONRequestBody defines body for SearchEvents for application/json ContentType.
 type SearchEventsJSONRequestBody = SearchEventsRequest
@@ -1431,6 +1485,20 @@ type ClientInterface interface {
 	//
 	// Corresponds with POST /api/v1/entities/lookup (the `LookupEntity` operationId).
 	LookupEntity(ctx context.Context, params *LookupEntityParams, body LookupEntityJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// AggregateEventsWithBody Aggregate events into source-local groups
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /api/v1/events/aggregate (the `AggregateEvents` operationId).
+	AggregateEventsWithBody(ctx context.Context, params *AggregateEventsParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// AggregateEvents Aggregate events into source-local groups
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /api/v1/events/aggregate (the `AggregateEvents` operationId).
+	AggregateEvents(ctx context.Context, params *AggregateEventsParams, body AggregateEventsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// SearchEventsWithBody Search normalized events
 	//
@@ -1655,6 +1723,40 @@ func (c *Client) LookupEntityWithBody(ctx context.Context, params *LookupEntityP
 // Corresponds with POST /api/v1/entities/lookup (the `LookupEntity` operationId).
 func (c *Client) LookupEntity(ctx context.Context, params *LookupEntityParams, body LookupEntityJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewLookupEntityRequest(c.Server, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// AggregateEventsWithBody Aggregate events into source-local groups
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /api/v1/events/aggregate (the `AggregateEvents` operationId).
+func (c *Client) AggregateEventsWithBody(ctx context.Context, params *AggregateEventsParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAggregateEventsRequestWithBody(c.Server, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// AggregateEvents Aggregate events into source-local groups
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /api/v1/events/aggregate (the `AggregateEvents` operationId).
+func (c *Client) AggregateEvents(ctx context.Context, params *AggregateEventsParams, body AggregateEventsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAggregateEventsRequest(c.Server, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -2103,6 +2205,59 @@ func NewLookupEntityRequestWithBody(server string, params *LookupEntityParams, c
 	}
 
 	operationPath := fmt.Sprintf("/api/v1/entities/lookup")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "X-Project-ID", params.XProjectID, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("X-Project-ID", headerParam0)
+
+	}
+
+	return req, nil
+}
+
+// NewAggregateEventsRequest calls the generic AggregateEvents builder with application/json body
+func NewAggregateEventsRequest(server string, params *AggregateEventsParams, body AggregateEventsJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewAggregateEventsRequestWithBody(server, params, "application/json", bodyReader)
+}
+
+// NewAggregateEventsRequestWithBody constructs an http.Request for the AggregateEvents method, with any body, and a specified content type
+func NewAggregateEventsRequestWithBody(server string, params *AggregateEventsParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/events/aggregate")
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -2820,6 +2975,20 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with POST /api/v1/entities/lookup (the `LookupEntity` operationId).
 	LookupEntityWithResponse(ctx context.Context, params *LookupEntityParams, body LookupEntityJSONRequestBody, reqEditors ...RequestEditorFn) (*LookupEntityClientResponse, error)
 
+	// AggregateEventsWithBodyWithResponse Aggregate events into source-local groups
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/events/aggregate (the `AggregateEvents` operationId).
+	AggregateEventsWithBodyWithResponse(ctx context.Context, params *AggregateEventsParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AggregateEventsClientResponse, error)
+
+	// AggregateEventsWithResponse Aggregate events into source-local groups
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/events/aggregate (the `AggregateEvents` operationId).
+	AggregateEventsWithResponse(ctx context.Context, params *AggregateEventsParams, body AggregateEventsJSONRequestBody, reqEditors ...RequestEditorFn) (*AggregateEventsClientResponse, error)
+
 	// SearchEventsWithBodyWithResponse Search normalized events
 	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
@@ -3416,6 +3585,110 @@ func (r LookupEntityClientResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r LookupEntityClientResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type AggregateEventsClientResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *AggregateEventsResponse
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *BadRequest
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Unauthorized
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Forbidden
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *NotFound
+	// JSON422 the response for an HTTP 422 `application/json` response
+	JSON422 *ValidationError
+	// JSON500 the response for an HTTP 500 `application/json` response
+	JSON500 *InternalError
+	// JSON502 the response for an HTTP 502 `application/json` response
+	JSON502 *BadGateway
+	// JSON504 the response for an HTTP 504 `application/json` response
+	JSON504 *GatewayTimeout
+	// JSONDefault the response for an HTTP default `application/json` response
+	JSONDefault *ErrorResponse
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r AggregateEventsClientResponse) GetJSON200() *AggregateEventsResponse {
+	return r.JSON200
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r AggregateEventsClientResponse) GetJSON400() *BadRequest {
+	return r.JSON400
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r AggregateEventsClientResponse) GetJSON401() *Unauthorized {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r AggregateEventsClientResponse) GetJSON403() *Forbidden {
+	return r.JSON403
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r AggregateEventsClientResponse) GetJSON404() *NotFound {
+	return r.JSON404
+}
+
+// GetJSON422 returns the response for an HTTP 422 `application/json` response
+func (r AggregateEventsClientResponse) GetJSON422() *ValidationError {
+	return r.JSON422
+}
+
+// GetJSON500 returns the response for an HTTP 500 `application/json` response
+func (r AggregateEventsClientResponse) GetJSON500() *InternalError {
+	return r.JSON500
+}
+
+// GetJSON502 returns the response for an HTTP 502 `application/json` response
+func (r AggregateEventsClientResponse) GetJSON502() *BadGateway {
+	return r.JSON502
+}
+
+// GetJSON504 returns the response for an HTTP 504 `application/json` response
+func (r AggregateEventsClientResponse) GetJSON504() *GatewayTimeout {
+	return r.JSON504
+}
+
+// GetJSONDefault returns the response for an HTTP default `application/json` response
+func (r AggregateEventsClientResponse) GetJSONDefault() *ErrorResponse {
+	return r.JSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r AggregateEventsClientResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r AggregateEventsClientResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r AggregateEventsClientResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r AggregateEventsClientResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -4360,6 +4633,32 @@ func (c *ClientWithResponses) LookupEntityWithResponse(ctx context.Context, para
 	return ParseLookupEntityClientResponse(rsp)
 }
 
+// AggregateEventsWithBodyWithResponse Aggregate events into source-local groups
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/events/aggregate (the `AggregateEvents` operationId).
+func (c *ClientWithResponses) AggregateEventsWithBodyWithResponse(ctx context.Context, params *AggregateEventsParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AggregateEventsClientResponse, error) {
+	rsp, err := c.AggregateEventsWithBody(ctx, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAggregateEventsClientResponse(rsp)
+}
+
+// AggregateEventsWithResponse Aggregate events into source-local groups
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/events/aggregate (the `AggregateEvents` operationId).
+func (c *ClientWithResponses) AggregateEventsWithResponse(ctx context.Context, params *AggregateEventsParams, body AggregateEventsJSONRequestBody, reqEditors ...RequestEditorFn) (*AggregateEventsClientResponse, error) {
+	rsp, err := c.AggregateEvents(ctx, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAggregateEventsClientResponse(rsp)
+}
+
 // SearchEventsWithBodyWithResponse Search normalized events
 //
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
@@ -4891,6 +5190,95 @@ func ParseLookupEntityClientResponse(rsp *http.Response) (*LookupEntityClientRes
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest LookupEntityResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest ValidationError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON422 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest InternalError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON500 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 502:
+		var dest BadGateway
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON502 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 504:
+		var dest GatewayTimeout
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON504 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseAggregateEventsClientResponse parses an HTTP response from a AggregateEventsWithResponse call
+func ParseAggregateEventsClientResponse(rsp *http.Response) (*AggregateEventsClientResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &AggregateEventsClientResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest AggregateEventsResponse
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}

@@ -15,6 +15,7 @@ type Provider struct {
 	Findings         capability.FindingSource
 	Sessions         capability.SessionSource
 	Events           capability.EventSource
+	EventAggregation capability.EventAggregator
 	EntityLookup     capability.EntityLookup
 	ArtifactAnalyzer capability.ArtifactAnalyzer
 	Endpoints        capability.EndpointSource

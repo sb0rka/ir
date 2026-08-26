@@ -13,7 +13,10 @@ Go API сервис `ir-api` расследований Sb0rka.
   и строит подтверждённую часть графа;
 - `POST /api/v1/investigations/{id}/agent-results` принимает один явный batch
   SOM-агента. Только перечисленные `nodes` и `edges` попадают на граф; ноды
-  получают origin `agent`, рёбра — status `proposed`.
+  получают origin `agent`, рёбра — status `proposed`;
+- `/api/v1/investigations/{id}/edges` поддерживает ручные confirmed analyst
+  рёбра, редактирование, evidence и удаление, а `/review` атомарно подтверждает
+  или отклоняет предложенные связи с optimistic locking по `version`.
 
 Нормализованный event хранится в `normalized_data`, provenance и source URL —
 отдельно, vendor raw payload не сохраняется. Все investigation endpoints требуют
@@ -26,6 +29,6 @@ Bearer используется для чтения Sb0rka Secrets, но не п
 `source_code + source_entity_id`. Эти значения читаемы и позволяют сразу
 перейти к исходному инструменту при разборе ошибки.
 
-Read API страницы расследования включает investigation list/card, timeline и
-event detail, entity list/card, graph/nodes/edges и reference dictionaries.
-Списки используют keyset cursor.
+API страницы расследования включает investigation list/card, timeline и event
+detail, entity list/card, graph/nodes/edges, edge review и reference
+dictionaries. Списки используют keyset cursor.

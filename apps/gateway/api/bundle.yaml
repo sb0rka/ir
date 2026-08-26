@@ -329,6 +329,47 @@ paths:
           $ref: '#/components/responses/ErrorResponse'
       security:
         - bearerAuth: []
+  /api/v1/events/aggregate:
+    post:
+      tags:
+        - events
+      summary: Aggregate events into source-local groups
+      operationId: aggregateEvents
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AggregateEventsRequest'
+      responses:
+        '200':
+          description: Source-local event groups and their counts.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AggregateEventsResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '502':
+          $ref: '#/components/responses/BadGateway'
+        '504':
+          $ref: '#/components/responses/GatewayTimeout'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+      security:
+        - bearerAuth: []
   /api/v1/context/resolve:
     post:
       tags:
@@ -1276,7 +1317,7 @@ components:
             $ref: '#/components/schemas/SourceError'
     EventSort:
       type: object
-      description: Source event field and direction used to order matching events.
+      description: Field and direction used to order matching events or event groups.
       required:
         - field
         - direction
@@ -1290,6 +1331,107 @@ components:
           enum:
             - asc
             - desc
+    AggregateEventsRequest:
+      type: object
+      description: Filters for source-local event group counts.
+      required:
+        - time_range
+        - group_by
+      properties:
+        sources:
+          type: array
+          uniqueItems: true
+          description: Source codes to query; omit to use every allowed event source.
+          items:
+            type: string
+        time_range:
+          description: Required occurrence-time interval.
+          allOf:
+            - $ref: '#/components/schemas/TimeRange'
+        entities:
+          type: array
+          maxItems: 100
+          description: >-
+            Entity conditions; an event matches when it contains at least one
+            listed entity.
+          items:
+            $ref: '#/components/schemas/EntityRef'
+        filter:
+          type: string
+          maxLength: 4096
+          description: >-
+            Bounded source predicate without a query pipeline. Pipeline
+            separators, comments, and control characters are rejected.
+        group_by:
+          type: array
+          minItems: 1
+          maxItems: 8
+          uniqueItems: true
+          description: Allowlisted source event fields whose values form each group.
+          items:
+            type: string
+            minLength: 1
+            maxLength: 128
+        sort:
+          type: array
+          maxItems: 8
+          description: >-
+            Ordered group sort rules. A field must be count or one of group_by;
+            defaults to count descending.
+          items:
+            $ref: '#/components/schemas/EventSort'
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 1000
+          default: 100
+          description: Maximum number of groups returned by each selected source.
+    EventGroup:
+      type: object
+      description: One source-local group and its event count.
+      required:
+        - source_code
+        - values
+        - count
+      properties:
+        source_code:
+          type: string
+          description: Source that calculated the group.
+        values:
+          type: array
+          minItems: 1
+          maxItems: 8
+          description: Group values aligned by position with the request group_by fields.
+          items:
+            type: string
+            nullable: true
+            maxLength: 1024
+        count:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Number of source events in the group.
+    AggregateEventsResponse:
+      type: object
+      description: Source-local event groups without cross-source merging.
+      required:
+        - groups
+        - source_states
+        - source_errors
+      properties:
+        groups:
+          type: array
+          items:
+            $ref: '#/components/schemas/EventGroup'
+        source_states:
+          type: array
+          items:
+            $ref: '#/components/schemas/SourceState'
+        source_errors:
+          type: array
+          description: Per-source failures when at least one selected source succeeded.
+          items:
+            $ref: '#/components/schemas/SourceError'
     SearchEventsRequest:
       type: object
       description: Filters for a normalized multi-source event search.

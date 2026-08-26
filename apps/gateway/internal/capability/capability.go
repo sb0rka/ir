@@ -84,6 +84,25 @@ type EventSource interface {
 	ResolveContext(context.Context, Access, ResolveContextRequest) (ContextPage, error)
 }
 
+type AggregateEventsRequest struct {
+	TimeFrom time.Time
+	TimeTo   time.Time
+	Entities []domain.EntityRef
+	Filter   string
+	GroupBy  []string
+	Sort     []EventSort
+	Limit    int
+}
+
+type EventGroupPage struct {
+	Groups []domain.EventGroup
+	Status string
+}
+
+type EventAggregator interface {
+	AggregateEvents(context.Context, Access, AggregateEventsRequest) (EventGroupPage, error)
+}
+
 type ContextPage struct {
 	Findings    []domain.Finding
 	Sessions    []domain.Session
