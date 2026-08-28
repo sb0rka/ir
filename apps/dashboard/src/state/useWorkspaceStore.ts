@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import {
-  ALL_ENTITY_TYPES,
+  DEFAULT_ENTITY_TYPES,
   ALL_SEVERITIES,
 } from '../components/graph/constants'
 import type {
@@ -59,7 +59,7 @@ function mapSeverity(s: string): Severity {
 
 function defaultFilters(windowStart: string, windowEnd: string): GraphSessionFilters {
   return {
-    entityTypes: [...ALL_ENTITY_TYPES],
+    entityTypes: [...DEFAULT_ENTITY_TYPES],
     severities: [...ALL_SEVERITIES],
     edgeOrigins: ['agent', 'analyst'],
     timeRange: {
