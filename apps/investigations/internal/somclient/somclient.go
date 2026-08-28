@@ -13,7 +13,6 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -66,9 +65,8 @@ func optionalString(value *string) string {
 }
 
 type Client struct {
-	cfg        Config
-	http       *http.Client
-	mcpStartMu sync.Mutex
+	cfg  Config
+	http *http.Client
 }
 
 func New(cfg Config) *Client {
@@ -243,83 +241,37 @@ func (c *Client) EnsureRepo(ctx context.Context, sessionID string) (string, erro
 	return created.ID, nil
 }
 
-// ConfigureInvestigationMCP adds the project-scoped IR MCP endpoint to the
-// selected agent without deleting MCP servers already configured by the user.
-// The current SOM demo uses OpenCode; Codex intentionally drops remote MCP
-// servers in som-daemon and therefore cannot satisfy this integration.
-func (c *Client) ConfigureInvestigationMCP(ctx context.Context, sessionID, endpoint, projectID, capabilityToken string) error {
-	if !strings.EqualFold(strings.TrimSpace(c.cfg.Executor), "OPENCODE") {
-		return fmt.Errorf("investigation MCP requires SOM_EXECUTOR=OPENCODE")
-	}
-	endpoint = strings.TrimRight(strings.TrimSpace(endpoint), "/")
-	projectID = strings.TrimSpace(projectID)
-	capabilityToken = strings.TrimSpace(capabilityToken)
-	if endpoint == "" || projectID == "" || capabilityToken == "" {
-		return fmt.Errorf("investigation MCP endpoint, project id, and capability token are required")
-	}
-
-	var current struct {
-		MCPConfig struct {
-			Servers map[string]json.RawMessage `json:"servers"`
-		} `json:"mcp_config"`
-	}
-	path := "/api/config/mcp-config?executor=" + url.QueryEscape(strings.ToUpper(c.cfg.Executor))
-	if err := c.doDaemon(ctx, "daemon get MCP config", http.MethodGet,
-		c.relayURL(sessionID, path), nil, &current); err != nil {
-		return err
-	}
-	if current.MCPConfig.Servers == nil {
-		current.MCPConfig.Servers = make(map[string]json.RawMessage)
-	}
-	server, err := json.Marshal(map[string]any{
-		"type":    "remote",
-		"url":     endpoint,
-		"enabled": true,
-		"headers": map[string]string{
-			"Accept":             "application/json, text/event-stream",
-			"X-Project-ID":       projectID,
-			"X-Sb0rka-MCP-Token": capabilityToken,
-		},
-	})
-	if err != nil {
-		return fmt.Errorf("encode investigation MCP config: %w", err)
-	}
-	current.MCPConfig.Servers["investigation"] = server
-	return c.doDaemon(ctx, "daemon update MCP config", http.MethodPost,
-		c.relayURL(sessionID, path), map[string]any{"servers": current.MCPConfig.Servers}, nil)
-}
-
-// StartEnvironmentWithInvestigationMCP serializes the global OpenCode config
-// update with process start. OpenCode reads that config at startup; without
-// the lock, concurrent project runs could start with another project's scope.
-func (c *Client) StartEnvironmentWithInvestigationMCP(
-	ctx context.Context,
-	sessionID, repoID, name, prompt string,
-	exec ExecutorConfig,
-	endpoint, projectID, capabilityToken string,
-) (string, error) {
-	c.mcpStartMu.Lock()
-	defer c.mcpStartMu.Unlock()
-	if err := c.ConfigureInvestigationMCP(ctx, sessionID, endpoint, projectID, capabilityToken); err != nil {
-		return "", err
-	}
-	return c.StartEnvironment(ctx, sessionID, repoID, name, prompt, exec)
+// RemoteMCPServer is the safe subset accepted by daemon's per-environment
+// start contract. It cannot describe a local command.
+type RemoteMCPServer struct {
+	URL     string            `json:"url"`
+	Headers map[string]string `json:"headers,omitempty"`
+	Enabled bool              `json:"enabled"`
 }
 
 // StartEnvironment создаёт и запускает окружение с агентом. linked_issue не
 // передаётся сознательно — фронтенд SOM делает так же, а связь с issue
 // оформляется на стороне SOM через LinkEnvironment.
-func (c *Client) StartEnvironment(ctx context.Context, sessionID, repoID, name, prompt string, exec ExecutorConfig) (string, error) {
+func (c *Client) StartEnvironment(
+	ctx context.Context,
+	sessionID, repoID, name, prompt string,
+	exec ExecutorConfig,
+	remoteMCPServers map[string]RemoteMCPServer,
+) (string, error) {
+	if len(remoteMCPServers) > 0 && !strings.EqualFold(strings.TrimSpace(c.cfg.Executor), "OPENCODE") {
+		return "", fmt.Errorf("remote MCP servers require SOM_EXECUTOR=OPENCODE")
+	}
 	body := map[string]any{
 		"name": name,
 		"repos": []map[string]any{{
 			"repo_id":       repoID,
 			"target_branch": c.cfg.TargetBranch,
 		}},
-		"linked_issue":    nil,
-		"executor_config": executorConfigPayload(c.cfg.Executor, exec),
-		"prompt":          prompt,
-		"attachment_ids":  nil,
+		"linked_issue":       nil,
+		"executor_config":    executorConfigPayload(c.cfg.Executor, exec),
+		"prompt":             prompt,
+		"attachment_ids":     nil,
+		"remote_mcp_servers": remoteMCPServers,
 	}
 	var out struct {
 		Environment struct {

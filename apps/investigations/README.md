@@ -24,6 +24,12 @@ Go API сервис `ir-api` расследований Sb0rka.
 `DEMO_SOM_ACCESS_TOKEN` выбранного проекта и кэшируется в памяти; входящий
 Bearer используется для чтения Sb0rka Secrets, но не передаётся в SOM.
 
+Удалённый Streamable HTTP MCP опубликован на `/mcp` тем же бинарником `ir-api`
+и использует официальный Go SDK. Для SOM `ir-api` выдаёт короткоживущий
+capability token одной investigation и передаёт remote MCP в атомарном запросе
+создания environment. Daemon добавляет его только в процессы OpenCode этого
+environment, не меняя глобальную MCP-конфигурацию и не сохраняя token в БД.
+
 Событие в Gateway и `ir-api` находится по паре `source_code + source_event_id`.
 Сущность объединяется по `type_code + canonical_key`, а её исходные записи — по
 `source_code + source_entity_id`. Эти значения читаемы и позволяют сразу

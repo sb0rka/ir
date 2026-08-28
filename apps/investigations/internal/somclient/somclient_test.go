@@ -87,55 +87,54 @@ func TestExecutorConfigPayload(t *testing.T) {
 	}
 }
 
-func TestConfigureInvestigationMCPPreservesExistingServers(t *testing.T) {
+func TestStartEnvironmentIncludesRemoteMCPServersInOneRequest(t *testing.T) {
 	t.Parallel()
 
-	var posted struct {
-		Servers map[string]json.RawMessage `json:"servers"`
-	}
+	var posted map[string]json.RawMessage
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !strings.Contains(r.URL.Path, "/api/config/mcp-config") || r.URL.Query().Get("executor") != "OPENCODE" {
+		if !strings.Contains(r.URL.Path, "/api/environments/start") || r.Method != http.MethodPost {
 			t.Fatalf("unexpected request URL: %s", r.URL.String())
 		}
 		w.Header().Set("Content-Type", "application/json")
-		if r.Method == http.MethodGet {
-			_, _ = w.Write([]byte(`{"success":true,"data":{"mcp_config":{"servers":{"existing":{"type":"local","command":["tool"]}}}}}`))
-			return
-		}
 		if err := json.NewDecoder(r.Body).Decode(&posted); err != nil {
-			t.Fatalf("decode update: %v", err)
+			t.Fatalf("decode start: %v", err)
 		}
-		_, _ = w.Write([]byte(`{"success":true,"data":"updated"}`))
+		_, _ = w.Write([]byte(`{"success":true,"data":{"environment":{"id":"environment-1"},"execution_process":{}}}`))
 	}))
 	defer server.Close()
 
-	client := New(Config{RelayBaseURL: server.URL, HostID: "host", Executor: "OPENCODE"})
-	if err := client.ConfigureInvestigationMCP(t.Context(), "session", "http://ir:8090/mcp", "project-1", "capability-token"); err != nil {
+	client := New(Config{RelayBaseURL: server.URL, HostID: "host", Executor: "OPENCODE", TargetBranch: "main"})
+	servers := map[string]RemoteMCPServer{
+		"investigation": {
+			URL:     "http://ir:8090/mcp",
+			Enabled: true,
+			Headers: map[string]string{"X-Sb0rka-MCP-Token": "capability-token"},
+		},
+	}
+	environmentID, err := client.StartEnvironment(
+		t.Context(), "session", "repo", "name", "prompt", ExecutorConfig{}, servers)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := posted.Servers["existing"]; !ok {
-		t.Fatal("existing MCP server was dropped")
+	if environmentID != "environment-1" {
+		t.Fatalf("environment id: %q", environmentID)
 	}
-	var investigation map[string]any
-	if err := json.Unmarshal(posted.Servers["investigation"], &investigation); err != nil {
-		t.Fatalf("decode investigation server: %v", err)
+	var remote map[string]RemoteMCPServer
+	if err := json.Unmarshal(posted["remote_mcp_servers"], &remote); err != nil {
+		t.Fatalf("decode remote MCP servers: %v", err)
 	}
-	if investigation["url"] != "http://ir:8090/mcp" || investigation["type"] != "remote" {
-		t.Fatalf("unexpected investigation config: %+v", investigation)
-	}
-	headers := investigation["headers"].(map[string]any)
-	if headers["X-Project-ID"] != "project-1" {
-		t.Fatalf("project header missing: %+v", headers)
-	}
-	if headers["X-Sb0rka-MCP-Token"] != "capability-token" {
-		t.Fatalf("capability header missing: %+v", headers)
+	if remote["investigation"].URL != "http://ir:8090/mcp" ||
+		remote["investigation"].Headers["X-Sb0rka-MCP-Token"] != "capability-token" {
+		t.Fatalf("unexpected investigation config: %+v", remote)
 	}
 }
 
-func TestConfigureInvestigationMCPRejectsUnsupportedExecutor(t *testing.T) {
+func TestStartEnvironmentRejectsRemoteMCPForUnsupportedExecutor(t *testing.T) {
 	t.Parallel()
 	client := New(Config{Executor: "CODEX"})
-	err := client.ConfigureInvestigationMCP(t.Context(), "session", "http://ir/mcp", "project", "token")
+	_, err := client.StartEnvironment(t.Context(), "session", "repo", "name", "prompt", ExecutorConfig{}, map[string]RemoteMCPServer{
+		"investigation": {URL: "http://ir/mcp", Enabled: true},
+	})
 	if err == nil || !strings.Contains(err.Error(), "OPENCODE") {
 		t.Fatalf("got %v, want OpenCode requirement", err)
 	}

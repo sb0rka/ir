@@ -56,9 +56,11 @@ task db:down
 
 ## Investigation MCP и SOM
 
-`ir-api` публикует project-scoped Streamable HTTP endpoint `POST /mcp`.
-Он защищён теми же `Authorization` и `X-Project-ID`, что и REST API, и
-предоставляет инструменты:
+`ir-api` публикует Streamable HTTP endpoint `POST /mcp` на официальном Go SDK
+Model Context Protocol. Для ручного доступа он защищён теми же `Authorization`
+и `X-Project-ID`, что и REST API; для запуска через SOM используется
+короткоживущий capability token, ограниченный одним project и investigation.
+Endpoint предоставляет инструменты:
 
 - `get_investigation_graph` — прочитать граф;
 - `list_investigation_events` — прочитать страницу таймлайна;
@@ -68,16 +70,19 @@ task db:down
 Запись использует canonical `agent-results`: узлы получают `origin=agent`, а
 связи создаются в статусе `proposed` и требуют решения аналитика.
 
-При `POST /api/v1/som/issues/{issue_id}/run` сервис читает текущую MCP-карту
-daemon через relay, сохраняет существующие серверы и добавляет
-`investigation` с точным URL `${IR_PUBLIC_BASE_URL}/mcp` и текущим
-`X-Project-ID`. Для этого flow требуется `SOM_EXECUTOR=OPENCODE`: текущий
-Codex adapter daemon намеренно не передаёт remote HTTP MCP servers. `ir-api`
-создаёт случайный capability token с TTL 4 часа, ограниченный одним project и
-investigation; human OAuth token агенту не передаётся, REST этим token недоступен.
-Обновление глобальной OpenCode MCP-карты и запуск
-environment сериализованы внутри одного `ir-api`; несколько реплик `ir-api` на
-один daemon-хост потребуют environment-scoped MCP в SOM и общий capability store.
+При `POST /api/v1/som/issues/{issue_id}/run` `ir-api` передаёт конфигурацию
+`investigation` в том же запросе, которым создаётся конкретный environment SOM.
+Daemon валидирует только удалённые HTTP(S) MCP-серверы и добавляет их в
+`OPENCODE_CONFIG_CONTENT` первого процесса агента, не меняя глобальный профиль
+OpenCode и не записывая capability в SQLite. Поэтому параллельные investigation
+не могут подменить MCP-конфигурацию друг друга. Для этого flow требуется
+`SOM_EXECUTOR=OPENCODE`; human OAuth token агенту не передаётся, а capability
+не даёт доступа к REST API.
+
+MCP является частью бинарника `ir-api`, поэтому его версия развёртывается
+атомарно вместе с Investigation API. Capability хранятся в памяти одной реплики
+и после рестарта должны быть выданы заново; горизонтальное масштабирование
+потребует общего capability store или маршрутизации с привязкой к реплике.
 
 Состояние покрытия требований и реализации — в [api/investigations/COVERAGE.md](api/investigations/COVERAGE.md).
 Правила разработки — в [AGENTS.md](AGENTS.md).

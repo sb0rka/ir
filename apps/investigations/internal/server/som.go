@@ -200,10 +200,18 @@ func (s *Server) RunSomIssue(ctx context.Context, request som.RunSomIssueRequest
 	if err != nil {
 		return nil, somError(err)
 	}
-	localEnvironmentID, err := s.som.StartEnvironmentWithInvestigationMCP(
-		ctx, sessionID, repoID, name, prompt, exec,
-		strings.TrimRight(s.prompt.IRBaseURL, "/")+"/mcp", scope.ProjectID, mcpToken,
-	)
+	remoteMCPServers := map[string]somclient.RemoteMCPServer{
+		"investigation": {
+			URL:     strings.TrimRight(s.prompt.IRBaseURL, "/") + "/mcp",
+			Enabled: true,
+			Headers: map[string]string{
+				"Accept":             "application/json, text/event-stream",
+				"X-Sb0rka-MCP-Token": mcpToken,
+			},
+		},
+	}
+	localEnvironmentID, err := s.som.StartEnvironment(
+		ctx, sessionID, repoID, name, prompt, exec, remoteMCPServers)
 	if err != nil {
 		return nil, somError(err)
 	}

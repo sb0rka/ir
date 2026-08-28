@@ -36,14 +36,31 @@ func TestMCPNotificationAndToolError(t *testing.T) {
 
 	called := mcpPost(t, handler, `{"jsonrpc":"2.0","id":"x","method":"tools/call","params":{"name":"get_investigation_graph","arguments":{"investigation_id":"00000000-0000-0000-0000-000000000000"}}}`)
 	var response struct {
-		Result mcpToolResult `json:"result"`
+		Result struct {
+			IsError bool `json:"isError"`
+		} `json:"result"`
 	}
-	if err := json.Unmarshal(called.Body.Bytes(), &response); err != nil {
+	if err := json.Unmarshal(mcpResponseJSON(t, called), &response); err != nil {
 		t.Fatal(err)
 	}
 	if !response.Result.IsError {
 		t.Fatalf("expected tool error: %s", called.Body.String())
 	}
+}
+
+func mcpResponseJSON(t *testing.T, response *httptest.ResponseRecorder) []byte {
+	t.Helper()
+	body := response.Body.Bytes()
+	if !strings.HasPrefix(response.Header().Get("Content-Type"), "text/event-stream") {
+		return body
+	}
+	for _, line := range strings.Split(string(body), "\n") {
+		if payload, ok := strings.CutPrefix(line, "data: "); ok {
+			return []byte(payload)
+		}
+	}
+	t.Fatalf("SSE response does not contain a data event: %s", body)
+	return nil
 }
 
 func TestMCPCapabilityIsBoundToOneInvestigation(t *testing.T) {
