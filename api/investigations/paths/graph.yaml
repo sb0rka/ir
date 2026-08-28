@@ -57,6 +57,113 @@ paths:
         '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
         '422': { $ref: '../shared/responses.yaml#/components/responses/ValidationError' }
 
+  /investigations/{investigation_id}/hypotheses/{hypothesis_id}/graph:
+    parameters:
+      - { $ref: '../shared/parameters.yaml#/components/parameters/ProjectId' }
+      - { $ref: '../shared/parameters.yaml#/components/parameters/InvestigationId' }
+      - { $ref: '../shared/parameters.yaml#/components/parameters/HypothesisId' }
+    get:
+      tags: [hypotheses]
+      summary: Graph projection of a hypothesis
+      description: >-
+        Returns explicit member nodes and edges of this flat hypothesis. The
+        payload includes isolated member nodes and both endpoints of every
+        member edge. Rejected member edges are hidden by default. This is a
+        projection over one investigation graph, so include_subtree does not
+        apply.
+      operationId: getHypothesisGraph
+      parameters:
+        - name: min_confidence
+          in: query
+          description: Drop member edges whose producer confidence is below this value.
+          schema: { type: number, minimum: 0, maximum: 1 }
+        - name: statuses
+          in: query
+          description: >-
+            Which member edge states to include. Defaults to proposed and
+            confirmed; pass rejected explicitly to include ruled-out claims.
+          schema:
+            type: array
+            items: { $ref: '../shared/enums.yaml#/components/schemas/GraphEdgeStatus' }
+          style: form
+          explode: false
+      responses:
+        '200':
+          description: The hypothesis graph projection
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HypothesisGraph' }
+        '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
+        '422': { $ref: '../shared/responses.yaml#/components/responses/ValidationError' }
+        '500': { $ref: '../shared/responses.yaml#/components/responses/InternalError' }
+
+  /investigations/{investigation_id}/hypotheses/{hypothesis_id}/nodes:
+    parameters:
+      - { $ref: '../shared/parameters.yaml#/components/parameters/ProjectId' }
+      - { $ref: '../shared/parameters.yaml#/components/parameters/InvestigationId' }
+      - { $ref: '../shared/parameters.yaml#/components/parameters/HypothesisId' }
+    post:
+      tags: [hypotheses]
+      summary: Create or find a graph node in a hypothesis
+      description: >-
+        Uses the normal NodeCreate contract to create or find a node in the
+        investigation's shared graph, then atomically adds its hypothesis
+        membership. The referenced event or entity must already belong to this
+        exact investigation. Resolved hypotheses reject graph writes.
+      operationId: createHypothesisNode
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/NodeCreate' }
+      responses:
+        '201':
+          description: The shared node now included in the hypothesis
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GraphNode' }
+        '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
+        '409': { $ref: '../shared/responses.yaml#/components/responses/Conflict' }
+        '422': { $ref: '../shared/responses.yaml#/components/responses/ValidationError' }
+        '500': { $ref: '../shared/responses.yaml#/components/responses/InternalError' }
+
+  /investigations/{investigation_id}/hypotheses/{hypothesis_id}/edges:
+    parameters:
+      - { $ref: '../shared/parameters.yaml#/components/parameters/ProjectId' }
+      - { $ref: '../shared/parameters.yaml#/components/parameters/InvestigationId' }
+      - { $ref: '../shared/parameters.yaml#/components/parameters/HypothesisId' }
+    post:
+      tags: [hypotheses]
+      summary: Draw a shared graph edge in a hypothesis
+      description: >-
+        Creates the normal confirmed analyst edge and its evidence in the
+        investigation's shared graph, then atomically adds the edge and both
+        endpoint nodes to the hypothesis. A duplicate shared edge returns 409;
+        attach an existing edge through the membership PUT operation. Resolved
+        hypotheses reject graph writes.
+      operationId: createHypothesisGraphEdge
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GraphEdgeCreate' }
+      responses:
+        '201':
+          description: The new shared edge included in the hypothesis
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GraphEdge' }
+        '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
+        '409': { $ref: '../shared/responses.yaml#/components/responses/Conflict' }
+        '422': { $ref: '../shared/responses.yaml#/components/responses/ValidationError' }
+        '500': { $ref: '../shared/responses.yaml#/components/responses/InternalError' }
+
   /investigations/{investigation_id}/nodes:
     parameters:
       - { $ref: '../shared/parameters.yaml#/components/parameters/ProjectId' }
@@ -402,6 +509,30 @@ paths:
 
 components:
   schemas:
+    HypothesisGraph:
+      type: object
+      description: Explicit graph memberships of one flat hypothesis.
+      required: [hypothesis_id, investigation_id, nodes, edges]
+      properties:
+        hypothesis_id:
+          type: string
+          format: uuid
+          description: Hypothesis whose memberships are projected.
+        investigation_id:
+          type: string
+          format: uuid
+          description: Investigation that owns every returned graph object.
+        nodes:
+          type: array
+          description: >-
+            Explicit node members, including isolated nodes, plus guaranteed
+            endpoints of every returned member edge.
+          items: { $ref: '#/components/schemas/GraphNode' }
+        edges:
+          type: array
+          description: Explicit edge members surviving status and confidence filters.
+          items: { $ref: '#/components/schemas/GraphEdge' }
+
     Graph:
       type: object
       description: Nodes and edges as one payload, ready to render.

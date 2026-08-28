@@ -13,7 +13,9 @@ security:
 
 tags:
   - name: investigations
-    description: Cases and nested hypotheses.
+    description: Root and child cases, each with an independent lifecycle and graph.
+  - name: hypotheses
+    description: Flat named projections over an investigation's shared graph.
   - name: events
     description: Project events and their investigation links.
   - name: findings

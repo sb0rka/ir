@@ -13,8 +13,11 @@ paths:
       - { $ref: '../shared/parameters.yaml#/components/parameters/ProjectId' }
     post:
       tags: [investigations]
-      summary: Open an investigation or a hypothesis under one
-      description: A root investigation is a case; a child is a hypothesis.
+      summary: Open a root or child investigation
+      description: >-
+        Every investigation is a standalone case with its own lifecycle,
+        context, queue, report, and graph. A parent_id creates a nested child
+        case; hypotheses are separate flat projections inside one case.
       operationId: createInvestigation
       requestBody:
         required: true
@@ -136,6 +139,73 @@ paths:
         '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
         '422': { $ref: '../shared/responses.yaml#/components/responses/ValidationError' }
         '500': { $ref: '../shared/responses.yaml#/components/responses/InternalError' }
+
+  /investigations/{investigation_id}/hypotheses/{hypothesis_id}/context:
+    parameters:
+      - { $ref: '../shared/parameters.yaml#/components/parameters/ProjectId' }
+      - { $ref: '../shared/parameters.yaml#/components/parameters/InvestigationId' }
+      - { $ref: '../shared/parameters.yaml#/components/parameters/HypothesisId' }
+    post:
+      tags: [hypotheses]
+      summary: Add analyst-selected context through a hypothesis
+      description: >-
+        Resolves the same ContextSelection as the investigation-level import.
+        One transaction updates project records, attaches investigation
+        context, creates or finds shared graph objects, and adds the complete
+        bounded graph projection touched by this import to the hypothesis.
+        Findings and sessions remain context records rather than graph members.
+        Resolved hypotheses reject imports.
+      operationId: addHypothesisContext
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ContextSelection' }
+      responses:
+        '201':
+          description: Import counters
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ContextImportResult' }
+        '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
+        '409': { $ref: '../shared/responses.yaml#/components/responses/Conflict' }
+        '422': { $ref: '../shared/responses.yaml#/components/responses/ValidationError' }
+        '500': { $ref: '../shared/responses.yaml#/components/responses/InternalError' }
+
+  /investigations/{investigation_id}/hypotheses/{hypothesis_id}/agent-results:
+    parameters:
+      - { $ref: '../shared/parameters.yaml#/components/parameters/ProjectId' }
+      - { $ref: '../shared/parameters.yaml#/components/parameters/InvestigationId' }
+      - { $ref: '../shared/parameters.yaml#/components/parameters/HypothesisId' }
+    post:
+      tags: [hypotheses]
+      summary: Save explicit SOM agent results for an active hypothesis
+      description: >-
+        Uses AgentResultBatch and the shared investigation context. Only nodes
+        and edges explicitly listed by the agent gain hypothesis memberships;
+        timeline-only events and entities do not. The hypothesis must be active
+        when the transaction is applied.
+      operationId: addHypothesisAgentResults
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AgentResultBatch' }
+      responses:
+        '201':
+          description: Import counters
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ContextImportResult' }
+        '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
+        '409': { $ref: '../shared/responses.yaml#/components/responses/Conflict' }
+        '422': { $ref: '../shared/responses.yaml#/components/responses/ValidationError' }
+        '500': { $ref: '../shared/responses.yaml#/components/responses/InternalError' }
+
   /investigations/{investigation_id}:
     parameters:
       - { $ref: '../shared/parameters.yaml#/components/parameters/ProjectId' }
@@ -162,10 +232,9 @@ paths:
       tags: [investigations]
       summary: Update an investigation
       description: >-
-        Updates only the supplied fields. Closing requires a verdict; rejecting
-        requires a reason. Confirming a hypothesis without an attached event
-        returns 422 with `details.reason=evidence_required`. A closed
-        investigation can only be reopened; reopening clears the verdict.
+        Updates only the supplied fields. Closing requires a case verdict. A
+        closed investigation can only be reopened; reopening clears the
+        verdict. Root and child investigations use the same verdict semantics.
       operationId: updateInvestigation
       requestBody:
         required: true
@@ -244,7 +313,9 @@ components:
   schemas:
     Investigation:
       type: object
-      description: A case or a nested hypothesis in the selected project.
+      description: >-
+        A standalone root or child case in the selected project. Hypotheses are
+        separate projections and never appear in the investigation tree.
       required: [id, project_id, title, status, version, som_workspace_ids, created_at, updated_at, counters]
       properties:
         id:
@@ -261,13 +332,11 @@ components:
           format: uuid
           nullable: true
           description: >-
-            The investigation this one refines. Null means it is a root case;
-            anything else means it is a hypothesis inside a larger case.
+            Parent case. Null means this is a root case; a value means this is
+            an independently managed child case.
         title:
           type: string
-          description: >-
-            What is being investigated. For a hypothesis this is the claim being
-            tested, phrased so a verdict makes sense against it.
+          description: What this case investigates.
         description:
           type: string
           nullable: true
@@ -290,20 +359,17 @@ components:
           allOf: [{ $ref: '#/components/schemas/Verdict' }]
           description: >-
             The conclusion. Absent while the investigation is still open,
-            required to close it. Which values are allowed depends on whether
-            this is a root case or a hypothesis — see Verdict.
+            required to close it. Root and child cases use the same vocabulary.
         verdict_reason:
           type: string
           nullable: true
-          description: Reason for the verdict. Required when rejecting.
+          description: Optional explanation of the case verdict.
         confidence:
           type: number
           minimum: 0
           maximum: 1
           nullable: true
-          description: >-
-            How sure the conclusion is. Meaningful for a hypothesis, rarely used
-            on a root case.
+          description: How sure the case conclusion is.
         origin:
           allOf: [{ $ref: '../shared/enums.yaml#/components/schemas/Origin' }]
           description: Creator type, assigned by the server.
@@ -333,7 +399,7 @@ components:
           properties:
             children:
               type: integer
-              description: Direct child investigations — the open hypotheses under this one.
+              description: Direct child investigations. Hypotheses are not counted here.
             findings:
               type: integer
               description: First-class incidents, correlations and attacks attached here.
@@ -513,13 +579,13 @@ components:
 
     InvestigationCreate:
       type: object
-      description: A new case, or a new hypothesis inside an existing one.
+      description: A new root case or an independently managed child case.
       required: [title, som_workspace_ids]
       properties:
         title:
           type: string
           maxLength: 255
-          description: What is being investigated, or the claim being tested.
+          description: What is being investigated.
         description:
           type: string
           description: Context — what is known so far and what needs checking.
@@ -527,7 +593,7 @@ components:
           type: string
           format: uuid
           description: >-
-            The investigation this one refines. Omit it to open a root case.
+            Parent case for a nested investigation. Omit it to open a root case.
         severity:
           allOf: [{ $ref: '../shared/enums.yaml#/components/schemas/Severity' }]
           description: Initial assessment. Can be revised later.
@@ -564,17 +630,15 @@ components:
             verdict; reopening clears it.
         verdict:
           allOf: [{ $ref: '#/components/schemas/Verdict' }]
-          description: >-
-            The conclusion. Which values are allowed depends on whether this is
-            a root case or a hypothesis.
+          description: Case conclusion for either a root or child investigation.
         verdict_reason:
           type: string
-          description: Why. Required when the verdict is rejected.
+          description: Optional explanation of the case verdict.
         confidence:
           type: number
           minimum: 0
           maximum: 1
-          description: How sure the conclusion is. Meaningful for a hypothesis.
+          description: How sure the case conclusion is.
         severity:
           allOf: [{ $ref: '../shared/enums.yaml#/components/schemas/Severity' }]
           description: Revised assessment of how bad this is.
@@ -596,12 +660,9 @@ components:
     Verdict:
       type: string
       description: >-
-        The conclusion, drawn from two vocabularies that share one field.
-        A root case ends as incident, false_positive, not_affected or
-        inconclusive. A hypothesis ends as confirmed, rejected or inconclusive.
-        The server checks the value against the investigation's position in the
-        tree, so a hypothesis cannot be closed as an incident.
-      enum: [incident, false_positive, not_affected, inconclusive, confirmed, rejected]
+        Conclusion of a root or child case. Hypotheses have their own status and
+        resolution reason rather than investigation verdicts.
+      enum: [incident, false_positive, not_affected, inconclusive]
 
     InvestigationPage:
       type: object

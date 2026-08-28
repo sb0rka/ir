@@ -1,0 +1,321 @@
+openapi: 3.0.3
+info:
+  title: IR — hypotheses
+  version: 0.0.1
+servers:
+  - url: /api/v1
+security:
+  - bearerAuth: []
+
+paths:
+  /investigations/{investigation_id}/hypotheses:
+    parameters:
+      - { $ref: '../shared/parameters.yaml#/components/parameters/ProjectId' }
+      - { $ref: '../shared/parameters.yaml#/components/parameters/InvestigationId' }
+    get:
+      tags: [hypotheses]
+      summary: List hypotheses of an investigation
+      description: >-
+        Returns the flat hypotheses owned by this investigation, newest first.
+        Hypotheses are graph projections, not child investigations, and do not
+        participate in the investigation tree.
+      operationId: listHypotheses
+      parameters:
+        - name: status
+          in: query
+          description: Keep only hypotheses in this status.
+          schema: { $ref: '#/components/schemas/HypothesisStatus' }
+        - { $ref: '../shared/parameters.yaml#/components/parameters/Limit' }
+        - { $ref: '../shared/parameters.yaml#/components/parameters/Cursor' }
+      responses:
+        '200':
+          description: One page of hypotheses
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HypothesisPage' }
+        '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
+        '422': { $ref: '../shared/responses.yaml#/components/responses/ValidationError' }
+        '500': { $ref: '../shared/responses.yaml#/components/responses/InternalError' }
+    post:
+      tags: [hypotheses]
+      summary: Propose a hypothesis
+      description: >-
+        Creates an analyst-origin hypothesis in proposed status. Its graph
+        projection starts empty and is filled through the nested graph,
+        context, and agent-result operations.
+      operationId: createHypothesis
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/HypothesisCreate' }
+      responses:
+        '201':
+          description: The proposed hypothesis
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Hypothesis' }
+        '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
+        '422': { $ref: '../shared/responses.yaml#/components/responses/ValidationError' }
+        '500': { $ref: '../shared/responses.yaml#/components/responses/InternalError' }
+
+  /investigations/{investigation_id}/hypotheses/{hypothesis_id}:
+    parameters:
+      - { $ref: '../shared/parameters.yaml#/components/parameters/ProjectId' }
+      - { $ref: '../shared/parameters.yaml#/components/parameters/InvestigationId' }
+      - { $ref: '../shared/parameters.yaml#/components/parameters/HypothesisId' }
+    get:
+      tags: [hypotheses]
+      summary: One hypothesis
+      operationId: getHypothesis
+      responses:
+        '200':
+          description: The hypothesis
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Hypothesis' }
+        '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
+        '500': { $ref: '../shared/responses.yaml#/components/responses/InternalError' }
+    patch:
+      tags: [hypotheses]
+      summary: Update a hypothesis
+      description: >-
+        Applies supplied fields with optimistic locking. Allowed status
+        transitions are proposed to active or resolved, active to resolved,
+        and resolved back to active. Resolving requires a non-empty reason;
+        reopening clears the reason and resolved timestamp. A stale version
+        returns 409 with the conflicting hypothesis id.
+      operationId: updateHypothesis
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/HypothesisPatch' }
+      responses:
+        '200':
+          description: The updated hypothesis
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Hypothesis' }
+        '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
+        '409': { $ref: '../shared/responses.yaml#/components/responses/Conflict' }
+        '422': { $ref: '../shared/responses.yaml#/components/responses/ValidationError' }
+        '500': { $ref: '../shared/responses.yaml#/components/responses/InternalError' }
+    delete:
+      tags: [hypotheses]
+      summary: Delete a hypothesis
+      description: >-
+        Deletes only the hypothesis and its node and edge memberships. The
+        investigation's shared graph objects remain unchanged.
+      operationId: deleteHypothesis
+      responses:
+        '204':
+          description: Deleted
+        '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
+        '500': { $ref: '../shared/responses.yaml#/components/responses/InternalError' }
+
+  /investigations/{investigation_id}/hypotheses/{hypothesis_id}/nodes/{node_id}:
+    parameters:
+      - { $ref: '../shared/parameters.yaml#/components/parameters/ProjectId' }
+      - { $ref: '../shared/parameters.yaml#/components/parameters/InvestigationId' }
+      - { $ref: '../shared/parameters.yaml#/components/parameters/HypothesisId' }
+      - { $ref: '../shared/parameters.yaml#/components/parameters/NodeId' }
+    put:
+      tags: [hypotheses]
+      summary: Add an existing graph node to a hypothesis
+      description: >-
+        Idempotently adds a node from this investigation's shared graph to the
+        hypothesis. Resolved hypotheses reject membership writes.
+      operationId: addHypothesisNode
+      responses:
+        '204':
+          description: The membership exists
+        '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
+        '409': { $ref: '../shared/responses.yaml#/components/responses/Conflict' }
+        '500': { $ref: '../shared/responses.yaml#/components/responses/InternalError' }
+    delete:
+      tags: [hypotheses]
+      summary: Remove a node from a hypothesis
+      description: >-
+        Removes only this membership and memberships of edges incident to the
+        node in this hypothesis. The shared node and edges remain. Resolved
+        hypotheses reject membership writes.
+      operationId: deleteHypothesisNode
+      responses:
+        '204':
+          description: Membership removed
+        '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
+        '409': { $ref: '../shared/responses.yaml#/components/responses/Conflict' }
+        '500': { $ref: '../shared/responses.yaml#/components/responses/InternalError' }
+
+  /investigations/{investigation_id}/hypotheses/{hypothesis_id}/edges/{edge_id}:
+    parameters:
+      - { $ref: '../shared/parameters.yaml#/components/parameters/ProjectId' }
+      - { $ref: '../shared/parameters.yaml#/components/parameters/InvestigationId' }
+      - { $ref: '../shared/parameters.yaml#/components/parameters/HypothesisId' }
+      - { $ref: '../shared/parameters.yaml#/components/parameters/GraphEdgeId' }
+    put:
+      tags: [hypotheses]
+      summary: Add an existing graph edge to a hypothesis
+      description: >-
+        Idempotently adds an edge from this investigation's shared graph and
+        both endpoint-node memberships. Resolved hypotheses reject membership
+        writes.
+      operationId: addHypothesisEdge
+      responses:
+        '204':
+          description: The edge and endpoint memberships exist
+        '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
+        '409': { $ref: '../shared/responses.yaml#/components/responses/Conflict' }
+        '500': { $ref: '../shared/responses.yaml#/components/responses/InternalError' }
+    delete:
+      tags: [hypotheses]
+      summary: Remove an edge from a hypothesis
+      description: >-
+        Removes only the edge membership. Endpoint-node memberships and the
+        shared graph edge remain. Resolved hypotheses reject membership writes.
+      operationId: deleteHypothesisEdge
+      responses:
+        '204':
+          description: Membership removed
+        '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
+        '409': { $ref: '../shared/responses.yaml#/components/responses/Conflict' }
+        '500': { $ref: '../shared/responses.yaml#/components/responses/InternalError' }
+
+components:
+  schemas:
+    Hypothesis:
+      type: object
+      description: >-
+        A flat named projection over the owning investigation's shared factual
+        graph. Memberships may overlap with other hypotheses.
+      required:
+        - id
+        - project_id
+        - investigation_id
+        - statement
+        - status
+        - origin
+        - version
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        project_id:
+          type: string
+          description: Project that owns the investigation and hypothesis.
+        investigation_id:
+          type: string
+          format: uuid
+          description: Investigation whose shared graph this hypothesis projects.
+        statement:
+          type: string
+          maxLength: 255
+          description: The version of events being tested.
+        description:
+          type: string
+          nullable: true
+          description: Optional working context and intended verification steps.
+        status:
+          allOf: [{ $ref: '#/components/schemas/HypothesisStatus' }]
+          description: Current hypothesis workflow state.
+        reason:
+          type: string
+          nullable: true
+          description: Resolution rationale. Present only while status is resolved.
+        origin:
+          allOf: [{ $ref: '../shared/enums.yaml#/components/schemas/Origin' }]
+          description: Creator type. Manual creation always returns analyst.
+        version:
+          type: integer
+          minimum: 1
+          description: >-
+            Version of hypothesis fields for optimistic locking. Membership
+            changes do not increment it.
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        resolved_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Resolution time. Present only while status is resolved.
+
+    HypothesisCreate:
+      type: object
+      required: [statement]
+      properties:
+        statement:
+          type: string
+          minLength: 1
+          maxLength: 255
+          description: The version of events being proposed. Blank after trimming is invalid.
+        description:
+          type: string
+          description: Optional working context.
+
+    HypothesisPatch:
+      type: object
+      description: >-
+        Fields to change. Omitted fields stay unchanged. An explicitly empty
+        description clears it; resolving requires a non-empty reason.
+      required: [version]
+      properties:
+        version:
+          type: integer
+          minimum: 1
+          description: Version the client last read. A mismatch is a 409.
+        statement:
+          type: string
+          minLength: 1
+          maxLength: 255
+          description: Revised version of events. Blank after trimming is invalid.
+        description:
+          type: string
+          description: Revised working context. Send an empty string to clear it.
+        status:
+          allOf: [{ $ref: '#/components/schemas/HypothesisStatus' }]
+          description: New workflow state. Transitions back to proposed are forbidden.
+        reason:
+          type: string
+          description: Resolution rationale, or a correction while already resolved.
+
+    HypothesisStatus:
+      type: string
+      enum: [proposed, active, resolved]
+
+    HypothesisPage:
+      type: object
+      required: [hypotheses]
+      properties:
+        hypotheses:
+          type: array
+          description: Hypotheses ordered by created_at and id, newest first.
+          items: { $ref: '#/components/schemas/Hypothesis' }
+        next_cursor:
+          type: string
+          nullable: true
+          description: Pass as cursor to continue the same filtered list.

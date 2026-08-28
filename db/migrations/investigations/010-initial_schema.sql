@@ -96,7 +96,7 @@ CREATE TABLE IF NOT EXISTS investigations (
         CHECK (severity IN ('low', 'medium', 'high', 'critical')),
     verdict VARCHAR(16)
         CHECK (verdict IN ('incident', 'false_positive', 'not_affected',
-                           'inconclusive', 'confirmed', 'rejected')),
+                           'inconclusive')),
     verdict_reason VARCHAR,
     confidence REAL CHECK (confidence >= 0 AND confidence <= 1),
     origin VARCHAR(8) DEFAULT 'analyst' NOT NULL
@@ -113,9 +113,7 @@ CREATE TABLE IF NOT EXISTS investigations (
     CONSTRAINT fk_investigations_parent_id_investigations FOREIGN KEY (parent_id, project_id)
         REFERENCES investigations (id, project_id) ON DELETE CASCADE,
     CONSTRAINT ck_investigations_closed_verdict
-        CHECK (status <> 'closed' OR verdict IS NOT NULL),
-    CONSTRAINT ck_investigations_rejected_reason
-        CHECK (verdict <> 'rejected' OR verdict_reason IS NOT NULL)
+        CHECK (status <> 'closed' OR verdict IS NOT NULL)
 );
 
 DROP TRIGGER IF EXISTS trg_investigations_set_updated_at ON investigations;
@@ -132,6 +130,50 @@ CREATE INDEX IF NOT EXISTS ix_investigations_parent
 
 CREATE INDEX IF NOT EXISTS ix_investigations_status
     ON investigations (project_id, status, created_at DESC);
+
+-- A hypothesis is a named projection of an investigation's common graph.
+-- Its memberships never own or copy the underlying graph objects.
+CREATE TABLE IF NOT EXISTS hypotheses (
+    id UUID DEFAULT gen_random_uuid() NOT NULL,
+    project_id VARCHAR(12) NOT NULL,
+    investigation_id UUID NOT NULL,
+
+    statement VARCHAR(255) NOT NULL,
+    description VARCHAR,
+    status VARCHAR(8) DEFAULT 'proposed' NOT NULL
+        CHECK (status IN ('proposed', 'active', 'resolved')),
+    reason VARCHAR,
+    origin VARCHAR(8) DEFAULT 'analyst' NOT NULL
+        CHECK (origin IN ('analyst', 'rule', 'agent')),
+    version INTEGER DEFAULT 1 NOT NULL,
+
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
+    resolved_at TIMESTAMP WITH TIME ZONE,
+
+    CONSTRAINT pk_hypotheses PRIMARY KEY (id),
+    CONSTRAINT uq_hypotheses_id_investigation UNIQUE (id, investigation_id),
+    CONSTRAINT ck_hypotheses_statement CHECK (btrim(statement) <> ''),
+    CONSTRAINT ck_hypotheses_version CHECK (version >= 1),
+    CONSTRAINT ck_hypotheses_resolution CHECK (
+        (status = 'resolved' AND NULLIF(btrim(reason), '') IS NOT NULL AND resolved_at IS NOT NULL) OR
+        (status IN ('proposed', 'active') AND reason IS NULL AND resolved_at IS NULL)
+    ),
+    CONSTRAINT fk_hypotheses_investigation FOREIGN KEY (investigation_id, project_id)
+        REFERENCES investigations (id, project_id) ON DELETE CASCADE
+);
+
+DROP TRIGGER IF EXISTS trg_hypotheses_set_updated_at ON hypotheses;
+CREATE TRIGGER trg_hypotheses_set_updated_at
+BEFORE UPDATE ON hypotheses
+FOR EACH ROW
+EXECUTE FUNCTION set_updated_at();
+
+CREATE INDEX IF NOT EXISTS ix_hypotheses_project_investigation_created
+    ON hypotheses (project_id, investigation_id, created_at DESC, id DESC);
+
+CREATE INDEX IF NOT EXISTS ix_hypotheses_project_investigation_status
+    ON hypotheses (project_id, investigation_id, status, created_at DESC, id DESC);
 
 CREATE TABLE IF NOT EXISTS investigation_som_workspaces (
     investigation_id UUID NOT NULL,
@@ -719,6 +761,38 @@ CREATE INDEX IF NOT EXISTS ix_edges_investigation_status
 CREATE INDEX IF NOT EXISTS ix_edges_source ON edges (source_node_id);
 CREATE INDEX IF NOT EXISTS ix_edges_target ON edges (target_node_id);
 
+CREATE TABLE IF NOT EXISTS hypothesis_nodes (
+    hypothesis_id UUID NOT NULL,
+    investigation_id UUID NOT NULL,
+    node_id UUID NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
+
+    CONSTRAINT pk_hypothesis_nodes PRIMARY KEY (hypothesis_id, node_id),
+    CONSTRAINT fk_hypothesis_nodes_hypothesis FOREIGN KEY (hypothesis_id, investigation_id)
+        REFERENCES hypotheses (id, investigation_id) ON DELETE CASCADE,
+    CONSTRAINT fk_hypothesis_nodes_node FOREIGN KEY (node_id, investigation_id)
+        REFERENCES graph_nodes (id, investigation_id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS ix_hypothesis_nodes_node
+    ON hypothesis_nodes (node_id, hypothesis_id);
+
+CREATE TABLE IF NOT EXISTS hypothesis_edges (
+    hypothesis_id UUID NOT NULL,
+    investigation_id UUID NOT NULL,
+    edge_id UUID NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
+
+    CONSTRAINT pk_hypothesis_edges PRIMARY KEY (hypothesis_id, edge_id),
+    CONSTRAINT fk_hypothesis_edges_hypothesis FOREIGN KEY (hypothesis_id, investigation_id)
+        REFERENCES hypotheses (id, investigation_id) ON DELETE CASCADE,
+    CONSTRAINT fk_hypothesis_edges_edge FOREIGN KEY (edge_id, investigation_id)
+        REFERENCES edges (id, investigation_id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS ix_hypothesis_edges_edge
+    ON hypothesis_edges (edge_id, hypothesis_id);
+
 CREATE TABLE IF NOT EXISTS edge_evidence (
     edge_id UUID NOT NULL,
     event_id UUID NOT NULL,
@@ -744,11 +818,11 @@ CREATE INDEX IF NOT EXISTS ix_edge_evidence_event ON edge_evidence (event_id);
 
 WITH updated AS (
     UPDATE version_investigations
-    SET version_num = '202608240001'
+    SET version_num = '202608280001'
     RETURNING version_investigations.version_num
 )
 INSERT INTO version_investigations (version_num)
-SELECT '202608240001'
+SELECT '202608280001'
 WHERE NOT EXISTS (SELECT 1 FROM updated)
 RETURNING version_num;
 
