@@ -106,7 +106,7 @@ function SomIssueTreeItem({
               )}
             </div>
 
-            <div className="mt-0.5 flex items-center gap-2 text-[10px] text-fg-dim font-mono">
+            <div className="mt-0.5 flex items-center gap-2 text-xs text-fg-dim font-mono">
               <span>{item.simple_id}</span>
               {hasChildren && <span>· подзадач: {node.children.length}</span>}
               {issue?.createdAt && <span>· {formatTime(issue.createdAt)}</span>}
@@ -117,7 +117,7 @@ function SomIssueTreeItem({
                 {issue.entityIds.map((id) => (
                   <span
                     key={id}
-                    className="rounded border border-border bg-surface-2 px-1 font-mono text-[9px] text-fg-muted"
+                    className="rounded border border-border bg-surface-2 px-1.5 py-0.5 font-mono text-xs text-fg-muted"
                   >
                     {entities[id]?.label ?? id}
                   </span>
@@ -126,7 +126,7 @@ function SomIssueTreeItem({
             )}
 
             {issue?.resultSummary && (
-              <div className="mt-1 text-[11px] text-fg-dim">
+              <div className="mt-1 text-xs text-fg-dim">
                 {issue.resultSummary}
               </div>
             )}
@@ -165,7 +165,7 @@ function SomIssueTreeItem({
         {expanded && hasDetails && (
           <div className="space-y-2 border-t border-border/80 bg-surface-2/30 p-2.5 text-xs">
             {(item.description?.trim() || issue?.description) && (
-              <p className="whitespace-pre-wrap text-fg-muted">
+              <p className="max-h-64 overflow-y-auto whitespace-pre-wrap text-fg-muted">
                 {item.description?.trim() || issue?.description}
               </p>
             )}
@@ -374,11 +374,11 @@ export function AgentPanel({ investigationId }: { investigationId: string }) {
     if (open) void loadSomCatalog()
   }, [open, loadSomCatalog])
 
-  if (!inv || !open) return null
-
   const issueTree = useMemo(() => {
     return buildSomIssueTree(catalog?.issues ?? [])
   }, [catalog?.issues])
+
+  if (!inv || !open) return null
 
   return (
     <div
