@@ -17,4 +17,6 @@ export const ALL_ENTITY_TYPES = [
   'url',
 ] as const
 
+export const DEFAULT_ENTITY_TYPES = ALL_ENTITY_TYPES
+
 export const ALL_SEVERITIES = ['critical', 'high', 'medium', 'low'] as const

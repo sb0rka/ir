@@ -3,11 +3,17 @@ import { RotateCcw } from 'lucide-react'
 import { useWorkspaceStore } from '../../state/useWorkspaceStore'
 import {
   ALL_ENTITY_TYPES,
+  DEFAULT_ENTITY_TYPES,
   ALL_SEVERITIES,
   SEVERITY_COLOR,
 } from './constants'
 import { toMs } from './time'
 import type { EdgeOrigin, EntityTypeCode, Severity } from './types'
+
+function sameEntityTypes(active: Set<string>, defaults: readonly string[]): boolean {
+  if (active.size !== defaults.length) return false
+  return defaults.every((type) => active.has(type))
+}
 
 /** Compact filter strip above the graph. Investigation identity lives in the page header. */
 export function GraphToolbar() {
@@ -31,7 +37,7 @@ export function GraphToolbar() {
     (filters.timeRange.start <= toMs(activeInvestigation.windowStart) &&
       filters.timeRange.end >= toMs(activeInvestigation.windowEnd))
   const filtered =
-    entityTypes.size !== ALL_ENTITY_TYPES.length ||
+    !sameEntityTypes(entityTypes, DEFAULT_ENTITY_TYPES) ||
     severities.size !== ALL_SEVERITIES.length ||
     edgeOrigins.size !== 2 ||
     !fullTimeRange
