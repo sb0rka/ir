@@ -575,6 +575,18 @@ export const useAppStore = create<AppState>((set, get) => ({
         selectedAlertIds: [],
         inspectedQueueItem: null,
         investigationLoading: false,
+        contextQueue: {
+          ...get().contextQueue,
+          [created.id]: {
+            ...emptyContextQueue,
+            chips: get().chips,
+            pdql: get().queuePdql,
+            timeInterval: get().timeInterval,
+            queueSource: get().queueSource,
+            groupValues: get().groupValues,
+            queryHistory: get().queryHistory,
+          },
+        },
       })
       void get().loadSomCatalog()
       return created.id
@@ -610,11 +622,33 @@ export const useAppStore = create<AppState>((set, get) => ({
         view: 'graph',
         selectedEntityIds: [],
       })
+      const parentQueue = get().contextQueue[parentId]
+      const inheritedQueue = parentQueue ?? {
+        ...emptyContextQueue,
+        chips: get().chips,
+        pdql: get().queuePdql,
+        timeInterval: get().timeInterval,
+        queueSource: get().queueSource,
+        groupValues: get().groupValues,
+        queryHistory: get().queryHistory,
+      }
       set({
         ...applyBundle(get, bundle),
         tabs: [...get().tabs, created.id],
         activeTab: created.id,
         investigationLoading: false,
+        contextQueue: {
+          ...get().contextQueue,
+          [created.id]: {
+            ...emptyContextQueue,
+            chips: inheritedQueue.chips,
+            pdql: inheritedQueue.pdql,
+            timeInterval: inheritedQueue.timeInterval,
+            queueSource: inheritedQueue.queueSource,
+            groupValues: inheritedQueue.groupValues,
+            queryHistory: inheritedQueue.queryHistory,
+          },
+        },
       })
       return created.id
     } catch (err) {
