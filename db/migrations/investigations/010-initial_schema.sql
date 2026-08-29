@@ -153,10 +153,10 @@ CREATE TABLE IF NOT EXISTS hypotheses (
 
     CONSTRAINT pk_hypotheses PRIMARY KEY (id),
     CONSTRAINT uq_hypotheses_id_investigation UNIQUE (id, investigation_id),
-    CONSTRAINT ck_hypotheses_statement CHECK (btrim(statement) <> ''),
+    CONSTRAINT ck_hypotheses_statement CHECK (statement ~ '[^[:space:]]'),
     CONSTRAINT ck_hypotheses_version CHECK (version >= 1),
     CONSTRAINT ck_hypotheses_resolution CHECK (
-        (status = 'resolved' AND NULLIF(btrim(reason), '') IS NOT NULL AND resolved_at IS NOT NULL) OR
+        (status = 'resolved' AND reason IS NOT NULL AND reason ~ '[^[:space:]]' AND resolved_at IS NOT NULL) OR
         (status IN ('proposed', 'active') AND reason IS NULL AND resolved_at IS NULL)
     ),
     CONSTRAINT fk_hypotheses_investigation FOREIGN KEY (investigation_id, project_id)

@@ -16,7 +16,7 @@ paths:
       tags: [hypotheses]
       summary: List hypotheses of an investigation
       description: >-
-        Returns the flat hypotheses owned by this investigation, newest first.
+        Returns the hypotheses owned by this investigation, newest first.
         Hypotheses are graph projections, not child investigations, and do not
         participate in the investigation tree.
       operationId: listHypotheses
@@ -205,18 +205,22 @@ components:
     Hypothesis:
       type: object
       description: >-
-        A flat named projection over the owning investigation's shared factual
-        graph. Memberships may overlap with other hypotheses.
+        A named projection over the owning investigation's shared factual graph.
+        It cannot have child hypotheses, but that does not restrict which events,
+        entities, or edges belong to its graph. Memberships may overlap.
       required:
         - id
         - project_id
         - investigation_id
         - statement
+        - description
         - status
+        - reason
         - origin
         - version
         - created_at
         - updated_at
+        - resolved_at
       properties:
         id:
           type: string

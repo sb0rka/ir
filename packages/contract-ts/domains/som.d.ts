@@ -68,7 +68,7 @@ export interface paths {
         };
         /**
          * Issues of a SOM board
-         * @description Proxies SOM `GET /v1/issues?board_id=...`. Issues are the research tasks (skills) an agent can be started on.
+         * @description Proxies SOM `GET /v1/issues?board_id=...`. Issues and sub-issues are runnable investigation tasks or verification steps, not hypotheses.
          */
         get: operations["listSomIssues"];
         put?: never;
@@ -96,7 +96,7 @@ export interface paths {
         put?: never;
         /**
          * Run an agent on a SOM issue
-         * @description Orchestrates a run: reads the issue from SOM, opens a relay session to the configured daemon host, starts an environment with the issue text as the prompt, then links the environment back to the issue in SOM. SOM requests use the selected project's cached access-token secret. `variant` and `model_id` are forwarded as daemon `executor_config`. Stateless — nothing is persisted in IR; the ids in the response are the only handle on the run.
+         * @description Orchestrates a run: reads the issue from SOM, opens a relay session to the configured daemon host, starts an environment with the issue text as the prompt, then links the environment back to the issue in SOM. SOM requests use the selected project's cached access-token secret. `variant` and `model_id` are forwarded as daemon `executor_config`. With hypothesis_id, the hypothesis must be active before any external calls; the prompt reads its nested graph and submits explicit results to its nested endpoint while retaining the investigation-wide timeline. Stateless — nothing is persisted about the run in IR; the ids in the response are the only handle on it.
          */
         post: operations["runSomIssue"];
         delete?: never;
@@ -168,7 +168,7 @@ export interface components {
             /** @description Display name. */
             name: string;
         };
-        /** @description A SOM issue — a research task (skill) that an agent can execute. */
+        /** @description A SOM issue — a task or verification step that an agent can execute. */
         SomIssue: {
             /**
              * Format: uuid
@@ -192,7 +192,7 @@ export interface components {
             priority?: string | null;
             /**
              * Format: uuid
-             * @description Parent issue for sub-issues.
+             * @description Parent task for a nested verification step.
              */
             parent_issue_id?: string | null;
         };
@@ -209,6 +209,11 @@ export interface components {
              * @description Investigation the agent should enrich. Passed to the agent inside the prompt so it knows where to attach found events and nodes.
              */
             investigation_id: string;
+            /**
+             * Format: uuid
+             * @description Optional active hypothesis to work on. Omit it to keep the existing unscoped run against the full investigation graph.
+             */
+            hypothesis_id?: string;
             /** @description Daemon executor variant, e.g. DEFAULT. Omitted uses the executor's default variant. */
             variant?: string;
             /** @description OpenCode model id in `provider/model` form, forwarded as executor_config.model_id. Omitted value is `openrouter/deepseek/deepseek-v4-flash`. */
@@ -325,6 +330,15 @@ export interface components {
         };
         /** @description No such record in the selected project. Returned instead of 403 for records that exist elsewhere, so the response does not reveal them (code=not_found). */
         NotFound: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
+        /** @description The record changed since the version the client sent, the write would duplicate an existing one, or the investigation is already closed. `details.conflicts` lists the ids that clashed (code=conflict). */
+        Conflict: {
             headers: {
                 [name: string]: unknown;
             };
@@ -475,6 +489,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
             422: components["responses"]["ValidationError"];
             500: components["responses"]["InternalError"];
             501: components["responses"]["NotImplemented"];

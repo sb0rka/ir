@@ -1,6 +1,6 @@
 # Покрытие требований Техлаб
 
-Текущий объём контракта: 39 путей, 57 операций, 9 доменов.
+Текущий объём контракта: 40 путей, 58 операций, 9 доменов.
 
 Важно: контракт шире реализованного вертикального среза. Незаявленные операции
 вне edge CRUD/review сохраняют `501 not_implemented`.
@@ -12,7 +12,7 @@
 | 5.3 | Автосвязывание и ручная корректировка | analyst `mentions`/Gateway relations; agent proposals | Импорт, ручные рёбра и review готовы |
 | 5.4 | Граф и таймлайн | `getGraph`, `listNodes`, `listGraphEdges`, `listEvents` | Готово, включая filters/cursors |
 | 5.5 | Историчность и окружение сущности | `getEntityCard` | Готово |
-| 5.6 | Журнал находок | Плоские hypotheses с status/reason и graph projection; child investigations — отдельные cases | Hypothesis CRUD/memberships готовы; child tree/update — 501 |
+| 5.6 | Журнал находок | Hypotheses без иерархии, с status/reason и graph projection; child investigations — отдельные cases | Hypothesis CRUD/memberships готовы; child tree/update — 501 |
 | 5.7 | Обогащение артефактов | Вне v0.1 | — |
 | 5.8 | Поиск и фильтрация | Поиск внутри кейса; сквозной триаж в Gateway | Готово в заявленном срезе |
 | 5.9 | Подсказки следующих шагов | Не описано, опционально | — |

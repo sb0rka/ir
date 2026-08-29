@@ -9,11 +9,14 @@ import (
 
 // Context — то, без чего агент не достучится ни до ir-api, ни до Gateway.
 type Context struct {
-	IRBaseURL       string
-	GatewayBaseURL  string
-	ProjectID       string
-	InvestigationID string
-	SomIssueID      string
+	IRBaseURL             string
+	GatewayBaseURL        string
+	ProjectID             string
+	InvestigationID       string
+	HypothesisID          string
+	HypothesisStatement   string
+	HypothesisDescription string
+	SomIssueID            string
 }
 
 // Build дописывает к тексту issue адреса, заголовки и правила поиска.
@@ -25,6 +28,11 @@ func Build(title, description string, c Context) string {
 	eventsURL := ir + "/api/v1/investigations/" + c.InvestigationID + "/events"
 	graphURL := ir + "/api/v1/investigations/" + c.InvestigationID + "/graph"
 	resultsURL := ir + "/api/v1/investigations/" + c.InvestigationID + "/agent-results"
+	if c.HypothesisID != "" {
+		hypothesisBase := ir + "/api/v1/investigations/" + c.InvestigationID + "/hypotheses/" + c.HypothesisID
+		graphURL = hypothesisBase + "/graph"
+		resultsURL = hypothesisBase + "/agent-results"
+	}
 	sourcesURL := gw + "/api/v1/sources"
 	searchURL := gw + "/api/v1/events/search"
 	irSpec := ir + "/openapi.json"
@@ -47,6 +55,11 @@ func Build(title, description string, c Context) string {
 	writeLine("gateway_base_url", gw)
 	writeLine("project_id", c.ProjectID)
 	writeLine("investigation_id", c.InvestigationID)
+	if c.HypothesisID != "" {
+		writeLine("hypothesis_id", c.HypothesisID)
+		writeLine("hypothesis_statement", c.HypothesisStatement)
+		writeLine("hypothesis_description", c.HypothesisDescription)
+	}
 	writeLine("som_issue_id", c.SomIssueID)
 
 	fmt.Fprintf(&b, "\nMandatory headers on every ir-api and Gateway /api/v1/* request:\n"+
@@ -64,7 +77,7 @@ func Build(title, description string, c Context) string {
 		"   Time windows: do not assume the data is recent. Take the window from the issue and timeline; when a search is empty, widen rather than narrow. Confirm with an unfiltered search (same sources, no query/entities/time_range) before declaring a source empty.\n"+
 		"   Pagination: next_cursor is valid only with otherwise-identical filters. On invalid_cursor, drop cursor and restart from the first page.\n"+
 		"3. Persist selected discoveries with POST %s. You may send any number of overlapping batches while investigating. Use som_issue_ids [\"%s\"] in every batch; events and entities may be submitted with empty nodes and edges to enrich the timeline without drawing them. A discovery batch can look like {\"som_issue_ids\":[\"%s\"],\"events\":[{\"ref\":\"selected-event\",\"source_code\":\"...\",\"source_event_id\":\"...\"}],\"entities\":[],\"nodes\":[],\"edges\":[]}. Replaying the same source records and graph facts is idempotent.\n"+
-		"4. Before drawing the final graph, read the complete timeline and graph again. Keep useful benign or false-positive context on the timeline, but promote only evidence-backed stages and entities needed for a minimal causal explanation. A new node points to a selected record with event_ref or entity_ref. An existing graph node is reused with node_id; include it in the final batch when it must also be linked to this SOM issue. Every node has a unique batch-local ref.\n"+
+		"4. Before drawing the final graph, read the complete investigation timeline and the assigned graph again. Keep useful benign or false-positive context on the shared timeline, but promote only evidence-backed stages and entities needed for a minimal causal explanation. A new node points to a selected record with event_ref or entity_ref. An existing graph node is reused with node_id; include it in the final batch when it must also be linked to this SOM issue. Every node has a unique batch-local ref.\n"+
 		"5. Edges address those node refs through source_ref and target_ref. evidence_event_refs contains batch-local refs of event nodes from the same batch, including event nodes reused through node_id; it never contains event selection refs, source event IDs, or database event IDs. Every edge needs a non-empty evidence-based why. IR assigns agent origin and proposed edge status.\n"+
 		"6. Submit the final graph batch, then verify both GET endpoints again.\n",
 		sourcesURL, c.ProjectID, eventsURL, graphURL,

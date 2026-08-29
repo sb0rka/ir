@@ -66,7 +66,7 @@ paths:
       tags: [hypotheses]
       summary: Graph projection of a hypothesis
       description: >-
-        Returns explicit member nodes and edges of this flat hypothesis. The
+        Returns explicit member nodes and edges of this hypothesis. The
         payload includes isolated member nodes and both endpoints of every
         member edge. Rejected member edges are hidden by default. This is a
         projection over one investigation graph, so include_subtree does not
@@ -511,7 +511,7 @@ components:
   schemas:
     HypothesisGraph:
       type: object
-      description: Explicit graph memberships of one flat hypothesis.
+      description: Explicit graph memberships of one hypothesis.
       required: [hypothesis_id, investigation_id, nodes, edges]
       properties:
         hypothesis_id:

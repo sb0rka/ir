@@ -121,7 +121,7 @@ type SomEnvironmentStatus struct {
 // SomEnvironmentStatusStatus `running` while the latest coding-agent/setup/cleanup process is `running` or has not appeared yet; `failed` when it is `failed` or `killed`; `completed` when it is `completed`.
 type SomEnvironmentStatusStatus string
 
-// SomIssue A SOM issue — a research task (skill) that an agent can execute.
+// SomIssue A SOM issue — a task or verification step that an agent can execute.
 type SomIssue struct {
 	// BoardId Board the issue belongs to.
 	BoardId openapi_types.UUID `json:"board_id"`
@@ -135,7 +135,7 @@ type SomIssue struct {
 	// IssueNumber Sequential number within the workspace.
 	IssueNumber int `json:"issue_number"`
 
-	// ParentIssueId Parent issue for sub-issues.
+	// ParentIssueId Parent task for a nested verification step.
 	ParentIssueId *openapi_types.UUID `json:"parent_issue_id,omitempty"`
 
 	// Priority urgent, high, medium or low. Absent when not set.
@@ -158,6 +158,9 @@ type SomIssueList struct {
 
 // SomIssueRunRequest Context IR adds to the run.
 type SomIssueRunRequest struct {
+	// HypothesisId Optional active hypothesis to work on. Omit it to keep the existing unscoped run against the full investigation graph.
+	HypothesisId *openapi_types.UUID `json:"hypothesis_id,omitempty"`
+
 	// InvestigationId Investigation the agent should enrich. Passed to the agent inside the prompt so it knows where to attach found events and nodes.
 	InvestigationId openapi_types.UUID `json:"investigation_id"`
 
@@ -209,6 +212,9 @@ type SomWorkspace struct {
 
 // ProjectId defines model for ProjectId.
 type ProjectId = string
+
+// Conflict Body of every non-2xx response. Clients branch on `code`, not on the HTTP status: the status says what happened at the protocol level, the code says what happened in the domain.
+type Conflict = ErrorResponse
 
 // Forbidden Body of every non-2xx response. Clients branch on `code`, not on the HTTP status: the status says what happened at the protocol level, the code says what happened in the domain.
 type Forbidden = ErrorResponse
@@ -682,6 +688,8 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	return m
 }
 
+type ConflictJSONResponse ErrorResponse
+
 type ForbiddenJSONResponse ErrorResponse
 
 type InternalErrorJSONResponse ErrorResponse
@@ -972,6 +980,20 @@ func (response RunSomIssue404JSONResponse) VisitRunSomIssueResponse(w http.Respo
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RunSomIssue409JSONResponse struct{ ConflictJSONResponse }
+
+func (response RunSomIssue409JSONResponse) VisitRunSomIssueResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
 	_, err := buf.WriteTo(w)
 	return err
 }

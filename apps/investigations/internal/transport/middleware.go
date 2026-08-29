@@ -114,7 +114,7 @@ func corsMiddleware(cfg config.ServerConfig) middlewareChain {
 					w.Header().Set("Access-Control-Allow-Credentials", "true")
 				}
 				w.Header().Set("Access-Control-Allow-Origin", allowedOrigin)
-				w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS")
+				w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
 				w.Header().Set("Access-Control-Allow-Headers", allowHeaders)
 				// Без этого префлайт летит перед каждым запросом.
 				w.Header().Set("Access-Control-Max-Age", "600")

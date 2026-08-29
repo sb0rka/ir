@@ -15,7 +15,7 @@ tags:
   - name: investigations
     description: Root and child cases, each with an independent lifecycle and graph.
   - name: hypotheses
-    description: Flat named projections over an investigation's shared graph.
+    description: Named graph projections without child hypotheses.
   - name: events
     description: Project events and their investigation links.
   - name: findings

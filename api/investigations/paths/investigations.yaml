@@ -17,7 +17,8 @@ paths:
       description: >-
         Every investigation is a standalone case with its own lifecycle,
         context, queue, report, and graph. A parent_id creates a nested child
-        case; hypotheses are separate flat projections inside one case.
+        case; hypotheses are separate graph projections inside one case and
+        cannot contain child hypotheses.
       operationId: createInvestigation
       requestBody:
         required: true
