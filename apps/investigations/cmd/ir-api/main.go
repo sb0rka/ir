@@ -76,7 +76,11 @@ func run() error {
 		}),
 		secrets,
 		gatewayclient.New(gatewayclient.Config{BaseURL: cfg.Gateway.BaseURL}),
-		authclient.New(authclient.Config{BaseURL: cfg.Platform.AuthBaseURL}),
+		authclient.New(authclient.Config{
+			BaseURL:      cfg.Platform.AuthBaseURL,
+			ClientID:     cfg.Platform.AgentExchangeClientID,
+			ClientSecret: cfg.Platform.AgentExchangeClientSecret,
+		}),
 		cfg.Prompt,
 	)
 	handler := transport.NewHandler(transport.Dependencies{

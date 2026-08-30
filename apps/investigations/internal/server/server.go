@@ -38,6 +38,7 @@ type Server struct {
 
 type agentTokenIssuer interface {
 	InvestigationToken(ctx context.Context, bearer, projectID, investigationID string) (string, error)
+	ExchangeAccessToken(ctx context.Context, agentToken string) (string, error)
 }
 
 type cursorPayload struct {

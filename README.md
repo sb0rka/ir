@@ -65,7 +65,9 @@ Endpoint предоставляет инструменты:
 - `get_investigation_graph` — прочитать граф;
 - `list_investigation_events` — прочитать страницу таймлайна;
 - `add_investigation_agent_results` — атомарно добавить локальные узлы и
-  evidence-backed связи.
+  evidence-backed связи, включая выбранные Gateway records;
+- `search_gateway_events` — искать события в разрешённых project sources;
+- `lookup_gateway_entity` — обогащать observable через Gateway.
 
 Запись использует canonical `agent-results`: узлы получают `origin=agent`, а
 связи создаются в статусе `proposed` и требуют решения аналитика.
@@ -78,6 +80,10 @@ OpenCode и не записывая JWT в SQLite. Поэтому паралле
 не могут подменить MCP-конфигурацию друг друга. Для этого flow требуется
 `SOM_EXECUTOR=OPENCODE`; human OAuth token агенту не передаётся, agent JWT не
 принимается REST API и не пересылается в Gateway, Platform API или Secrets.
+Для Gateway tools `ir-api` через confidential client обменивает agent JWT в Auth
+на обычный пяти минутный access JWT. Этот JWT существует только в памяти на
+время server-to-server вызова; Gateway и Platform Secrets продолжают работать
+по общему пользовательскому access-JWT pattern.
 
 MCP является частью бинарника `ir-api`, поэтому его версия развёртывается
 атомарно вместе с Investigation API. Подписанный JWT не хранится в `ir-api`,

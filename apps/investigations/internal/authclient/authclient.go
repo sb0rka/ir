@@ -19,13 +19,17 @@ const maxResponseBody = 1 << 20
 var ErrUnavailable = errors.New("Sb0rka Auth is not configured")
 
 type Config struct {
-	BaseURL    string
-	HTTPClient *http.Client
+	BaseURL      string
+	ClientID     string
+	ClientSecret string
+	HTTPClient   *http.Client
 }
 
 type Client struct {
-	baseURL string
-	http    *http.Client
+	baseURL      string
+	clientID     string
+	clientSecret string
+	http         *http.Client
 }
 
 type HTTPError struct {
@@ -41,7 +45,53 @@ func New(cfg Config) *Client {
 	if httpClient == nil {
 		httpClient = &http.Client{Timeout: 10 * time.Second}
 	}
-	return &Client{baseURL: strings.TrimRight(strings.TrimSpace(cfg.BaseURL), "/"), http: httpClient}
+	return &Client{
+		baseURL:  strings.TrimRight(strings.TrimSpace(cfg.BaseURL), "/"),
+		clientID: strings.TrimSpace(cfg.ClientID), clientSecret: cfg.ClientSecret, http: httpClient,
+	}
+}
+
+func (client *Client) ExchangeAccessToken(ctx context.Context, agentToken string) (string, error) {
+	if client == nil || client.baseURL == "" || client.clientID == "" || client.clientSecret == "" {
+		return "", ErrUnavailable
+	}
+	body, err := json.Marshal(map[string]string{"subject_token": strings.TrimSpace(agentToken)})
+	if err != nil {
+		return "", fmt.Errorf("encode agent exchange request: %w", err)
+	}
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost,
+		client.baseURL+"/auth/agent-tokens/exchange", bytes.NewReader(body))
+	if err != nil {
+		return "", fmt.Errorf("create agent exchange request: %w", err)
+	}
+	request.SetBasicAuth(client.clientID, client.clientSecret)
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Accept", "application/json")
+	response, err := client.http.Do(request)
+	if err != nil {
+		return "", fmt.Errorf("call Sb0rka Auth exchange: %w", err)
+	}
+	defer response.Body.Close()
+	raw, err := io.ReadAll(io.LimitReader(response.Body, maxResponseBody+1))
+	if err != nil {
+		return "", fmt.Errorf("read agent exchange response: %w", err)
+	}
+	if len(raw) > maxResponseBody {
+		return "", errors.New("agent exchange response is too large")
+	}
+	if response.StatusCode != http.StatusOK {
+		return "", &HTTPError{Status: response.StatusCode}
+	}
+	var result struct {
+		AccessToken string `json:"access_token"`
+		TokenType   string `json:"token_type"`
+		ExpiresIn   int    `json:"expires_in"`
+	}
+	if json.Unmarshal(raw, &result) != nil || strings.TrimSpace(result.AccessToken) == "" ||
+		!strings.EqualFold(result.TokenType, "Bearer") || result.ExpiresIn <= 0 {
+		return "", errors.New("Sb0rka Auth returned an invalid exchange response")
+	}
+	return result.AccessToken, nil
 }
 
 func (client *Client) InvestigationToken(ctx context.Context, bearer, projectID, investigationID string) (string, error) {

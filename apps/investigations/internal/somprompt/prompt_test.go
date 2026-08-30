@@ -35,9 +35,11 @@ func TestBuildExpandsURLsAndHeaders(t *testing.T) {
 		"list_investigation_events",
 		"get_investigation_graph",
 		"add_investigation_agent_results",
+		"search_gateway_events",
+		"lookup_gateway_entity",
 		"investigation_id 496f2041-7949-4816-8d07-734de89d121f",
-		"event_id or entity_id",
-		"do not call IR REST, Gateway, Platform API, or Secrets directly",
+		"event_ref/entity_ref",
+		"do not call IR REST, Gateway REST, Platform API, or Secrets directly",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("missing %q", want)

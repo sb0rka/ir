@@ -84,6 +84,8 @@ services:
       LOG_FORMAT: "${LOG_FORMAT:-text}"
       SB0RKA_API_BASE_URL: "${SB0RKA_API_BASE_URL:-http://host.docker.internal:8080}"
       SB0RKA_AUTH_BASE_URL: "${SB0RKA_AUTH_BASE_URL:-http://host.docker.internal:8020}"
+      INVESTIGATION_AGENT_EXCHANGE_CLIENT_ID: "${INVESTIGATION_AGENT_EXCHANGE_CLIENT_ID:-ir-api}"
+      INVESTIGATION_AGENT_EXCHANGE_CLIENT_SECRET: "${INVESTIGATION_AGENT_EXCHANGE_CLIENT_SECRET:-local-investigation-agent-exchange-secret-2026}"
       # Значения — из ir/.env (см. .env.sample). Пустой SOM_API_BASE_URL выключает som-роуты.
       SOM_API_BASE_URL: "${SOM_API_BASE_URL:-}"
       SOM_RELAY_BASE_URL: "${SOM_RELAY_BASE_URL:-}"

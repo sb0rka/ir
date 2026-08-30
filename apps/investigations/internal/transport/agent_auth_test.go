@@ -80,12 +80,15 @@ func TestMCPAuthChecksAgentTokenWhenHumanAuthIsDisabled(t *testing.T) {
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		scope, scopeOK := socctx.ScopeFromContext(r.Context())
-		_, agentOK := socctx.AgentAuthorizationFromContext(r.Context())
+		authorization, agentOK := socctx.AgentAuthorizationFromContext(r.Context())
 		if !scopeOK || !agentOK || scope.ProjectID != "abcdef1234" {
 			t.Fatalf("agent context missing: scope=%#v agent=%v", scope, agentOK)
 		}
 		if _, forwarded := socctx.BearerFromContext(r.Context()); forwarded {
 			t.Fatal("agent JWT was exposed as an upstream bearer")
+		}
+		if authorization.Token == "" {
+			t.Fatal("agent JWT was not retained in the dedicated exchange context")
 		}
 		w.WriteHeader(http.StatusNoContent)
 	})

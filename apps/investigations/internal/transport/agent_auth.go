@@ -53,6 +53,7 @@ func mcpAuthMiddleware(cfg config.ServerConfig, log *slog.Logger) middlewareChai
 			ctx = socctx.WithAgentAuthorization(ctx, socctx.AgentAuthorization{
 				InvestigationID: claims.InvestigationID,
 				Scope:           claims.Scope,
+				Token:           raw,
 			})
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})

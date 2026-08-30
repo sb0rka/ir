@@ -18,8 +18,10 @@ type Config struct {
 }
 
 type PlatformConfig struct {
-	APIBaseURL  string
-	AuthBaseURL string
+	APIBaseURL                string
+	AuthBaseURL               string
+	AgentExchangeClientID     string
+	AgentExchangeClientSecret string
 }
 
 // GatewayConfig — внутренний адрес для получения выбранных записей по их

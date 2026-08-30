@@ -15,6 +15,7 @@ type scopeKey struct{}
 type AgentAuthorization struct {
 	InvestigationID string
 	Scope           string
+	Token           string
 }
 
 type agentAuthorizationKey struct{}

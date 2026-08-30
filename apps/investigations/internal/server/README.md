@@ -21,3 +21,5 @@ transport обязательны тесты на пересечение гран
 `access+jwt` + `X-Project-ID` и delegated `agent+jwt`. Во втором режиме project,
 investigation и scopes берутся только из подписанных claims; agent bearer нельзя
 класть в `socctx.Bearer`, чтобы он не мог уйти в Gateway/Platform/Secrets.
+Gateway tools передают его только внутреннему Auth exchange; полученный
+короткоживущий access JWT используется server-to-server и агенту не виден.

@@ -4,7 +4,8 @@ Go API сервис `ir-api` расследований Sb0rka.
 
 `ir-api` не является хранилищем потока событий. Страница первичного разбора
 читает нормализованные events/entities/relations через Gateway. SOM-агент
-работает только с уже прикреплённым investigation context через MCP:
+работает через единый investigation MCP: читает прикреплённый context и ищет
+дополнительное evidence в разрешённых Gateway sources:
 
 - `POST /api/v1/investigations` создаёт расследование и привязывает выбранные
   рабочие пространства SOM, не принимая события и сущности;
@@ -30,11 +31,15 @@ Bearer используется для чтения Sb0rka Secrets, но не п
 audience `ir-mcp`, фиксированными scopes и одной investigation. Daemon добавляет
 `Authorization: Bearer ...` только в OpenCode конкретного environment, не меняя
 глобальную MCP-конфигурацию и не сохраняя token в SQLite. Agent JWT не
-передаётся в Gateway, Platform API или Secrets.
+передаётся в Gateway, Platform API или Secrets. Для Gateway-backed tools
+`ir-api` предъявляет его только внутреннему Auth exchange вместе со своим
+confidential client secret и получает обычный access JWT на пять минут. Этот
+JWT остаётся внутри `ir-api`; Gateway и Platform Secrets применяют существующие
+проверки пользователя, project membership и live session.
 
-MCP-запись принимает только `event_id`/`entity_id`, уже прикреплённые к этой
-investigation, либо существующий `node_id`. Human REST-путь сохраняет импорт
-новых source refs через Gateway. Для remote MCP требуется HTTPS; локальный HTTP
+MCP-запись принимает `event_id`/`entity_id`, уже прикреплённые к investigation,
+существующий `node_id` либо выбранные MCP Gateway records по
+`source_code + source_event_id/source_entity_id`. Для remote MCP требуется HTTPS; локальный HTTP
 разрешается только через `MCP_ALLOW_INSECURE_HTTP=true`.
 
 Событие в Gateway и `ir-api` находится по паре `source_code + source_event_id`.

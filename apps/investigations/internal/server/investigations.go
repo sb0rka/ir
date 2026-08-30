@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/sb0rka/ir/apps/investigations/internal/authclient"
 	"github.com/sb0rka/ir/apps/investigations/internal/domain/model"
 	"github.com/sb0rka/ir/apps/investigations/internal/gatewayclient"
 	"github.com/sb0rka/ir/apps/investigations/internal/transport/httperr"
@@ -277,7 +278,10 @@ func (s *Server) resolveGatewayContext(ctx context.Context, scope socctx.Scope, 
 	if len(findings) == 0 && len(sessions) == 0 && len(events) == 0 && len(entities) == 0 {
 		return resolvedGatewayContext{}, validationError("at least one finding, session, event, or entity is required")
 	}
-	bearer, _ := socctx.BearerFromContext(ctx)
+	bearer, err := s.gatewayBearer(ctx)
+	if err != nil {
+		return resolvedGatewayContext{}, err
+	}
 	response, err := s.gateway.ResolveContext(ctx, scope.ProjectID, bearer, request)
 	if err != nil {
 		return resolvedGatewayContext{}, gatewayError(err)
@@ -324,6 +328,28 @@ func (s *Server) resolveGatewayContext(ctx context.Context, scope socctx.Scope, 
 		resolved.Warnings = append(resolved.Warnings, "Gateway source "+sourceErr.Source+": "+sourceErr.Message)
 	}
 	return resolved, nil
+}
+
+func (s *Server) gatewayBearer(ctx context.Context) (string, error) {
+	if bearer, ok := socctx.BearerFromContext(ctx); ok {
+		return bearer, nil
+	}
+	authorization, ok := socctx.AgentAuthorizationFromContext(ctx)
+	if !ok || !authorization.HasScope(mcpGatewayReadScope) || strings.TrimSpace(authorization.Token) == "" {
+		return "", httperr.ErrForbidden
+	}
+	if s.agentTokens == nil {
+		return "", httperr.New(http.StatusServiceUnavailable, httperr.CodeSourceUnavailable, "agent token exchange is unavailable")
+	}
+	bearer, err := s.agentTokens.ExchangeAccessToken(ctx, authorization.Token)
+	if err == nil {
+		return bearer, nil
+	}
+	var upstream *authclient.HTTPError
+	if errors.As(err, &upstream) && (upstream.Status == http.StatusUnauthorized || upstream.Status == http.StatusForbidden) {
+		return "", httperr.ErrUnauthorized
+	}
+	return "", httperr.New(http.StatusServiceUnavailable, httperr.CodeSourceUnavailable, "agent token exchange is unavailable")
 }
 
 func convertGatewayContext(input gatewayclient.ResolveContextResponse, request gatewayclient.ResolveContextRequest) (resolvedGatewayContext, error) {
