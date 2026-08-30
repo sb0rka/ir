@@ -57,6 +57,51 @@ type InvestigationFilter struct {
 	Limit     int
 }
 
+type HypothesisNew struct {
+	ProjectID       string
+	InvestigationID string
+	Statement       string
+	Description     *string
+}
+
+type Hypothesis struct {
+	ID              string
+	ProjectID       string
+	InvestigationID string
+	Statement       string
+	Description     *string
+	Status          string
+	Reason          *string
+	Origin          string
+	Version         int
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
+	ResolvedAt      *time.Time
+}
+
+type HypothesisPatch struct {
+	ProjectID       string
+	InvestigationID string
+	HypothesisID    string
+	Version         int
+	Statement       *string
+	Description     *string
+	HasDescription  bool
+	Status          *string
+	Reason          *string
+}
+
+type HypothesisFilter struct {
+	Status *string
+	Cursor *PageCursor
+	Limit  int
+}
+
+type HypothesisGraph struct {
+	Nodes []GraphNode
+	Edges []GraphEdge
+}
+
 type GatewayProvenance struct {
 	Source     string    `json:"source"`
 	ExternalID string    `json:"external_id"`
@@ -185,14 +230,16 @@ type AgentEdge struct {
 }
 
 type ImportRequest struct {
-	ProjectID       string
-	InvestigationID string
-	Selection       GatewaySelection
-	Origin          string
-	SomIssueIDs     []string
-	Nodes           []AgentNode
-	Edges           []AgentEdge
-	Warnings        []string
+	ProjectID               string
+	InvestigationID         string
+	HypothesisID            *string
+	RequireActiveHypothesis bool
+	Selection               GatewaySelection
+	Origin                  string
+	SomIssueIDs             []string
+	Nodes                   []AgentNode
+	Edges                   []AgentEdge
+	Warnings                []string
 }
 
 type ImportStats struct {

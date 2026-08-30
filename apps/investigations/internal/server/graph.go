@@ -543,3 +543,142 @@ func (s *Server) ReviewGraphEdges(ctx context.Context, request graph.ReviewGraph
 	}
 	return graph.ReviewGraphEdges200JSONResponse(out), nil
 }
+
+// CreateHypothesisGraphEdge Draw a shared graph edge in a hypothesis
+// (POST /investigations/{investigation_id}/hypotheses/{hypothesis_id}/edges)
+func (s *Server) CreateHypothesisGraphEdge(ctx context.Context, request graph.CreateHypothesisGraphEdgeRequestObject) (graph.CreateHypothesisGraphEdgeResponseObject, error) {
+	scope, err := s.scope(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if request.Body == nil {
+		return nil, httperr.BadRequest("request body is required")
+	}
+	relationCode := strings.TrimSpace(request.Body.RelationCode)
+	if relationCode == "" {
+		return nil, validationError("relation_code is required")
+	}
+	if request.Body.Confidence != nil && (*request.Body.Confidence < 0 || *request.Body.Confidence > 1) {
+		return nil, validationError("confidence must be between 0 and 1")
+	}
+	var why *string
+	if request.Body.Why != nil {
+		value := strings.TrimSpace(*request.Body.Why)
+		if value != "" {
+			why = &value
+		}
+	}
+	var originRef *string
+	if subjectID, ok := coreauthctx.SubjectIDFromContext(ctx); ok {
+		originRef = &subjectID
+	}
+	input := model.GraphEdgeNew{
+		ProjectID: scope.ProjectID, InvestigationID: request.InvestigationId.String(),
+		SourceNodeID: request.Body.SourceNodeId.String(), TargetNodeID: request.Body.TargetNodeId.String(),
+		RelationCode: relationCode, Confidence: request.Body.Confidence, Why: why, OriginRef: originRef,
+	}
+	if request.Body.EvidenceEventIds != nil {
+		for _, id := range *request.Body.EvidenceEventIds {
+			input.EvidenceEventIDs = append(input.EvidenceEventIDs, id.String())
+		}
+	}
+	edge, err := s.db.CreateHypothesisGraphEdge(ctx, request.HypothesisId.String(), input)
+	if err != nil {
+		return nil, edgeStoreError(err)
+	}
+	out, err := convertGraphEdge(edge)
+	if err != nil {
+		return nil, err
+	}
+	return graph.CreateHypothesisGraphEdge201JSONResponse(out), nil
+}
+
+// GetHypothesisGraph Graph projection of a hypothesis
+// (GET /investigations/{investigation_id}/hypotheses/{hypothesis_id}/graph)
+func (s *Server) GetHypothesisGraph(ctx context.Context, request graph.GetHypothesisGraphRequestObject) (graph.GetHypothesisGraphResponseObject, error) {
+	scope, err := s.scope(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if request.Params.Statuses != nil {
+		for _, status := range *request.Params.Statuses {
+			if !status.Valid() {
+				return nil, validationError("invalid graph edge status")
+			}
+		}
+	}
+	if request.Params.MinConfidence != nil && (*request.Params.MinConfidence < 0 || *request.Params.MinConfidence > 1) {
+		return nil, validationError("min_confidence must be between 0 and 1")
+	}
+	projection, err := s.db.HypothesisGraph(ctx, scope.ProjectID, request.InvestigationId.String(),
+		request.HypothesisId.String(), model.EdgeFilter{
+			Statuses: statusStrings(request.Params.Statuses), MinConfidence: request.Params.MinConfidence,
+		})
+	if err != nil {
+		return nil, hypothesisStoreError(err)
+	}
+	out := graph.HypothesisGraph{
+		HypothesisId: request.HypothesisId, InvestigationId: request.InvestigationId,
+		Nodes: make([]graph.GraphNode, 0, len(projection.Nodes)), Edges: make([]graph.GraphEdge, 0, len(projection.Edges)),
+	}
+	for _, item := range projection.Nodes {
+		converted, err := convertGraphNode(item)
+		if err != nil {
+			return nil, err
+		}
+		out.Nodes = append(out.Nodes, converted)
+	}
+	for _, item := range projection.Edges {
+		converted, err := convertGraphEdge(item)
+		if err != nil {
+			return nil, err
+		}
+		out.Edges = append(out.Edges, converted)
+	}
+	return graph.GetHypothesisGraph200JSONResponse(out), nil
+}
+
+// CreateHypothesisNode Create or find a graph node in a hypothesis
+// (POST /investigations/{investigation_id}/hypotheses/{hypothesis_id}/nodes)
+func (s *Server) CreateHypothesisNode(ctx context.Context, request graph.CreateHypothesisNodeRequestObject) (graph.CreateHypothesisNodeResponseObject, error) {
+	scope, err := s.scope(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if request.Body == nil {
+		return nil, httperr.BadRequest("request body is required")
+	}
+	var entityID, eventID *string
+	switch request.Body.NodeType {
+	case graph.Entity:
+		if request.Body.EntityId == nil || request.Body.EventId != nil {
+			return nil, validationError("entity node requires only entity_id")
+		}
+		value := request.Body.EntityId.String()
+		entityID = &value
+	case graph.Event:
+		if request.Body.EventId == nil || request.Body.EntityId != nil {
+			return nil, validationError("event node requires only event_id")
+		}
+		value := request.Body.EventId.String()
+		eventID = &value
+	default:
+		return nil, validationError("invalid node_type")
+	}
+	var issues []string
+	if request.Body.SomIssueIds != nil {
+		for _, id := range *request.Body.SomIssueIds {
+			issues = append(issues, id.String())
+		}
+	}
+	node, err := s.db.CreateHypothesisNode(ctx, scope.ProjectID, request.InvestigationId.String(),
+		request.HypothesisId.String(), string(request.Body.NodeType), entityID, eventID, "analyst", issues)
+	if err != nil {
+		return nil, hypothesisStoreError(err)
+	}
+	out, err := convertGraphNode(node)
+	if err != nil {
+		return nil, err
+	}
+	return graph.CreateHypothesisNode201JSONResponse(out), nil
+}

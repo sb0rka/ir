@@ -68,13 +68,32 @@ erDiagram
 		uuid workspace_id PK
 		timestamptz created_at
 	}
+
+	hypotheses {
+		uuid id PK
+		varchar project_id FK
+		uuid investigation_id UK,FK
+		varchar statement
+		varchar description
+		varchar status
+		varchar reason
+		varchar origin
+		int version
+		timestamptz created_at
+		timestamptz updated_at
+		timestamptz resolved_at
+	}
 	%% investigations.status CHECK: open, closed
 	%% investigations.severity CHECK: low, medium, high, critical
-	%% investigations.verdict CHECK: incident, false_positive, not_affected, inconclusive, confirmed, rejected
+	%% investigations.verdict CHECK: incident, false_positive, not_affected, inconclusive
 	%% investigations.origin CHECK: analyst, rule, agent
 	%% investigations UNIQUE (id, project_id)
 	%% investigations: status=closed => verdict NOT NULL
-	%% investigations: verdict=rejected => verdict_reason NOT NULL
+	%% hypotheses.status CHECK: proposed, active, resolved
+	%% hypotheses.origin CHECK: analyst, rule, agent
+	%% hypotheses UNIQUE (id, investigation_id)
+	%% hypotheses: statement is not blank; version >= 1
+	%% hypotheses: resolved iff reason and resolved_at are present
 
 	%% EVIDENCE
 
@@ -231,6 +250,22 @@ erDiagram
 		timestamptz updated_at
 	}
 
+	hypothesis_nodes {
+		uuid hypothesis_id PK,FK
+		uuid investigation_id FK
+		uuid node_id PK,FK
+		timestamptz created_at
+	}
+	%% FKs: (hypothesis_id, investigation_id), (node_id, investigation_id)
+
+	hypothesis_edges {
+		uuid hypothesis_id PK,FK
+		uuid investigation_id FK
+		uuid edge_id PK,FK
+		timestamptz created_at
+	}
+	%% FKs: (hypothesis_id, investigation_id), (edge_id, investigation_id)
+
 	%% ACCESS CONTROL
 
 	role_bindings {
@@ -247,10 +282,11 @@ erDiagram
 	relation_types ||--o{ event_entity_relations : has
 	relation_types ||--o{ edges : has
 
-	investigations |o--o{ investigations : has
+	investigations |o--o{ investigations : nested_case
 	investigations ||--o{ investigation_events : has
 	investigations ||--o{ investigation_entities : has
 	investigations ||--o{ investigation_som_workspaces : links
+	investigations ||--o{ hypotheses : owns
 	investigations ||--o{ graph_nodes : has
 	investigations ||--o{ edges : has
 
@@ -270,6 +306,10 @@ erDiagram
 	graph_nodes ||--o{ graph_node_som_issues : has
 	graph_nodes ||--o{ edges : is_source
 	graph_nodes ||--o{ edges : is_target
+	graph_nodes ||--o{ hypothesis_nodes : member_of
 
 	edges ||--o{ edge_evidence : has
+	edges ||--o{ hypothesis_edges : member_of
 	investigation_events ||--o{ edge_evidence : has
+	hypotheses ||--o{ hypothesis_nodes : selects
+	hypotheses ||--o{ hypothesis_edges : selects

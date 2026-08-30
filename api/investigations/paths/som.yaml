@@ -77,8 +77,8 @@ paths:
       tags: [som]
       summary: Issues of a SOM board
       description: >-
-        Proxies SOM `GET /v1/issues?board_id=...`. Issues are the research
-        tasks (skills) an agent can be started on.
+        Proxies SOM `GET /v1/issues?board_id=...`. Issues and sub-issues are
+        runnable investigation tasks or verification steps, not hypotheses.
       operationId: listSomIssues
       responses:
         '200':
@@ -110,8 +110,11 @@ paths:
         as the prompt, then links the environment back to the issue in SOM.
         SOM requests use the selected project's cached access-token secret.
         `variant` and `model_id` are forwarded as daemon `executor_config`.
-        Stateless — nothing is persisted in IR; the ids in the response are the
-        only handle on the run.
+        With hypothesis_id, the hypothesis must be active before any external
+        calls; the prompt reads its nested graph and submits explicit results to
+        its nested endpoint while retaining the investigation-wide timeline.
+        Stateless — nothing is persisted about the run in IR; the ids in the
+        response are the only handle on it.
       operationId: runSomIssue
       requestBody:
         required: true
@@ -129,6 +132,7 @@ paths:
         '501': { $ref: '../shared/responses.yaml#/components/responses/NotImplemented' }
         '500': { $ref: '../shared/responses.yaml#/components/responses/InternalError' }
         '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
+        '409': { $ref: '../shared/responses.yaml#/components/responses/Conflict' }
         '422': { $ref: '../shared/responses.yaml#/components/responses/ValidationError' }
         '502': { $ref: '../shared/responses.yaml#/components/responses/SourceUnavailable' }
 
@@ -209,7 +213,7 @@ components:
     SomIssue:
       type: object
       description: >-
-        A SOM issue — a research task (skill) that an agent can execute.
+        A SOM issue — a task or verification step that an agent can execute.
       required: [id, board_id, issue_number, simple_id, title]
       properties:
         id:
@@ -243,7 +247,7 @@ components:
           type: string
           format: uuid
           nullable: true
-          description: Parent issue for sub-issues.
+          description: Parent task for a nested verification step.
 
     SomIssueList:
       type: object
@@ -268,6 +272,12 @@ components:
           description: >-
             Investigation the agent should enrich. Passed to the agent inside
             the prompt so it knows where to attach found events and nodes.
+        hypothesis_id:
+          type: string
+          format: uuid
+          description: >-
+            Optional active hypothesis to work on. Omit it to keep the existing
+            unscoped run against the full investigation graph.
         variant:
           type: string
           description: >-

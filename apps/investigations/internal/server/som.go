@@ -11,6 +11,7 @@ import (
 
 	"github.com/sb0rka/ir/apps/investigations/internal/somclient"
 	"github.com/sb0rka/ir/apps/investigations/internal/somprompt"
+	"github.com/sb0rka/ir/apps/investigations/internal/store"
 	"github.com/sb0rka/ir/apps/investigations/internal/transport/httperr"
 	"github.com/sb0rka/ir/apps/investigations/internal/transport/socctx"
 	"github.com/sb0rka/ir/packages/common"
@@ -152,6 +153,27 @@ func (s *Server) RunSomIssue(ctx context.Context, request som.RunSomIssueRequest
 	if err != nil {
 		return nil, err
 	}
+	investigationID := request.Body.InvestigationId.String()
+	hypothesisID := ""
+	hypothesisStatement := ""
+	hypothesisDescription := ""
+	if request.Body.HypothesisId != nil {
+		if *request.Body.HypothesisId == uuid.Nil {
+			return nil, validationError("hypothesis_id must be a non-zero UUID")
+		}
+		hypothesisID = request.Body.HypothesisId.String()
+		hypothesis, err := s.db.GetHypothesis(ctx, scope.ProjectID, investigationID, hypothesisID)
+		if err != nil {
+			return nil, hypothesisStoreError(err)
+		}
+		if hypothesis.Status != "active" {
+			return nil, hypothesisStoreError(&store.ConflictError{IDs: []string{hypothesisID}})
+		}
+		hypothesisStatement = hypothesis.Statement
+		if hypothesis.Description != nil {
+			hypothesisDescription = *hypothesis.Description
+		}
+	}
 
 	issueID := request.IssueId.String()
 	var issue somclient.Issue
@@ -168,17 +190,19 @@ func (s *Server) RunSomIssue(ctx context.Context, request som.RunSomIssueRequest
 		return nil, err
 	}
 
-	investigationID := request.Body.InvestigationId.String()
 	description := ""
 	if issue.Description != nil {
 		description = *issue.Description
 	}
 	prompt := somprompt.Build(issue.Title, description, somprompt.Context{
-		IRBaseURL:       s.prompt.IRBaseURL,
-		GatewayBaseURL:  s.prompt.GatewayBaseURL,
-		ProjectID:       scope.ProjectID,
-		InvestigationID: investigationID,
-		SomIssueID:      issue.ID,
+		IRBaseURL:             s.prompt.IRBaseURL,
+		GatewayBaseURL:        s.prompt.GatewayBaseURL,
+		ProjectID:             scope.ProjectID,
+		InvestigationID:       investigationID,
+		HypothesisID:          hypothesisID,
+		HypothesisStatement:   hypothesisStatement,
+		HypothesisDescription: hypothesisDescription,
+		SomIssueID:            issue.ID,
 	})
 	name := runName(issue)
 	exec := somclient.ResolveExecutorConfig(request.Body.Variant, request.Body.ModelId)

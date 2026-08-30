@@ -318,6 +318,21 @@ type GraphNode struct {
 	TypeCode *string `json:"type_code,omitempty"`
 }
 
+// HypothesisGraph Explicit graph memberships of one hypothesis.
+type HypothesisGraph struct {
+	// Edges Explicit edge members surviving status and confidence filters.
+	Edges []GraphEdge `json:"edges"`
+
+	// HypothesisId Hypothesis whose memberships are projected.
+	HypothesisId openapi_types.UUID `json:"hypothesis_id"`
+
+	// InvestigationId Investigation that owns every returned graph object.
+	InvestigationId openapi_types.UUID `json:"investigation_id"`
+
+	// Nodes Explicit node members, including isolated nodes, plus guaranteed endpoints of every returned member edge.
+	Nodes []GraphNode `json:"nodes"`
+}
+
 // NodeCreate What to promote onto the graph. Give exactly one of the two ids, and it must match node_type — the pair is what says which one is meant.
 type NodeCreate struct {
 	// EntityId The entity, when node_type is entity. Rarely needed — entities are put on the graph automatically as their events arrive.
@@ -389,6 +404,9 @@ type EventId = openapi_types.UUID
 
 // GraphEdgeId defines model for GraphEdgeId.
 type GraphEdgeId = openapi_types.UUID
+
+// HypothesisId defines model for HypothesisId.
+type HypothesisId = openapi_types.UUID
 
 // InvestigationId defines model for InvestigationId.
 type InvestigationId = openapi_types.UUID
@@ -507,6 +525,30 @@ type GetGraphParams struct {
 	XProjectID ProjectId `json:"X-Project-ID"`
 }
 
+// CreateHypothesisGraphEdgeParams defines parameters for CreateHypothesisGraphEdge.
+type CreateHypothesisGraphEdgeParams struct {
+	// XProjectID Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets.
+	XProjectID ProjectId `json:"X-Project-ID"`
+}
+
+// GetHypothesisGraphParams defines parameters for GetHypothesisGraph.
+type GetHypothesisGraphParams struct {
+	// MinConfidence Drop member edges whose producer confidence is below this value.
+	MinConfidence *float32 `form:"min_confidence,omitempty" json:"min_confidence,omitempty"`
+
+	// Statuses Which member edge states to include. Defaults to proposed and confirmed; pass rejected explicitly to include ruled-out claims.
+	Statuses *[]GraphEdgeStatus `form:"statuses,omitempty" json:"statuses,omitempty"`
+
+	// XProjectID Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets.
+	XProjectID ProjectId `json:"X-Project-ID"`
+}
+
+// CreateHypothesisNodeParams defines parameters for CreateHypothesisNode.
+type CreateHypothesisNodeParams struct {
+	// XProjectID Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets.
+	XProjectID ProjectId `json:"X-Project-ID"`
+}
+
 // ListNodesParams defines parameters for ListNodes.
 type ListNodesParams struct {
 	// NodeType Keep only entity nodes or only event nodes.
@@ -558,6 +600,12 @@ type UpdateGraphEdgeJSONRequestBody = GraphEdgePatch
 // AddGraphEdgeEvidenceJSONRequestBody defines body for AddGraphEdgeEvidence for application/json ContentType.
 type AddGraphEdgeEvidenceJSONRequestBody = GraphEdgeEvidenceAdd
 
+// CreateHypothesisGraphEdgeJSONRequestBody defines body for CreateHypothesisGraphEdge for application/json ContentType.
+type CreateHypothesisGraphEdgeJSONRequestBody = GraphEdgeCreate
+
+// CreateHypothesisNodeJSONRequestBody defines body for CreateHypothesisNode for application/json ContentType.
+type CreateHypothesisNodeJSONRequestBody = NodeCreate
+
 // CreateNodeJSONRequestBody defines body for CreateNode for application/json ContentType.
 type CreateNodeJSONRequestBody = NodeCreate
 
@@ -593,6 +641,15 @@ type ServerInterface interface {
 	// GetGraph Graph of the investigation
 	// (GET /investigations/{investigation_id}/graph)
 	GetGraph(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, params GetGraphParams)
+	// CreateHypothesisGraphEdge Draw a shared graph edge in a hypothesis
+	// (POST /investigations/{investigation_id}/hypotheses/{hypothesis_id}/edges)
+	CreateHypothesisGraphEdge(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, hypothesisId HypothesisId, params CreateHypothesisGraphEdgeParams)
+	// GetHypothesisGraph Graph projection of a hypothesis
+	// (GET /investigations/{investigation_id}/hypotheses/{hypothesis_id}/graph)
+	GetHypothesisGraph(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, hypothesisId HypothesisId, params GetHypothesisGraphParams)
+	// CreateHypothesisNode Create or find a graph node in a hypothesis
+	// (POST /investigations/{investigation_id}/hypotheses/{hypothesis_id}/nodes)
+	CreateHypothesisNode(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, hypothesisId HypothesisId, params CreateHypothesisNodeParams)
 	// ListNodes Nodes of the investigation
 	// (GET /investigations/{investigation_id}/nodes)
 	ListNodes(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, params ListNodesParams)
@@ -1298,6 +1355,221 @@ func (siw *ServerInterfaceWrapper) GetGraph(w http.ResponseWriter, r *http.Reque
 	handler.ServeHTTP(w, r)
 }
 
+// CreateHypothesisGraphEdge operation middleware
+func (siw *ServerInterfaceWrapper) CreateHypothesisGraphEdge(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "investigation_id" -------------
+	var investigationId InvestigationId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "investigation_id", r.PathValue("investigation_id"), &investigationId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "investigation_id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "hypothesis_id" -------------
+	var hypothesisId HypothesisId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "hypothesis_id", r.PathValue("hypothesis_id"), &hypothesisId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "hypothesis_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params CreateHypothesisGraphEdgeParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "X-Project-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Project-ID")]; found {
+		var XProjectID ProjectId
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Project-ID", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Project-ID", valueList[0], &XProjectID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Project-ID", Err: err})
+			return
+		}
+
+		params.XProjectID = XProjectID
+
+	} else {
+		err := fmt.Errorf("Header parameter X-Project-ID is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Project-ID", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateHypothesisGraphEdge(w, r, investigationId, hypothesisId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetHypothesisGraph operation middleware
+func (siw *ServerInterfaceWrapper) GetHypothesisGraph(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "investigation_id" -------------
+	var investigationId InvestigationId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "investigation_id", r.PathValue("investigation_id"), &investigationId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "investigation_id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "hypothesis_id" -------------
+	var hypothesisId HypothesisId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "hypothesis_id", r.PathValue("hypothesis_id"), &hypothesisId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "hypothesis_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetHypothesisGraphParams
+
+	// ------------- Optional query parameter "min_confidence" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "min_confidence", r.URL.Query(), &params.MinConfidence, runtime.BindQueryParameterOptions{Type: "number", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "min_confidence"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "min_confidence", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "statuses" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", false, false, "statuses", r.URL.Query(), &params.Statuses, runtime.BindQueryParameterOptions{Type: "array", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "statuses"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "statuses", Err: err})
+		}
+		return
+	}
+
+	headers := r.Header
+
+	// ------------- Required header parameter "X-Project-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Project-ID")]; found {
+		var XProjectID ProjectId
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Project-ID", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Project-ID", valueList[0], &XProjectID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Project-ID", Err: err})
+			return
+		}
+
+		params.XProjectID = XProjectID
+
+	} else {
+		err := fmt.Errorf("Header parameter X-Project-ID is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Project-ID", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetHypothesisGraph(w, r, investigationId, hypothesisId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateHypothesisNode operation middleware
+func (siw *ServerInterfaceWrapper) CreateHypothesisNode(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "investigation_id" -------------
+	var investigationId InvestigationId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "investigation_id", r.PathValue("investigation_id"), &investigationId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "investigation_id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "hypothesis_id" -------------
+	var hypothesisId HypothesisId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "hypothesis_id", r.PathValue("hypothesis_id"), &hypothesisId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "hypothesis_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params CreateHypothesisNodeParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "X-Project-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Project-ID")]; found {
+		var XProjectID ProjectId
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Project-ID", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Project-ID", valueList[0], &XProjectID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Project-ID", Err: err})
+			return
+		}
+
+		params.XProjectID = XProjectID
+
+	} else {
+		err := fmt.Errorf("Header parameter X-Project-ID is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Project-ID", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateHypothesisNode(w, r, investigationId, hypothesisId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListNodes operation middleware
 func (siw *ServerInterfaceWrapper) ListNodes(w http.ResponseWriter, r *http.Request) {
 
@@ -1759,6 +2031,9 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	}
 
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/investigations/{investigation_id}/graph", wrapper.GetGraph)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/investigations/{investigation_id}/hypotheses/{hypothesis_id}/graph", wrapper.GetHypothesisGraph)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/investigations/{investigation_id}/hypotheses/{hypothesis_id}/nodes", wrapper.CreateHypothesisNode)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/investigations/{investigation_id}/hypotheses/{hypothesis_id}/edges", wrapper.CreateHypothesisGraphEdge)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/investigations/{investigation_id}/nodes", wrapper.ListNodes)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/investigations/{investigation_id}/nodes", wrapper.CreateNode)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/investigations/{investigation_id}/nodes/{node_id}", wrapper.DeleteNode)
@@ -2737,6 +3012,318 @@ func (response GetGraph501JSONResponse) VisitGetGraphResponse(w http.ResponseWri
 	return err
 }
 
+type CreateHypothesisGraphEdgeRequestObject struct {
+	InvestigationId InvestigationId `json:"investigation_id"`
+	HypothesisId    HypothesisId    `json:"hypothesis_id"`
+	Params          CreateHypothesisGraphEdgeParams
+	Body            *CreateHypothesisGraphEdgeJSONRequestBody
+}
+
+type CreateHypothesisGraphEdgeResponseObject interface {
+	VisitCreateHypothesisGraphEdgeResponse(w http.ResponseWriter) error
+}
+
+type CreateHypothesisGraphEdge201JSONResponse GraphEdge
+
+func (response CreateHypothesisGraphEdge201JSONResponse) VisitCreateHypothesisGraphEdgeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateHypothesisGraphEdge401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response CreateHypothesisGraphEdge401JSONResponse) VisitCreateHypothesisGraphEdgeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateHypothesisGraphEdge403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response CreateHypothesisGraphEdge403JSONResponse) VisitCreateHypothesisGraphEdgeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateHypothesisGraphEdge404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response CreateHypothesisGraphEdge404JSONResponse) VisitCreateHypothesisGraphEdgeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateHypothesisGraphEdge409JSONResponse struct{ ConflictJSONResponse }
+
+func (response CreateHypothesisGraphEdge409JSONResponse) VisitCreateHypothesisGraphEdgeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateHypothesisGraphEdge422JSONResponse struct{ ValidationErrorJSONResponse }
+
+func (response CreateHypothesisGraphEdge422JSONResponse) VisitCreateHypothesisGraphEdgeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateHypothesisGraphEdge500JSONResponse struct{ InternalErrorJSONResponse }
+
+func (response CreateHypothesisGraphEdge500JSONResponse) VisitCreateHypothesisGraphEdgeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetHypothesisGraphRequestObject struct {
+	InvestigationId InvestigationId `json:"investigation_id"`
+	HypothesisId    HypothesisId    `json:"hypothesis_id"`
+	Params          GetHypothesisGraphParams
+}
+
+type GetHypothesisGraphResponseObject interface {
+	VisitGetHypothesisGraphResponse(w http.ResponseWriter) error
+}
+
+type GetHypothesisGraph200JSONResponse HypothesisGraph
+
+func (response GetHypothesisGraph200JSONResponse) VisitGetHypothesisGraphResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetHypothesisGraph401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response GetHypothesisGraph401JSONResponse) VisitGetHypothesisGraphResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetHypothesisGraph403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response GetHypothesisGraph403JSONResponse) VisitGetHypothesisGraphResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetHypothesisGraph404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response GetHypothesisGraph404JSONResponse) VisitGetHypothesisGraphResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetHypothesisGraph422JSONResponse struct{ ValidationErrorJSONResponse }
+
+func (response GetHypothesisGraph422JSONResponse) VisitGetHypothesisGraphResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetHypothesisGraph500JSONResponse struct{ InternalErrorJSONResponse }
+
+func (response GetHypothesisGraph500JSONResponse) VisitGetHypothesisGraphResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateHypothesisNodeRequestObject struct {
+	InvestigationId InvestigationId `json:"investigation_id"`
+	HypothesisId    HypothesisId    `json:"hypothesis_id"`
+	Params          CreateHypothesisNodeParams
+	Body            *CreateHypothesisNodeJSONRequestBody
+}
+
+type CreateHypothesisNodeResponseObject interface {
+	VisitCreateHypothesisNodeResponse(w http.ResponseWriter) error
+}
+
+type CreateHypothesisNode201JSONResponse GraphNode
+
+func (response CreateHypothesisNode201JSONResponse) VisitCreateHypothesisNodeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateHypothesisNode401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response CreateHypothesisNode401JSONResponse) VisitCreateHypothesisNodeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateHypothesisNode403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response CreateHypothesisNode403JSONResponse) VisitCreateHypothesisNodeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateHypothesisNode404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response CreateHypothesisNode404JSONResponse) VisitCreateHypothesisNodeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateHypothesisNode409JSONResponse struct{ ConflictJSONResponse }
+
+func (response CreateHypothesisNode409JSONResponse) VisitCreateHypothesisNodeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateHypothesisNode422JSONResponse struct{ ValidationErrorJSONResponse }
+
+func (response CreateHypothesisNode422JSONResponse) VisitCreateHypothesisNodeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateHypothesisNode500JSONResponse struct{ InternalErrorJSONResponse }
+
+func (response CreateHypothesisNode500JSONResponse) VisitCreateHypothesisNodeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type ListNodesRequestObject struct {
 	InvestigationId InvestigationId `json:"investigation_id"`
 	Params          ListNodesParams
@@ -3285,6 +3872,15 @@ type StrictServerInterface interface {
 	// GetGraph Graph of the investigation
 	// (GET /investigations/{investigation_id}/graph)
 	GetGraph(ctx context.Context, request GetGraphRequestObject) (GetGraphResponseObject, error)
+	// CreateHypothesisGraphEdge Draw a shared graph edge in a hypothesis
+	// (POST /investigations/{investigation_id}/hypotheses/{hypothesis_id}/edges)
+	CreateHypothesisGraphEdge(ctx context.Context, request CreateHypothesisGraphEdgeRequestObject) (CreateHypothesisGraphEdgeResponseObject, error)
+	// GetHypothesisGraph Graph projection of a hypothesis
+	// (GET /investigations/{investigation_id}/hypotheses/{hypothesis_id}/graph)
+	GetHypothesisGraph(ctx context.Context, request GetHypothesisGraphRequestObject) (GetHypothesisGraphResponseObject, error)
+	// CreateHypothesisNode Create or find a graph node in a hypothesis
+	// (POST /investigations/{investigation_id}/hypotheses/{hypothesis_id}/nodes)
+	CreateHypothesisNode(ctx context.Context, request CreateHypothesisNodeRequestObject) (CreateHypothesisNodeResponseObject, error)
 	// ListNodes Nodes of the investigation
 	// (GET /investigations/{investigation_id}/nodes)
 	ListNodes(ctx context.Context, request ListNodesRequestObject) (ListNodesResponseObject, error)
@@ -3605,6 +4201,104 @@ func (sh *strictHandler) GetGraph(w http.ResponseWriter, r *http.Request, invest
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetGraphResponseObject); ok {
 		if err := validResponse.VisitGetGraphResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateHypothesisGraphEdge operation middleware
+func (sh *strictHandler) CreateHypothesisGraphEdge(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, hypothesisId HypothesisId, params CreateHypothesisGraphEdgeParams) {
+	var request CreateHypothesisGraphEdgeRequestObject
+
+	request.InvestigationId = investigationId
+	request.HypothesisId = hypothesisId
+	request.Params = params
+
+	var body CreateHypothesisGraphEdgeJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateHypothesisGraphEdge(ctx, request.(CreateHypothesisGraphEdgeRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateHypothesisGraphEdge")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateHypothesisGraphEdgeResponseObject); ok {
+		if err := validResponse.VisitCreateHypothesisGraphEdgeResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetHypothesisGraph operation middleware
+func (sh *strictHandler) GetHypothesisGraph(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, hypothesisId HypothesisId, params GetHypothesisGraphParams) {
+	var request GetHypothesisGraphRequestObject
+
+	request.InvestigationId = investigationId
+	request.HypothesisId = hypothesisId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetHypothesisGraph(ctx, request.(GetHypothesisGraphRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetHypothesisGraph")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetHypothesisGraphResponseObject); ok {
+		if err := validResponse.VisitGetHypothesisGraphResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateHypothesisNode operation middleware
+func (sh *strictHandler) CreateHypothesisNode(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, hypothesisId HypothesisId, params CreateHypothesisNodeParams) {
+	var request CreateHypothesisNodeRequestObject
+
+	request.InvestigationId = investigationId
+	request.HypothesisId = hypothesisId
+	request.Params = params
+
+	var body CreateHypothesisNodeJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateHypothesisNode(ctx, request.(CreateHypothesisNodeRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateHypothesisNode")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateHypothesisNodeResponseObject); ok {
+		if err := validResponse.VisitCreateHypothesisNodeResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

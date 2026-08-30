@@ -35,6 +35,19 @@ type Database interface {
 	InvestigationExists(ctx context.Context, projectID, investigationID string) (bool, error)
 	ImportContext(ctx context.Context, request model.ImportRequest) (model.ImportStats, error)
 
+	CreateHypothesis(ctx context.Context, hypothesis model.HypothesisNew) (model.Hypothesis, error)
+	ListHypotheses(ctx context.Context, projectID, investigationID string, filter model.HypothesisFilter) ([]model.Hypothesis, error)
+	GetHypothesis(ctx context.Context, projectID, investigationID, hypothesisID string) (model.Hypothesis, error)
+	UpdateHypothesis(ctx context.Context, patch model.HypothesisPatch) (model.Hypothesis, error)
+	DeleteHypothesis(ctx context.Context, projectID, investigationID, hypothesisID string) error
+	HypothesisGraph(ctx context.Context, projectID, investigationID, hypothesisID string, filter model.EdgeFilter) (model.HypothesisGraph, error)
+	AddHypothesisNode(ctx context.Context, projectID, investigationID, hypothesisID, nodeID string) error
+	DeleteHypothesisNode(ctx context.Context, projectID, investigationID, hypothesisID, nodeID string) error
+	AddHypothesisEdge(ctx context.Context, projectID, investigationID, hypothesisID, edgeID string) error
+	DeleteHypothesisEdge(ctx context.Context, projectID, investigationID, hypothesisID, edgeID string) error
+	CreateHypothesisNode(ctx context.Context, projectID, investigationID, hypothesisID, nodeType string, entityID, eventID *string, origin string, somIssueIDs []string) (model.GraphNode, error)
+	CreateHypothesisGraphEdge(ctx context.Context, hypothesisID string, edge model.GraphEdgeNew) (model.GraphEdge, error)
+
 	InvestigationFindings(ctx context.Context, projectID, investigationID string, filter model.ObjectFilter) ([]model.Finding, error)
 	GetFinding(ctx context.Context, projectID, findingID string) (model.Finding, error)
 	DetachFinding(ctx context.Context, projectID, investigationID, findingID string) error

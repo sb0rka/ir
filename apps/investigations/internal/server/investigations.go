@@ -11,6 +11,7 @@ import (
 
 	"github.com/sb0rka/ir/apps/investigations/internal/domain/model"
 	"github.com/sb0rka/ir/apps/investigations/internal/gatewayclient"
+	"github.com/sb0rka/ir/apps/investigations/internal/store"
 	"github.com/sb0rka/ir/apps/investigations/internal/transport/httperr"
 	"github.com/sb0rka/ir/apps/investigations/internal/transport/socctx"
 	"github.com/sb0rka/ir/packages/contract/investigations"
@@ -671,4 +672,164 @@ func (s *Server) GetInvestigationTree(context.Context, investigations.GetInvesti
 }
 func (s *Server) DeleteInvestigation(context.Context, investigations.DeleteInvestigationRequestObject) (investigations.DeleteInvestigationResponseObject, error) {
 	return nil, httperr.ErrNotImplemented
+}
+
+// AddHypothesisAgentResults Save explicit SOM agent results for an active hypothesis
+// (POST /investigations/{investigation_id}/hypotheses/{hypothesis_id}/agent-results)
+func (s *Server) AddHypothesisAgentResults(ctx context.Context, request investigations.AddHypothesisAgentResultsRequestObject) (investigations.AddHypothesisAgentResultsResponseObject, error) {
+	scope, err := s.scope(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if request.Body == nil {
+		return nil, httperr.BadRequest("request body is required")
+	}
+	if len(request.Body.SomIssueIds) == 0 {
+		return nil, validationError("som_issue_ids must not be empty")
+	}
+	investigationID := request.InvestigationId.String()
+	hypothesisID := request.HypothesisId.String()
+	hypothesis, err := s.db.GetHypothesis(ctx, scope.ProjectID, investigationID, hypothesisID)
+	if err != nil {
+		return nil, hypothesisStoreError(err)
+	}
+	if hypothesis.Status != "active" {
+		return nil, hypothesisStoreError(&store.ConflictError{IDs: []string{hypothesisID}})
+	}
+
+	gatewayRequest := gatewayclient.ResolveContextRequest{}
+	eventRefs := make(map[string]string, len(request.Body.Events))
+	entityRefs := make(map[string]string, len(request.Body.Entities))
+	for _, event := range request.Body.Events {
+		ref := strings.TrimSpace(event.Ref)
+		if ref == "" {
+			return nil, validationError("event ref is required")
+		}
+		if _, duplicate := eventRefs[ref]; duplicate {
+			return nil, validationError("event refs must be unique")
+		}
+		sourceKey := sourceRecordKey(event.SourceCode, event.SourceEventId)
+		eventRefs[ref] = sourceKey
+		gatewayRequest.Events = appendOptionalSlice(gatewayRequest.Events,
+			gatewayclient.EventSourceRef{SourceCode: event.SourceCode, SourceEventId: event.SourceEventId})
+	}
+	for _, entity := range request.Body.Entities {
+		ref := strings.TrimSpace(entity.Ref)
+		if ref == "" {
+			return nil, validationError("entity ref is required")
+		}
+		if _, duplicate := entityRefs[ref]; duplicate {
+			return nil, validationError("entity refs must be unique")
+		}
+		sourceKey := sourceRecordKey(entity.SourceCode, entity.SourceEntityId)
+		entityRefs[ref] = sourceKey
+		gatewayRequest.Entities = appendOptionalSlice(gatewayRequest.Entities,
+			gatewayclient.EntitySourceRef{SourceCode: entity.SourceCode, SourceEntityId: entity.SourceEntityId})
+	}
+	resolved := resolvedGatewayContext{EventsBySource: map[string]string{}, EntitiesBySource: map[string]string{}}
+	if len(optionalSlice(gatewayRequest.Events)) > 0 || len(optionalSlice(gatewayRequest.Entities)) > 0 {
+		resolved, err = s.resolveGatewayContext(ctx, scope, gatewayRequest)
+		if err != nil {
+			return nil, err
+		}
+	}
+	input := model.ImportRequest{
+		ProjectID: scope.ProjectID, InvestigationID: investigationID,
+		HypothesisID: &hypothesisID, RequireActiveHypothesis: true,
+		Origin: "agent", Selection: resolved.Selection, Warnings: resolved.Warnings,
+	}
+	for _, id := range request.Body.SomIssueIds {
+		input.SomIssueIDs = append(input.SomIssueIDs, id.String())
+	}
+	for _, node := range request.Body.Nodes {
+		converted := model.AgentNode{Ref: strings.TrimSpace(node.Ref)}
+		if node.EventRef != nil {
+			sourceKey, ok := eventRefs[strings.TrimSpace(*node.EventRef)]
+			if !ok {
+				return nil, validationError("node event_ref is not present in events")
+			}
+			value := resolved.EventsBySource[sourceKey]
+			converted.SnapshotEventID = &value
+		}
+		if node.EntityRef != nil {
+			sourceKey, ok := entityRefs[strings.TrimSpace(*node.EntityRef)]
+			if !ok {
+				return nil, validationError("node entity_ref is not present in entities")
+			}
+			value := resolved.EntitiesBySource[sourceKey]
+			converted.SnapshotEntityID = &value
+		}
+		if node.NodeId != nil {
+			value := node.NodeId.String()
+			converted.NodeID = &value
+		}
+		input.Nodes = append(input.Nodes, converted)
+	}
+	for _, edge := range request.Body.Edges {
+		input.Edges = append(input.Edges, model.AgentEdge{
+			SourceRef: edge.SourceRef, TargetRef: edge.TargetRef, RelationCode: edge.RelationCode,
+			Why: edge.Why, Confidence: edge.Confidence, EvidenceEventRefs: edge.EvidenceEventRefs,
+		})
+	}
+	stats, err := s.db.ImportContext(ctx, input)
+	if err != nil {
+		return nil, hypothesisStoreError(err)
+	}
+	return investigations.AddHypothesisAgentResults201JSONResponse(importResult(stats)), nil
+}
+
+// AddHypothesisContext Add analyst-selected context through a hypothesis
+// (POST /investigations/{investigation_id}/hypotheses/{hypothesis_id}/context)
+func (s *Server) AddHypothesisContext(ctx context.Context, request investigations.AddHypothesisContextRequestObject) (investigations.AddHypothesisContextResponseObject, error) {
+	scope, err := s.scope(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if request.Body == nil {
+		return nil, httperr.BadRequest("request body is required")
+	}
+	investigationID := request.InvestigationId.String()
+	hypothesisID := request.HypothesisId.String()
+	hypothesis, err := s.db.GetHypothesis(ctx, scope.ProjectID, investigationID, hypothesisID)
+	if err != nil {
+		return nil, hypothesisStoreError(err)
+	}
+	if hypothesis.Status == "resolved" {
+		return nil, hypothesisStoreError(&store.ConflictError{IDs: []string{hypothesisID}})
+	}
+	gatewayRequest := gatewayclient.ResolveContextRequest{}
+	for _, ref := range request.Body.Findings {
+		converted, err := gatewaySourceObjectRef(ref)
+		if err != nil {
+			return nil, validationError("invalid finding source reference")
+		}
+		gatewayRequest.Findings = appendOptionalSlice(gatewayRequest.Findings, converted)
+	}
+	for _, ref := range request.Body.Sessions {
+		converted, err := gatewaySourceObjectRef(ref)
+		if err != nil {
+			return nil, validationError("invalid session source reference")
+		}
+		gatewayRequest.Sessions = appendOptionalSlice(gatewayRequest.Sessions, converted)
+	}
+	for _, ref := range request.Body.Events {
+		gatewayRequest.Events = appendOptionalSlice(gatewayRequest.Events,
+			gatewayclient.EventSourceRef{SourceCode: ref.SourceCode, SourceEventId: ref.SourceEventId})
+	}
+	for _, ref := range request.Body.Entities {
+		gatewayRequest.Entities = appendOptionalSlice(gatewayRequest.Entities,
+			gatewayclient.EntitySourceRef{SourceCode: ref.SourceCode, SourceEntityId: ref.SourceEntityId})
+	}
+	resolved, err := s.resolveGatewayContext(ctx, scope, gatewayRequest)
+	if err != nil {
+		return nil, err
+	}
+	stats, err := s.db.ImportContext(ctx, model.ImportRequest{
+		ProjectID: scope.ProjectID, InvestigationID: investigationID, HypothesisID: &hypothesisID,
+		Selection: resolved.Selection, Origin: "analyst", Warnings: resolved.Warnings,
+	})
+	if err != nil {
+		return nil, hypothesisStoreError(err)
+	}
+	return investigations.AddHypothesisContext201JSONResponse(importResult(stats)), nil
 }
