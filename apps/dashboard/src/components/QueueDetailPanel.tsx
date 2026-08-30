@@ -26,6 +26,7 @@ export function QueueDetailPanel({
   const start = useAppStore((s) => s.startInvestigation)
   const addEventsToContext = useAppStore((s) => s.addEventsToContext)
   const appendPdqlFilter = useAppStore((s) => s.appendPdqlFilter)
+  const filterByFindingUuid = useAppStore((s) => s.filterByFindingUuid)
   const globalTime = useAppStore((s) => s.timeInterval)
   const setTimeInterval = useAppStore((s) => s.setTimeInterval)
   const loadQueue = useAppStore((s) => s.loadQueue)
@@ -83,6 +84,9 @@ export function QueueDetailPanel({
               alert={alert}
               onAddFilter={(field, value) =>
                 appendPdqlFilter(investigationId ?? null, field, value)
+              }
+              onFilterFindingUuid={(uuid, recordType) =>
+                filterByFindingUuid(investigationId ?? null, uuid, recordType)
               }
               timeInterval={timeInterval}
               onTimeChange={(interval) => {
@@ -171,12 +175,14 @@ function DecoButton({
 function AlertDetails({
   alert,
   onAddFilter,
+  onFilterFindingUuid,
   timeInterval,
   onTimeChange,
   onTimeExecute,
 }: {
   alert: AlertEvent
   onAddFilter: (field: string, value: string) => void
+  onFilterFindingUuid: (uuid: string, recordType: 'siem_incident' | 'siem_correlation') => void
   timeInterval: TimeInterval
   onTimeChange: (value: TimeInterval) => void
   onTimeExecute: (value: TimeInterval) => void
@@ -190,6 +196,7 @@ function AlertDetails({
         onTimeChange={onTimeChange}
         onTimeExecute={onTimeExecute}
         onAddFilter={onAddFilter}
+        onFilterFindingUuid={onFilterFindingUuid}
       />
     </>
   )

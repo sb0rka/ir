@@ -29,7 +29,7 @@ import {
   lookupEntity,
   searchQueue,
 } from '../api/search'
-import { appendCondition, alignGroupValues, astToFilterChips, defaultQuery, drillGroupValues, entityKindForField, parseQueuePdql, serialize } from '../lib/pdql'
+import { appendCondition, alignGroupValues, astToFilterChips, defaultQuery, drillGroupValues, entityKindForField, findingUuidFromAst, findingUuidQuery, parseQueuePdql, serialize, type FindingFilterField } from '../lib/pdql'
 import { pdqlFieldForFilterField } from '../lib/filters'
 import { filterFingerprint } from '../lib/queryFingerprint'
 import { demoDayInterval, type TimeInterval } from '../components/time-interval'
@@ -65,6 +65,7 @@ export const emptyContextQueue: ContextQueueState = {
   eventGroups: [],
   executedFingerprint: null,
   queryHistory: [],
+  findingFilterWarnAt: 0,
   selectedIds: [],
   hideAdded: false,
   originFilter: 'all',
@@ -102,6 +103,7 @@ interface AppState {
   eventGroups: EventGroupItem[]
   executedFingerprint: string | null
   queryHistory: QueryHistoryEntry[]
+  findingFilterWarnAt: number
   selectedAlertIds: string[]
   expandedCorrelationIds: string[]
   inspectedQueueItem: QueueItem | null
@@ -173,6 +175,12 @@ interface AppState {
   executeContextQuery: (investigationId: string) => Promise<boolean>
   addEventsToContext: (investigationId: string, eventIds: string[]) => Promise<void>
   appendPdqlFilter: (investigationId: string | null, field: string, value: string) => void
+  filterByFindingUuid: (
+    investigationId: string | null,
+    uuid: string,
+    recordType: FindingFilterField,
+  ) => void
+  warnFindingFilterExclusive: (investigationId: string | null) => void
   addFieldToContext: (
     investigationId: string,
     input: { field: string; value: string; eventId: string; includeEvent: boolean },
@@ -299,6 +307,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   eventGroups: [],
   executedFingerprint: null,
   queryHistory: [],
+  findingFilterWarnAt: 0,
   selectedAlertIds: [],
   expandedCorrelationIds: [],
   inspectedQueueItem: null,
@@ -335,6 +344,11 @@ export const useAppStore = create<AppState>((set, get) => ({
   somCatalog: null,
 
   addChip: (field, value) => {
+    const parsed = parseQueuePdql(get().queuePdql)
+    if (parsed.ok && findingUuidFromAst(parsed.ast)) {
+      get().warnFindingFilterExclusive(null)
+      return
+    }
     set({
       queuePdql: appendCondition(get().queuePdql, pdqlFieldForFilterField(field), '=', value),
     })
@@ -749,6 +763,11 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   addContextChip: (investigationId, field, value) => {
     const cur = get().contextQueue[investigationId] ?? emptyContextQueue
+    const parsed = parseQueuePdql(cur.pdql)
+    if (parsed.ok && findingUuidFromAst(parsed.ast)) {
+      get().warnFindingFilterExclusive(investigationId)
+      return
+    }
     set({
       contextQueue: {
         ...get().contextQueue,
@@ -873,6 +892,10 @@ export const useAppStore = create<AppState>((set, get) => ({
       ? (get().contextQueue[investigationId] ?? emptyContextQueue).queueSource
       : get().queueSource
     const parsed = parseQueuePdql(pdql)
+    if (parsed.ok && findingUuidFromAst(parsed.ast)) {
+      get().warnFindingFilterExclusive(investigationId)
+      return
+    }
     if (queueSource === 'events' && parsed.ok && parsed.ast.groups.some((group) => group.field === field)) {
       get().drillGroupValue(investigationId, field, value)
       return
@@ -886,6 +909,44 @@ export const useAppStore = create<AppState>((set, get) => ({
       contextQueue: {
         ...get().contextQueue,
         [investigationId]: { ...cur, pdql: appendCondition(cur.pdql, field, '=', value) },
+      },
+    })
+  },
+
+  filterByFindingUuid: (investigationId, uuid, recordType) => {
+    const value = uuid.trim()
+    if (!value) return
+    const pdql = findingUuidQuery(value, recordType)
+    if (!investigationId) {
+      set({ queuePdql: pdql, queueSource: 'events', groupValues: [], eventGroups: [] })
+      return
+    }
+    const cur = get().contextQueue[investigationId] ?? emptyContextQueue
+    set({
+      contextQueue: {
+        ...get().contextQueue,
+        [investigationId]: {
+          ...cur,
+          pdql,
+          queueSource: 'events',
+          groupValues: [],
+          eventGroups: [],
+        },
+      },
+    })
+  },
+
+  warnFindingFilterExclusive: (investigationId) => {
+    const now = Date.now()
+    if (!investigationId) {
+      set({ findingFilterWarnAt: now })
+      return
+    }
+    const cur = get().contextQueue[investigationId] ?? emptyContextQueue
+    set({
+      contextQueue: {
+        ...get().contextQueue,
+        [investigationId]: { ...cur, findingFilterWarnAt: now },
       },
     })
   },

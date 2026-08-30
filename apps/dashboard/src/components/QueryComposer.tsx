@@ -3,6 +3,8 @@ import { useEffect, useState } from 'react'
 import { Braces, Check, History, Loader2, Pencil, Play, Plus, Search } from 'lucide-react'
 import {
   addFieldToPdql,
+  findingUuidFromAst,
+  isFindingFilterField,
   parseQueuePdql,
   pdqlToChips,
   serialize,
@@ -97,6 +99,8 @@ export function QueryComposer({
   onExecute,
   onApplyHistory,
   onClearGroupFrom,
+  findingFilterWarnAt = 0,
+  onFindingFilterBlocked,
 }: {
   pdql: string
   timeInterval: TimeInterval
@@ -112,6 +116,8 @@ export function QueryComposer({
   onExecute: () => void
   onApplyHistory: (entry: QueryHistoryEntry) => void
   onClearGroupFrom?: (index: number) => void
+  findingFilterWarnAt?: number
+  onFindingFilterBlocked?: () => void
 }) {
   const loadFields = usePdqlStore((s) => s.loadFields)
   const fields = usePdqlStore((s) => s.fields)
@@ -125,6 +131,7 @@ export function QueryComposer({
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(pdql)
   const [editError, setEditError] = useState<string | null>(null)
+  const [findingChipFlash, setFindingChipFlash] = useState(false)
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }))
 
   useEffect(() => {
@@ -135,6 +142,13 @@ export function QueryComposer({
     if (!editing) setDraft(pdql)
   }, [editing, pdql])
 
+  useEffect(() => {
+    if (!findingFilterWarnAt) return
+    setFindingChipFlash(true)
+    const timer = window.setTimeout(() => setFindingChipFlash(false), 900)
+    return () => window.clearTimeout(timer)
+  }, [findingFilterWarnAt])
+
   const parsed = parseQueuePdql(pdql)
   const chips = parsed.ok ? pdqlToChips(parsed.ast) : []
   const filters = chips.filter((chip) => chip.kind === 'filter')
@@ -142,6 +156,7 @@ export function QueryComposer({
   const groups = chips.filter((chip) => chip.kind === 'group')
   const stale = filterFingerprint(pdql, timeInterval, queueSource, groupValues) !== executedFingerprint
   const parseError = parseErrorText(parsed)
+  const findingFilterLocked = parsed.ok && Boolean(findingUuidFromAst(parsed.ast))
 
   const removeChip = (id: string) => {
     if (!parsed.ok) return
@@ -154,6 +169,12 @@ export function QueryComposer({
   }
 
   const addField = (name: string) => {
+    if (addSection === 'filter' && findingFilterLocked) {
+      onFindingFilterBlocked?.()
+      setAddOpen(false)
+      setAddQuery('')
+      return
+    }
     onPdqlChange(addFieldToPdql(pdql, name, addSection, fields))
     setAddOpen(false)
     setAddQuery('')
@@ -187,7 +208,11 @@ export function QueryComposer({
       </div>
       <div className="flex flex-wrap items-center gap-2">
         {filters.map((chip) => (
-          <Chip key={chip.id} onRemove={() => removeChip(chip.id)}>
+          <Chip
+            key={chip.id}
+            flash={findingChipFlash && isFindingFilterField(chip.field ?? '')}
+            onRemove={() => removeChip(chip.id)}
+          >
             {chip.label}
           </Chip>
         ))}
@@ -451,6 +476,8 @@ export function GlobalQueryComposer() {
   const applyQueueHistory = useAppStore((s) => s.applyQueueHistory)
   const loadQueue = useAppStore((s) => s.loadQueue)
   const clearGroupPathFrom = useAppStore((s) => s.clearGroupPathFrom)
+  const findingFilterWarnAt = useAppStore((s) => s.findingFilterWarnAt)
+  const warnFindingFilterExclusive = useAppStore((s) => s.warnFindingFilterExclusive)
 
   return (
     <QueryComposer
@@ -461,12 +488,14 @@ export function GlobalQueryComposer() {
       executedFingerprint={executedFingerprint}
       history={history}
       executing={executing}
+      findingFilterWarnAt={findingFilterWarnAt}
       onPdqlChange={setQueuePdql}
       onTimeChange={setTimeInterval}
       onQueueSourceChange={setQueueSource}
       onApplyHistory={applyQueueHistory}
       onExecute={() => void loadQueue()}
       onClearGroupFrom={(index) => clearGroupPathFrom(null, index)}
+      onFindingFilterBlocked={() => warnFindingFilterExclusive(null)}
     />
   )
 }
@@ -482,6 +511,7 @@ export function ContextQueryComposer({
   const setContextQueue = useAppStore((s) => s.setContextQueue)
   const executeContextQuery = useAppStore((s) => s.executeContextQuery)
   const clearGroupPathFrom = useAppStore((s) => s.clearGroupPathFrom)
+  const warnFindingFilterExclusive = useAppStore((s) => s.warnFindingFilterExclusive)
 
   return (
     <QueryComposer
@@ -493,6 +523,7 @@ export function ContextQueryComposer({
       history={queue.queryHistory}
       executing={queue.loading}
       extra={extra}
+      findingFilterWarnAt={queue.findingFilterWarnAt}
       onPdqlChange={(pdql) => setContextQueue(investigationId, { pdql })}
       onTimeChange={(timeInterval) => setContextQueue(investigationId, { timeInterval })}
       onQueueSourceChange={(queueSource) => setContextQueue(investigationId, { queueSource })}
@@ -508,6 +539,7 @@ export function ContextQueryComposer({
         void executeContextQuery(investigationId)
       }}
       onClearGroupFrom={(index) => clearGroupPathFrom(investigationId, index)}
+      onFindingFilterBlocked={() => warnFindingFilterExclusive(investigationId)}
     />
   )
 }

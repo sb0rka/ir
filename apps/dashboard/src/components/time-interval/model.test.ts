@@ -18,6 +18,7 @@ import {
   timeZoneAbbrev,
   timeZoneLabel,
   resolve,
+  inResolvedInterval,
   returnToNow,
   switchToRange,
   switchToRelative,
@@ -302,6 +303,18 @@ describe('demoDayInterval', () => {
     const resolved = resolve(interval)
     expect(formatInstant(resolved.from, 'Europe/Moscow')).toBe('2025-10-23 00:00:00')
     expect(formatInstant(resolved.to, 'Europe/Moscow')).toBe('2025-10-23 23:59:59')
+  })
+})
+
+describe('inResolvedInterval', () => {
+  it('keeps instants on the inclusive bounds', () => {
+    const range = { from: '2025-10-23T00:00:00.000Z', to: '2025-10-23T23:59:59.000Z' }
+    expect(inResolvedInterval('2025-10-23T00:00:00.000Z', range)).toBe(true)
+    expect(inResolvedInterval('2025-10-23T12:00:00.000Z', range)).toBe(true)
+    expect(inResolvedInterval('2025-10-23T23:59:59.000Z', range)).toBe(true)
+    expect(inResolvedInterval('2025-10-22T23:59:59.000Z', range)).toBe(false)
+    expect(inResolvedInterval('2025-10-24T00:00:00.000Z', range)).toBe(false)
+    expect(inResolvedInterval('not-a-time', range)).toBe(false)
   })
 })
 

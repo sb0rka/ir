@@ -1,3 +1,4 @@
+import { FINDING_FILTER_LABELS, isFindingFilterField } from './append'
 import { removeGroup } from './ast'
 import { isGroupCountColumn, isGroupDimensionColumn, type QueryAst, type SortDir } from './model'
 import { formatConditionLabel, serialize } from './serialize'
@@ -8,7 +9,17 @@ export interface PdqlChip {
   id: string
   kind: PdqlChipKind
   label: string
+  field?: string
   sort?: SortDir
+}
+
+function quote(value: string): string {
+  return `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`
+}
+
+function filterChipLabel(field: string, value: string, fallback: string): string {
+  if (isFindingFilterField(field)) return `${FINDING_FILTER_LABELS[field]} = ${quote(value)}`
+  return fallback
 }
 
 function formatSelectLabel(ast: QueryAst, columnId: string): string {
@@ -27,16 +38,18 @@ export function pdqlToChips(ast: QueryAst): PdqlChip[] {
   const chips: PdqlChip[] = ast.filter.map((condition) => ({
     id: condition.id,
     kind: 'filter',
-    label: formatConditionLabel(condition),
+    field: condition.field,
+    label: filterChipLabel(condition.field, condition.value, formatConditionLabel(condition)),
   }))
   for (const group of ast.groups) {
-    chips.push({ id: group.id, kind: 'group', label: `group ${group.field}` })
+    chips.push({ id: group.id, kind: 'group', field: group.field, label: `group ${group.field}` })
   }
   for (const column of ast.columns) {
     if (isGroupDimensionColumn(ast, column) || isGroupCountColumn(column)) continue
     chips.push({
       id: column.id,
       kind: 'column',
+      field: column.field,
       label: formatSelectLabel(ast, column.id),
       sort: column.sort?.dir,
     })

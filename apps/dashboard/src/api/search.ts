@@ -19,11 +19,12 @@ import {
   astToEventAggregate,
   astToEventSearch,
   astToFilterChips,
+  findingUuidFromAst,
   pdqlToSearchParts,
   type QueryAst,
 } from '../lib/pdql'
 import { sortQueueAlerts, type QueueSort } from '../lib/queueSort'
-import { resolve, type TimeInterval } from '../components/time-interval/model'
+import { inResolvedInterval, resolve, type TimeInterval } from '../components/time-interval/model'
 import type { components as Gw } from '@ir/contract/gateway'
 
 type FindingsBody = Gw['schemas']['SearchFindingsRequest']
@@ -266,6 +267,104 @@ async function aggregateEventsQueue(
   }
 }
 
+function findingUuidResolveKeys(
+  uuid: string,
+  timeRange: { from: string; to: string },
+  sources: string[],
+  recordType: FindingResolveKey['record_type'],
+): FindingResolveKey[] {
+  return sources.map((source_code) => ({
+    source_code,
+    record_type: recordType,
+    external_id: uuid,
+    time_range: timeRange,
+  }))
+}
+
+function findingRefBody(key: FindingResolveKey): Gw['schemas']['SourceObjectRef'] {
+  return {
+    source_code: key.source_code,
+    ...(key.source_instance ? { source_instance: key.source_instance } : {}),
+    record_type: key.record_type,
+    external_id: key.external_id,
+    time_range: key.time_range,
+  }
+}
+
+function entitiesFromGateway(events: Gw['schemas']['Event'][], extra: Gw['schemas']['Entity'][]) {
+  const entities: Record<string, Entity> = {}
+  for (const entity of extra) {
+    const mapped = mapGatewayEntity(entity)
+    entities[mapped.id] = mapped
+  }
+  const alertList: AlertEvent[] = []
+  const seen = new Set<string>()
+  for (const event of events) {
+    const entityIds: string[] = []
+    for (const mention of event.entities ?? []) {
+      if (!mention.type || !mention.value) continue
+      const mapped = mapGatewayEntity({
+        type: mention.type,
+        value: mention.value,
+        attributes: {},
+        sources: [],
+      })
+      entities[mapped.id] = entities[mapped.id] ?? mapped
+      entityIds.push(mapped.id)
+    }
+    const alert = mapGatewayEvent(event, entityIds)
+    if (seen.has(alert.id)) continue
+    seen.add(alert.id)
+    alertList.push(alert)
+  }
+  return { alertList, entities }
+}
+
+async function resolveUuidFindingQueue(
+  uuid: string,
+  recordType: FindingResolveKey['record_type'],
+  timeInterval: TimeInterval,
+  allowedSources: string[],
+  availableSources: string[],
+): Promise<QueueSearchResult | null> {
+  const time_range = resolve(timeInterval)
+  const keys = findingUuidResolveKeys(uuid, time_range, allowedSources, recordType)
+  if (keys.length === 0) return null
+
+  const { data, error, response } = await gatewayClient.POST('/api/v1/context/resolve', {
+    params: projectHeader(),
+    body: {
+      findings: keys.map(findingRefBody),
+      events: allowedSources.map((source_code) => ({
+        source_code,
+        source_event_id: uuid,
+      })),
+    },
+  })
+  if (error || !data) throw unwrapError(error, response.status)
+
+  const { alertList, entities } = entitiesFromGateway(data.events ?? [], data.entities ?? [])
+  let picked: AlertEvent[] = []
+  let usedKey: FindingResolveKey | null = null
+  for (const key of keys) {
+    const children = pickFindingChildEvents(alertList, key)
+    if (children.length > picked.length) {
+      picked = children
+      usedKey = key
+    }
+  }
+  if (picked.length === 0 || !usedKey) return null
+
+  return finishQueue(
+    picked.filter((alert) => inResolvedInterval(alert.time, time_range)),
+    entities,
+    [],
+    undefined,
+    contextErrorMessagesForKey(data, usedKey),
+    availableSources,
+  )
+}
+
 async function searchEventsQueue(
   ast: QueryAst,
   timeInterval: TimeInterval,
@@ -287,6 +386,18 @@ async function searchEventsQueue(
       ],
       sources.available,
     )
+  }
+
+  const finding = findingUuidFromAst(ast)
+  if (finding) {
+    const resolved = await resolveUuidFindingQueue(
+      finding.uuid,
+      finding.recordType,
+      timeInterval,
+      allowedSources,
+      sources.available,
+    )
+    if (resolved) return resolved
   }
 
   const sourceErrors: string[] = []
@@ -333,31 +444,7 @@ async function searchEventsQueue(
     cursor = data.next_cursor
   }
 
-  const entities: Record<string, Entity> = {}
-  for (const entity of gatewayEntities) {
-    const mapped = mapGatewayEntity(entity)
-    entities[mapped.id] = mapped
-  }
-  const alertList: AlertEvent[] = []
-  const seen = new Set<string>()
-  for (const event of events) {
-    const entityIds: string[] = []
-    for (const mention of event.entities ?? []) {
-      if (!mention.type || !mention.value) continue
-      const mapped = mapGatewayEntity({
-        type: mention.type,
-        value: mention.value,
-        attributes: {},
-        sources: [],
-      })
-      entities[mapped.id] = entities[mapped.id] ?? mapped
-      entityIds.push(mapped.id)
-    }
-    const alert = mapGatewayEvent(event, entityIds)
-    if (seen.has(alert.id)) continue
-    seen.add(alert.id)
-    alertList.push(alert)
-  }
+  const { alertList, entities } = entitiesFromGateway(events, gatewayEntities)
   return finishQueue(
     alertList,
     entities,
@@ -409,21 +496,33 @@ function contextErrorMessages(data: Gw['schemas']['ResolveContextResponse']): st
   return [...new Set(out)]
 }
 
+function contextErrorMessagesForKey(
+  data: Gw['schemas']['ResolveContextResponse'],
+  key: FindingResolveKey,
+): string[] {
+  const out: string[] = []
+  for (const resolution of data.resolutions ?? []) {
+    if (
+      resolution.ref.source_code !== key.source_code ||
+      resolution.ref.record_type !== key.record_type ||
+      resolution.ref.external_id !== key.external_id
+    ) {
+      continue
+    }
+    for (const err of resolution.errors ?? []) {
+      out.push(`${err.source}: ${err.message}`)
+    }
+  }
+  return [...new Set(out)]
+}
+
 export async function resolveFindingEvents(
   key: FindingResolveKey,
 ): Promise<{ events: AlertEvent[]; errors: string[] }> {
   const { data, error, response } = await gatewayClient.POST('/api/v1/context/resolve', {
     params: projectHeader(),
     body: {
-      findings: [
-        {
-          source_code: key.source_code,
-          ...(key.source_instance ? { source_instance: key.source_instance } : {}),
-          record_type: key.record_type,
-          external_id: key.external_id,
-          time_range: key.time_range,
-        },
-      ],
+      findings: [findingRefBody(key)],
     },
   })
   if (error || !data) throw unwrapError(error, response.status)

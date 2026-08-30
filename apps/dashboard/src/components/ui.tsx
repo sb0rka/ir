@@ -16,12 +16,14 @@ export function Chip({
   onClick,
   title,
   tone = 'default',
+  flash = false,
 }: {
   children: React.ReactNode
   onRemove?: () => void
   onClick?: () => void
   title?: string
   tone?: 'default' | 'proposed' | 'confirmed' | 'rejected'
+  flash?: boolean
 }) {
   const tones = {
     default: 'border-border bg-surface-2 text-fg',
@@ -35,6 +37,7 @@ export function Chip({
         'inline-flex items-center gap-1 rounded border px-2 py-0.5 text-xs font-mono',
         tones[tone],
         onClick && 'cursor-pointer hover:border-fg/40',
+        flash && 'chip-flash-critical',
       )}
       title={title}
       role={onClick ? 'button' : undefined}

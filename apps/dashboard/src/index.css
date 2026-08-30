@@ -65,3 +65,21 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: #444;
 }
+
+@keyframes chip-flash-critical {
+  0%,
+  100% {
+    border-color: var(--color-border);
+    background-color: var(--color-surface-2);
+    color: var(--color-fg);
+  }
+  50% {
+    border-color: var(--color-critical);
+    background-color: color-mix(in srgb, var(--color-critical) 18%, transparent);
+    color: var(--color-critical);
+  }
+}
+
+.chip-flash-critical {
+  animation: chip-flash-critical 0.28s ease-in-out 3;
+}
