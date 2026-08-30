@@ -4,11 +4,14 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 
 	"github.com/google/uuid"
 
+	"github.com/sb0rka/ir/apps/investigations/internal/authclient"
+	"github.com/sb0rka/ir/apps/investigations/internal/config"
 	"github.com/sb0rka/ir/apps/investigations/internal/somclient"
 	"github.com/sb0rka/ir/apps/investigations/internal/somprompt"
 	"github.com/sb0rka/ir/apps/investigations/internal/transport/httperr"
@@ -145,12 +148,17 @@ func (s *Server) RunSomIssue(ctx context.Context, request som.RunSomIssueRequest
 	if err := s.som.RunConfigured(); err != nil {
 		return nil, somNotConfigured(err)
 	}
-	if s.prompt.GatewayBaseURL == "" {
-		return nil, somNotConfigured(errors.New("GATEWAY_PUBLIC_BASE_URL is not set"))
-	}
 	scope, err := s.scope(ctx)
 	if err != nil {
 		return nil, err
+	}
+	investigationID := request.Body.InvestigationId.String()
+	if _, err := s.db.GetInvestigation(ctx, scope.ProjectID, investigationID); err != nil {
+		return nil, storeError(err)
+	}
+	mcpURL, err := remoteMCPURL(s.prompt)
+	if err != nil {
+		return nil, somNotConfigured(err)
 	}
 
 	issueID := request.IssueId.String()
@@ -168,24 +176,18 @@ func (s *Server) RunSomIssue(ctx context.Context, request som.RunSomIssueRequest
 		return nil, err
 	}
 
-	investigationID := request.Body.InvestigationId.String()
 	description := ""
 	if issue.Description != nil {
 		description = *issue.Description
 	}
 	prompt := somprompt.Build(issue.Title, description, somprompt.Context{
 		IRBaseURL:       s.prompt.IRBaseURL,
-		GatewayBaseURL:  s.prompt.GatewayBaseURL,
 		ProjectID:       scope.ProjectID,
 		InvestigationID: investigationID,
 		SomIssueID:      issue.ID,
 	})
 	name := runName(issue)
 	exec := somclient.ResolveExecutorConfig(request.Body.Variant, request.Body.ModelId)
-	mcpToken, err := s.issueMCPToken(scope.ProjectID, investigationID)
-	if err != nil {
-		return nil, err
-	}
 
 	var sessionID string
 	err = s.withSOMBearer(ctx, false, func(bearer string) error {
@@ -200,13 +202,24 @@ func (s *Server) RunSomIssue(ctx context.Context, request som.RunSomIssueRequest
 	if err != nil {
 		return nil, somError(err)
 	}
+	platformBearer, ok := socctx.BearerFromContext(ctx)
+	if !ok {
+		return nil, httperr.ErrUnauthorized
+	}
+	if s.agentTokens == nil {
+		return nil, somNotConfigured(authclient.ErrUnavailable)
+	}
+	agentToken, err := s.agentTokens.InvestigationToken(ctx, platformBearer, scope.ProjectID, investigationID)
+	if err != nil {
+		return nil, agentTokenError(err)
+	}
 	remoteMCPServers := map[string]somclient.RemoteMCPServer{
 		"investigation": {
-			URL:     strings.TrimRight(s.prompt.IRBaseURL, "/") + "/mcp",
+			URL:     mcpURL,
 			Enabled: true,
 			Headers: map[string]string{
-				"Accept":             "application/json, text/event-stream",
-				"X-Sb0rka-MCP-Token": mcpToken,
+				"Accept":        "application/json, text/event-stream",
+				"Authorization": "Bearer " + agentToken,
 			},
 		},
 	}
@@ -254,6 +267,34 @@ func (s *Server) RunSomIssue(ctx context.Context, request som.RunSomIssueRequest
 		SomEnvironmentId:   somEnvUUID,
 		RepoId:             &repoUUID,
 	}), nil
+}
+
+func remoteMCPURL(cfg config.PromptConfig) (string, error) {
+	parsed, err := url.Parse(strings.TrimSpace(cfg.IRBaseURL))
+	if err != nil || parsed.Host == "" || (parsed.Scheme != "https" && parsed.Scheme != "http") {
+		return "", errors.New("IR_PUBLIC_BASE_URL must be an absolute HTTP(S) URL")
+	}
+	if parsed.Scheme != "https" && !cfg.AllowInsecureMCPHTTP {
+		return "", errors.New("IR_PUBLIC_BASE_URL must use HTTPS; set MCP_ALLOW_INSECURE_HTTP=true only for local development")
+	}
+	parsed.Path = strings.TrimRight(parsed.Path, "/") + "/mcp"
+	parsed.RawQuery = ""
+	parsed.Fragment = ""
+	return parsed.String(), nil
+}
+
+func agentTokenError(err error) error {
+	var upstream *authclient.HTTPError
+	if errors.As(err, &upstream) {
+		switch upstream.Status {
+		case http.StatusUnauthorized:
+			return httperr.ErrUnauthorized
+		case http.StatusForbidden, http.StatusNotFound:
+			return httperr.ErrForbidden
+		}
+	}
+	return httperr.New(http.StatusBadGateway, httperr.CodeSourceUnavailable,
+		"cannot obtain investigation agent token from Sb0rka Auth")
 }
 
 func runName(issue somclient.Issue) string {

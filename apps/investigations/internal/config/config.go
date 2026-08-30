@@ -38,7 +38,8 @@ func Load() (Config, error) {
 			Format: coreconfig.GetStringEnv("LOG_FORMAT", "json"),
 		},
 		Platform: PlatformConfig{
-			APIBaseURL: strings.TrimRight(coreconfig.GetStringEnv("SB0RKA_API_BASE_URL", ""), "/"),
+			APIBaseURL:  strings.TrimRight(coreconfig.GetStringEnv("SB0RKA_API_BASE_URL", ""), "/"),
+			AuthBaseURL: strings.TrimRight(coreconfig.GetStringEnv("SB0RKA_AUTH_BASE_URL", ""), "/"),
 		},
 		SOM: SOMConfig{
 			APIBaseURL:     strings.TrimRight(coreconfig.GetStringEnv("SOM_API_BASE_URL", ""), "/"),
@@ -59,8 +60,7 @@ func Load() (Config, error) {
 	cfg.Prompt = PromptConfig{
 		IRBaseURL: strings.TrimRight(coreconfig.GetStringEnv(
 			"IR_PUBLIC_BASE_URL", "http://localhost:"+cfg.Server.Port), "/"),
-		GatewayBaseURL: strings.TrimRight(coreconfig.GetStringEnv(
-			"GATEWAY_PUBLIC_BASE_URL", cfg.Gateway.BaseURL), "/"),
+		AllowInsecureMCPHTTP: coreconfig.GetBoolEnv("MCP_ALLOW_INSECURE_HTTP", false),
 	}
 
 	key, err := loadPublicKey()

@@ -54,16 +54,7 @@ func NewHandler(deps Dependencies) http.Handler {
 	registerDomains(api, deps)
 	public.Handle(baseURL+"/", authMiddleware(deps.Cfg, deps.Log)(api))
 	mcp := deps.Server.MCPHandler()
-	authenticatedMCP := authMiddleware(deps.Cfg, deps.Log)(mcp)
-	public.Handle("/mcp", mcpOriginMiddleware(deps.Cfg)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// A valid agent capability is authenticated and scoped inside the MCP
-		// handler. Every other request uses the regular JWT/project middleware.
-		if r.Header.Get("X-Sb0rka-MCP-Token") != "" {
-			mcp.ServeHTTP(w, r)
-			return
-		}
-		authenticatedMCP.ServeHTTP(w, r)
-	})))
+	public.Handle("/mcp", mcpOriginMiddleware(deps.Cfg)(mcpAuthMiddleware(deps.Cfg, deps.Log)(mcp)))
 
 	// Логгер снаружи recover: он оборачивает ResponseWriter, а recover по этой
 	// обёртке понимает, была ли уже запись в ответ.

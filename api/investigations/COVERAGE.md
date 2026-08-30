@@ -34,12 +34,12 @@
   сущность — отдельные ссылки на исходные инструменты. Normalized snapshot,
   безопасный provenance и partial errors сохраняются; agent edge требует `why`
   и evidence.
-- **Граница источников:** UI и агент читают Gateway напрямую. `ir-api` не
-  выполняет Gateway search и не хранит полный поток или vendor raw payload.
+- **Граница источников:** UI читает Gateway, а агент — только прикреплённый
+  investigation context через MCP. `ir-api` не выполняет Gateway search и не
+  хранит полный поток или vendor raw payload.
 
 ## Вне v0.1
 
-- внутренний MCP-контур агента;
 - обогащение артефактов;
 - отчёты и пакет реагирования;
 - аудит, метрики и API администрирования;

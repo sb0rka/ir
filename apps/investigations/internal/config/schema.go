@@ -18,7 +18,8 @@ type Config struct {
 }
 
 type PlatformConfig struct {
-	APIBaseURL string
+	APIBaseURL  string
+	AuthBaseURL string
 }
 
 // GatewayConfig — внутренний адрес для получения выбранных записей по их
@@ -46,8 +47,8 @@ type SOMConfig struct {
 // PromptConfig — адреса, которые подставляются агенту в prompt при запуске
 // issue: с daemon VM сервисы видны не по тем же URL, что с localhost.
 type PromptConfig struct {
-	IRBaseURL      string
-	GatewayBaseURL string
+	IRBaseURL            string
+	AllowInsecureMCPHTTP bool
 }
 
 type ServerConfig struct {

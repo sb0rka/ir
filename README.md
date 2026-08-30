@@ -58,14 +58,14 @@ task db:down
 
 `ir-api` публикует Streamable HTTP endpoint `POST /mcp` на официальном Go SDK
 Model Context Protocol. Для ручного доступа он защищён теми же `Authorization`
-и `X-Project-ID`, что и REST API; для запуска через SOM используется
-короткоживущий capability token, ограниченный одним project и investigation.
+и `X-Project-ID`, что и REST API; для запуска через SOM используется подписанный
+Sb0rka Auth `agent+jwt`, ограниченный одним project и investigation.
 Endpoint предоставляет инструменты:
 
 - `get_investigation_graph` — прочитать граф;
 - `list_investigation_events` — прочитать страницу таймлайна;
-- `add_investigation_agent_results` — атомарно добавить выбранные записи,
-  узлы и evidence-backed связи.
+- `add_investigation_agent_results` — атомарно добавить локальные узлы и
+  evidence-backed связи.
 
 Запись использует canonical `agent-results`: узлы получают `origin=agent`, а
 связи создаются в статусе `proposed` и требуют решения аналитика.
@@ -74,15 +74,14 @@ Endpoint предоставляет инструменты:
 `investigation` в том же запросе, которым создаётся конкретный environment SOM.
 Daemon валидирует только удалённые HTTP(S) MCP-серверы и добавляет их в
 `OPENCODE_CONFIG_CONTENT` первого процесса агента, не меняя глобальный профиль
-OpenCode и не записывая capability в SQLite. Поэтому параллельные investigation
+OpenCode и не записывая JWT в SQLite. Поэтому параллельные investigation
 не могут подменить MCP-конфигурацию друг друга. Для этого flow требуется
-`SOM_EXECUTOR=OPENCODE`; human OAuth token агенту не передаётся, а capability
-не даёт доступа к REST API.
+`SOM_EXECUTOR=OPENCODE`; human OAuth token агенту не передаётся, agent JWT не
+принимается REST API и не пересылается в Gateway, Platform API или Secrets.
 
 MCP является частью бинарника `ir-api`, поэтому его версия развёртывается
-атомарно вместе с Investigation API. Capability хранятся в памяти одной реплики
-и после рестарта должны быть выданы заново; горизонтальное масштабирование
-потребует общего capability store или маршрутизации с привязкой к реплике.
+атомарно вместе с Investigation API. Подписанный JWT не хранится в `ir-api`,
+поэтому его принимает любая реплика с тем же публичным ключом и issuer.
 
 Состояние покрытия требований и реализации — в [api/investigations/COVERAGE.md](api/investigations/COVERAGE.md).
 Правила разработки — в [AGENTS.md](AGENTS.md).

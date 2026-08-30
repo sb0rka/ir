@@ -3,18 +3,16 @@ package server
 
 import (
 	"context"
-	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"log/slog"
 	"net/http"
-	"sync"
 	"time"
 
 	"github.com/google/uuid"
 
+	"github.com/sb0rka/ir/apps/investigations/internal/authclient"
 	"github.com/sb0rka/ir/apps/investigations/internal/config"
 	"github.com/sb0rka/ir/apps/investigations/internal/domain/model"
 	"github.com/sb0rka/ir/apps/investigations/internal/gatewayclient"
@@ -30,20 +28,16 @@ type Server struct {
 	db  store.Database
 	log *slog.Logger
 
-	som     *somclient.Client
-	secrets *common.SecretsClient
-	somAuth somTokenCache
-	gateway *gatewayclient.Client
-	prompt  config.PromptConfig
-
-	mcpTokensMu sync.Mutex
-	mcpTokens   map[string]mcpCapability
+	som         *somclient.Client
+	secrets     *common.SecretsClient
+	somAuth     somTokenCache
+	gateway     *gatewayclient.Client
+	agentTokens agentTokenIssuer
+	prompt      config.PromptConfig
 }
 
-type mcpCapability struct {
-	ProjectID       string
-	InvestigationID string
-	ExpiresAt       time.Time
+type agentTokenIssuer interface {
+	InvestigationToken(ctx context.Context, bearer, projectID, investigationID string) (string, error)
 }
 
 type cursorPayload struct {
@@ -82,45 +76,12 @@ func New(
 	som *somclient.Client,
 	secrets *common.SecretsClient,
 	gateway *gatewayclient.Client,
+	agentTokens *authclient.Client,
 	prompt config.PromptConfig,
 ) *Server {
 	return &Server{
-		db: db, log: log, som: som, secrets: secrets, gateway: gateway, prompt: prompt,
-		mcpTokens: make(map[string]mcpCapability),
+		db: db, log: log, som: som, secrets: secrets, gateway: gateway, agentTokens: agentTokens, prompt: prompt,
 	}
-}
-
-// issueMCPToken creates a short-lived capability for exactly one project and
-// investigation. It is not a REST credential and carries no human OAuth token.
-func (s *Server) issueMCPToken(projectID, investigationID string) (string, error) {
-	raw := make([]byte, 32)
-	if _, err := rand.Read(raw); err != nil {
-		return "", fmt.Errorf("generate MCP capability: %w", err)
-	}
-	token := base64.RawURLEncoding.EncodeToString(raw)
-	now := time.Now()
-	s.mcpTokensMu.Lock()
-	defer s.mcpTokensMu.Unlock()
-	for value, capability := range s.mcpTokens {
-		if !capability.ExpiresAt.After(now) {
-			delete(s.mcpTokens, value)
-		}
-	}
-	s.mcpTokens[token] = mcpCapability{
-		ProjectID: projectID, InvestigationID: investigationID, ExpiresAt: now.Add(4 * time.Hour),
-	}
-	return token, nil
-}
-
-func (s *Server) consumeMCPToken(token string) (mcpCapability, bool) {
-	s.mcpTokensMu.Lock()
-	defer s.mcpTokensMu.Unlock()
-	capability, ok := s.mcpTokens[token]
-	if !ok || !capability.ExpiresAt.After(time.Now()) {
-		delete(s.mcpTokens, token)
-		return mcpCapability{}, false
-	}
-	return capability, true
 }
 
 // Хелперы живут здесь, а не в отдельном файле: gen-prune удаляет из пакета

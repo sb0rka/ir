@@ -16,3 +16,8 @@
 
 Чужая запись не отличается от отсутствующей и возвращает `404`. Для store и
 transport обязательны тесты на пересечение границы проекта.
+
+`/mcp` использует те же handler-методы, но два режима авторизации: human
+`access+jwt` + `X-Project-ID` и delegated `agent+jwt`. Во втором режиме project,
+investigation и scopes берутся только из подписанных claims; agent bearer нельзя
+класть в `socctx.Bearer`, чтобы он не мог уйти в Gateway/Platform/Secrets.

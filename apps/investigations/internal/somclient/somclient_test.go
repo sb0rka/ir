@@ -108,7 +108,7 @@ func TestStartEnvironmentIncludesRemoteMCPServersInOneRequest(t *testing.T) {
 		"investigation": {
 			URL:     "http://ir:8090/mcp",
 			Enabled: true,
-			Headers: map[string]string{"X-Sb0rka-MCP-Token": "capability-token"},
+			Headers: map[string]string{"Authorization": "Bearer agent-jwt"},
 		},
 	}
 	environmentID, err := client.StartEnvironment(
@@ -124,7 +124,7 @@ func TestStartEnvironmentIncludesRemoteMCPServersInOneRequest(t *testing.T) {
 		t.Fatalf("decode remote MCP servers: %v", err)
 	}
 	if remote["investigation"].URL != "http://ir:8090/mcp" ||
-		remote["investigation"].Headers["X-Sb0rka-MCP-Token"] != "capability-token" {
+		remote["investigation"].Headers["Authorization"] != "Bearer agent-jwt" {
 		t.Fatalf("unexpected investigation config: %+v", remote)
 	}
 }

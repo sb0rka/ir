@@ -236,6 +236,14 @@ func (s *Server) AddAgentResults(ctx context.Context, request investigations.Add
 			v := resolved.EntitiesBySource[sourceKey]
 			converted.SnapshotEntityID = &v
 		}
+		if node.EventId != nil {
+			v := node.EventId.String()
+			converted.EventID = &v
+		}
+		if node.EntityId != nil {
+			v := node.EntityId.String()
+			converted.EntityID = &v
+		}
 		if node.NodeId != nil {
 			v := node.NodeId.String()
 			converted.NodeID = &v

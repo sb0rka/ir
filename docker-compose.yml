@@ -83,6 +83,7 @@ services:
       DATABASE_URI: "postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:5432/investigations?search_path=${DB_INV_SCHEMA_NAME}"
       LOG_FORMAT: "${LOG_FORMAT:-text}"
       SB0RKA_API_BASE_URL: "${SB0RKA_API_BASE_URL:-http://host.docker.internal:8080}"
+      SB0RKA_AUTH_BASE_URL: "${SB0RKA_AUTH_BASE_URL:-http://host.docker.internal:8020}"
       # Значения — из ir/.env (см. .env.sample). Пустой SOM_API_BASE_URL выключает som-роуты.
       SOM_API_BASE_URL: "${SOM_API_BASE_URL:-}"
       SOM_RELAY_BASE_URL: "${SOM_RELAY_BASE_URL:-}"
@@ -95,7 +96,7 @@ services:
 
       GATEWAY_BASE_URL: "${GATEWAY_BASE_URL:-http://host.docker.internal:8091}"
       IR_PUBLIC_BASE_URL: "${IR_PUBLIC_BASE_URL:-http://host.docker.internal:8090}"
-      GATEWAY_PUBLIC_BASE_URL: "${GATEWAY_PUBLIC_BASE_URL:-http://host.docker.internal:8091}"
+      MCP_ALLOW_INSECURE_HTTP: "${MCP_ALLOW_INSECURE_HTTP:-true}"
       # Приватный ключ общий с Auth/API; IR выводит из него публичную половину.
       ACCESS_TOKEN_PRIVATE_KEY: "${ACCESS_TOKEN_PRIVATE_KEY:-}"
       ACCESS_TOKEN_PRIVATE_KEY_FILE_PATH: "${ACCESS_TOKEN_PRIVATE_KEY_FILE_PATH:-}"

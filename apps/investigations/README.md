@@ -2,9 +2,9 @@
 
 Go API сервис `ir-api` расследований Sb0rka.
 
-`ir-api` не является хранилищем потока событий. Страница первичного разбора и SOM-агенты
-читают нормализованные events/entities/relations напрямую из Gateway, а сюда
-передают только коды источников и исходные идентификаторы выбранных записей:
+`ir-api` не является хранилищем потока событий. Страница первичного разбора
+читает нормализованные events/entities/relations через Gateway. SOM-агент
+работает только с уже прикреплённым investigation context через MCP:
 
 - `POST /api/v1/investigations` создаёт расследование и привязывает выбранные
   рабочие пространства SOM, не принимая события и сущности;
@@ -25,10 +25,17 @@ Go API сервис `ir-api` расследований Sb0rka.
 Bearer используется для чтения Sb0rka Secrets, но не передаётся в SOM.
 
 Удалённый Streamable HTTP MCP опубликован на `/mcp` тем же бинарником `ir-api`
-и использует официальный Go SDK. Для SOM `ir-api` выдаёт короткоживущий
-capability token одной investigation и передаёт remote MCP в атомарном запросе
-создания environment. Daemon добавляет его только в процессы OpenCode этого
-environment, не меняя глобальную MCP-конфигурацию и не сохраняя token в БД.
+и использует официальный Go SDK. Перед запуском SOM `ir-api` обменивает
+пользовательский access JWT в Sb0rka Auth на четырёхчасовой `agent+jwt` с
+audience `ir-mcp`, фиксированными scopes и одной investigation. Daemon добавляет
+`Authorization: Bearer ...` только в OpenCode конкретного environment, не меняя
+глобальную MCP-конфигурацию и не сохраняя token в SQLite. Agent JWT не
+передаётся в Gateway, Platform API или Secrets.
+
+MCP-запись принимает только `event_id`/`entity_id`, уже прикреплённые к этой
+investigation, либо существующий `node_id`. Human REST-путь сохраняет импорт
+новых source refs через Gateway. Для remote MCP требуется HTTPS; локальный HTTP
+разрешается только через `MCP_ALLOW_INSECURE_HTTP=true`.
 
 Событие в Gateway и `ir-api` находится по паре `source_code + source_event_id`.
 Сущность объединяется по `type_code + canonical_key`, а её исходные записи — по

@@ -8,7 +8,6 @@ import (
 func sampleContext() Context {
 	return Context{
 		IRBaseURL:       "http://host.docker.internal:8090",
-		GatewayBaseURL:  "http://host.docker.internal:8091",
 		ProjectID:       "abcdef1234",
 		InvestigationID: "496f2041-7949-4816-8d07-734de89d121f",
 		SomIssueID:      "11111111-1111-1111-1111-111111111111",
@@ -37,18 +36,17 @@ func TestBuildExpandsURLsAndHeaders(t *testing.T) {
 		"get_investigation_graph",
 		"add_investigation_agent_results",
 		"investigation_id 496f2041-7949-4816-8d07-734de89d121f",
-		"http://host.docker.internal:8091/api/v1/sources",
-		"http://host.docker.internal:8091/api/v1/events/search",
-		"X-Project-ID: abcdef1234",
-		"sources, time_range (from, to), query, entities",
-		"unsupported_capability",
+		"event_id or entity_id",
+		"do not call IR REST, Gateway, Platform API, or Secrets directly",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("missing %q", want)
 		}
 	}
-	if strings.Contains(got, "- ir_api_base_url: \n") || strings.Contains(got, "- gateway_base_url: \n") {
-		t.Error("empty base_url line")
+	for _, forbidden := range []string{"gateway_base_url", "/api/v1/events/search", "X-Project-ID:"} {
+		if strings.Contains(got, forbidden) {
+			t.Errorf("prompt leaks forbidden direct-service instruction %q", forbidden)
+		}
 	}
 }
 

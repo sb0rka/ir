@@ -1,13 +1,23 @@
 // Package socctx carries the selected project and the verified request bearer.
 package socctx
 
-import "context"
+import (
+	"context"
+	"strings"
+)
 
 type Scope struct {
 	ProjectID string
 }
 
 type scopeKey struct{}
+
+type AgentAuthorization struct {
+	InvestigationID string
+	Scope           string
+}
+
+type agentAuthorizationKey struct{}
 
 func WithScope(ctx context.Context, scope Scope) context.Context {
 	return context.WithValue(ctx, scopeKey{}, scope)
@@ -35,4 +45,25 @@ func ScopeFromContext(ctx context.Context) (Scope, bool) {
 		return Scope{}, false
 	}
 	return scope, true
+}
+
+func WithAgentAuthorization(ctx context.Context, authorization AgentAuthorization) context.Context {
+	return context.WithValue(ctx, agentAuthorizationKey{}, authorization)
+}
+
+func AgentAuthorizationFromContext(ctx context.Context) (AgentAuthorization, bool) {
+	authorization, ok := ctx.Value(agentAuthorizationKey{}).(AgentAuthorization)
+	if !ok || authorization.InvestigationID == "" || authorization.Scope == "" {
+		return AgentAuthorization{}, false
+	}
+	return authorization, true
+}
+
+func (a AgentAuthorization) HasScope(required string) bool {
+	for _, scope := range strings.Fields(a.Scope) {
+		if scope == required {
+			return true
+		}
+	}
+	return false
 }

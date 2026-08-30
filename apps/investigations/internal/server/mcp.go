@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	openapi_types "github.com/oapi-codegen/runtime/types"
 	"github.com/sb0rka/ir/apps/investigations/internal/transport/httperr"
 	"github.com/sb0rka/ir/apps/investigations/internal/transport/socctx"
 	"github.com/sb0rka/ir/packages/contract/events"
@@ -18,7 +19,11 @@ import (
 	"github.com/sb0rka/ir/packages/contract/investigations"
 )
 
-type mcpCapabilityContextKey struct{}
+const (
+	mcpGraphReadScope         = "investigation.graph.read"
+	mcpEventsReadScope        = "investigation.events.read"
+	mcpAgentResultsWriteScope = "investigation.agent_results.write"
+)
 
 type investigationArgs struct {
 	InvestigationID string `json:"investigation_id"`
@@ -31,8 +36,17 @@ type listEventsArgs struct {
 }
 
 type addAgentResultsArgs struct {
-	InvestigationID string `json:"investigation_id"`
-	investigations.AgentResultBatch
+	InvestigationID string                     `json:"investigation_id"`
+	SomIssueIDs     []uuid.UUID                `json:"som_issue_ids"`
+	Nodes           []mcpAgentNode             `json:"nodes"`
+	Edges           []investigations.AgentEdge `json:"edges"`
+}
+
+type mcpAgentNode struct {
+	Ref      string     `json:"ref"`
+	EventID  *uuid.UUID `json:"event_id,omitempty"`
+	EntityID *uuid.UUID `json:"entity_id,omitempty"`
+	NodeID   *uuid.UUID `json:"node_id,omitempty"`
 }
 
 func (s *Server) MCPHandler() http.Handler {
@@ -52,7 +66,7 @@ func (s *Server) MCPHandler() http.Handler {
 	}, s.listInvestigationEventsTool)
 	server.AddTool(&mcp.Tool{
 		Name:        "add_investigation_agent_results",
-		Description: "Atomically add selected records, graph nodes, and proposed evidence-backed edges from an agent run.",
+		Description: "Atomically add graph nodes for records already attached to the investigation and proposed evidence-backed edges.",
 		InputSchema: addAgentResultsInputSchema(),
 	}, s.addInvestigationAgentResultsTool)
 
@@ -61,16 +75,6 @@ func (s *Server) MCPHandler() http.Handler {
 	}, &mcp.StreamableHTTPOptions{Stateless: true})
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if token := r.Header.Get("X-Sb0rka-MCP-Token"); token != "" {
-			capability, ok := s.consumeMCPToken(token)
-			if !ok {
-				http.Error(w, "invalid or expired MCP capability", http.StatusUnauthorized)
-				return
-			}
-			ctx := socctx.WithScope(r.Context(), socctx.Scope{ProjectID: capability.ProjectID})
-			ctx = context.WithValue(ctx, mcpCapabilityContextKey{}, capability)
-			r = r.WithContext(ctx)
-		}
 		if r.Body != nil {
 			r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 		}
@@ -101,19 +105,9 @@ func addAgentResultsInputSchema() map[string]any {
 		"properties": map[string]any{
 			"investigation_id": id,
 			"som_issue_ids":    map[string]any{"type": "array", "minItems": 1, "items": id},
-			"events": map[string]any{"type": "array", "items": map[string]any{
-				"type": "object", "properties": map[string]any{
-					"ref": map[string]any{"type": "string"}, "source_code": map[string]any{"type": "string"}, "source_event_id": map[string]any{"type": "string"},
-				}, "required": []string{"ref", "source_code", "source_event_id"}, "additionalProperties": false,
-			}},
-			"entities": map[string]any{"type": "array", "items": map[string]any{
-				"type": "object", "properties": map[string]any{
-					"ref": map[string]any{"type": "string"}, "source_code": map[string]any{"type": "string"}, "source_entity_id": map[string]any{"type": "string"},
-				}, "required": []string{"ref", "source_code", "source_entity_id"}, "additionalProperties": false,
-			}},
 			"nodes": map[string]any{"type": "array", "items": map[string]any{
 				"type": "object", "properties": map[string]any{
-					"ref": map[string]any{"type": "string"}, "event_ref": map[string]any{"type": "string"}, "entity_ref": map[string]any{"type": "string"}, "node_id": id,
+					"ref": map[string]any{"type": "string"}, "event_id": id, "entity_id": id, "node_id": id,
 				}, "required": []string{"ref"}, "additionalProperties": false,
 			}},
 			"edges": map[string]any{"type": "array", "items": map[string]any{
@@ -124,7 +118,7 @@ func addAgentResultsInputSchema() map[string]any {
 				}, "required": []string{"source_ref", "target_ref", "relation_code", "why", "evidence_event_refs"}, "additionalProperties": false,
 			}},
 		},
-		"required":             []string{"investigation_id", "som_issue_ids", "events", "entities", "nodes", "edges"},
+		"required":             []string{"investigation_id", "som_issue_ids", "nodes", "edges"},
 		"additionalProperties": false,
 	}
 }
@@ -137,7 +131,7 @@ func (s *Server) getInvestigationGraphTool(
 	if err := decodeMCPArguments(request.Params.Arguments, &args); err != nil {
 		return mcpToolError(fmt.Errorf("invalid arguments: %w", err)), nil
 	}
-	id, err := requireMCPInvestigation(ctx, args.InvestigationID)
+	id, err := requireMCPInvestigation(ctx, args.InvestigationID, mcpGraphReadScope)
 	if err != nil {
 		return mcpToolError(err), nil
 	}
@@ -163,7 +157,7 @@ func (s *Server) listInvestigationEventsTool(
 	if err := decodeMCPArguments(request.Params.Arguments, &args); err != nil {
 		return mcpToolError(fmt.Errorf("invalid arguments: %w", err)), nil
 	}
-	id, err := requireMCPInvestigation(ctx, args.InvestigationID)
+	id, err := requireMCPInvestigation(ctx, args.InvestigationID, mcpEventsReadScope)
 	if err != nil {
 		return mcpToolError(err), nil
 	}
@@ -202,11 +196,36 @@ func (s *Server) addInvestigationAgentResultsTool(
 	if err := decodeMCPArguments(request.Params.Arguments, &args); err != nil {
 		return mcpToolError(fmt.Errorf("invalid arguments: %w", err)), nil
 	}
-	id, err := requireMCPInvestigation(ctx, args.InvestigationID)
+	id, err := requireMCPInvestigation(ctx, args.InvestigationID, mcpAgentResultsWriteScope)
 	if err != nil {
 		return mcpToolError(err), nil
 	}
-	body := investigations.AddAgentResultsJSONRequestBody(args.AgentResultBatch)
+	body := investigations.AddAgentResultsJSONRequestBody{
+		Events:      []investigations.AgentEventSelection{},
+		Entities:    []investigations.AgentEntitySelection{},
+		Edges:       args.Edges,
+		Nodes:       make([]investigations.AgentNode, 0, len(args.Nodes)),
+		SomIssueIds: make([]openapi_types.UUID, 0, len(args.SomIssueIDs)),
+	}
+	for _, issueID := range args.SomIssueIDs {
+		body.SomIssueIds = append(body.SomIssueIds, openapi_types.UUID(issueID))
+	}
+	for _, node := range args.Nodes {
+		converted := investigations.AgentNode{Ref: node.Ref}
+		if node.EventID != nil {
+			value := openapi_types.UUID(*node.EventID)
+			converted.EventId = &value
+		}
+		if node.EntityID != nil {
+			value := openapi_types.UUID(*node.EntityID)
+			converted.EntityId = &value
+		}
+		if node.NodeID != nil {
+			value := openapi_types.UUID(*node.NodeID)
+			converted.NodeId = &value
+		}
+		body.Nodes = append(body.Nodes, converted)
+	}
 	response, err := s.AddAgentResults(ctx, investigations.AddAgentResultsRequestObject{
 		InvestigationId: id,
 		Body:            &body,
@@ -238,15 +257,19 @@ func mcpToolResult(value any) *mcp.CallToolResult {
 	}
 }
 
-func requireMCPInvestigation(ctx context.Context, rawID string) (uuid.UUID, error) {
+func requireMCPInvestigation(ctx context.Context, rawID, requiredScope string) (uuid.UUID, error) {
 	id, err := uuid.Parse(strings.TrimSpace(rawID))
 	if err != nil || id == uuid.Nil {
 		return uuid.Nil, fmt.Errorf("invalid arguments: investigation_id must be a non-zero UUID")
 	}
-	capability, ok := ctx.Value(mcpCapabilityContextKey{}).(mcpCapability)
-	if ok && capability.InvestigationID != id.String() {
+	authorization, ok := socctx.AgentAuthorizationFromContext(ctx)
+	if ok && authorization.InvestigationID != id.String() {
 		return uuid.Nil, httperr.New(http.StatusForbidden, httperr.CodeForbidden,
-			"MCP capability does not grant access to this investigation")
+			"agent token does not grant access to this investigation")
+	}
+	if ok && !authorization.HasScope(requiredScope) {
+		return uuid.Nil, httperr.New(http.StatusForbidden, httperr.CodeForbidden,
+			"agent token does not grant the required scope")
 	}
 	return id, nil
 }
