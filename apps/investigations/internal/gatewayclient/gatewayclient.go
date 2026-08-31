@@ -1,5 +1,6 @@
-// Package gatewayclient exposes the bounded, read-only Gateway operations used
-// by Investigation REST and MCP transports.
+// Package gatewayclient resolves source-owned record identifiers through the
+// normalized Gateway API. It deliberately does not expose Gateway search: UI
+// and SOM agents search independently and send only their selected references.
 package gatewayclient
 
 import (
@@ -41,13 +42,6 @@ type EntitySourceRef = gatewaycontract.EntitySourceRef
 type SourceObjectRef = gatewaycontract.SourceObjectRef
 type ResolveContextRequest = gatewaycontract.ResolveContextRequest
 type ResolveContextResponse = gatewaycontract.ResolveContextResponse
-type SearchEventsRequest = gatewaycontract.SearchEventsRequest
-type SearchEventsResponse = gatewaycontract.SearchEventsResponse
-type LookupEntityRequest = gatewaycontract.LookupEntityRequest
-type LookupEntityResponse = gatewaycontract.LookupEntityResponse
-type TimeRange = gatewaycontract.TimeRange
-type EntityRef = gatewaycontract.EntityRef
-type EventSort = gatewaycontract.EventSort
 
 func (err *HTTPError) Error() string {
 	return fmt.Sprintf("gateway request failed with status %d: %s", err.Status, err.Code)
@@ -100,69 +94,6 @@ func (client *Client) ResolveContext(ctx context.Context, projectID, bearer stri
 		return ResolveContextResponse{}, fmt.Errorf("decode Gateway context response: expected application/json")
 	}
 	return *response.JSON200, nil
-}
-
-func (client *Client) SearchEvents(ctx context.Context, projectID, bearer string, body SearchEventsRequest) (SearchEventsResponse, error) {
-	if err := client.ready(); err != nil {
-		return SearchEventsResponse{}, err
-	}
-	response, err := client.api.SearchEventsWithResponse(ctx,
-		&gatewaycontract.SearchEventsParams{XProjectID: projectID}, body, bearerEditor(bearer))
-	if err != nil {
-		return SearchEventsResponse{}, fmt.Errorf("call Gateway event search: %w", err)
-	}
-	if response.StatusCode() != http.StatusOK {
-		return SearchEventsResponse{}, parseHTTPError(response.StatusCode(), response.Body)
-	}
-	if response.JSON200 == nil {
-		return SearchEventsResponse{}, fmt.Errorf("decode Gateway event search response: expected application/json")
-	}
-	return *response.JSON200, nil
-}
-
-func (client *Client) LookupEntity(ctx context.Context, projectID, bearer string, body LookupEntityRequest) (LookupEntityResponse, error) {
-	if err := client.ready(); err != nil {
-		return LookupEntityResponse{}, err
-	}
-	response, err := client.api.LookupEntityWithResponse(ctx,
-		&gatewaycontract.LookupEntityParams{XProjectID: projectID}, body, bearerEditor(bearer))
-	if err != nil {
-		return LookupEntityResponse{}, fmt.Errorf("call Gateway entity lookup: %w", err)
-	}
-	if response.StatusCode() != http.StatusOK {
-		return LookupEntityResponse{}, parseHTTPError(response.StatusCode(), response.Body)
-	}
-	if response.JSON200 == nil {
-		return LookupEntityResponse{}, fmt.Errorf("decode Gateway entity lookup response: expected application/json")
-	}
-	return *response.JSON200, nil
-}
-
-func (client *Client) ready() error {
-	if client == nil || client.api == nil {
-		if client != nil && client.initErr != nil {
-			return fmt.Errorf("initialize Gateway client: %w", client.initErr)
-		}
-		return ErrUnavailable
-	}
-	return nil
-}
-
-func bearerEditor(bearer string) gatewaycontract.RequestEditorFn {
-	return func(_ context.Context, request *http.Request) error {
-		if bearer = strings.TrimSpace(bearer); bearer != "" {
-			request.Header.Set("Authorization", "Bearer "+bearer)
-		}
-		return nil
-	}
-}
-
-func parseHTTPError(status int, body []byte) error {
-	var envelope gatewaycontract.ErrorEnvelope
-	if json.Unmarshal(body, &envelope) != nil {
-		return &HTTPError{Status: status, Code: "gateway_error", Message: "Gateway rejected the request"}
-	}
-	return &HTTPError{Status: status, Code: envelope.Error.Code, Message: envelope.Error.Message}
 }
 
 type responseLimitDoer struct {

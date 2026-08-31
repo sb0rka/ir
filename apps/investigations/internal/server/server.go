@@ -12,7 +12,6 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/sb0rka/ir/apps/investigations/internal/config"
 	"github.com/sb0rka/ir/apps/investigations/internal/domain/model"
 	"github.com/sb0rka/ir/apps/investigations/internal/gatewayclient"
 	"github.com/sb0rka/ir/apps/investigations/internal/somclient"
@@ -31,7 +30,6 @@ type Server struct {
 	secrets *common.SecretsClient
 	somAuth somTokenCache
 	gateway *gatewayclient.Client
-	prompt  config.PromptConfig
 }
 
 type cursorPayload struct {
@@ -70,11 +68,8 @@ func New(
 	som *somclient.Client,
 	secrets *common.SecretsClient,
 	gateway *gatewayclient.Client,
-	prompt config.PromptConfig,
 ) *Server {
-	return &Server{
-		db: db, log: log, som: som, secrets: secrets, gateway: gateway, prompt: prompt,
-	}
+	return &Server{db: db, log: log, som: som, secrets: secrets, gateway: gateway}
 }
 
 // Хелперы живут здесь, а не в отдельном файле: gen-prune удаляет из пакета

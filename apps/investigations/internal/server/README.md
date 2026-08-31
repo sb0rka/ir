@@ -16,10 +16,3 @@
 
 Чужая запись не отличается от отсутствующей и возвращает `404`. Для store и
 transport обязательны тесты на пересечение границы проекта.
-
-`/mcp` использует те же handler-методы и тот же `authMiddleware`, что REST:
-обычный пользовательский `access+jwt` и обязательный `X-Project-ID`.
-Для SOM demo `RunSomIssue` настраивает этот режим через
-`Authorization: Bearer {env:ACCESS_KEY}` и `X-Project-ID`. Значение хранится в
-профиле OpenCode и подставляется самим OpenCode; daemon request содержит только
-env reference. Это осознанно даёт агенту пользовательские права до expiry JWT.

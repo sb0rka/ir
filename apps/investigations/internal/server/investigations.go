@@ -277,10 +277,7 @@ func (s *Server) resolveGatewayContext(ctx context.Context, scope socctx.Scope, 
 	if len(findings) == 0 && len(sessions) == 0 && len(events) == 0 && len(entities) == 0 {
 		return resolvedGatewayContext{}, validationError("at least one finding, session, event, or entity is required")
 	}
-	bearer, err := s.gatewayBearer(ctx)
-	if err != nil {
-		return resolvedGatewayContext{}, err
-	}
+	bearer, _ := socctx.BearerFromContext(ctx)
 	response, err := s.gateway.ResolveContext(ctx, scope.ProjectID, bearer, request)
 	if err != nil {
 		return resolvedGatewayContext{}, gatewayError(err)
@@ -327,14 +324,6 @@ func (s *Server) resolveGatewayContext(ctx context.Context, scope socctx.Scope, 
 		resolved.Warnings = append(resolved.Warnings, "Gateway source "+sourceErr.Source+": "+sourceErr.Message)
 	}
 	return resolved, nil
-}
-
-func (s *Server) gatewayBearer(ctx context.Context) (string, error) {
-	bearer, ok := socctx.BearerFromContext(ctx)
-	if !ok {
-		return "", httperr.ErrUnauthorized
-	}
-	return bearer, nil
 }
 
 func convertGatewayContext(input gatewayclient.ResolveContextResponse, request gatewayclient.ResolveContextRequest) (resolvedGatewayContext, error) {

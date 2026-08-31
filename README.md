@@ -54,42 +54,5 @@ task apps:down
 task db:down
 ```
 
-## Investigation MCP и SOM
-
-`ir-api` публикует Streamable HTTP endpoint `POST /mcp` на официальном Go SDK
-Model Context Protocol. Он защищён обычным пользовательским `access+jwt` и
-обязательным `X-Project-ID`, как основной Investigation REST API.
-Endpoint предоставляет инструменты:
-
-- `get_investigation_graph` — прочитать граф;
-- `list_investigation_events` — прочитать страницу таймлайна;
-- `add_investigation_agent_results` — атомарно добавить локальные узлы и
-  evidence-backed связи, включая выбранные Gateway records;
-- `search_gateway_events` — искать события в разрешённых project sources;
-- `lookup_gateway_entity` — обогащать observable через Gateway.
-
-Запись использует canonical `agent-results`: узлы получают `origin=agent`, а
-связи создаются в статусе `proposed` и требуют решения аналитика.
-
-При `POST /api/v1/som/issues/{issue_id}/run` `ir-api` передаёт конфигурацию
-`investigation` в том же запросе, которым создаётся конкретный environment SOM.
-Daemon валидирует только удалённые HTTP(S) MCP-серверы и добавляет их в
-`OPENCODE_CONFIG_CONTENT` первого процесса агента, не меняя глобальный профиль
-OpenCode и не записывая конфигурацию environment в SQLite. Поэтому параллельные
-investigation не могут подменить MCP-конфигурацию друг друга. Для этого flow
-требуется `SOM_EXECUTOR=OPENCODE`.
-
-Временный demo-path использует `ACCESS_KEY` из Environment variables профиля
-OpenCode. Это обычный короткоживущий пользовательский `access+jwt`. IR передаёт
-в remote MCP config только ссылку `Bearer {env:ACCESS_KEY}` и подписанный
-текущим запросом `X-Project-ID`; OpenCode подставляет значение при запуске.
-Тот же token доступен агенту для прямого Gateway REST на
-`http://gateway:8091/api/v1`. Перед демо token нужно обновить вручную; он даёт
-агенту те же права, что и пользователю, поэтому не используйте admin JWT.
-
-MCP является частью бинарника `ir-api`, поэтому его версия развёртывается
-атомарно вместе с Investigation API. Подписанный JWT не хранится в `ir-api`,
-поэтому его принимает любая реплика с тем же публичным ключом и issuer.
-
 Состояние покрытия требований и реализации — в [api/investigations/COVERAGE.md](api/investigations/COVERAGE.md).
 Правила разработки — в [AGENTS.md](AGENTS.md).

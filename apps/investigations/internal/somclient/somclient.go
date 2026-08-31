@@ -241,37 +241,20 @@ func (c *Client) EnsureRepo(ctx context.Context, sessionID string) (string, erro
 	return created.ID, nil
 }
 
-// RemoteMCPServer is the safe subset accepted by daemon's per-environment
-// start contract. It cannot describe a local command.
-type RemoteMCPServer struct {
-	URL     string            `json:"url"`
-	Headers map[string]string `json:"headers,omitempty"`
-	Enabled bool              `json:"enabled"`
-}
-
 // StartEnvironment создаёт и запускает окружение с агентом. linked_issue не
 // передаётся сознательно — фронтенд SOM делает так же, а связь с issue
 // оформляется на стороне SOM через LinkEnvironment.
-func (c *Client) StartEnvironment(
-	ctx context.Context,
-	sessionID, repoID, name, prompt string,
-	exec ExecutorConfig,
-	remoteMCPServers map[string]RemoteMCPServer,
-) (string, error) {
-	if len(remoteMCPServers) > 0 && !strings.EqualFold(strings.TrimSpace(c.cfg.Executor), "OPENCODE") {
-		return "", fmt.Errorf("remote MCP servers require SOM_EXECUTOR=OPENCODE")
-	}
+func (c *Client) StartEnvironment(ctx context.Context, sessionID, repoID, name, prompt string, exec ExecutorConfig) (string, error) {
 	body := map[string]any{
 		"name": name,
 		"repos": []map[string]any{{
 			"repo_id":       repoID,
 			"target_branch": c.cfg.TargetBranch,
 		}},
-		"linked_issue":       nil,
-		"executor_config":    executorConfigPayload(c.cfg.Executor, exec),
-		"prompt":             prompt,
-		"attachment_ids":     nil,
-		"remote_mcp_servers": remoteMCPServers,
+		"linked_issue":    nil,
+		"executor_config": executorConfigPayload(c.cfg.Executor, exec),
+		"prompt":          prompt,
+		"attachment_ids":  nil,
 	}
 	var out struct {
 		Environment struct {

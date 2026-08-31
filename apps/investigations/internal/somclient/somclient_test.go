@@ -1,10 +1,6 @@
 package somclient
 
 import (
-	"encoding/json"
-	"net/http"
-	"net/http/httptest"
-	"strings"
 	"testing"
 )
 
@@ -84,58 +80,5 @@ func TestExecutorConfigPayload(t *testing.T) {
 	payload = executorConfigPayload("OPENCODE", ExecutorConfig{Variant: "DEFAULT", ModelID: "openrouter/x"})
 	if payload["variant"] != "DEFAULT" || payload["model_id"] != "openrouter/x" {
 		t.Fatalf("overrides: %+v", payload)
-	}
-}
-
-func TestStartEnvironmentIncludesRemoteMCPServersInOneRequest(t *testing.T) {
-	t.Parallel()
-
-	var posted map[string]json.RawMessage
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !strings.Contains(r.URL.Path, "/api/environments/start") || r.Method != http.MethodPost {
-			t.Fatalf("unexpected request URL: %s", r.URL.String())
-		}
-		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewDecoder(r.Body).Decode(&posted); err != nil {
-			t.Fatalf("decode start: %v", err)
-		}
-		_, _ = w.Write([]byte(`{"success":true,"data":{"environment":{"id":"environment-1"},"execution_process":{}}}`))
-	}))
-	defer server.Close()
-
-	client := New(Config{RelayBaseURL: server.URL, HostID: "host", Executor: "OPENCODE", TargetBranch: "main"})
-	servers := map[string]RemoteMCPServer{
-		"investigation": {
-			URL:     "http://ir:8090/mcp",
-			Enabled: true,
-			Headers: map[string]string{"Authorization": "Bearer agent-jwt"},
-		},
-	}
-	environmentID, err := client.StartEnvironment(
-		t.Context(), "session", "repo", "name", "prompt", ExecutorConfig{}, servers)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if environmentID != "environment-1" {
-		t.Fatalf("environment id: %q", environmentID)
-	}
-	var remote map[string]RemoteMCPServer
-	if err := json.Unmarshal(posted["remote_mcp_servers"], &remote); err != nil {
-		t.Fatalf("decode remote MCP servers: %v", err)
-	}
-	if remote["investigation"].URL != "http://ir:8090/mcp" ||
-		remote["investigation"].Headers["Authorization"] != "Bearer agent-jwt" {
-		t.Fatalf("unexpected investigation config: %+v", remote)
-	}
-}
-
-func TestStartEnvironmentRejectsRemoteMCPForUnsupportedExecutor(t *testing.T) {
-	t.Parallel()
-	client := New(Config{Executor: "CODEX"})
-	_, err := client.StartEnvironment(t.Context(), "session", "repo", "name", "prompt", ExecutorConfig{}, map[string]RemoteMCPServer{
-		"investigation": {URL: "http://ir/mcp", Enabled: true},
-	})
-	if err == nil || !strings.Contains(err.Error(), "OPENCODE") {
-		t.Fatalf("got %v, want OpenCode requirement", err)
 	}
 }

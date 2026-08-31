@@ -14,7 +14,6 @@ type Config struct {
 	Platform PlatformConfig
 	SOM      SOMConfig
 	Gateway  GatewayConfig
-	Prompt   PromptConfig
 }
 
 type PlatformConfig struct {
@@ -41,13 +40,6 @@ type SOMConfig struct {
 	RepoFolderName string
 	TargetBranch   string
 	Executor       string
-}
-
-// PromptConfig — адреса, которые подставляются агенту в prompt при запуске
-// issue: с daemon VM сервисы видны не по тем же URL, что с localhost.
-type PromptConfig struct {
-	IRBaseURL            string
-	AllowInsecureMCPHTTP bool
 }
 
 type ServerConfig struct {

@@ -1,9 +1,7 @@
 // Package socctx carries the selected project and the verified request bearer.
 package socctx
 
-import (
-	"context"
-)
+import "context"
 
 type Scope struct {
 	ProjectID string
