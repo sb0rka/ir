@@ -17,6 +17,7 @@ import {
 } from '@xyflow/react'
 import { LayoutGrid } from 'lucide-react'
 import { useWorkspaceStore } from '../../state/useWorkspaceStore'
+import { useAppStore } from '../../store/appStore'
 import { SEVERITY_COLOR } from './constants'
 import { buildVisibleGraph, type GraphNodeData } from './graph-adapters'
 import { AlertNode } from './nodes/AlertNode'
@@ -42,6 +43,23 @@ function GraphInner({ fitToken }: { fitToken: FitToken }) {
     updateNodePosition,
     arrangeNodes,
   } = useWorkspaceStore()
+  const hypothesisId = useAppStore((s) =>
+    session?.id ? (s.activeHypothesisId[session.id] ?? null) : null,
+  )
+  const membership = useAppStore((s) =>
+    hypothesisId ? (s.hypothesisMembership[hypothesisId] ?? null) : null,
+  )
+  const lensWritable = useAppStore((s) =>
+    hypothesisId ? s.hypotheses[hypothesisId]?.status !== 'resolved' : false,
+  )
+  const hypothesisLens = useMemo(() => {
+    if (!hypothesisId) return null
+    return {
+      nodeIds: new Set(membership?.nodeIds ?? []),
+      edgeIds: new Set(membership?.edgeIds ?? []),
+      writable: lensWritable,
+    }
+  }, [hypothesisId, membership, lensWritable])
 
   const { fitView } = useReactFlow()
   const paneWidth = useStore((s) => s.width)
@@ -68,8 +86,9 @@ function GraphInner({ fitToken }: { fitToken: FitToken }) {
       },
       selection,
       hoverEventId,
+      hypothesisLens,
     })
-  }, [session, selection, hoverEventId])
+  }, [session, selection, hoverEventId, hypothesisLens])
 
   // Length alone misses “same count, new ids” after agent enrichment.
   const graphSig = useMemo(() => {

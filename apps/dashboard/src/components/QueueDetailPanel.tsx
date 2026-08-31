@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import {
   ArrowUpRight,
+  Lightbulb,
   Play,
   Plus,
   Sparkles,
@@ -11,6 +12,7 @@ import {
 import { emptyContextQueue, useAppStore } from '../store/appStore'
 import type { AlertEvent, CorrelationGroup } from '../types'
 import { Button, Chip, Panel, SeverityBadge } from './ui'
+import { isHypothesisWritable } from '../lib/hypotheses'
 import { formatTime, statusLabel } from '../lib/utils'
 import { alertIsInContext, contextEventKeys } from '../lib/queueContext'
 import { EventCard, eventCardModelFromAlert } from './event-card'
@@ -25,6 +27,8 @@ export function QueueDetailPanel({
   const inspect = useAppStore((s) => s.inspectQueueItem)
   const start = useAppStore((s) => s.startInvestigation)
   const addEventsToContext = useAppStore((s) => s.addEventsToContext)
+  const addEventsToActiveHypothesis = useAppStore((s) => s.addEventsToActiveHypothesis)
+  const createHypothesisFromEvents = useAppStore((s) => s.createHypothesisFromEvents)
   const appendPdqlFilter = useAppStore((s) => s.appendPdqlFilter)
   const filterByFindingUuid = useAppStore((s) => s.filterByFindingUuid)
   const globalTime = useAppStore((s) => s.timeInterval)
@@ -40,6 +44,11 @@ export function QueueDetailPanel({
     investigationId ? (s.contextQueue[investigationId] ?? emptyContextQueue) : null,
   )
   const inv = useAppStore((s) => (investigationId ? s.investigations[investigationId] : undefined))
+  const activeHypothesis = useAppStore((s) => {
+    if (!investigationId) return null
+    const id = s.activeHypothesisId[investigationId]
+    return id ? (s.hypotheses[id] ?? null) : null
+  })
   const contextEvents = useAppStore((s) => s.contextEvents)
   const correlations = useAppStore((s) => s.correlations)
   const loading = useAppStore((s) => s.investigationLoading)
@@ -65,6 +74,14 @@ export function QueueDetailPanel({
   const inContext = Boolean(
     investigationId && alert && alertIsInContext(alert, inv?.findingSourceKeys ?? [], eventKeys),
   )
+  const canAddToHypothesis = Boolean(
+    alert && activeHypothesis && isHypothesisWritable(activeHypothesis.status),
+  )
+  const addToHypothesisTitle = !activeHypothesis
+    ? 'Сначала выберите гипотезу'
+    : activeHypothesis.status === 'resolved'
+      ? 'Гипотеза закрыта'
+      : activeHypothesis.statement
 
   return (
     <Panel
@@ -115,20 +132,47 @@ export function QueueDetailPanel({
 
         <div className="sticky bottom-0 space-y-2 border-t border-border bg-surface-1 p-3">
           {investigationId ? (
-            inContext ? (
-              <div className="text-xs text-fg-dim">Уже в расследовании</div>
-            ) : (
-              <Button
-                size="md"
-                variant="primary"
-                className="w-full"
-                disabled={loading || !alert}
-                onClick={() => void addEventsToContext(investigationId, [item.id])}
-              >
-                <Plus className="h-3.5 w-3.5" />
-                Добавить в расследование
-              </Button>
-            )
+            <>
+              {inContext ? (
+                <div className="text-xs text-fg-dim">Уже в расследовании</div>
+              ) : (
+                <Button
+                  size="md"
+                  variant="primary"
+                  className="w-full"
+                  disabled={loading || !alert}
+                  onClick={() => void addEventsToContext(investigationId, [item.id])}
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Добавить в расследование
+                </Button>
+              )}
+              {alert && (
+                <>
+                  <Button
+                    size="md"
+                    variant={inContext && canAddToHypothesis ? 'primary' : 'default'}
+                    className="w-full"
+                    disabled={loading || !canAddToHypothesis}
+                    title={addToHypothesisTitle}
+                    onClick={() => void addEventsToActiveHypothesis(investigationId, [item.id])}
+                  >
+                    <Lightbulb className="h-3.5 w-3.5" />
+                    Добавить в текущую гипотезу
+                  </Button>
+                  <Button
+                    size="md"
+                    variant="ghost"
+                    className="w-full"
+                    disabled={loading}
+                    onClick={() => void createHypothesisFromEvents(investigationId, [item.id])}
+                  >
+                    <Lightbulb className="h-3.5 w-3.5" />
+                    Создать гипотезу
+                  </Button>
+                </>
+              )}
+            </>
           ) : (
             <>
               <Button

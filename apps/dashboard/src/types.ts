@@ -175,6 +175,7 @@ export interface Investigation {
   /** Gateway finding identities attached to this investigation (`source/instance?/kind/external_id`). */
   findingSourceKeys: string[]
   issueIds: string[]
+  hypothesisIds: string[]
   createdAt: string
   view: 'table' | 'graph' | 'queue'
   selectedNodeId?: string

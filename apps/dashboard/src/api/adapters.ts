@@ -303,6 +303,7 @@ export function mapIrInvestigation(
     findingIds: extras?.findingIds ?? [],
     findingSourceKeys: extras?.findingSourceKeys ?? [],
     issueIds: extras?.issueIds ?? [],
+    hypothesisIds: extras?.hypothesisIds ?? [],
     createdAt: inv.created_at,
     view: extras?.view ?? 'graph',
     selectedEntityIds: extras?.selectedEntityIds ?? [],

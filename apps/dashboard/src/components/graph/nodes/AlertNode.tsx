@@ -8,10 +8,11 @@ import {
 import { Crosshair, ShieldAlert } from 'lucide-react'
 import { SEVERITY_COLOR } from '../constants'
 import type { GraphNodeData } from '../graph-adapters'
+import { HypothesisMembershipBadge } from './HypothesisMembershipBadge'
 
 export type AlertFlowNode = Node<GraphNodeData, 'alert'>
 
-export function AlertNode({ data }: NodeProps<AlertFlowNode>) {
+export function AlertNode({ id, data }: NodeProps<AlertFlowNode>) {
   const color = data.severity
     ? SEVERITY_COLOR[data.severity]
     : 'var(--text-muted)'
@@ -19,18 +20,20 @@ export function AlertNode({ data }: NodeProps<AlertFlowNode>) {
 
   const classes = [
     'graph-node',
-    'flex min-w-[160px] max-w-[220px] items-start gap-2 rounded-lg border px-2.5 py-2',
+    'group relative flex min-w-[160px] max-w-[220px] items-start gap-2 rounded-lg border px-2.5 py-2',
     'bg-[var(--bg-node)] text-[var(--text)]',
     data.isSeed ? 'is-seed' : '',
     data.dimmed ? 'is-dimmed' : '',
     data.highlighted ? 'is-highlighted' : '',
     data.selected ? 'is-selected' : '',
+    data.inHypothesis ? 'is-in-hypothesis' : '',
   ]
     .filter(Boolean)
     .join(' ')
 
   return (
     <div className={classes} style={{ borderColor: color }}>
+      <HypothesisMembershipBadge nodeId={id} data={data} />
       {data.tooltip && (
         <NodeToolbar
           isVisible={data.highlighted ? true : undefined}

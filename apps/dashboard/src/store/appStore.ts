@@ -23,7 +23,7 @@ import {
 import { uid } from '../lib/utils'
 import { defaultFilterValueOptions, issueTemplates } from '../lib/catalog'
 import { parseGatewayEventId, saveLayout } from '../api/adapters'
-import { errorMessage, isNotImplemented, isUnauthorized } from '../api/error'
+import { errorMessage, isConflict, isNotImplemented, isUnauthorized } from '../api/error'
 import {
   analyzeArtifact,
   lookupEntity,
@@ -48,7 +48,30 @@ import {
   runSomIssue,
   type SomCatalog,
 } from '../api/ir'
+import {
+  addHypothesisContext,
+  addHypothesisEdge,
+  addHypothesisNode,
+  createHypothesis as createHypothesisRequest,
+  deleteHypothesis as deleteHypothesisRequest,
+  getHypothesis,
+  getHypothesisGraph,
+  listHypotheses,
+  patchHypothesis as patchHypothesisRequest,
+  removeHypothesisEdge,
+  removeHypothesisNode,
+  type Hypothesis,
+  type HypothesisStatus,
+} from '../api/hypotheses'
+import {
+  edgesBetweenNodes,
+  membershipFromGraph,
+  nodeIdsForEntityRefs,
+  type HypothesisMembership,
+} from '../lib/hypotheses'
 import type { components as Ir } from '@ir/contract'
+
+export type SidebarSectionId = 'agent' | 'hypotheses'
 
 export type TabId = 'queue' | string
 
@@ -119,6 +142,11 @@ interface AppState {
   actionResults: Record<string, ActionResult[]>
   contextQueue: Record<string, ContextQueueState>
   agentPanelOpen: boolean
+  sidebarSection: SidebarSectionId | null
+  hypothesisDraftOpen: boolean
+  hypotheses: Record<string, Hypothesis>
+  hypothesisMembership: Record<string, HypothesisMembership>
+  activeHypothesisId: Record<string, string | null>
   detailPanelOpen: boolean
 
   alerts: Record<string, AlertEvent>
@@ -186,9 +214,28 @@ interface AppState {
     input: { field: string; value: string; eventId: string; includeEvent: boolean },
   ) => Promise<void>
   setAgentPanelOpen: (open: boolean) => void
+  setSidebarSection: (section: SidebarSectionId | null) => void
+  setHypothesisDraftOpen: (open: boolean) => void
   setDetailPanelOpen: (open: boolean) => void
   loadSomCatalog: () => Promise<void>
   openAgentPanel: () => Promise<void>
+  loadHypotheses: (investigationId: string) => Promise<void>
+  createHypothesis: (
+    investigationId: string,
+    input: { statement: string; description?: string; includeSelection?: boolean },
+  ) => Promise<Hypothesis | null>
+  createHypothesisFromEvents: (investigationId: string, eventIds: string[]) => Promise<Hypothesis | null>
+  patchHypothesis: (
+    investigationId: string,
+    hypothesisId: string,
+    patch: { statement?: string; description?: string; status?: HypothesisStatus; reason?: string },
+  ) => Promise<Hypothesis | null>
+  deleteHypothesis: (investigationId: string, hypothesisId: string) => Promise<void>
+  setActiveHypothesis: (investigationId: string, hypothesisId: string | null) => Promise<void>
+  addSelectionToHypothesis: (investigationId: string, hypothesisId: string) => Promise<void>
+  addEventsToActiveHypothesis: (investigationId: string, eventIds: string[]) => Promise<void>
+  toggleHypothesisNode: (investigationId: string, nodeId: string) => Promise<void>
+  toggleHypothesisEdge: (investigationId: string, edgeId: string) => Promise<void>
 
   runEnrichment: (investigationId: string, issueId: string) => Promise<void>
   createIssue: (
@@ -284,6 +331,10 @@ function applyBundle(
         selectedNodeId: keepView?.selectedNodeId,
         seedEventIds: keepView?.seedEventIds ?? bundle.investigation.seedEventIds,
         issueIds: keepView?.issueIds ?? bundle.investigation.issueIds,
+        hypothesisIds:
+          keepView?.hypothesisIds ??
+          get().investigations[bundle.investigation.id]?.hypothesisIds ??
+          bundle.investigation.hypothesisIds,
         findingIds: bundle.investigation.findingIds,
         findingSourceKeys: bundle.investigation.findingSourceKeys,
       },
@@ -323,6 +374,11 @@ export const useAppStore = create<AppState>((set, get) => ({
   actionResults: {},
   contextQueue: {},
   agentPanelOpen: false,
+  sidebarSection: null,
+  hypothesisDraftOpen: false,
+  hypotheses: {},
+  hypothesisMembership: {},
+  activeHypothesisId: {},
   detailPanelOpen: false,
 
   alerts: {},
@@ -551,6 +607,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       const bundle = await loadInvestigationBundle(id, keep)
       set({ ...applyBundle(get, bundle, keep), investigationLoading: false })
+      void get().loadHypotheses(id)
     } catch (err) {
       set({ investigationLoading: false, lastError: errorMessage(err) })
     }
@@ -974,7 +1031,27 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
-  setAgentPanelOpen: (agentPanelOpen) => set({ agentPanelOpen }),
+  setAgentPanelOpen: (open) => {
+    if (open) {
+      set({ sidebarSection: 'agent', agentPanelOpen: true })
+      return
+    }
+    if (get().sidebarSection === 'agent') {
+      set({ sidebarSection: null, agentPanelOpen: false })
+    }
+  },
+  setSidebarSection: (section) => {
+    set({
+      sidebarSection: section,
+      agentPanelOpen: section === 'agent',
+    })
+    if (section === 'agent') void get().loadSomCatalog()
+    if (section === 'hypotheses') {
+      const id = get().activeTab
+      if (id !== 'queue') void get().loadHypotheses(id)
+    }
+  },
+  setHypothesisDraftOpen: (hypothesisDraftOpen) => set({ hypothesisDraftOpen }),
   setDetailPanelOpen: (detailPanelOpen) => set({ detailPanelOpen }),
 
   loadSomCatalog: async () => {
@@ -986,14 +1063,14 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   openAgentPanel: async () => {
-    set({ agentPanelOpen: true })
+    set({ sidebarSection: 'agent', agentPanelOpen: true })
     if (!get().somCatalog) await get().loadSomCatalog()
   },
 
   runEnrichment: async (investigationId, issueId) => {
     const inv = get().investigations[investigationId]
     if (!inv || !issueId) return
-    set({ agentPanelOpen: true, lastError: null, somHint: null })
+    set({ sidebarSection: 'agent', agentPanelOpen: true, lastError: null, somHint: null })
     try {
       let catalog = get().somCatalog
       if (!catalog) {
@@ -1263,6 +1340,266 @@ export const useAppStore = create<AppState>((set, get) => ({
         },
       },
     })
+  },
+
+  loadHypotheses: async (investigationId) => {
+    try {
+      const items = await listHypotheses(investigationId)
+      const hypotheses = { ...get().hypotheses }
+      for (const item of items) hypotheses[item.id] = item
+      const inv = get().investigations[investigationId]
+      set({
+        hypotheses,
+        investigations: inv
+          ? {
+              ...get().investigations,
+              [investigationId]: {
+                ...inv,
+                hypothesisIds: items.map((item) => item.id),
+              },
+            }
+          : get().investigations,
+      })
+    } catch (err) {
+      set({ lastError: errorMessage(err) })
+    }
+  },
+
+  createHypothesis: async (investigationId, input) => {
+    const statement = input.statement.trim()
+    if (!statement) return null
+    set({ lastError: null })
+    try {
+      const created = await createHypothesisRequest(investigationId, {
+        statement,
+        description: input.description?.trim() || undefined,
+      })
+      const inv = get().investigations[investigationId]
+      set({
+        hypotheses: { ...get().hypotheses, [created.id]: created },
+        investigations: inv
+          ? {
+              ...get().investigations,
+              [investigationId]: {
+                ...inv,
+                hypothesisIds: [created.id, ...inv.hypothesisIds.filter((id) => id !== created.id)],
+              },
+            }
+          : get().investigations,
+        hypothesisDraftOpen: false,
+        sidebarSection: 'hypotheses',
+        agentPanelOpen: false,
+      })
+      if (input.includeSelection) {
+        await get().addSelectionToHypothesis(investigationId, created.id)
+      }
+      await get().setActiveHypothesis(investigationId, created.id)
+      return created
+    } catch (err) {
+      set({ lastError: errorMessage(err) })
+      return null
+    }
+  },
+
+  createHypothesisFromEvents: async (investigationId, eventIds) => {
+    const queue = get().contextQueue[investigationId]
+    const alerts = { ...get().alerts, ...queue?.alerts }
+    const first = eventIds
+      .map((id) => alerts[id] ?? get().contextEvents[id])
+      .find((item) => item != null)
+    const statement = (first?.title ?? '').trim().slice(0, 255) || 'Новая гипотеза'
+    const created = await get().createHypothesis(investigationId, { statement })
+    if (!created) return null
+    await get().addEventsToActiveHypothesis(investigationId, eventIds)
+    return created
+  },
+
+  patchHypothesis: async (investigationId, hypothesisId, patch) => {
+    const current = get().hypotheses[hypothesisId]
+    if (!current) return null
+    set({ lastError: null })
+    try {
+      const updated = await patchHypothesisRequest(investigationId, hypothesisId, {
+        version: current.version,
+        ...patch,
+      })
+      set({ hypotheses: { ...get().hypotheses, [updated.id]: updated } })
+      return updated
+    } catch (err) {
+      if (isConflict(err)) {
+        try {
+          const fresh = await getHypothesis(investigationId, hypothesisId)
+          set({
+            hypotheses: { ...get().hypotheses, [fresh.id]: fresh },
+            lastError: 'Карточка гипотезы изменилась — обновите и повторите',
+          })
+        } catch (refreshErr) {
+          set({ lastError: errorMessage(refreshErr) })
+        }
+        return null
+      }
+      set({ lastError: errorMessage(err) })
+      return null
+    }
+  },
+
+  deleteHypothesis: async (investigationId, hypothesisId) => {
+    set({ lastError: null })
+    try {
+      await deleteHypothesisRequest(investigationId, hypothesisId)
+      const hypotheses = { ...get().hypotheses }
+      delete hypotheses[hypothesisId]
+      const membership = { ...get().hypothesisMembership }
+      delete membership[hypothesisId]
+      const inv = get().investigations[investigationId]
+      const active = { ...get().activeHypothesisId }
+      if (active[investigationId] === hypothesisId) active[investigationId] = null
+      set({
+        hypotheses,
+        hypothesisMembership: membership,
+        activeHypothesisId: active,
+        investigations: inv
+          ? {
+              ...get().investigations,
+              [investigationId]: {
+                ...inv,
+                hypothesisIds: inv.hypothesisIds.filter((id) => id !== hypothesisId),
+              },
+            }
+          : get().investigations,
+      })
+    } catch (err) {
+      set({ lastError: errorMessage(err) })
+    }
+  },
+
+  setActiveHypothesis: async (investigationId, hypothesisId) => {
+    const current = get().activeHypothesisId[investigationId] ?? null
+    const next = current === hypothesisId ? null : hypothesisId
+    set({
+      activeHypothesisId: { ...get().activeHypothesisId, [investigationId]: next },
+    })
+    if (!next) return
+    try {
+      const graph = await getHypothesisGraph(investigationId, next)
+      set({
+        hypothesisMembership: {
+          ...get().hypothesisMembership,
+          [next]: membershipFromGraph(graph),
+        },
+      })
+    } catch (err) {
+      set({ lastError: errorMessage(err) })
+    }
+  },
+
+  addEventsToActiveHypothesis: async (investigationId, eventIds) => {
+    const hypothesisId = get().activeHypothesisId[investigationId]
+    const hypothesis = hypothesisId ? get().hypotheses[hypothesisId] : null
+    if (!hypothesisId || !hypothesis || hypothesis.status === 'resolved') return
+    const queue = get().contextQueue[investigationId]
+    const refs = contextRefsFromIds(
+      eventIds,
+      { ...get().alerts, ...queue?.alerts },
+      get().correlations,
+      get().contextEvents,
+    )
+    if (refs.events.length === 0 && refs.findings.length === 0) return
+    set({ lastError: null })
+    try {
+      await addHypothesisContext(investigationId, hypothesisId, refs)
+      const cur = get().contextQueue[investigationId] ?? emptyContextQueue
+      set({
+        contextQueue: {
+          ...get().contextQueue,
+          [investigationId]: { ...cur, selectedIds: [] },
+        },
+      })
+      await get().loadInvestigation(investigationId)
+      const graph = await getHypothesisGraph(investigationId, hypothesisId)
+      set({
+        hypothesisMembership: {
+          ...get().hypothesisMembership,
+          [hypothesisId]: membershipFromGraph(graph),
+        },
+      })
+    } catch (err) {
+      set({ lastError: errorMessage(err) })
+    }
+  },
+
+  addSelectionToHypothesis: async (investigationId, hypothesisId) => {
+    const inv = get().investigations[investigationId]
+    const hypothesis = get().hypotheses[hypothesisId]
+    if (!inv || !hypothesis || hypothesis.status === 'resolved') return
+    const nodeIds = nodeIdsForEntityRefs(inv.selectedEntityIds, get().graphNodes)
+    const edgeIds = edgesBetweenNodes(nodeIds, get().graphEdges)
+    set({ lastError: null })
+    try {
+      for (const nodeId of nodeIds) {
+        await addHypothesisNode(investigationId, hypothesisId, nodeId)
+      }
+      for (const edgeId of edgeIds) {
+        await addHypothesisEdge(investigationId, hypothesisId, edgeId)
+      }
+      const graph = await getHypothesisGraph(investigationId, hypothesisId)
+      set({
+        hypothesisMembership: {
+          ...get().hypothesisMembership,
+          [hypothesisId]: membershipFromGraph(graph),
+        },
+      })
+    } catch (err) {
+      set({ lastError: errorMessage(err) })
+    }
+  },
+
+  toggleHypothesisNode: async (investigationId, nodeId) => {
+    const hypothesisId = get().activeHypothesisId[investigationId]
+    const hypothesis = hypothesisId ? get().hypotheses[hypothesisId] : null
+    if (!hypothesisId || !hypothesis || hypothesis.status === 'resolved') return
+    const member = new Set(get().hypothesisMembership[hypothesisId]?.nodeIds ?? [])
+    set({ lastError: null })
+    try {
+      if (member.has(nodeId)) {
+        await removeHypothesisNode(investigationId, hypothesisId, nodeId)
+      } else {
+        await addHypothesisNode(investigationId, hypothesisId, nodeId)
+      }
+      const graph = await getHypothesisGraph(investigationId, hypothesisId)
+      set({
+        hypothesisMembership: {
+          ...get().hypothesisMembership,
+          [hypothesisId]: membershipFromGraph(graph),
+        },
+      })
+    } catch (err) {
+      set({ lastError: errorMessage(err) })
+    }
+  },
+
+  toggleHypothesisEdge: async (investigationId, edgeId) => {
+    const hypothesisId = get().activeHypothesisId[investigationId]
+    const hypothesis = hypothesisId ? get().hypotheses[hypothesisId] : null
+    if (!hypothesisId || !hypothesis || hypothesis.status === 'resolved') return
+    const member = new Set(get().hypothesisMembership[hypothesisId]?.edgeIds ?? [])
+    set({ lastError: null })
+    try {
+      if (member.has(edgeId)) {
+        await removeHypothesisEdge(investigationId, hypothesisId, edgeId)
+      } else {
+        await addHypothesisEdge(investigationId, hypothesisId, edgeId)
+      }
+      const graph = await getHypothesisGraph(investigationId, hypothesisId)
+      set({
+        hypothesisMembership: {
+          ...get().hypothesisMembership,
+          [hypothesisId]: membershipFromGraph(graph),
+        },
+      })
+    } catch (err) {
+      set({ lastError: errorMessage(err) })
+    }
   },
 }))
 

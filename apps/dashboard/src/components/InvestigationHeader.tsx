@@ -11,6 +11,7 @@ import {
   Check,
   GitBranch,
   Inbox,
+  Lightbulb,
   Network,
   PanelRight,
   Table2,
@@ -28,6 +29,8 @@ export function InvestigationHeader({ investigationId }: { investigationId: stri
   const createChild = useAppStore((s) => s.createChildInvestigation)
   const setAgentPanelOpen = useAppStore((s) => s.setAgentPanelOpen)
   const agentPanelOpen = useAppStore((s) => s.agentPanelOpen)
+  const setSidebarSection = useAppStore((s) => s.setSidebarSection)
+  const setHypothesisDraftOpen = useAppStore((s) => s.setHypothesisDraftOpen)
   const setDetailPanelOpen = useAppStore((s) => s.setDetailPanelOpen)
   const detailPanelOpen = useAppStore((s) => s.detailPanelOpen)
   const setActiveTab = useAppStore((s) => s.setActiveTab)
@@ -108,6 +111,20 @@ export function InvestigationHeader({ investigationId }: { investigationId: stri
           <Button size="sm" onClick={() => void openAgentPanel()}>
             <Bot className="h-3.5 w-3.5" />
             Насыщение контекста
+          </Button>
+
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={inv.selectedEntityIds.length === 0}
+            onClick={() => {
+              setSidebarSection('hypotheses')
+              setHypothesisDraftOpen(true)
+            }}
+            title="Создать гипотезу из выбранных сущностей"
+          >
+            <Lightbulb className="h-3.5 w-3.5" />
+            Гипотеза ({inv.selectedEntityIds.length})
           </Button>
 
           <Button

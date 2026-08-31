@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { issueTemplates, useAppStore } from '../store/appStore'
-import { Button, Chip, Panel } from './ui'
+import { Button, Chip } from './ui'
 import { clsx, formatTime, statusLabel } from '../lib/utils'
 import {
   CheckCircle2,
@@ -12,7 +12,6 @@ import {
   Play,
   Plus,
   Square,
-  X,
   XCircle,
 } from 'lucide-react'
 import { TreeItem } from './TreeItem'
@@ -312,157 +311,77 @@ function ProposedLinksSection({ investigationId }: { investigationId: string }) 
   )
 }
 
-export function AgentPanel({ investigationId }: { investigationId: string }) {
+export function AgentSection({ investigationId }: { investigationId: string }) {
   const inv = useAppStore((s) => s.investigations[investigationId])
-  const open = useAppStore((s) => s.agentPanelOpen)
-  const setOpen = useAppStore((s) => s.setAgentPanelOpen)
   const catalog = useAppStore((s) => s.somCatalog)
   const loadSomCatalog = useAppStore((s) => s.loadSomCatalog)
   const createIssue = useAppStore((s) => s.createIssue)
 
   const [showCreate, setShowCreate] = useState(false)
-  const [width, setWidth] = useState(() => {
-    try {
-      const saved = localStorage.getItem('ir.agentPanel.width')
-      if (saved) {
-        const parsed = Number(saved)
-        if (parsed >= 280 && parsed <= 900) return parsed
-      }
-    } catch {
-      /* ignore */
-    }
-    return 384 // 24rem (w-96)
-  })
-
-  const isDraggingRef = useRef(false)
-  const dragStartRef = useRef({ startX: 0, startWidth: 384 })
-
-  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    e.preventDefault()
-    e.currentTarget.setPointerCapture(e.pointerId)
-    isDraggingRef.current = true
-    dragStartRef.current = { startX: e.clientX, startWidth: width }
-  }
-
-  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!isDraggingRef.current) return
-    const delta = e.clientX - dragStartRef.current.startX
-    const maxW = Math.min(900, window.innerWidth - 360)
-    const nextWidth = Math.min(
-      Math.max(280, dragStartRef.current.startWidth + delta),
-      Math.max(280, maxW)
-    )
-    setWidth(nextWidth)
-  }
-
-  const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!isDraggingRef.current) return
-    isDraggingRef.current = false
-    try {
-      e.currentTarget.releasePointerCapture(e.pointerId)
-    } catch {
-      /* ignore */
-    }
-    try {
-      localStorage.setItem('ir.agentPanel.width', String(width))
-    } catch {
-      /* ignore */
-    }
-  }
 
   useEffect(() => {
-    if (open) void loadSomCatalog()
-  }, [open, loadSomCatalog])
+    void loadSomCatalog()
+  }, [loadSomCatalog])
 
   const issueTree = useMemo(() => {
     return buildSomIssueTree(catalog?.issues ?? [])
   }, [catalog?.issues])
 
-  if (!inv || !open) return null
+  if (!inv) return null
 
   return (
-    <div
-      className="relative z-10 flex h-full shrink-0 flex-col"
-      style={{ width }}
-    >
-      <Panel
-        title="ИИ-агент"
-        side="left"
-        className="w-full flex-1 min-w-0"
-        actions={
-          <div className="flex items-center gap-1">
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => setShowCreate((v) => !v)}
-            >
-              <Plus className="h-3.5 w-3.5" />
-            </Button>
-            <button type="button" onClick={() => setOpen(false)}>
-              <X className="h-3.5 w-3.5 text-fg-dim" />
-            </button>
-          </div>
-        }
-      >
-        <div className="space-y-3 p-3">
-          <ProposedLinksSection investigationId={investigationId} />
-
-          {showCreate && (
-            <div className="rounded border border-border bg-surface-2 p-2">
-              <div className="mb-2 text-[10px] uppercase tracking-wider text-fg-dim">
-                Новый issue
-              </div>
-              <div className="space-y-1">
-                {issueTemplates.map((tpl) => (
-                  <button
-                    key={tpl.id}
-                    type="button"
-                    className="block w-full rounded px-2 py-1.5 text-left text-xs hover:bg-surface-3"
-                    onClick={() => {
-                      createIssue(
-                        investigationId,
-                        tpl.id,
-                        inv.selectedEntityIds.slice(0, 2).length
-                          ? inv.selectedEntityIds.slice(0, 2)
-                          : inv.entityIds.slice(0, 1)
-                      )
-                      setShowCreate(false)
-                    }}
-                  >
-                    <div className="font-medium text-fg">{tpl.title}</div>
-                    <div className="text-fg-dim">{tpl.description}</div>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {issueTree.map((rootNode) => (
-            <SomIssueTreeItem
-              key={rootNode.issue.id}
-              node={rootNode}
-              investigationId={investigationId}
-            />
-          ))}
-
-          {issueTree.length === 0 && (
-            <div className="rounded border border-border p-4 text-center text-xs text-fg-dim">
-              Нет задач на выбранной доске SOM
-            </div>
-          )}
-        </div>
-      </Panel>
-
-      <div
-        className="group absolute top-0 -right-1 z-20 h-full w-2 cursor-col-resize select-none touch-none flex items-center justify-center"
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-        onPointerCancel={handlePointerUp}
-        title="Потяните, чтобы изменить ширину"
-      >
-        <div className="h-8 w-1 rounded-full bg-border-strong/60 transition-colors group-hover:bg-proposed group-active:bg-proposed" />
+    <div className="space-y-3 p-3">
+      <div className="flex justify-end">
+        <Button size="sm" variant="ghost" onClick={() => setShowCreate((v) => !v)}>
+          <Plus className="h-3.5 w-3.5" />
+        </Button>
       </div>
+
+      <ProposedLinksSection investigationId={investigationId} />
+
+      {showCreate && (
+        <div className="rounded border border-border bg-surface-2 p-2">
+          <div className="mb-2 text-[10px] uppercase tracking-wider text-fg-dim">
+            Новый issue
+          </div>
+          <div className="space-y-1">
+            {issueTemplates.map((tpl) => (
+              <button
+                key={tpl.id}
+                type="button"
+                className="block w-full rounded px-2 py-1.5 text-left text-xs hover:bg-surface-3"
+                onClick={() => {
+                  createIssue(
+                    investigationId,
+                    tpl.id,
+                    inv.selectedEntityIds.slice(0, 2).length
+                      ? inv.selectedEntityIds.slice(0, 2)
+                      : inv.entityIds.slice(0, 1),
+                  )
+                  setShowCreate(false)
+                }}
+              >
+                <div className="font-medium text-fg">{tpl.title}</div>
+                <div className="text-fg-dim">{tpl.description}</div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {issueTree.map((rootNode) => (
+        <SomIssueTreeItem
+          key={rootNode.issue.id}
+          node={rootNode}
+          investigationId={investigationId}
+        />
+      ))}
+
+      {issueTree.length === 0 && (
+        <div className="rounded border border-border p-4 text-center text-xs text-fg-dim">
+          Нет задач на выбранной доске SOM
+        </div>
+      )}
     </div>
   )
 }
