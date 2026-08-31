@@ -3,10 +3,11 @@ package server
 import (
 	"context"
 	"errors"
-	"fmt"
 	"net/http"
+	"reflect"
 	"strings"
 
+	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/google/uuid"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	openapi_types "github.com/oapi-codegen/runtime/types"
@@ -18,31 +19,18 @@ import (
 )
 
 type investigationArgs struct {
-	InvestigationID string `json:"investigation_id" jsonschema:"Investigation UUID"`
+	InvestigationID openapi_types.UUID `json:"investigation_id" jsonschema:"Investigation UUID"`
 }
 
 type listEventsArgs struct {
-	InvestigationID string  `json:"investigation_id" jsonschema:"Investigation UUID"`
-	Limit           *int    `json:"limit,omitempty" jsonschema:"Page size from 1 to 200"`
-	Cursor          *string `json:"cursor,omitempty" jsonschema:"Cursor returned by the previous page"`
+	InvestigationID openapi_types.UUID `json:"investigation_id" jsonschema:"Investigation UUID"`
+	Limit           *events.Limit      `json:"limit,omitempty" jsonschema:"Page size from 1 to 200"`
+	Cursor          *events.Cursor     `json:"cursor,omitempty" jsonschema:"Cursor returned by the previous page"`
 }
 
 type addAgentResultsArgs struct {
-	InvestigationID string                                `json:"investigation_id" jsonschema:"Investigation UUID"`
-	SomIssueIDs     []string                              `json:"som_issue_ids" jsonschema:"At least one SOM issue UUID"`
-	Events          []investigations.AgentEventSelection  `json:"events" jsonschema:"Gateway event selections, at most 500"`
-	Entities        []investigations.AgentEntitySelection `json:"entities" jsonschema:"Gateway entity selections, at most 2000"`
-	Nodes           []mcpAgentNode                        `json:"nodes"`
-	Edges           []investigations.AgentEdge            `json:"edges"`
-}
-
-type mcpAgentNode struct {
-	Ref       string  `json:"ref"`
-	EventID   *string `json:"event_id,omitempty" jsonschema:"Attached event UUID"`
-	EntityID  *string `json:"entity_id,omitempty" jsonschema:"Attached entity UUID"`
-	NodeID    *string `json:"node_id,omitempty" jsonschema:"Existing graph node UUID"`
-	EventRef  *string `json:"event_ref,omitempty" jsonschema:"Local ref of a Gateway event selection"`
-	EntityRef *string `json:"entity_ref,omitempty" jsonschema:"Local ref of a Gateway entity selection"`
+	InvestigationID openapi_types.UUID `json:"investigation_id" jsonschema:"Investigation UUID"`
+	investigations.AgentResultBatch
 }
 
 func (s *Server) MCPHandler() http.Handler {
@@ -50,18 +38,18 @@ func (s *Server) MCPHandler() http.Handler {
 		Name:    "sb0rka-investigation",
 		Version: "1.0.0",
 	}, nil)
-	mcp.AddTool[investigationArgs, any](server, &mcp.Tool{
-		Name:        "get_investigation_graph",
-		Description: "Read the investigation graph, including proposed agent edges.",
-	}, s.getInvestigationGraphTool)
-	mcp.AddTool[listEventsArgs, any](server, &mcp.Tool{
-		Name:        "list_investigation_events",
-		Description: "Read one page of the investigation timeline.",
-	}, s.listInvestigationEventsTool)
-	mcp.AddTool[addAgentResultsArgs, any](server, &mcp.Tool{
-		Name:        "add_investigation_agent_results",
-		Description: "Atomically add graph nodes and proposed evidence-backed edges.",
-	}, s.addInvestigationAgentResultsTool)
+	mcp.AddTool[investigationArgs, any](server, mcpTool[investigationArgs](
+		"get_investigation_graph",
+		"Read the investigation graph, including proposed agent edges.",
+	), s.getInvestigationGraphTool)
+	mcp.AddTool[listEventsArgs, any](server, mcpTool[listEventsArgs](
+		"list_investigation_events",
+		"Read one page of the investigation timeline.",
+	), s.listInvestigationEventsTool)
+	mcp.AddTool[addAgentResultsArgs, any](server, mcpTool[addAgentResultsArgs](
+		"add_investigation_agent_results",
+		"Atomically add graph nodes and proposed evidence-backed edges.",
+	), s.addInvestigationAgentResultsTool)
 
 	handler := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server {
 		return server
@@ -73,6 +61,16 @@ func (s *Server) MCPHandler() http.Handler {
 		}
 		handler.ServeHTTP(w, r)
 	})
+}
+
+func mcpTool[T any](name, description string) *mcp.Tool {
+	schema, err := jsonschema.For[T](&jsonschema.ForOptions{TypeSchemas: map[reflect.Type]*jsonschema.Schema{
+		reflect.TypeFor[uuid.UUID](): {Type: "string", Format: "uuid"},
+	}})
+	if err != nil {
+		panic(err)
+	}
+	return &mcp.Tool{Name: name, Description: description, InputSchema: schema}
 }
 
 func (s *Server) getInvestigationGraphTool(
@@ -110,21 +108,11 @@ func (s *Server) listInvestigationEventsTool(
 	if args.Limit != nil && (*args.Limit < 1 || *args.Limit > 200) {
 		return mcpFailure(errors.New("invalid arguments: limit must be between 1 and 200"))
 	}
-	var limit *events.Limit
-	if args.Limit != nil {
-		converted := events.Limit(*args.Limit)
-		limit = &converted
-	}
-	var cursor *events.Cursor
-	if args.Cursor != nil {
-		converted := events.Cursor(*args.Cursor)
-		cursor = &converted
-	}
 	response, err := s.ListEvents(ctx, events.ListEventsRequestObject{
 		InvestigationId: id,
 		Params: events.ListEventsParams{
-			Limit:  limit,
-			Cursor: cursor,
+			Limit:  args.Limit,
+			Cursor: args.Cursor,
 		},
 	})
 	if err != nil {
@@ -146,31 +134,16 @@ func (s *Server) addInvestigationAgentResultsTool(
 	if err != nil {
 		return mcpFailure(err)
 	}
-	if len(args.SomIssueIDs) == 0 || len(args.Events) > 500 || len(args.Entities) > 2000 {
+	if len(args.SomIssueIds) == 0 || len(args.Events) > 500 || len(args.Entities) > 2000 {
 		return mcpFailure(errors.New("invalid arguments: expected at least one SOM issue, at most 500 events and at most 2000 entities"))
 	}
+	for _, id := range args.SomIssueIds {
+		if id == uuid.Nil {
+			return mcpFailure(errors.New("invalid arguments: som_issue_ids must contain non-zero UUIDs"))
+		}
+	}
 
-	body := investigations.AddAgentResultsJSONRequestBody{
-		Events:      args.Events,
-		Entities:    args.Entities,
-		Edges:       args.Edges,
-		Nodes:       make([]investigations.AgentNode, 0, len(args.Nodes)),
-		SomIssueIds: make([]openapi_types.UUID, 0, len(args.SomIssueIDs)),
-	}
-	for _, raw := range args.SomIssueIDs {
-		issueID, err := parseMCPUUID("som_issue_ids", raw)
-		if err != nil {
-			return mcpFailure(err)
-		}
-		body.SomIssueIds = append(body.SomIssueIds, openapi_types.UUID(issueID))
-	}
-	for _, node := range args.Nodes {
-		converted, err := convertMCPAgentNode(node)
-		if err != nil {
-			return mcpFailure(err)
-		}
-		body.Nodes = append(body.Nodes, converted)
-	}
+	body := investigations.AddAgentResultsJSONRequestBody(args.AgentResultBatch)
 	for _, edge := range args.Edges {
 		if edge.Confidence != nil && (*edge.Confidence < 0 || *edge.Confidence > 1) {
 			return mcpFailure(errors.New("invalid arguments: edge confidence must be between 0 and 1"))
@@ -191,52 +164,11 @@ func (s *Server) addInvestigationAgentResultsTool(
 	return nil, investigations.ContextImportResult(value), nil
 }
 
-func convertMCPAgentNode(node mcpAgentNode) (investigations.AgentNode, error) {
-	locators := 0
-	for _, value := range []*string{node.EventID, node.EntityID, node.NodeID, node.EventRef, node.EntityRef} {
-		if value != nil {
-			locators++
-		}
-	}
-	if strings.TrimSpace(node.Ref) == "" || locators != 1 {
-		return investigations.AgentNode{}, errors.New("invalid arguments: each node needs a ref and exactly one locator")
-	}
-
-	converted := investigations.AgentNode{Ref: node.Ref, EventRef: node.EventRef, EntityRef: node.EntityRef}
-	for _, pair := range []struct {
-		raw    *string
-		target **openapi_types.UUID
-	}{
-		{node.EventID, &converted.EventId},
-		{node.EntityID, &converted.EntityId},
-		{node.NodeID, &converted.NodeId},
-	} {
-		if pair.raw != nil {
-			value, err := parseMCPUUID("node locator", *pair.raw)
-			if err != nil {
-				return investigations.AgentNode{}, err
-			}
-			convertedValue := openapi_types.UUID(value)
-			*pair.target = &convertedValue
-		}
-	}
-	if node.EventRef != nil && strings.TrimSpace(*node.EventRef) == "" ||
-		node.EntityRef != nil && strings.TrimSpace(*node.EntityRef) == "" {
-		return investigations.AgentNode{}, errors.New("invalid arguments: node locator cannot be empty")
-	}
-	return converted, nil
-}
-
-func parseMCPUUID(field, raw string) (uuid.UUID, error) {
-	id, err := uuid.Parse(strings.TrimSpace(raw))
-	if err != nil || id == uuid.Nil {
-		return uuid.Nil, fmt.Errorf("invalid arguments: %s must be a non-zero UUID", field)
+func requireMCPInvestigation(id openapi_types.UUID) (uuid.UUID, error) {
+	if id == uuid.Nil {
+		return uuid.Nil, errors.New("invalid arguments: investigation_id must be a non-zero UUID")
 	}
 	return id, nil
-}
-
-func requireMCPInvestigation(rawID string) (uuid.UUID, error) {
-	return parseMCPUUID("investigation_id", rawID)
 }
 
 func mcpFailure(err error) (*mcp.CallToolResult, any, error) {

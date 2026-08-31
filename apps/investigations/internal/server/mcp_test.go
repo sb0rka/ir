@@ -48,6 +48,9 @@ func TestMCPInitializeAndListTools(t *testing.T) {
 			t.Fatalf("tools/list schema missing %s: %s", field, listed.Body.String())
 		}
 	}
+	if !strings.Contains(listed.Body.String(), `"format":"uuid"`) || strings.Contains(listed.Body.String(), `"minItems":16`) {
+		t.Fatalf("tools/list must expose UUIDs as strings: %s", listed.Body.String())
+	}
 }
 
 func TestMCPNotificationAndToolError(t *testing.T) {
