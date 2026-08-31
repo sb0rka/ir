@@ -13,7 +13,6 @@ import (
 
 	corelog "github.com/sb0rka/sb0rka/packages/core/log"
 
-	"github.com/sb0rka/ir/apps/investigations/internal/authclient"
 	"github.com/sb0rka/ir/apps/investigations/internal/config"
 	"github.com/sb0rka/ir/apps/investigations/internal/gatewayclient"
 	"github.com/sb0rka/ir/apps/investigations/internal/server"
@@ -76,11 +75,6 @@ func run() error {
 		}),
 		secrets,
 		gatewayclient.New(gatewayclient.Config{BaseURL: cfg.Gateway.BaseURL}),
-		authclient.New(authclient.Config{
-			BaseURL:      cfg.Platform.AuthBaseURL,
-			ClientID:     cfg.Platform.AgentExchangeClientID,
-			ClientSecret: cfg.Platform.AgentExchangeClientSecret,
-		}),
 		cfg.Prompt,
 	)
 	handler := transport.NewHandler(transport.Dependencies{

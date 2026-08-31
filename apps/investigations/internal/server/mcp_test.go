@@ -83,40 +83,6 @@ func mcpResponseJSON(t *testing.T, response *httptest.ResponseRecorder) []byte {
 	return nil
 }
 
-func TestMCPAgentAuthorizationIsBoundToOneInvestigationAndScope(t *testing.T) {
-	t.Parallel()
-	server := &Server{}
-	request := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(
-		`{"jsonrpc":"2.0","id":8,"method":"tools/call","params":{"name":"get_investigation_graph","arguments":{"investigation_id":"22222222-2222-2222-2222-222222222222"}}}`))
-	request.Header.Set("Accept", "application/json, text/event-stream")
-	request.Header.Set("Content-Type", "application/json")
-	ctx := socctx.WithAgentAuthorization(request.Context(), socctx.AgentAuthorization{
-		InvestigationID: "11111111-1111-1111-1111-111111111111",
-		Scope:           mcpGraphReadScope,
-	})
-	request = request.WithContext(ctx)
-	recorder := httptest.NewRecorder()
-	server.MCPHandler().ServeHTTP(recorder, request)
-	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), "does not grant access") {
-		t.Fatalf("cross-investigation call: status=%d body=%s", recorder.Code, recorder.Body.String())
-	}
-
-	request = httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(
-		`{"jsonrpc":"2.0","id":9,"method":"tools/call","params":{"name":"get_investigation_graph","arguments":{"investigation_id":"11111111-1111-1111-1111-111111111111"}}}`))
-	request.Header.Set("Accept", "application/json, text/event-stream")
-	request.Header.Set("Content-Type", "application/json")
-	ctx = socctx.WithAgentAuthorization(request.Context(), socctx.AgentAuthorization{
-		InvestigationID: "11111111-1111-1111-1111-111111111111",
-		Scope:           mcpEventsReadScope,
-	})
-	request = request.WithContext(ctx)
-	recorder = httptest.NewRecorder()
-	server.MCPHandler().ServeHTTP(recorder, request)
-	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), "required scope") {
-		t.Fatalf("missing scope: status=%d body=%s", recorder.Code, recorder.Body.String())
-	}
-}
-
 func TestMCPAgentResultsSchemaExposesGatewaySelections(t *testing.T) {
 	t.Parallel()
 	encoded, err := json.Marshal(addAgentResultsInputSchema())
@@ -140,10 +106,6 @@ func TestMCPAgentResultsUsesLocalIDsWithoutGateway(t *testing.T) {
 	request.Header.Set("Accept", "application/json, text/event-stream")
 	request.Header.Set("Content-Type", "application/json")
 	ctx := socctx.WithScope(request.Context(), socctx.Scope{ProjectID: "abcdef1234"})
-	ctx = socctx.WithAgentAuthorization(ctx, socctx.AgentAuthorization{
-		InvestigationID: "11111111-1111-1111-1111-111111111111",
-		Scope:           mcpAgentResultsWriteScope,
-	})
 	recorder := httptest.NewRecorder()
 	server.MCPHandler().ServeHTTP(recorder, request.WithContext(ctx))
 	if recorder.Code != http.StatusOK || strings.Contains(recorder.Body.String(), `"isError":true`) {
@@ -154,54 +116,6 @@ func TestMCPAgentResultsUsesLocalIDsWithoutGateway(t *testing.T) {
 	}
 	if len(db.request.Nodes) != 2 || db.request.Nodes[0].EventID == nil || db.request.Nodes[1].EntityID == nil {
 		t.Fatalf("local node locators were not preserved: %#v", db.request.Nodes)
-	}
-}
-
-type mcpAgentTokenClient struct {
-	exchanged string
-}
-
-func (*mcpAgentTokenClient) InvestigationToken(context.Context, string, string, string) (string, error) {
-	return "", nil
-}
-
-func (client *mcpAgentTokenClient) ExchangeAccessToken(_ context.Context, token string) (string, error) {
-	client.exchanged = token
-	return "short-access-jwt", nil
-}
-
-func TestMCPSearchGatewayEventsExchangesAgentToken(t *testing.T) {
-	t.Parallel()
-	gateway := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/v1/events/search" || r.Header.Get("Authorization") != "Bearer short-access-jwt" ||
-			r.Header.Get("X-Project-ID") != "abcdef1234" {
-			t.Fatalf("unexpected Gateway request: %s auth=%q project=%q", r.URL.Path, r.Header.Get("Authorization"), r.Header.Get("X-Project-ID"))
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"events":[],"entities":[],"relations":[],"source_states":[],"source_errors":[]}`))
-	}))
-	defer gateway.Close()
-	tokens := &mcpAgentTokenClient{}
-	server := &Server{
-		db: &mcpRecordingDB{}, agentTokens: tokens,
-		gateway: gatewayclient.New(gatewayclient.Config{BaseURL: gateway.URL}),
-	}
-	request := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(
-		`{"jsonrpc":"2.0","id":11,"method":"tools/call","params":{"name":"search_gateway_events","arguments":{"investigation_id":"11111111-1111-1111-1111-111111111111","time_range":{"from":"2026-08-30T00:00:00Z","to":"2026-08-31T00:00:00Z"},"limit":10}}}`))
-	request.Header.Set("Accept", "application/json, text/event-stream")
-	request.Header.Set("Content-Type", "application/json")
-	ctx := socctx.WithScope(request.Context(), socctx.Scope{ProjectID: "abcdef1234"})
-	ctx = socctx.WithAgentAuthorization(ctx, socctx.AgentAuthorization{
-		InvestigationID: "11111111-1111-1111-1111-111111111111",
-		Scope:           mcpGatewayReadScope, Token: "agent-jwt",
-	})
-	recorder := httptest.NewRecorder()
-	server.MCPHandler().ServeHTTP(recorder, request.WithContext(ctx))
-	if recorder.Code != http.StatusOK || strings.Contains(recorder.Body.String(), `"isError":true`) {
-		t.Fatalf("Gateway search: status=%d body=%s", recorder.Code, recorder.Body.String())
-	}
-	if tokens.exchanged != "agent-jwt" {
-		t.Fatalf("agent token was not exchanged: %q", tokens.exchanged)
 	}
 }
 
@@ -236,7 +150,7 @@ func TestMCPSearchGatewayEventsForwardsHumanAccessToken(t *testing.T) {
 func TestMCPAgentResultsImportsGatewaySelections(t *testing.T) {
 	t.Parallel()
 	gateway := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/v1/context/resolve" || r.Header.Get("Authorization") != "Bearer short-access-jwt" {
+		if r.URL.Path != "/api/v1/context/resolve" || r.Header.Get("Authorization") != "Bearer user-access-jwt" {
 			t.Fatalf("unexpected Gateway resolve request: %s auth=%q", r.URL.Path, r.Header.Get("Authorization"))
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -249,7 +163,7 @@ func TestMCPAgentResultsImportsGatewaySelections(t *testing.T) {
 	defer gateway.Close()
 	db := &mcpRecordingDB{}
 	server := &Server{
-		db: db, agentTokens: &mcpAgentTokenClient{},
+		db:      db,
 		gateway: gatewayclient.New(gatewayclient.Config{BaseURL: gateway.URL}),
 	}
 	request := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(
@@ -257,10 +171,7 @@ func TestMCPAgentResultsImportsGatewaySelections(t *testing.T) {
 	request.Header.Set("Accept", "application/json, text/event-stream")
 	request.Header.Set("Content-Type", "application/json")
 	ctx := socctx.WithScope(request.Context(), socctx.Scope{ProjectID: "abcdef1234"})
-	ctx = socctx.WithAgentAuthorization(ctx, socctx.AgentAuthorization{
-		InvestigationID: "11111111-1111-1111-1111-111111111111",
-		Scope:           mcpAgentResultsWriteScope + " " + mcpGatewayReadScope, Token: "agent-jwt",
-	})
+	ctx = socctx.WithBearer(ctx, "user-access-jwt")
 	recorder := httptest.NewRecorder()
 	server.MCPHandler().ServeHTTP(recorder, request.WithContext(ctx))
 	if recorder.Code != http.StatusOK || strings.Contains(recorder.Body.String(), `"isError":true`) {

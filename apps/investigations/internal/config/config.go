@@ -38,10 +38,7 @@ func Load() (Config, error) {
 			Format: coreconfig.GetStringEnv("LOG_FORMAT", "json"),
 		},
 		Platform: PlatformConfig{
-			APIBaseURL:                strings.TrimRight(coreconfig.GetStringEnv("SB0RKA_API_BASE_URL", ""), "/"),
-			AuthBaseURL:               strings.TrimRight(coreconfig.GetStringEnv("SB0RKA_AUTH_BASE_URL", ""), "/"),
-			AgentExchangeClientID:     strings.TrimSpace(coreconfig.GetStringEnv("INVESTIGATION_AGENT_EXCHANGE_CLIENT_ID", "")),
-			AgentExchangeClientSecret: coreconfig.GetStringEnv("INVESTIGATION_AGENT_EXCHANGE_CLIENT_SECRET", ""),
+			APIBaseURL: strings.TrimRight(coreconfig.GetStringEnv("SB0RKA_API_BASE_URL", ""), "/"),
 		},
 		SOM: SOMConfig{
 			APIBaseURL:     strings.TrimRight(coreconfig.GetStringEnv("SOM_API_BASE_URL", ""), "/"),
@@ -73,12 +70,6 @@ func Load() (Config, error) {
 
 	if cfg.Database.URI == "" {
 		return cfg, fmt.Errorf("DATABASE_URI is required")
-	}
-	if (cfg.Platform.AgentExchangeClientID == "") != (cfg.Platform.AgentExchangeClientSecret == "") {
-		return cfg, fmt.Errorf("INVESTIGATION_AGENT_EXCHANGE_CLIENT_ID and INVESTIGATION_AGENT_EXCHANGE_CLIENT_SECRET must be set together")
-	}
-	if cfg.Platform.AgentExchangeClientSecret != "" && len(cfg.Platform.AgentExchangeClientSecret) < 32 {
-		return cfg, fmt.Errorf("INVESTIGATION_AGENT_EXCHANGE_CLIENT_SECRET must be at least 32 bytes")
 	}
 	return cfg, nil
 }

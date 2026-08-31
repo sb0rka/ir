@@ -153,10 +153,6 @@ func authMiddleware(cfg config.ServerConfig, log *slog.Logger) middlewareChain {
 			// Demo-режим сохраняет тот же project scope, но не проверяет подпись.
 			// Если bearer передан, он нужен только для project-scoped Sb0rka API.
 			if cfg.Auth.Disabled {
-				if token, parseErr := coreauth.ParseBearerToken(r.Header.Get("Authorization")); parseErr == nil && looksLikeAgentToken(token) {
-					httperr.Write(w, log, httperr.ErrUnauthorized)
-					return
-				}
 				projectID := strings.TrimSpace(r.Header.Get(projectIDHeader))
 				if !validProjectID(projectID) {
 					httperr.Write(w, log, httperr.BadRequest("X-Project-ID must be 10-12 lowercase hexadecimal characters"))

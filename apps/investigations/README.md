@@ -34,9 +34,6 @@ JWT агент может использовать для прямого Gateway
 `profiles.json`, действует с правами пользователя и обычно быстро истекает,
 поэтому его обновляют непосредственно перед демо и не используют admin token.
 
-Delegated `agent+jwt` с ограничением одной investigation и server-side exchange
-по-прежнему поддержан `/mcp`, но не является prerequisite этого demo-flow.
-
 MCP-запись принимает `event_id`/`entity_id`, уже прикреплённые к investigation,
 существующий `node_id` либо выбранные MCP Gateway records по
 `source_code + source_event_id/source_entity_id`. Для remote MCP требуется HTTPS; локальный HTTP

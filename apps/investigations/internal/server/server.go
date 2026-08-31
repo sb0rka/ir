@@ -12,7 +12,6 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/sb0rka/ir/apps/investigations/internal/authclient"
 	"github.com/sb0rka/ir/apps/investigations/internal/config"
 	"github.com/sb0rka/ir/apps/investigations/internal/domain/model"
 	"github.com/sb0rka/ir/apps/investigations/internal/gatewayclient"
@@ -28,17 +27,11 @@ type Server struct {
 	db  store.Database
 	log *slog.Logger
 
-	som         *somclient.Client
-	secrets     *common.SecretsClient
-	somAuth     somTokenCache
-	gateway     *gatewayclient.Client
-	agentTokens agentTokenIssuer
-	prompt      config.PromptConfig
-}
-
-type agentTokenIssuer interface {
-	InvestigationToken(ctx context.Context, bearer, projectID, investigationID string) (string, error)
-	ExchangeAccessToken(ctx context.Context, agentToken string) (string, error)
+	som     *somclient.Client
+	secrets *common.SecretsClient
+	somAuth somTokenCache
+	gateway *gatewayclient.Client
+	prompt  config.PromptConfig
 }
 
 type cursorPayload struct {
@@ -77,11 +70,10 @@ func New(
 	som *somclient.Client,
 	secrets *common.SecretsClient,
 	gateway *gatewayclient.Client,
-	agentTokens *authclient.Client,
 	prompt config.PromptConfig,
 ) *Server {
 	return &Server{
-		db: db, log: log, som: som, secrets: secrets, gateway: gateway, agentTokens: agentTokens, prompt: prompt,
+		db: db, log: log, som: som, secrets: secrets, gateway: gateway, prompt: prompt,
 	}
 }
 

@@ -20,13 +20,6 @@ import (
 	"github.com/sb0rka/ir/packages/contract/investigations"
 )
 
-const (
-	mcpGraphReadScope         = "investigation.graph.read"
-	mcpEventsReadScope        = "investigation.events.read"
-	mcpAgentResultsWriteScope = "investigation.agent_results.write"
-	mcpGatewayReadScope       = "investigation.gateway.read"
-)
-
 type investigationArgs struct {
 	InvestigationID string `json:"investigation_id"`
 }
@@ -224,7 +217,7 @@ func (s *Server) getInvestigationGraphTool(
 	if err := decodeMCPArguments(request.Params.Arguments, &args); err != nil {
 		return mcpToolError(fmt.Errorf("invalid arguments: %w", err)), nil
 	}
-	id, err := requireMCPInvestigation(ctx, args.InvestigationID, mcpGraphReadScope)
+	id, err := requireMCPInvestigation(args.InvestigationID)
 	if err != nil {
 		return mcpToolError(err), nil
 	}
@@ -250,7 +243,7 @@ func (s *Server) listInvestigationEventsTool(
 	if err := decodeMCPArguments(request.Params.Arguments, &args); err != nil {
 		return mcpToolError(fmt.Errorf("invalid arguments: %w", err)), nil
 	}
-	id, err := requireMCPInvestigation(ctx, args.InvestigationID, mcpEventsReadScope)
+	id, err := requireMCPInvestigation(args.InvestigationID)
 	if err != nil {
 		return mcpToolError(err), nil
 	}
@@ -289,7 +282,7 @@ func (s *Server) addInvestigationAgentResultsTool(
 	if err := decodeMCPArguments(request.Params.Arguments, &args); err != nil {
 		return mcpToolError(fmt.Errorf("invalid arguments: %w", err)), nil
 	}
-	id, err := requireMCPInvestigation(ctx, args.InvestigationID, mcpAgentResultsWriteScope)
+	id, err := requireMCPInvestigation(args.InvestigationID)
 	if err != nil {
 		return mcpToolError(err), nil
 	}
@@ -388,7 +381,7 @@ func (s *Server) lookupGatewayEntityTool(
 }
 
 func (s *Server) requireMCPGatewayAccess(ctx context.Context, rawInvestigationID string) (socctx.Scope, error) {
-	id, err := requireMCPInvestigation(ctx, rawInvestigationID, mcpGatewayReadScope)
+	id, err := requireMCPInvestigation(rawInvestigationID)
 	if err != nil {
 		return socctx.Scope{}, err
 	}
@@ -419,19 +412,10 @@ func mcpToolResult(value any) *mcp.CallToolResult {
 	}
 }
 
-func requireMCPInvestigation(ctx context.Context, rawID, requiredScope string) (uuid.UUID, error) {
+func requireMCPInvestigation(rawID string) (uuid.UUID, error) {
 	id, err := uuid.Parse(strings.TrimSpace(rawID))
 	if err != nil || id == uuid.Nil {
 		return uuid.Nil, fmt.Errorf("invalid arguments: investigation_id must be a non-zero UUID")
-	}
-	authorization, ok := socctx.AgentAuthorizationFromContext(ctx)
-	if ok && authorization.InvestigationID != id.String() {
-		return uuid.Nil, httperr.New(http.StatusForbidden, httperr.CodeForbidden,
-			"agent token does not grant access to this investigation")
-	}
-	if ok && !authorization.HasScope(requiredScope) {
-		return uuid.Nil, httperr.New(http.StatusForbidden, httperr.CodeForbidden,
-			"agent token does not grant the required scope")
 	}
 	return id, nil
 }

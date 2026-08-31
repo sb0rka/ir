@@ -54,7 +54,7 @@ func NewHandler(deps Dependencies) http.Handler {
 	registerDomains(api, deps)
 	public.Handle(baseURL+"/", authMiddleware(deps.Cfg, deps.Log)(api))
 	mcp := deps.Server.MCPHandler()
-	public.Handle("/mcp", mcpOriginMiddleware(deps.Cfg)(mcpAuthMiddleware(deps.Cfg, deps.Log)(mcp)))
+	public.Handle("/mcp", mcpOriginMiddleware(deps.Cfg)(authMiddleware(deps.Cfg, deps.Log)(mcp)))
 
 	// Логгер снаружи recover: он оборачивает ResponseWriter, а recover по этой
 	// обёртке понимает, была ли уже запись в ответ.

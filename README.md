@@ -57,8 +57,8 @@ task db:down
 ## Investigation MCP и SOM
 
 `ir-api` публикует Streamable HTTP endpoint `POST /mcp` на официальном Go SDK
-Model Context Protocol. Он поддерживает обычный пользовательский `access+jwt` +
-`X-Project-ID` и delegated `agent+jwt`.
+Model Context Protocol. Он защищён обычным пользовательским `access+jwt` и
+обязательным `X-Project-ID`, как основной Investigation REST API.
 Endpoint предоставляет инструменты:
 
 - `get_investigation_graph` — прочитать граф;
@@ -86,9 +86,6 @@ OpenCode. Это обычный короткоживущий пользоват�
 Тот же token доступен агенту для прямого Gateway REST на
 `http://gateway:8091/api/v1`. Перед демо token нужно обновить вручную; он даёт
 агенту те же права, что и пользователю, поэтому не используйте admin JWT.
-
-Delegated `agent+jwt` и server-side exchange остаются поддержанным следующим
-этапом, но для demo-запуска через `ACCESS_KEY` не требуются.
 
 MCP является частью бинарника `ir-api`, поэтому его версия развёртывается
 атомарно вместе с Investigation API. Подписанный JWT не хранится в `ir-api`,

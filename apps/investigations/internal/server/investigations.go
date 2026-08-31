@@ -9,7 +9,6 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/sb0rka/ir/apps/investigations/internal/authclient"
 	"github.com/sb0rka/ir/apps/investigations/internal/domain/model"
 	"github.com/sb0rka/ir/apps/investigations/internal/gatewayclient"
 	"github.com/sb0rka/ir/apps/investigations/internal/transport/httperr"
@@ -331,25 +330,11 @@ func (s *Server) resolveGatewayContext(ctx context.Context, scope socctx.Scope, 
 }
 
 func (s *Server) gatewayBearer(ctx context.Context) (string, error) {
-	if bearer, ok := socctx.BearerFromContext(ctx); ok {
-		return bearer, nil
-	}
-	authorization, ok := socctx.AgentAuthorizationFromContext(ctx)
-	if !ok || !authorization.HasScope(mcpGatewayReadScope) || strings.TrimSpace(authorization.Token) == "" {
-		return "", httperr.ErrForbidden
-	}
-	if s.agentTokens == nil {
-		return "", httperr.New(http.StatusServiceUnavailable, httperr.CodeSourceUnavailable, "agent token exchange is unavailable")
-	}
-	bearer, err := s.agentTokens.ExchangeAccessToken(ctx, authorization.Token)
-	if err == nil {
-		return bearer, nil
-	}
-	var upstream *authclient.HTTPError
-	if errors.As(err, &upstream) && (upstream.Status == http.StatusUnauthorized || upstream.Status == http.StatusForbidden) {
+	bearer, ok := socctx.BearerFromContext(ctx)
+	if !ok {
 		return "", httperr.ErrUnauthorized
 	}
-	return "", httperr.New(http.StatusServiceUnavailable, httperr.CodeSourceUnavailable, "agent token exchange is unavailable")
+	return bearer, nil
 }
 
 func convertGatewayContext(input gatewayclient.ResolveContextResponse, request gatewayclient.ResolveContextRequest) (resolvedGatewayContext, error) {

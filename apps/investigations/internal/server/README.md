@@ -17,14 +17,9 @@
 Чужая запись не отличается от отсутствующей и возвращает `404`. Для store и
 transport обязательны тесты на пересечение границы проекта.
 
-`/mcp` использует те же handler-методы, но два режима авторизации: human
-`access+jwt` + `X-Project-ID` и delegated `agent+jwt`. Во втором режиме project,
-investigation и scopes берутся только из подписанных claims; agent bearer нельзя
-класть в `socctx.Bearer`, чтобы он не мог уйти в Gateway/Platform/Secrets.
-Gateway tools передают его только внутреннему Auth exchange; полученный
-короткоживущий access JWT используется server-to-server и агенту не виден.
-
-Для временного SOM demo `RunSomIssue` настраивает первый режим через
+`/mcp` использует те же handler-методы и тот же `authMiddleware`, что REST:
+обычный пользовательский `access+jwt` и обязательный `X-Project-ID`.
+Для SOM demo `RunSomIssue` настраивает этот режим через
 `Authorization: Bearer {env:ACCESS_KEY}` и `X-Project-ID`. Значение хранится в
 профиле OpenCode и подставляется самим OpenCode; daemon request содержит только
 env reference. Это осознанно даёт агенту пользовательские права до expiry JWT.
