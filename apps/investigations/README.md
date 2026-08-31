@@ -26,16 +26,16 @@ Go API сервис `ir-api` расследований Sb0rka.
 Bearer используется для чтения Sb0rka Secrets, но не передаётся в SOM.
 
 Удалённый Streamable HTTP MCP опубликован на `/mcp` тем же бинарником `ir-api`
-и использует официальный Go SDK. Перед запуском SOM `ir-api` обменивает
-пользовательский access JWT в Sb0rka Auth на четырёхчасовой `agent+jwt` с
-audience `ir-mcp`, фиксированными scopes и одной investigation. Daemon добавляет
-`Authorization: Bearer ...` только в OpenCode конкретного environment, не меняя
-глобальную MCP-конфигурацию и не сохраняя token в SQLite. Agent JWT не
-передаётся в Gateway, Platform API или Secrets. Для Gateway-backed tools
-`ir-api` предъявляет его только внутреннему Auth exchange вместе со своим
-confidential client secret и получает обычный access JWT на пять минут. Этот
-JWT остаётся внутри `ir-api`; Gateway и Platform Secrets применяют существующие
-проверки пользователя, project membership и live session.
+и использует официальный Go SDK. Временный demo-path берёт обычный
+пользовательский JWT из `ACCESS_KEY` в Environment variables профиля OpenCode.
+В daemon request попадает только ссылка `Bearer {env:ACCESS_KEY}` и
+`X-Project-ID` текущего расследования; значение подставляет OpenCode. Этот же
+JWT агент может использовать для прямого Gateway REST. Token хранится в
+`profiles.json`, действует с правами пользователя и обычно быстро истекает,
+поэтому его обновляют непосредственно перед демо и не используют admin token.
+
+Delegated `agent+jwt` с ограничением одной investigation и server-side exchange
+по-прежнему поддержан `/mcp`, но не является prerequisite этого demo-flow.
 
 MCP-запись принимает `event_id`/`entity_id`, уже прикреплённые к investigation,
 существующий `node_id` либо выбранные MCP Gateway records по

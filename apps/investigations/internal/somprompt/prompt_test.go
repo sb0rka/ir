@@ -39,13 +39,16 @@ func TestBuildExpandsURLsAndHeaders(t *testing.T) {
 		"lookup_gateway_entity",
 		"investigation_id 496f2041-7949-4816-8d07-734de89d121f",
 		"event_ref/entity_ref",
-		"do not call IR REST, Gateway REST, Platform API, or Secrets directly",
+		"ACCESS_KEY",
+		"http://gateway:8091/api/v1/sources",
+		"X-Project-ID: abcdef1234",
+		"do not call Platform API or Secrets directly",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("missing %q", want)
 		}
 	}
-	for _, forbidden := range []string{"gateway_base_url", "/api/v1/events/search", "X-Project-ID:"} {
+	for _, forbidden := range []string{"gateway_base_url", "Bearer eyJ"} {
 		if strings.Contains(got, forbidden) {
 			t.Errorf("prompt leaks forbidden direct-service instruction %q", forbidden)
 		}

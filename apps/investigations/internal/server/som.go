@@ -10,7 +10,6 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/sb0rka/ir/apps/investigations/internal/authclient"
 	"github.com/sb0rka/ir/apps/investigations/internal/config"
 	"github.com/sb0rka/ir/apps/investigations/internal/somclient"
 	"github.com/sb0rka/ir/apps/investigations/internal/somprompt"
@@ -202,27 +201,7 @@ func (s *Server) RunSomIssue(ctx context.Context, request som.RunSomIssueRequest
 	if err != nil {
 		return nil, somError(err)
 	}
-	platformBearer, ok := socctx.BearerFromContext(ctx)
-	if !ok {
-		return nil, httperr.ErrUnauthorized
-	}
-	if s.agentTokens == nil {
-		return nil, somNotConfigured(authclient.ErrUnavailable)
-	}
-	agentToken, err := s.agentTokens.InvestigationToken(ctx, platformBearer, scope.ProjectID, investigationID)
-	if err != nil {
-		return nil, agentTokenError(err)
-	}
-	remoteMCPServers := map[string]somclient.RemoteMCPServer{
-		"investigation": {
-			URL:     mcpURL,
-			Enabled: true,
-			Headers: map[string]string{
-				"Accept":        "application/json, text/event-stream",
-				"Authorization": "Bearer " + agentToken,
-			},
-		},
-	}
+	remoteMCPServers := investigationRemoteMCPServers(mcpURL, scope.ProjectID)
 	localEnvironmentID, err := s.som.StartEnvironment(
 		ctx, sessionID, repoID, name, prompt, exec, remoteMCPServers)
 	if err != nil {
@@ -269,6 +248,22 @@ func (s *Server) RunSomIssue(ctx context.Context, request som.RunSomIssueRequest
 	}), nil
 }
 
+// investigationRemoteMCPServers keeps the demo JWT in the OpenCode profile:
+// daemon receives only an env reference, never the token value itself.
+func investigationRemoteMCPServers(mcpURL, projectID string) map[string]somclient.RemoteMCPServer {
+	return map[string]somclient.RemoteMCPServer{
+		"investigation": {
+			URL:     mcpURL,
+			Enabled: true,
+			Headers: map[string]string{
+				"Accept":        "application/json, text/event-stream",
+				"Authorization": "Bearer {env:ACCESS_KEY}",
+				"X-Project-ID":  projectID,
+			},
+		},
+	}
+}
+
 func remoteMCPURL(cfg config.PromptConfig) (string, error) {
 	parsed, err := url.Parse(strings.TrimSpace(cfg.IRBaseURL))
 	if err != nil || parsed.Host == "" || (parsed.Scheme != "https" && parsed.Scheme != "http") {
@@ -281,20 +276,6 @@ func remoteMCPURL(cfg config.PromptConfig) (string, error) {
 	parsed.RawQuery = ""
 	parsed.Fragment = ""
 	return parsed.String(), nil
-}
-
-func agentTokenError(err error) error {
-	var upstream *authclient.HTTPError
-	if errors.As(err, &upstream) {
-		switch upstream.Status {
-		case http.StatusUnauthorized:
-			return httperr.ErrUnauthorized
-		case http.StatusForbidden, http.StatusNotFound:
-			return httperr.ErrForbidden
-		}
-	}
-	return httperr.New(http.StatusBadGateway, httperr.CodeSourceUnavailable,
-		"cannot obtain investigation agent token from Sb0rka Auth")
 }
 
 func runName(issue somclient.Issue) string {

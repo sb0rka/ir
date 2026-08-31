@@ -23,3 +23,8 @@ investigation и scopes берутся только из подписанных 
 класть в `socctx.Bearer`, чтобы он не мог уйти в Gateway/Platform/Secrets.
 Gateway tools передают его только внутреннему Auth exchange; полученный
 короткоживущий access JWT используется server-to-server и агенту не виден.
+
+Для временного SOM demo `RunSomIssue` настраивает первый режим через
+`Authorization: Bearer {env:ACCESS_KEY}` и `X-Project-ID`. Значение хранится в
+профиле OpenCode и подставляется самим OpenCode; daemon request содержит только
+env reference. Это осознанно даёт агенту пользовательские права до expiry JWT.

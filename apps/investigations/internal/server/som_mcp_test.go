@@ -20,3 +20,19 @@ func TestRemoteMCPURLRequiresHTTPS(t *testing.T) {
 		t.Fatalf("local url=%q err=%v", got, err)
 	}
 }
+
+func TestInvestigationRemoteMCPServersUseProfileAccessKey(t *testing.T) {
+	t.Parallel()
+
+	servers := investigationRemoteMCPServers("https://ir.example/mcp", "4a0326c78f")
+	server := servers["investigation"]
+	if server.URL != "https://ir.example/mcp" || !server.Enabled {
+		t.Fatalf("unexpected server: %+v", server)
+	}
+	if got := server.Headers["Authorization"]; got != "Bearer {env:ACCESS_KEY}" {
+		t.Fatalf("authorization=%q", got)
+	}
+	if got := server.Headers["X-Project-ID"]; got != "4a0326c78f" {
+		t.Fatalf("project=%q", got)
+	}
+}

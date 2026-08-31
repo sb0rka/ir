@@ -47,9 +47,10 @@ SOC аналитик открывает рабочее место и видит 
 
 ИИ-агент читает прикреплённые события, сущности и граф через Investigation MCP,
 а также ищет дополнительное evidence инструментами `search_gateway_events` и
-`lookup_gateway_entity` того же MCP. Прямых Gateway credentials и REST-доступа
-у агента нет: `ir-api` выполняет Gateway-вызовы от имени пользователя через
-короткоживущий backend token exchange. Через `add_investigation_agent_results`
+`lookup_gateway_entity` того же MCP. Для временного demo-flow OpenCode получает
+короткоживущий пользовательский JWT через `ACCESS_KEY`, поэтому может также
+вызывать Gateway REST напрямую с обязательным `X-Project-ID`. Через
+`add_investigation_agent_results`
 агент передаёт локальные UUID либо выбранные source references. В запрос также
 входят выбранные для графа узлы и связи,
 обоснование, степень уверенности и подтверждающие события; `som_issue_ids`

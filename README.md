@@ -57,9 +57,8 @@ task db:down
 ## Investigation MCP и SOM
 
 `ir-api` публикует Streamable HTTP endpoint `POST /mcp` на официальном Go SDK
-Model Context Protocol. Для ручного доступа он защищён теми же `Authorization`
-и `X-Project-ID`, что и REST API; для запуска через SOM используется подписанный
-Sb0rka Auth `agent+jwt`, ограниченный одним project и investigation.
+Model Context Protocol. Он поддерживает обычный пользовательский `access+jwt` +
+`X-Project-ID` и delegated `agent+jwt`.
 Endpoint предоставляет инструменты:
 
 - `get_investigation_graph` — прочитать граф;
@@ -76,14 +75,20 @@ Endpoint предоставляет инструменты:
 `investigation` в том же запросе, которым создаётся конкретный environment SOM.
 Daemon валидирует только удалённые HTTP(S) MCP-серверы и добавляет их в
 `OPENCODE_CONFIG_CONTENT` первого процесса агента, не меняя глобальный профиль
-OpenCode и не записывая JWT в SQLite. Поэтому параллельные investigation
-не могут подменить MCP-конфигурацию друг друга. Для этого flow требуется
-`SOM_EXECUTOR=OPENCODE`; human OAuth token агенту не передаётся, agent JWT не
-принимается REST API и не пересылается в Gateway, Platform API или Secrets.
-Для Gateway tools `ir-api` через confidential client обменивает agent JWT в Auth
-на обычный пяти минутный access JWT. Этот JWT существует только в памяти на
-время server-to-server вызова; Gateway и Platform Secrets продолжают работать
-по общему пользовательскому access-JWT pattern.
+OpenCode и не записывая конфигурацию environment в SQLite. Поэтому параллельные
+investigation не могут подменить MCP-конфигурацию друг друга. Для этого flow
+требуется `SOM_EXECUTOR=OPENCODE`.
+
+Временный demo-path использует `ACCESS_KEY` из Environment variables профиля
+OpenCode. Это обычный короткоживущий пользовательский `access+jwt`. IR передаёт
+в remote MCP config только ссылку `Bearer {env:ACCESS_KEY}` и подписанный
+текущим запросом `X-Project-ID`; OpenCode подставляет значение при запуске.
+Тот же token доступен агенту для прямого Gateway REST на
+`http://gateway:8091/api/v1`. Перед демо token нужно обновить вручную; он даёт
+агенту те же права, что и пользователю, поэтому не используйте admin JWT.
+
+Delegated `agent+jwt` и server-side exchange остаются поддержанным следующим
+этапом, но для demo-запуска через `ACCESS_KEY` не требуются.
 
 MCP является частью бинарника `ir-api`, поэтому его версия развёртывается
 атомарно вместе с Investigation API. Подписанный JWT не хранится в `ir-api`,

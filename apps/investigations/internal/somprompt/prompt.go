@@ -13,8 +13,8 @@ type Context struct {
 	SomIssueID      string
 }
 
-// Build tells the agent to use only the preconfigured, investigation-scoped
-// MCP server. Source credentials and the user's JWT never enter the prompt.
+// Build tells the agent how to use the preconfigured investigation MCP and the
+// temporary demo Gateway access inherited from its OpenCode profile.
 func Build(title, description string, c Context) string {
 	var b strings.Builder
 	b.WriteString(title)
@@ -25,15 +25,15 @@ func Build(title, description string, c Context) string {
 
 	b.WriteString("\n\n---\nIR context (appended by ir-api):\n")
 	fmt.Fprintf(&b, "- investigation_id: %s\n- som_issue_id: %s\n", c.InvestigationID, c.SomIssueID)
-	b.WriteString("\nThe `investigation` MCP server is already configured and authorized for exactly this project and investigation. " +
-		"Use only its five tools; do not call IR REST, Gateway REST, Platform API, or Secrets directly.\n\n")
+	fmt.Fprintf(&b, "\nThe `investigation` MCP server is already configured for project %s. Its Authorization header uses the short-lived user JWT from the `ACCESS_KEY` environment variable. Never print or persist this value.\n", c.ProjectID)
+	fmt.Fprintf(&b, "For the demo you may also call Gateway REST at `http://gateway:8091/api/v1` with `Authorization: Bearer $ACCESS_KEY` and `X-Project-ID: %s`. Prefer the five MCP tools for investigation context and graph writes; do not call Platform API or Secrets directly.\n\n", c.ProjectID)
 	fmt.Fprintf(&b, "Workflow:\n"+
 		"1. Read attached context with `list_investigation_events` and `get_investigation_graph` for investigation_id %s. Follow timeline pagination and reuse relevant existing node_id values.\n"+
-		"2. Investigate additional evidence with `search_gateway_events`; use `lookup_gateway_entity` when an observable needs enrichment. Both tools are already project-scoped through IR. Use bounded time ranges and the narrowest useful filters.\n"+
+		"2. Investigate additional evidence with `search_gateway_events`; use `lookup_gateway_entity` when an observable needs enrichment. You may inspect `GET http://gateway:8091/api/v1/sources` or other Gateway endpoints directly when needed. Always send both auth headers, use bounded time ranges and the narrowest useful filters.\n"+
 		"3. Submit `add_investigation_agent_results` with investigation_id %s and som_issue_ids [\"%s\"]. To import selected Gateway results, declare events by source_code/source_event_id and entities by source_code/source_entity_id, then point nodes at their batch refs using event_ref/entity_ref. Existing attached event_id/entity_id and graph node_id remain valid locators. A node must use exactly one locator.\n"+
 		"4. Edges use batch-local node refs in source_ref/target_ref. evidence_event_refs must contain batch-local refs of event nodes from the same batch. Every edge needs a concise evidence-based why; IR stores it as proposed for analyst review.\n"+
 		"5. Re-read graph and timeline after the write. Replaying the same batch is safe and should not create duplicate graph facts.\n\n"+
-		"Never invent source identifiers. Copy source_code/source_event_id/source_entity_id or UUIDs exactly from MCP results. If a corrected call still fails, report the tool error without attempting another service.\n",
+		"Never invent source identifiers. Copy source_code/source_event_id/source_entity_id or UUIDs exactly from MCP or Gateway results. If ACCESS_KEY is missing or expired, report that explicitly instead of exposing it or retrying with another credential.\n",
 		c.InvestigationID, c.InvestigationID, c.SomIssueID)
 	return b.String()
 }
