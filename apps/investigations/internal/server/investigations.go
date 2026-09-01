@@ -160,7 +160,8 @@ func (s *Server) AddInvestigationContext(ctx context.Context, request investigat
 	if err != nil {
 		return nil, err
 	}
-	stats, err := s.db.ImportContext(ctx, model.ImportRequest{ProjectID: scope.ProjectID, InvestigationID: request.InvestigationId.String(), Selection: resolved.Selection, Origin: "analyst", Warnings: resolved.Warnings})
+	seed := request.Body.Seed != nil && *request.Body.Seed
+	stats, err := s.db.ImportContext(ctx, model.ImportRequest{ProjectID: scope.ProjectID, InvestigationID: request.InvestigationId.String(), Selection: resolved.Selection, Origin: "analyst", Warnings: resolved.Warnings, Seed: seed})
 	if err != nil {
 		return nil, storeError(err)
 	}
@@ -672,8 +673,51 @@ func convertInvestigation(inv model.Investigation) (investigations.Investigation
 	return out, nil
 }
 
-func (s *Server) UpdateInvestigation(context.Context, investigations.UpdateInvestigationRequestObject) (investigations.UpdateInvestigationResponseObject, error) {
-	return nil, httperr.ErrNotImplemented
+func (s *Server) UpdateInvestigation(ctx context.Context, request investigations.UpdateInvestigationRequestObject) (investigations.UpdateInvestigationResponseObject, error) {
+	scope, err := s.scope(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if request.Body == nil {
+		return nil, httperr.BadRequest("request body is required")
+	}
+	patch := model.InvestigationPatch{
+		ProjectID:       scope.ProjectID,
+		InvestigationID: request.InvestigationId.String(),
+		Version:         request.Body.Version,
+		Title:           request.Body.Title,
+		Description:     request.Body.Description,
+		Confidence:      request.Body.Confidence,
+		VerdictReason:   request.Body.VerdictReason,
+	}
+	if request.Body.Status != nil {
+		value := string(*request.Body.Status)
+		patch.Status = &value
+	}
+	if request.Body.Verdict != nil {
+		value := string(*request.Body.Verdict)
+		patch.Verdict = &value
+	}
+	if request.Body.Severity != nil {
+		value := string(*request.Body.Severity)
+		patch.Severity = &value
+	}
+	if request.Body.SomWorkspaceIds != nil {
+		values := make([]string, 0, len(*request.Body.SomWorkspaceIds))
+		for _, id := range *request.Body.SomWorkspaceIds {
+			values = append(values, id.String())
+		}
+		patch.WorkspaceIDs = &values
+	}
+	updated, err := s.db.UpdateInvestigation(ctx, patch)
+	if err != nil {
+		return nil, storeError(err)
+	}
+	out, err := convertInvestigation(updated)
+	if err != nil {
+		return nil, err
+	}
+	return investigations.UpdateInvestigation200JSONResponse(out), nil
 }
 func (s *Server) GetInvestigationTree(context.Context, investigations.GetInvestigationTreeRequestObject) (investigations.GetInvestigationTreeResponseObject, error) {
 	return nil, httperr.ErrNotImplemented

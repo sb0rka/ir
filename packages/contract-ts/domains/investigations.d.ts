@@ -284,6 +284,11 @@ export interface components {
         };
         /** @description Source-owned identifiers selected in Gateway. At least one item across all four arrays is required; the server validates that aggregate rule. */
         ContextSelection: {
+            /**
+             * @description Marks directly selected events as the seed evidence that opened the investigation. Derived events are never marked as seed.
+             * @default false
+             */
+            seed: boolean;
             findings: components["schemas"]["SourceObjectRef"][];
             sessions: components["schemas"]["SourceObjectRef"][];
             events: components["schemas"]["EventSourceRef"][];
@@ -387,7 +392,7 @@ export interface components {
          * @description Whether work is still going on. Says nothing about the outcome — that is the verdict.
          * @enum {string}
          */
-        InvestigationStatus: "open" | "closed";
+        InvestigationStatus: "open" | "in_progress" | "closed";
         /**
          * @description Conclusion of a root or child case. Hypotheses have their own status and resolution reason rather than investigation verdicts.
          * @enum {string}

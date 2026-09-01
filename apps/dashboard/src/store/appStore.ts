@@ -563,7 +563,8 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       const created = await createInvestigation({ title, severity })
       const refs = contextRefsFromIds(ids, alerts, correlations, get().contextEvents)
-      if (refs.events.length || refs.findings.length) await addContext(created.id, refs)
+      if (refs.events.length || refs.findings.length)
+        await addContext(created.id, { ...refs, seed: true })
       const bundle = await loadInvestigationBundle(created.id, {
         seedEventIds: ids,
         view: 'graph',
@@ -644,7 +645,10 @@ export const useAppStore = create<AppState>((set, get) => ({
       await patchInvestigation(id, {
         version: inv.version,
         title: patch.title,
-        status: patch.status === 'closed' ? 'closed' : patch.status === 'open' ? 'open' : undefined,
+        status:
+          patch.status === 'closed' || patch.status === 'in_progress' || patch.status === 'open'
+            ? patch.status
+            : undefined,
         severity:
           patch.severity && patch.severity !== 'info' ? patch.severity : undefined,
       })

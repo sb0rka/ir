@@ -56,14 +56,17 @@ func (e ErrorResponseErrorCode) Valid() bool {
 
 // Defines values for InvestigationStatus.
 const (
-	Closed InvestigationStatus = "closed"
-	Open   InvestigationStatus = "open"
+	Closed     InvestigationStatus = "closed"
+	InProgress InvestigationStatus = "in_progress"
+	Open       InvestigationStatus = "open"
 )
 
 // Valid indicates whether the value is a known member of the InvestigationStatus enum.
 func (e InvestigationStatus) Valid() bool {
 	switch e {
 	case Closed:
+		return true
+	case InProgress:
 		return true
 	case Open:
 		return true
@@ -233,6 +236,9 @@ type ContextSelection struct {
 	Entities []EntitySourceRef `json:"entities"`
 	Events   []EventSourceRef  `json:"events"`
 	Findings []SourceObjectRef `json:"findings"`
+
+	// Seed Marks directly selected events as the seed evidence that opened the investigation. Derived events are never marked as seed.
+	Seed     *bool             `json:"seed,omitempty"`
 	Sessions []SourceObjectRef `json:"sessions"`
 }
 

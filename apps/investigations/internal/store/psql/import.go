@@ -282,19 +282,21 @@ func importSelectionTx(ctx context.Context, tx pgx.Tx, request model.ImportReque
 		if derived {
 			attachedBy = "system"
 		}
+		isSeed := request.Seed && direct
 		tag, err := tx.Exec(ctx, `INSERT INTO investigation_events
-			(investigation_id,event_id,project_id,attached_by,directly_added,derived)
-			VALUES ($1::uuid,$2::uuid,$3,$4,$5,$6) ON CONFLICT DO NOTHING`,
-			request.InvestigationID, eventID, request.ProjectID, attachedBy, direct, derived)
+			(investigation_id,event_id,project_id,attached_by,directly_added,derived,is_seed)
+			VALUES ($1::uuid,$2::uuid,$3,$4,$5,$6,$7) ON CONFLICT DO NOTHING`,
+			request.InvestigationID, eventID, request.ProjectID, attachedBy, direct, derived, isSeed)
 		if err != nil {
 			return stats, fmt.Errorf("attach event: %w", mapConstraint(err))
 		}
 		stats.Events += int(tag.RowsAffected())
 		if _, err := tx.Exec(ctx, `UPDATE investigation_events
 			SET directly_added=directly_added OR $4,derived=derived OR $5,
-			    attached_by=CASE WHEN $4 THEN $6 ELSE attached_by END
+			    attached_by=CASE WHEN $4 THEN $6 ELSE attached_by END,
+			    is_seed=is_seed OR $7
 			WHERE investigation_id=$1::uuid AND event_id=$2::uuid AND project_id=$3`,
-			request.InvestigationID, eventID, request.ProjectID, direct, derived, request.Origin); err != nil {
+			request.InvestigationID, eventID, request.ProjectID, direct, derived, request.Origin, isSeed); err != nil {
 			return stats, fmt.Errorf("merge event membership: %w", mapConstraint(err))
 		}
 	}

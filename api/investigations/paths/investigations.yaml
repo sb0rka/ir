@@ -463,6 +463,12 @@ components:
         all four arrays is required; the server validates that aggregate rule.
       required: [findings, sessions, events, entities]
       properties:
+        seed:
+          type: boolean
+          default: false
+          description: >-
+            Marks directly selected events as the seed evidence that opened the
+            investigation. Derived events are never marked as seed.
         findings:
           type: array
           maxItems: 100
@@ -665,7 +671,7 @@ components:
       description: >-
         Whether work is still going on. Says nothing about the outcome — that is
         the verdict.
-      enum: [open, closed]
+      enum: [open, in_progress, closed]
 
     Verdict:
       type: string

@@ -102,7 +102,7 @@ func convertEventSummary(item model.EventSummary) (events.EventSummary, error) {
 		return events.EventSummary{}, err
 	}
 	actor := events.Actor(item.AttachedBy)
-	out := events.EventSummary{Id: id, SourceCode: item.SourceCode, SourceEventId: item.SourceEventID, SourceRef: item.SourceRef, Title: item.Title, EventType: item.EventType, OccurredAt: item.OccurredAt, IngestedAt: item.IngestedAt, AttachedAt: &item.AttachedAt, AttachedBy: &actor, Reason: item.Reason}
+	out := events.EventSummary{Id: id, SourceCode: item.SourceCode, SourceEventId: item.SourceEventID, SourceRef: item.SourceRef, Title: item.Title, EventType: item.EventType, OccurredAt: item.OccurredAt, IngestedAt: item.IngestedAt, AttachedAt: &item.AttachedAt, AttachedBy: &actor, Reason: item.Reason, IsSeed: item.IsSeed}
 	var normalized map[string]any
 	if err := json.Unmarshal(item.NormalizedData, &normalized); err != nil {
 		return events.EventSummary{}, err

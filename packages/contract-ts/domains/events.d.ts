@@ -152,6 +152,8 @@ export interface components {
             attached_by?: components["schemas"]["Actor"];
             /** @description Explanation stored on the investigation-event link. */
             reason?: string | null;
+            /** @description Whether this event is seed evidence for the investigation being listed. This belongs to the investigation-event link, not the project event itself. */
+            is_seed: boolean;
             /** @description Which tool it came from. */
             source_code: string;
             /** @description Identifier of the record in that tool. */
