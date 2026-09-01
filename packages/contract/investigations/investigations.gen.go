@@ -143,19 +143,15 @@ func (e SourceObjectRefRecordType) Valid() bool {
 
 // Defines values for Verdict.
 const (
-	Confirmed     Verdict = "confirmed"
 	FalsePositive Verdict = "false_positive"
 	Incident      Verdict = "incident"
 	Inconclusive  Verdict = "inconclusive"
 	NotAffected   Verdict = "not_affected"
-	Rejected      Verdict = "rejected"
 )
 
 // Valid indicates whether the value is a known member of the Verdict enum.
 func (e Verdict) Valid() bool {
 	switch e {
-	case Confirmed:
-		return true
 	case FalsePositive:
 		return true
 	case Incident:
@@ -163,8 +159,6 @@ func (e Verdict) Valid() bool {
 	case Inconclusive:
 		return true
 	case NotAffected:
-		return true
-	case Rejected:
 		return true
 	default:
 		return false
@@ -278,17 +272,17 @@ type EventSourceRef struct {
 	SourceEventId string `json:"source_event_id"`
 }
 
-// Investigation A case or a nested hypothesis in the selected project.
+// Investigation A standalone root or child case in the selected project. Hypotheses are separate projections and never appear in the investigation tree.
 type Investigation struct {
 	// ClosedAt When it was closed. Cleared if the investigation is reopened.
 	ClosedAt *time.Time `json:"closed_at,omitempty"`
 
-	// Confidence How sure the conclusion is. Meaningful for a hypothesis, rarely used on a root case.
+	// Confidence How sure the case conclusion is.
 	Confidence *float32 `json:"confidence,omitempty"`
 
 	// Counters Size of the case at a glance, so the list does not need a query per row.
 	Counters struct {
-		// Children Direct child investigations — the open hypotheses under this one.
+		// Children Direct child investigations. Hypotheses are not counted here.
 		Children int `json:"children"`
 
 		// Entities Distinct entities extracted from those events.
@@ -322,7 +316,7 @@ type Investigation struct {
 	// OriginRef Which one exactly — the analyst's subject id, the rule's code, or the agent run's identifier.
 	OriginRef *string `json:"origin_ref,omitempty"`
 
-	// ParentId The investigation this one refines. Null means it is a root case; anything else means it is a hypothesis inside a larger case.
+	// ParentId Parent case. Null means this is a root case; a value means this is an independently managed child case.
 	ParentId *openapi_types.UUID `json:"parent_id,omitempty"`
 
 	// ProjectId Project that owns the case. Every child inherits it unchanged, so a whole tree belongs to one project.
@@ -337,28 +331,28 @@ type Investigation struct {
 	// Status Whether work is still going on. Independent of the verdict: a case can be open with no verdict yet, and closing requires one.
 	Status InvestigationStatus `json:"status"`
 
-	// Title What is being investigated. For a hypothesis this is the claim being tested, phrased so a verdict makes sense against it.
+	// Title What this case investigates.
 	Title string `json:"title"`
 
 	// UpdatedAt When it last changed.
 	UpdatedAt time.Time `json:"updated_at"`
 
-	// Verdict The conclusion. Absent while the investigation is still open, required to close it. Which values are allowed depends on whether this is a root case or a hypothesis — see Verdict.
+	// Verdict The conclusion. Absent while the investigation is still open, required to close it. Root and child cases use the same vocabulary.
 	Verdict *Verdict `json:"verdict,omitempty"`
 
-	// VerdictReason Reason for the verdict. Required when rejecting.
+	// VerdictReason Optional explanation of the case verdict.
 	VerdictReason *string `json:"verdict_reason,omitempty"`
 
 	// Version Bumped on every change. Send the value you last read when updating; a mismatch means someone else edited it first.
 	Version int `json:"version"`
 }
 
-// InvestigationCreate A new case, or a new hypothesis inside an existing one.
+// InvestigationCreate A new root case or an independently managed child case.
 type InvestigationCreate struct {
 	// Description Context — what is known so far and what needs checking.
 	Description *string `json:"description,omitempty"`
 
-	// ParentId The investigation this one refines. Omit it to open a root case.
+	// ParentId Parent case for a nested investigation. Omit it to open a root case.
 	ParentId *openapi_types.UUID `json:"parent_id,omitempty"`
 
 	// Severity Initial assessment. Can be revised later.
@@ -367,7 +361,7 @@ type InvestigationCreate struct {
 	// SomWorkspaceIds SOM workspaces to link to the new investigation.
 	SomWorkspaceIds []openapi_types.UUID `json:"som_workspace_ids"`
 
-	// Title What is being investigated, or the claim being tested.
+	// Title What is being investigated.
 	Title string `json:"title"`
 }
 
@@ -382,7 +376,7 @@ type InvestigationPage struct {
 
 // InvestigationPatch Fields to change. Anything omitted stays as it is; `version` is always required so concurrent edits cannot overwrite each other silently.
 type InvestigationPatch struct {
-	// Confidence How sure the conclusion is. Meaningful for a hypothesis.
+	// Confidence How sure the case conclusion is.
 	Confidence *float32 `json:"confidence,omitempty"`
 
 	// Description New description.
@@ -400,10 +394,10 @@ type InvestigationPatch struct {
 	// Title New title.
 	Title *string `json:"title,omitempty"`
 
-	// Verdict The conclusion. Which values are allowed depends on whether this is a root case or a hypothesis.
+	// Verdict Case conclusion for either a root or child investigation.
 	Verdict *Verdict `json:"verdict,omitempty"`
 
-	// VerdictReason Why. Required when the verdict is rejected.
+	// VerdictReason Optional explanation of the case verdict.
 	VerdictReason *string `json:"verdict_reason,omitempty"`
 
 	// Version Version the client last read. A mismatch is a 409.
@@ -437,11 +431,14 @@ type TimeRange struct {
 	To   time.Time `json:"to"`
 }
 
-// Verdict The conclusion, drawn from two vocabularies that share one field. A root case ends as incident, false_positive, not_affected or inconclusive. A hypothesis ends as confirmed, rejected or inconclusive. The server checks the value against the investigation's position in the tree, so a hypothesis cannot be closed as an incident.
+// Verdict Conclusion of a root or child case. Hypotheses have their own status and resolution reason rather than investigation verdicts.
 type Verdict string
 
 // Cursor defines model for Cursor.
 type Cursor = string
+
+// HypothesisId defines model for HypothesisId.
+type HypothesisId = openapi_types.UUID
 
 // InvestigationId defines model for InvestigationId.
 type InvestigationId = openapi_types.UUID
@@ -533,6 +530,18 @@ type AddInvestigationContextParams struct {
 	XProjectID ProjectId `json:"X-Project-ID"`
 }
 
+// AddHypothesisAgentResultsParams defines parameters for AddHypothesisAgentResults.
+type AddHypothesisAgentResultsParams struct {
+	// XProjectID Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets.
+	XProjectID ProjectId `json:"X-Project-ID"`
+}
+
+// AddHypothesisContextParams defines parameters for AddHypothesisContext.
+type AddHypothesisContextParams struct {
+	// XProjectID Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets.
+	XProjectID ProjectId `json:"X-Project-ID"`
+}
+
 // GetInvestigationTreeParams defines parameters for GetInvestigationTree.
 type GetInvestigationTreeParams struct {
 	// XProjectID Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets.
@@ -551,12 +560,18 @@ type AddAgentResultsJSONRequestBody = AgentResultBatch
 // AddInvestigationContextJSONRequestBody defines body for AddInvestigationContext for application/json ContentType.
 type AddInvestigationContextJSONRequestBody = ContextSelection
 
+// AddHypothesisAgentResultsJSONRequestBody defines body for AddHypothesisAgentResults for application/json ContentType.
+type AddHypothesisAgentResultsJSONRequestBody = AgentResultBatch
+
+// AddHypothesisContextJSONRequestBody defines body for AddHypothesisContext for application/json ContentType.
+type AddHypothesisContextJSONRequestBody = ContextSelection
+
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
 	// ListInvestigations List investigations
 	// (GET /investigations)
 	ListInvestigations(w http.ResponseWriter, r *http.Request, params ListInvestigationsParams)
-	// CreateInvestigation Open an investigation or a hypothesis under one
+	// CreateInvestigation Open a root or child investigation
 	// (POST /investigations)
 	CreateInvestigation(w http.ResponseWriter, r *http.Request, params CreateInvestigationParams)
 	// DeleteInvestigation Delete an investigation
@@ -574,6 +589,12 @@ type ServerInterface interface {
 	// AddInvestigationContext Add analyst-selected Gateway context
 	// (POST /investigations/{investigation_id}/context)
 	AddInvestigationContext(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, params AddInvestigationContextParams)
+	// AddHypothesisAgentResults Save explicit SOM agent results for an active hypothesis
+	// (POST /investigations/{investigation_id}/hypotheses/{hypothesis_id}/agent-results)
+	AddHypothesisAgentResults(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, hypothesisId HypothesisId, params AddHypothesisAgentResultsParams)
+	// AddHypothesisContext Add analyst-selected context through a hypothesis
+	// (POST /investigations/{investigation_id}/hypotheses/{hypothesis_id}/context)
+	AddHypothesisContext(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, hypothesisId HypothesisId, params AddHypothesisContextParams)
 	// GetInvestigationTree The whole subtree
 	// (GET /investigations/{investigation_id}/tree)
 	GetInvestigationTree(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, params GetInvestigationTreeParams)
@@ -1026,6 +1047,132 @@ func (siw *ServerInterfaceWrapper) AddInvestigationContext(w http.ResponseWriter
 	handler.ServeHTTP(w, r)
 }
 
+// AddHypothesisAgentResults operation middleware
+func (siw *ServerInterfaceWrapper) AddHypothesisAgentResults(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "investigation_id" -------------
+	var investigationId InvestigationId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "investigation_id", r.PathValue("investigation_id"), &investigationId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "investigation_id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "hypothesis_id" -------------
+	var hypothesisId HypothesisId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "hypothesis_id", r.PathValue("hypothesis_id"), &hypothesisId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "hypothesis_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params AddHypothesisAgentResultsParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "X-Project-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Project-ID")]; found {
+		var XProjectID ProjectId
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Project-ID", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Project-ID", valueList[0], &XProjectID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Project-ID", Err: err})
+			return
+		}
+
+		params.XProjectID = XProjectID
+
+	} else {
+		err := fmt.Errorf("Header parameter X-Project-ID is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Project-ID", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.AddHypothesisAgentResults(w, r, investigationId, hypothesisId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// AddHypothesisContext operation middleware
+func (siw *ServerInterfaceWrapper) AddHypothesisContext(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "investigation_id" -------------
+	var investigationId InvestigationId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "investigation_id", r.PathValue("investigation_id"), &investigationId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "investigation_id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "hypothesis_id" -------------
+	var hypothesisId HypothesisId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "hypothesis_id", r.PathValue("hypothesis_id"), &hypothesisId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "hypothesis_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params AddHypothesisContextParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "X-Project-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Project-ID")]; found {
+		var XProjectID ProjectId
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Project-ID", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Project-ID", valueList[0], &XProjectID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Project-ID", Err: err})
+			return
+		}
+
+		params.XProjectID = XProjectID
+
+	} else {
+		err := fmt.Errorf("Header parameter X-Project-ID is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Project-ID", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.AddHypothesisContext(w, r, investigationId, hypothesisId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetInvestigationTree operation middleware
 func (siw *ServerInterfaceWrapper) GetInvestigationTree(w http.ResponseWriter, r *http.Request) {
 
@@ -1204,6 +1351,8 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/investigations", wrapper.CreateInvestigation)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/investigations/{investigation_id}/context", wrapper.AddInvestigationContext)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/investigations/{investigation_id}/agent-results", wrapper.AddAgentResults)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/investigations/{investigation_id}/hypotheses/{hypothesis_id}/context", wrapper.AddHypothesisContext)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/investigations/{investigation_id}/hypotheses/{hypothesis_id}/agent-results", wrapper.AddHypothesisAgentResults)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/investigations/{investigation_id}", wrapper.DeleteInvestigation)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/investigations/{investigation_id}", wrapper.GetInvestigation)
 	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/investigations/{investigation_id}", wrapper.UpdateInvestigation)
@@ -1915,6 +2064,224 @@ func (response AddInvestigationContext500JSONResponse) VisitAddInvestigationCont
 	return err
 }
 
+type AddHypothesisAgentResultsRequestObject struct {
+	InvestigationId InvestigationId `json:"investigation_id"`
+	HypothesisId    HypothesisId    `json:"hypothesis_id"`
+	Params          AddHypothesisAgentResultsParams
+	Body            *AddHypothesisAgentResultsJSONRequestBody
+}
+
+type AddHypothesisAgentResultsResponseObject interface {
+	VisitAddHypothesisAgentResultsResponse(w http.ResponseWriter) error
+}
+
+type AddHypothesisAgentResults201JSONResponse ContextImportResult
+
+func (response AddHypothesisAgentResults201JSONResponse) VisitAddHypothesisAgentResultsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddHypothesisAgentResults401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response AddHypothesisAgentResults401JSONResponse) VisitAddHypothesisAgentResultsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddHypothesisAgentResults403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response AddHypothesisAgentResults403JSONResponse) VisitAddHypothesisAgentResultsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddHypothesisAgentResults404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response AddHypothesisAgentResults404JSONResponse) VisitAddHypothesisAgentResultsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddHypothesisAgentResults409JSONResponse struct{ ConflictJSONResponse }
+
+func (response AddHypothesisAgentResults409JSONResponse) VisitAddHypothesisAgentResultsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddHypothesisAgentResults422JSONResponse struct{ ValidationErrorJSONResponse }
+
+func (response AddHypothesisAgentResults422JSONResponse) VisitAddHypothesisAgentResultsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddHypothesisAgentResults500JSONResponse struct{ InternalErrorJSONResponse }
+
+func (response AddHypothesisAgentResults500JSONResponse) VisitAddHypothesisAgentResultsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddHypothesisContextRequestObject struct {
+	InvestigationId InvestigationId `json:"investigation_id"`
+	HypothesisId    HypothesisId    `json:"hypothesis_id"`
+	Params          AddHypothesisContextParams
+	Body            *AddHypothesisContextJSONRequestBody
+}
+
+type AddHypothesisContextResponseObject interface {
+	VisitAddHypothesisContextResponse(w http.ResponseWriter) error
+}
+
+type AddHypothesisContext201JSONResponse ContextImportResult
+
+func (response AddHypothesisContext201JSONResponse) VisitAddHypothesisContextResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddHypothesisContext401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response AddHypothesisContext401JSONResponse) VisitAddHypothesisContextResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddHypothesisContext403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response AddHypothesisContext403JSONResponse) VisitAddHypothesisContextResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddHypothesisContext404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response AddHypothesisContext404JSONResponse) VisitAddHypothesisContextResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddHypothesisContext409JSONResponse struct{ ConflictJSONResponse }
+
+func (response AddHypothesisContext409JSONResponse) VisitAddHypothesisContextResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddHypothesisContext422JSONResponse struct{ ValidationErrorJSONResponse }
+
+func (response AddHypothesisContext422JSONResponse) VisitAddHypothesisContextResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddHypothesisContext500JSONResponse struct{ InternalErrorJSONResponse }
+
+func (response AddHypothesisContext500JSONResponse) VisitAddHypothesisContextResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type GetInvestigationTreeRequestObject struct {
 	InvestigationId InvestigationId `json:"investigation_id"`
 	Params          GetInvestigationTreeParams
@@ -1928,12 +2295,12 @@ type GetInvestigationTree200JSONResponse []struct {
 	// ClosedAt When it was closed. Cleared if the investigation is reopened.
 	ClosedAt *time.Time `json:"closed_at,omitempty"`
 
-	// Confidence How sure the conclusion is. Meaningful for a hypothesis, rarely used on a root case.
+	// Confidence How sure the case conclusion is.
 	Confidence *float32 `json:"confidence,omitempty"`
 
 	// Counters Size of the case at a glance, so the list does not need a query per row.
 	Counters struct {
-		// Children Direct child investigations — the open hypotheses under this one.
+		// Children Direct child investigations. Hypotheses are not counted here.
 		Children int `json:"children"`
 
 		// Entities Distinct entities extracted from those events.
@@ -1970,7 +2337,7 @@ type GetInvestigationTree200JSONResponse []struct {
 	// OriginRef Which one exactly — the analyst's subject id, the rule's code, or the agent run's identifier.
 	OriginRef *string `json:"origin_ref,omitempty"`
 
-	// ParentId The investigation this one refines. Null means it is a root case; anything else means it is a hypothesis inside a larger case.
+	// ParentId Parent case. Null means this is a root case; a value means this is an independently managed child case.
 	ParentId *openapi_types.UUID `json:"parent_id,omitempty"`
 
 	// ProjectId Project that owns the case. Every child inherits it unchanged, so a whole tree belongs to one project.
@@ -1985,16 +2352,16 @@ type GetInvestigationTree200JSONResponse []struct {
 	// Status Whether work is still going on. Independent of the verdict: a case can be open with no verdict yet, and closing requires one.
 	Status InvestigationStatus `json:"status"`
 
-	// Title What is being investigated. For a hypothesis this is the claim being tested, phrased so a verdict makes sense against it.
+	// Title What this case investigates.
 	Title string `json:"title"`
 
 	// UpdatedAt When it last changed.
 	UpdatedAt time.Time `json:"updated_at"`
 
-	// Verdict The conclusion. Absent while the investigation is still open, required to close it. Which values are allowed depends on whether this is a root case or a hypothesis — see Verdict.
+	// Verdict The conclusion. Absent while the investigation is still open, required to close it. Root and child cases use the same vocabulary.
 	Verdict *Verdict `json:"verdict,omitempty"`
 
-	// VerdictReason Reason for the verdict. Required when rejecting.
+	// VerdictReason Optional explanation of the case verdict.
 	VerdictReason *string `json:"verdict_reason,omitempty"`
 
 	// Version Bumped on every change. Send the value you last read when updating; a mismatch means someone else edited it first.
@@ -2088,7 +2455,7 @@ type StrictServerInterface interface {
 	// ListInvestigations List investigations
 	// (GET /investigations)
 	ListInvestigations(ctx context.Context, request ListInvestigationsRequestObject) (ListInvestigationsResponseObject, error)
-	// CreateInvestigation Open an investigation or a hypothesis under one
+	// CreateInvestigation Open a root or child investigation
 	// (POST /investigations)
 	CreateInvestigation(ctx context.Context, request CreateInvestigationRequestObject) (CreateInvestigationResponseObject, error)
 	// DeleteInvestigation Delete an investigation
@@ -2106,6 +2473,12 @@ type StrictServerInterface interface {
 	// AddInvestigationContext Add analyst-selected Gateway context
 	// (POST /investigations/{investigation_id}/context)
 	AddInvestigationContext(ctx context.Context, request AddInvestigationContextRequestObject) (AddInvestigationContextResponseObject, error)
+	// AddHypothesisAgentResults Save explicit SOM agent results for an active hypothesis
+	// (POST /investigations/{investigation_id}/hypotheses/{hypothesis_id}/agent-results)
+	AddHypothesisAgentResults(ctx context.Context, request AddHypothesisAgentResultsRequestObject) (AddHypothesisAgentResultsResponseObject, error)
+	// AddHypothesisContext Add analyst-selected context through a hypothesis
+	// (POST /investigations/{investigation_id}/hypotheses/{hypothesis_id}/context)
+	AddHypothesisContext(ctx context.Context, request AddHypothesisContextRequestObject) (AddHypothesisContextResponseObject, error)
 	// GetInvestigationTree The whole subtree
 	// (GET /investigations/{investigation_id}/tree)
 	GetInvestigationTree(ctx context.Context, request GetInvestigationTreeRequestObject) (GetInvestigationTreeResponseObject, error)
@@ -2358,6 +2731,76 @@ func (sh *strictHandler) AddInvestigationContext(w http.ResponseWriter, r *http.
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(AddInvestigationContextResponseObject); ok {
 		if err := validResponse.VisitAddInvestigationContextResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// AddHypothesisAgentResults operation middleware
+func (sh *strictHandler) AddHypothesisAgentResults(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, hypothesisId HypothesisId, params AddHypothesisAgentResultsParams) {
+	var request AddHypothesisAgentResultsRequestObject
+
+	request.InvestigationId = investigationId
+	request.HypothesisId = hypothesisId
+	request.Params = params
+
+	var body AddHypothesisAgentResultsJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.AddHypothesisAgentResults(ctx, request.(AddHypothesisAgentResultsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "AddHypothesisAgentResults")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(AddHypothesisAgentResultsResponseObject); ok {
+		if err := validResponse.VisitAddHypothesisAgentResultsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// AddHypothesisContext operation middleware
+func (sh *strictHandler) AddHypothesisContext(w http.ResponseWriter, r *http.Request, investigationId InvestigationId, hypothesisId HypothesisId, params AddHypothesisContextParams) {
+	var request AddHypothesisContextRequestObject
+
+	request.InvestigationId = investigationId
+	request.HypothesisId = hypothesisId
+	request.Params = params
+
+	var body AddHypothesisContextJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.AddHypothesisContext(ctx, request.(AddHypothesisContextRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "AddHypothesisContext")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(AddHypothesisContextResponseObject); ok {
+		if err := validResponse.VisitAddHypothesisContextResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

@@ -20,6 +20,13 @@ components:
       description: Identifier of an investigation in the selected project.
       schema: { type: string, format: uuid }
 
+    HypothesisId:
+      name: hypothesis_id
+      in: path
+      required: true
+      description: Identifier of a hypothesis owned by the investigation in the path.
+      schema: { type: string, format: uuid }
+
     EventId:
       name: event_id
       in: path

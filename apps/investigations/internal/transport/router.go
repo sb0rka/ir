@@ -10,6 +10,7 @@ import (
 	"github.com/sb0rka/ir/packages/contract/events"
 	"github.com/sb0rka/ir/packages/contract/findings"
 	"github.com/sb0rka/ir/packages/contract/graph"
+	"github.com/sb0rka/ir/packages/contract/hypotheses"
 	"github.com/sb0rka/ir/packages/contract/investigations"
 	"github.com/sb0rka/ir/packages/contract/reference"
 	"github.com/sb0rka/ir/packages/contract/sessions"
@@ -24,6 +25,7 @@ type API interface {
 	events.StrictServerInterface
 	findings.StrictServerInterface
 	graph.StrictServerInterface
+	hypotheses.StrictServerInterface
 	investigations.StrictServerInterface
 	reference.StrictServerInterface
 	sessions.StrictServerInterface
@@ -106,6 +108,15 @@ func registerDomains(mux *http.ServeMux, deps Dependencies) {
 			ResponseErrorHandlerFunc: onResponseError,
 		}),
 		graph.StdHTTPServerOptions{
+			BaseURL: baseURL, BaseRouter: mux, ErrorHandlerFunc: onRequestError,
+		})
+
+	hypotheses.HandlerWithOptions(
+		hypotheses.NewStrictHandlerWithOptions(deps.Server, nil, hypotheses.StrictHTTPServerOptions{
+			RequestErrorHandlerFunc:  onRequestError,
+			ResponseErrorHandlerFunc: onResponseError,
+		}),
+		hypotheses.StdHTTPServerOptions{
 			BaseURL: baseURL, BaseRouter: mux, ErrorHandlerFunc: onRequestError,
 		})
 

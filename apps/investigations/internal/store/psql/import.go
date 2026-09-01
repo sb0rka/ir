@@ -19,6 +19,27 @@ type resolvedNode struct {
 	NodeType string
 }
 
+type importGraphRefs struct {
+	nodes map[string]struct{}
+	edges map[string]struct{}
+}
+
+func newImportGraphRefs() *importGraphRefs {
+	return &importGraphRefs{nodes: make(map[string]struct{}), edges: make(map[string]struct{})}
+}
+
+func (r *importGraphRefs) addNode(id string) {
+	if r != nil && id != "" {
+		r.nodes[id] = struct{}{}
+	}
+}
+
+func (r *importGraphRefs) addEdge(id string) {
+	if r != nil && id != "" {
+		r.edges[id] = struct{}{}
+	}
+}
+
 func (d *DB) ImportContext(ctx context.Context, request model.ImportRequest) (model.ImportStats, error) {
 	tx, err := d.Pgx().Begin(ctx)
 	if err != nil {
@@ -32,9 +53,35 @@ func (d *DB) ImportContext(ctx context.Context, request model.ImportRequest) (mo
 	if !exists {
 		return model.ImportStats{}, store.ErrInvestigationNotFound
 	}
-	stats, err := importSelectionTx(ctx, tx, request)
+	if request.RequireActiveHypothesis && request.HypothesisID == nil {
+		return model.ImportStats{}, store.ErrInvalidValue
+	}
+	if request.HypothesisID != nil {
+		if _, err := writableHypothesisTx(ctx, tx, request.ProjectID, request.InvestigationID,
+			*request.HypothesisID, request.RequireActiveHypothesis); err != nil {
+			return model.ImportStats{}, err
+		}
+	}
+	refs := newImportGraphRefs()
+	stats, err := importSelectionTx(ctx, tx, request, refs)
 	if err != nil {
 		return model.ImportStats{}, err
+	}
+	if request.HypothesisID != nil {
+		for nodeID := range refs.nodes {
+			if err := insertHypothesisNodeMembershipTx(ctx, tx, *request.HypothesisID, request.InvestigationID, nodeID); err != nil {
+				return model.ImportStats{}, err
+			}
+		}
+		for edgeID := range refs.edges {
+			edge, err := graphEdgeByIDTx(ctx, tx, request.ProjectID, request.InvestigationID, edgeID, false)
+			if err != nil {
+				return model.ImportStats{}, err
+			}
+			if err := insertHypothesisEdgeMembershipTx(ctx, tx, *request.HypothesisID, request.InvestigationID, edge); err != nil {
+				return model.ImportStats{}, err
+			}
+		}
 	}
 	stats.Warnings = dedupeStrings(stats.Warnings)
 	if err := tx.Commit(ctx); err != nil {
@@ -43,7 +90,7 @@ func (d *DB) ImportContext(ctx context.Context, request model.ImportRequest) (mo
 	return stats, nil
 }
 
-func importSelectionTx(ctx context.Context, tx pgx.Tx, request model.ImportRequest) (model.ImportStats, error) {
+func importSelectionTx(ctx context.Context, tx pgx.Tx, request model.ImportRequest, refs *importGraphRefs) (model.ImportStats, error) {
 	if request.Origin != "analyst" && request.Origin != "agent" {
 		return model.ImportStats{}, store.ErrInvalidValue
 	}
@@ -405,7 +452,11 @@ func importSelectionTx(ctx context.Context, tx pgx.Tx, request model.ImportReque
 			}
 		}
 	}
-	sourceNodes, sourceEdges, sourceWarnings, err := linkSourceSubeventEdgesTx(ctx, tx, request, eventIDs)
+	var sourceRefs *importGraphRefs
+	if request.Origin == "analyst" {
+		sourceRefs = refs
+	}
+	sourceNodes, sourceEdges, sourceWarnings, err := linkSourceSubeventEdgesTx(ctx, tx, request, eventIDs, sourceRefs)
 	if err != nil {
 		return stats, err
 	}
@@ -423,6 +474,7 @@ func importSelectionTx(ctx context.Context, tx pgx.Tx, request model.ImportReque
 				return stats, err
 			}
 			eventNodes[snapshotID] = node
+			refs.addNode(node.ID)
 			if inserted {
 				stats.Nodes++
 			}
@@ -433,6 +485,7 @@ func importSelectionTx(ctx context.Context, tx pgx.Tx, request model.ImportReque
 				return stats, err
 			}
 			entityNodes[snapshotID] = node
+			refs.addNode(node.ID)
 			if inserted {
 				stats.Nodes++
 			}
@@ -447,6 +500,7 @@ func importSelectionTx(ctx context.Context, tx pgx.Tx, request model.ImportReque
 					if inserted {
 						stats.Edges++
 					}
+					refs.addEdge(edgeID)
 					if _, err := tx.Exec(ctx, `INSERT INTO edge_evidence (edge_id,event_id,investigation_id) VALUES ($1::uuid,$2::uuid,$3::uuid) ON CONFLICT DO NOTHING`, edgeID, eventIDs[event.SnapshotID], request.InvestigationID); err != nil {
 						return stats, err
 					}
@@ -455,13 +509,14 @@ func importSelectionTx(ctx context.Context, tx pgx.Tx, request model.ImportReque
 		}
 		for _, relation := range request.Selection.Relations {
 			metadata, _ := json.Marshal(map[string]any{"source_code": relation.Provenance.Source, "source_relation_id": relation.Provenance.ExternalID, "source_ref": relation.Provenance.SourceURL})
-			_, inserted, err := insertEdgeTx(ctx, tx, request.InvestigationID, entityNodes[relation.SourceEntitySnapshotID], entityNodes[relation.TargetEntitySnapshotID], relation.RelationCode, "confirmed", "analyst", nil, &analystConfidence, nil, metadata)
+			edgeID, inserted, err := insertEdgeTx(ctx, tx, request.InvestigationID, entityNodes[relation.SourceEntitySnapshotID], entityNodes[relation.TargetEntitySnapshotID], relation.RelationCode, "confirmed", "analyst", nil, &analystConfidence, nil, metadata)
 			if err != nil {
 				return stats, err
 			}
 			if inserted {
 				stats.Edges++
 			}
+			refs.addEdge(edgeID)
 		}
 		return stats, nil
 	}
@@ -549,6 +604,7 @@ func importSelectionTx(ctx context.Context, tx pgx.Tx, request model.ImportReque
 		if inserted {
 			stats.Nodes++
 		}
+		refs.addNode(node.ID)
 		local[ref] = resolvedNode{Node: node, EventID: node.EventID, NodeType: node.NodeType}
 	}
 
@@ -579,11 +635,12 @@ func importSelectionTx(ctx context.Context, tx pgx.Tx, request model.ImportReque
 		if inserted {
 			stats.Edges++
 		}
+		refs.addEdge(edgeID)
 	}
 	return stats, nil
 }
 
-func linkSourceSubeventEdgesTx(ctx context.Context, tx pgx.Tx, request model.ImportRequest, eventIDs map[string]string) (int, int, []string, error) {
+func linkSourceSubeventEdgesTx(ctx context.Context, tx pgx.Tx, request model.ImportRequest, eventIDs map[string]string, refs *importGraphRefs) (int, int, []string, error) {
 	insertedNodes := 0
 	insertedEdges := 0
 	warnings := make([]string, 0)
@@ -623,6 +680,7 @@ func linkSourceSubeventEdgesTx(ctx context.Context, tx pgx.Tx, request model.Imp
 		if inserted {
 			insertedNodes++
 		}
+		refs.addNode(childNode.ID)
 		parentNode, inserted, err := upsertNodeTx(ctx, tx, request.InvestigationID, "event", nil, &parentEventID, "rule", nil)
 		if err != nil {
 			return 0, 0, nil, err
@@ -630,6 +688,7 @@ func linkSourceSubeventEdgesTx(ctx context.Context, tx pgx.Tx, request model.Imp
 		if inserted {
 			insertedNodes++
 		}
+		refs.addNode(parentNode.ID)
 		metadata, _ := json.Marshal(map[string]string{
 			"relation_type":          "subevent_of",
 			"source_code":            child.Provenance.Source,
@@ -644,6 +703,7 @@ func linkSourceSubeventEdgesTx(ctx context.Context, tx pgx.Tx, request model.Imp
 		if inserted {
 			insertedEdges++
 		}
+		refs.addEdge(edgeID)
 		if _, err := tx.Exec(ctx, `INSERT INTO edge_evidence (edge_id,event_id,investigation_id)
 			VALUES ($1::uuid,$2::uuid,$3::uuid) ON CONFLICT DO NOTHING`, edgeID, childEventID, request.InvestigationID); err != nil {
 			return 0, 0, nil, fmt.Errorf("add source subevent evidence: %w", mapConstraint(err))

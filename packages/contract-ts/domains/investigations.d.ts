@@ -21,8 +21,8 @@ export interface paths {
         get: operations["listInvestigations"];
         put?: never;
         /**
-         * Open an investigation or a hypothesis under one
-         * @description A root investigation is a case; a child is a hypothesis.
+         * Open a root or child investigation
+         * @description Every investigation is a standalone case with its own lifecycle, context, queue, report, and graph. A parent_id creates a nested child case; hypotheses are separate graph projections inside one case and cannot contain child hypotheses.
          */
         post: operations["createInvestigation"];
         delete?: never;
@@ -83,6 +83,62 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/investigations/{investigation_id}/hypotheses/{hypothesis_id}/context": {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
+            path: {
+                /** @description Identifier of an investigation in the selected project. */
+                investigation_id: components["parameters"]["InvestigationId"];
+                /** @description Identifier of a hypothesis owned by the investigation in the path. */
+                hypothesis_id: components["parameters"]["HypothesisId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add analyst-selected context through a hypothesis
+         * @description Resolves the same ContextSelection as the investigation-level import. One transaction updates project records, attaches investigation context, creates or finds shared graph objects, and adds the complete bounded graph projection touched by this import to the hypothesis. Findings and sessions remain context records rather than graph members. Resolved hypotheses reject imports.
+         */
+        post: operations["addHypothesisContext"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/investigations/{investigation_id}/hypotheses/{hypothesis_id}/agent-results": {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
+            path: {
+                /** @description Identifier of an investigation in the selected project. */
+                investigation_id: components["parameters"]["InvestigationId"];
+                /** @description Identifier of a hypothesis owned by the investigation in the path. */
+                hypothesis_id: components["parameters"]["HypothesisId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Save explicit SOM agent results for an active hypothesis
+         * @description Uses AgentResultBatch and the shared investigation context. Only nodes and edges explicitly listed by the agent gain hypothesis memberships; timeline-only events and entities do not. The hypothesis must be active when the transaction is applied.
+         */
+        post: operations["addHypothesisAgentResults"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/investigations/{investigation_id}": {
         parameters: {
             query?: never;
@@ -112,7 +168,7 @@ export interface paths {
         head?: never;
         /**
          * Update an investigation
-         * @description Updates only the supplied fields. Closing requires a verdict; rejecting requires a reason. Confirming a hypothesis without an attached event returns 422 with `details.reason=evidence_required`. A closed investigation can only be reopened; reopening clears the verdict.
+         * @description Updates only the supplied fields. Closing requires a case verdict. A closed investigation can only be reopened; reopening clears the verdict. Root and child investigations use the same verdict semantics.
          */
         patch: operations["updateInvestigation"];
         trace?: never;
@@ -147,7 +203,7 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        /** @description A case or a nested hypothesis in the selected project. */
+        /** @description A standalone root or child case in the selected project. Hypotheses are separate projections and never appear in the investigation tree. */
         Investigation: {
             /**
              * Format: uuid
@@ -158,10 +214,10 @@ export interface components {
             project_id: string;
             /**
              * Format: uuid
-             * @description The investigation this one refines. Null means it is a root case; anything else means it is a hypothesis inside a larger case.
+             * @description Parent case. Null means this is a root case; a value means this is an independently managed child case.
              */
             parent_id?: string | null;
-            /** @description What is being investigated. For a hypothesis this is the claim being tested, phrased so a verdict makes sense against it. */
+            /** @description What this case investigates. */
             title: string;
             /** @description Free-form context — what is known, what is being checked and why. */
             description?: string | null;
@@ -169,11 +225,11 @@ export interface components {
             status: components["schemas"]["InvestigationStatus"];
             /** @description How bad this looks. Set during triage and revised as evidence arrives. Absent until someone judges it. */
             severity?: components["schemas"]["Severity"];
-            /** @description The conclusion. Absent while the investigation is still open, required to close it. Which values are allowed depends on whether this is a root case or a hypothesis — see Verdict. */
+            /** @description The conclusion. Absent while the investigation is still open, required to close it. Root and child cases use the same vocabulary. */
             verdict?: components["schemas"]["Verdict"];
-            /** @description Reason for the verdict. Required when rejecting. */
+            /** @description Optional explanation of the case verdict. */
             verdict_reason?: string | null;
-            /** @description How sure the conclusion is. Meaningful for a hypothesis, rarely used on a root case. */
+            /** @description How sure the case conclusion is. */
             confidence?: number | null;
             /** @description Creator type, assigned by the server. */
             origin?: components["schemas"]["Origin"];
@@ -185,7 +241,7 @@ export interface components {
             som_workspace_ids: string[];
             /** @description Size of the case at a glance, so the list does not need a query per row. */
             counters: {
-                /** @description Direct child investigations — the open hypotheses under this one. */
+                /** @description Direct child investigations. Hypotheses are not counted here. */
                 children: number;
                 /** @description First-class incidents, correlations and attacks attached here. */
                 findings: number;
@@ -290,15 +346,15 @@ export interface components {
             /** @description Safe summaries for objects whose available context is partial. */
             warnings: string[];
         };
-        /** @description A new case, or a new hypothesis inside an existing one. */
+        /** @description A new root case or an independently managed child case. */
         InvestigationCreate: {
-            /** @description What is being investigated, or the claim being tested. */
+            /** @description What is being investigated. */
             title: string;
             /** @description Context — what is known so far and what needs checking. */
             description?: string;
             /**
              * Format: uuid
-             * @description The investigation this one refines. Omit it to open a root case.
+             * @description Parent case for a nested investigation. Omit it to open a root case.
              */
             parent_id?: string;
             /** @description Initial assessment. Can be revised later. */
@@ -316,11 +372,11 @@ export interface components {
             description?: string;
             /** @description Close the investigation, or reopen a closed one. Closing needs a verdict; reopening clears it. */
             status?: components["schemas"]["InvestigationStatus"];
-            /** @description The conclusion. Which values are allowed depends on whether this is a root case or a hypothesis. */
+            /** @description Case conclusion for either a root or child investigation. */
             verdict?: components["schemas"]["Verdict"];
-            /** @description Why. Required when the verdict is rejected. */
+            /** @description Optional explanation of the case verdict. */
             verdict_reason?: string;
-            /** @description How sure the conclusion is. Meaningful for a hypothesis. */
+            /** @description How sure the case conclusion is. */
             confidence?: number;
             /** @description Revised assessment of how bad this is. */
             severity?: components["schemas"]["Severity"];
@@ -333,10 +389,10 @@ export interface components {
          */
         InvestigationStatus: "open" | "closed";
         /**
-         * @description The conclusion, drawn from two vocabularies that share one field. A root case ends as incident, false_positive, not_affected or inconclusive. A hypothesis ends as confirmed, rejected or inconclusive. The server checks the value against the investigation's position in the tree, so a hypothesis cannot be closed as an incident.
+         * @description Conclusion of a root or child case. Hypotheses have their own status and resolution reason rather than investigation verdicts.
          * @enum {string}
          */
-        Verdict: "incident" | "false_positive" | "not_affected" | "inconclusive" | "confirmed" | "rejected";
+        Verdict: "incident" | "false_positive" | "not_affected" | "inconclusive";
         /** @description One page of investigations and the cursor for continuing it. */
         InvestigationPage: {
             /** @description The investigations on this page. */
@@ -461,6 +517,8 @@ export interface components {
         Cursor: string;
         /** @description Identifier of an investigation in the selected project. */
         InvestigationId: string;
+        /** @description Identifier of a hypothesis owned by the investigation in the path. */
+        HypothesisId: string;
     };
     requestBodies: never;
     headers: never;
@@ -616,6 +674,82 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            422: components["responses"]["ValidationError"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    addHypothesisContext: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
+            path: {
+                /** @description Identifier of an investigation in the selected project. */
+                investigation_id: components["parameters"]["InvestigationId"];
+                /** @description Identifier of a hypothesis owned by the investigation in the path. */
+                hypothesis_id: components["parameters"]["HypothesisId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ContextSelection"];
+            };
+        };
+        responses: {
+            /** @description Import counters */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContextImportResult"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationError"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    addHypothesisAgentResults: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
+            path: {
+                /** @description Identifier of an investigation in the selected project. */
+                investigation_id: components["parameters"]["InvestigationId"];
+                /** @description Identifier of a hypothesis owned by the investigation in the path. */
+                hypothesis_id: components["parameters"]["HypothesisId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentResultBatch"];
+            };
+        };
+        responses: {
+            /** @description Import counters */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContextImportResult"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
             422: components["responses"]["ValidationError"];
             500: components["responses"]["InternalError"];
         };

@@ -278,6 +278,90 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/investigations/{investigation_id}/hypotheses/{hypothesis_id}/graph": {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
+            path: {
+                /** @description Identifier of an investigation in the selected project. */
+                investigation_id: components["parameters"]["InvestigationId"];
+                /** @description Identifier of a hypothesis owned by the investigation in the path. */
+                hypothesis_id: components["parameters"]["HypothesisId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Graph projection of a hypothesis
+         * @description Returns explicit member nodes and edges of this hypothesis. The payload includes isolated member nodes and both endpoints of every member edge. Rejected member edges are hidden by default. This is a projection over one investigation graph, so include_subtree does not apply.
+         */
+        get: operations["getHypothesisGraph"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/investigations/{investigation_id}/hypotheses/{hypothesis_id}/nodes": {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
+            path: {
+                /** @description Identifier of an investigation in the selected project. */
+                investigation_id: components["parameters"]["InvestigationId"];
+                /** @description Identifier of a hypothesis owned by the investigation in the path. */
+                hypothesis_id: components["parameters"]["HypothesisId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create or find a graph node in a hypothesis
+         * @description Uses the normal NodeCreate contract to create or find a node in the investigation's shared graph, then atomically adds its hypothesis membership. The referenced event or entity must already belong to this exact investigation. Resolved hypotheses reject graph writes.
+         */
+        post: operations["createHypothesisNode"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/investigations/{investigation_id}/hypotheses/{hypothesis_id}/edges": {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
+            path: {
+                /** @description Identifier of an investigation in the selected project. */
+                investigation_id: components["parameters"]["InvestigationId"];
+                /** @description Identifier of a hypothesis owned by the investigation in the path. */
+                hypothesis_id: components["parameters"]["HypothesisId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Draw a shared graph edge in a hypothesis
+         * @description Creates the normal confirmed analyst edge and its evidence in the investigation's shared graph, then atomically adds the edge and both endpoint nodes to the hypothesis. A duplicate shared edge returns 409; attach an existing edge through the membership PUT operation. Resolved hypotheses reject graph writes.
+         */
+        post: operations["createHypothesisGraphEdge"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/investigations/{investigation_id}/nodes": {
         parameters: {
             query?: never;
@@ -494,6 +578,137 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/investigations/{investigation_id}/hypotheses": {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
+            path: {
+                /** @description Identifier of an investigation in the selected project. */
+                investigation_id: components["parameters"]["InvestigationId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * List hypotheses of an investigation
+         * @description Returns the hypotheses owned by this investigation, newest first. Hypotheses are graph projections, not child investigations, and do not participate in the investigation tree.
+         */
+        get: operations["listHypotheses"];
+        put?: never;
+        /**
+         * Propose a hypothesis
+         * @description Creates an analyst-origin hypothesis in proposed status. Its graph projection starts empty and is filled through the nested graph, context, and agent-result operations.
+         */
+        post: operations["createHypothesis"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/investigations/{investigation_id}/hypotheses/{hypothesis_id}": {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
+            path: {
+                /** @description Identifier of an investigation in the selected project. */
+                investigation_id: components["parameters"]["InvestigationId"];
+                /** @description Identifier of a hypothesis owned by the investigation in the path. */
+                hypothesis_id: components["parameters"]["HypothesisId"];
+            };
+            cookie?: never;
+        };
+        /** One hypothesis */
+        get: operations["getHypothesis"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete a hypothesis
+         * @description Deletes only the hypothesis and its node and edge memberships. The investigation's shared graph objects remain unchanged.
+         */
+        delete: operations["deleteHypothesis"];
+        options?: never;
+        head?: never;
+        /**
+         * Update a hypothesis
+         * @description Applies supplied fields with optimistic locking. Allowed status transitions are proposed to active or resolved, active to resolved, and resolved back to active. Resolving requires a non-empty reason; reopening clears the reason and resolved timestamp. A stale version returns 409 with the conflicting hypothesis id.
+         */
+        patch: operations["updateHypothesis"];
+        trace?: never;
+    };
+    "/investigations/{investigation_id}/hypotheses/{hypothesis_id}/nodes/{node_id}": {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
+            path: {
+                /** @description Identifier of an investigation in the selected project. */
+                investigation_id: components["parameters"]["InvestigationId"];
+                /** @description Identifier of a hypothesis owned by the investigation in the path. */
+                hypothesis_id: components["parameters"]["HypothesisId"];
+                /** @description Identifier of a graph node. Edges reference this, not the entity or event behind it. */
+                node_id: components["parameters"]["NodeId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Add an existing graph node to a hypothesis
+         * @description Idempotently adds a node from this investigation's shared graph to the hypothesis. Resolved hypotheses reject membership writes.
+         */
+        put: operations["addHypothesisNode"];
+        post?: never;
+        /**
+         * Remove a node from a hypothesis
+         * @description Removes only this membership and memberships of edges incident to the node in this hypothesis. The shared node and edges remain. Resolved hypotheses reject membership writes.
+         */
+        delete: operations["deleteHypothesisNode"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/investigations/{investigation_id}/hypotheses/{hypothesis_id}/edges/{edge_id}": {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
+            path: {
+                /** @description Identifier of an investigation in the selected project. */
+                investigation_id: components["parameters"]["InvestigationId"];
+                /** @description Identifier of a hypothesis owned by the investigation in the path. */
+                hypothesis_id: components["parameters"]["HypothesisId"];
+                /** @description Identifier of an edge — one claim that two nodes are related. */
+                edge_id: components["parameters"]["GraphEdgeId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Add an existing graph edge to a hypothesis
+         * @description Idempotently adds an edge from this investigation's shared graph and both endpoint-node memberships. Resolved hypotheses reject membership writes.
+         */
+        put: operations["addHypothesisEdge"];
+        post?: never;
+        /**
+         * Remove an edge from a hypothesis
+         * @description Removes only the edge membership. Endpoint-node memberships and the shared graph edge remain. Resolved hypotheses reject membership writes.
+         */
+        delete: operations["deleteHypothesisEdge"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/investigations": {
         parameters: {
             query?: never;
@@ -511,8 +726,8 @@ export interface paths {
         get: operations["listInvestigations"];
         put?: never;
         /**
-         * Open an investigation or a hypothesis under one
-         * @description A root investigation is a case; a child is a hypothesis.
+         * Open a root or child investigation
+         * @description Every investigation is a standalone case with its own lifecycle, context, queue, report, and graph. A parent_id creates a nested child case; hypotheses are separate graph projections inside one case and cannot contain child hypotheses.
          */
         post: operations["createInvestigation"];
         delete?: never;
@@ -573,6 +788,62 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/investigations/{investigation_id}/hypotheses/{hypothesis_id}/context": {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
+            path: {
+                /** @description Identifier of an investigation in the selected project. */
+                investigation_id: components["parameters"]["InvestigationId"];
+                /** @description Identifier of a hypothesis owned by the investigation in the path. */
+                hypothesis_id: components["parameters"]["HypothesisId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add analyst-selected context through a hypothesis
+         * @description Resolves the same ContextSelection as the investigation-level import. One transaction updates project records, attaches investigation context, creates or finds shared graph objects, and adds the complete bounded graph projection touched by this import to the hypothesis. Findings and sessions remain context records rather than graph members. Resolved hypotheses reject imports.
+         */
+        post: operations["addHypothesisContext"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/investigations/{investigation_id}/hypotheses/{hypothesis_id}/agent-results": {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
+            path: {
+                /** @description Identifier of an investigation in the selected project. */
+                investigation_id: components["parameters"]["InvestigationId"];
+                /** @description Identifier of a hypothesis owned by the investigation in the path. */
+                hypothesis_id: components["parameters"]["HypothesisId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Save explicit SOM agent results for an active hypothesis
+         * @description Uses AgentResultBatch and the shared investigation context. Only nodes and edges explicitly listed by the agent gain hypothesis memberships; timeline-only events and entities do not. The hypothesis must be active when the transaction is applied.
+         */
+        post: operations["addHypothesisAgentResults"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/investigations/{investigation_id}": {
         parameters: {
             query?: never;
@@ -602,7 +873,7 @@ export interface paths {
         head?: never;
         /**
          * Update an investigation
-         * @description Updates only the supplied fields. Closing requires a verdict; rejecting requires a reason. Confirming a hypothesis without an attached event returns 422 with `details.reason=evidence_required`. A closed investigation can only be reopened; reopening clears the verdict.
+         * @description Updates only the supplied fields. Closing requires a case verdict. A closed investigation can only be reopened; reopening clears the verdict. Root and child investigations use the same verdict semantics.
          */
         patch: operations["updateInvestigation"];
         trace?: never;
@@ -792,7 +1063,7 @@ export interface paths {
         };
         /**
          * Issues of a SOM board
-         * @description Proxies SOM `GET /v1/issues?board_id=...`. Issues are the research tasks (skills) an agent can be started on.
+         * @description Proxies SOM `GET /v1/issues?board_id=...`. Issues and sub-issues are runnable investigation tasks or verification steps, not hypotheses.
          */
         get: operations["listSomIssues"];
         put?: never;
@@ -820,7 +1091,7 @@ export interface paths {
         put?: never;
         /**
          * Run an agent on a SOM issue
-         * @description Orchestrates a run: reads the issue from SOM, opens a relay session to the configured daemon host, starts an environment with the issue text as the prompt, then links the environment back to the issue in SOM. SOM requests use the selected project's cached access-token secret. `variant` and `model_id` are forwarded as daemon `executor_config`. Stateless — nothing is persisted in IR; the ids in the response are the only handle on the run.
+         * @description Orchestrates a run: reads the issue from SOM, opens a relay session to the configured daemon host, starts an environment with the issue text as the prompt, then links the environment back to the issue in SOM. SOM requests use the selected project's cached access-token secret. `variant` and `model_id` are forwarded as daemon `executor_config`. With hypothesis_id, the hypothesis must be active before any external calls; the prompt reads its nested graph and submits explicit results to its nested endpoint while retaining the investigation-wide timeline. Stateless — nothing is persisted about the run in IR; the ids in the response are the only handle on it.
          */
         post: operations["runSomIssue"];
         delete?: never;
@@ -1160,6 +1431,23 @@ export interface components {
             findings: components["schemas"]["Finding"][];
             next_cursor?: string | null;
         };
+        /** @description Explicit graph memberships of one hypothesis. */
+        HypothesisGraph: {
+            /**
+             * Format: uuid
+             * @description Hypothesis whose memberships are projected.
+             */
+            hypothesis_id: string;
+            /**
+             * Format: uuid
+             * @description Investigation that owns every returned graph object.
+             */
+            investigation_id: string;
+            /** @description Explicit node members, including isolated nodes, plus guaranteed endpoints of every returned member edge. */
+            nodes: components["schemas"]["GraphNode"][];
+            /** @description Explicit edge members surviving status and confidence filters. */
+            edges: components["schemas"]["GraphEdge"][];
+        };
         /** @description Nodes and edges as one payload, ready to render. */
         Graph: {
             /**
@@ -1413,7 +1701,67 @@ export interface components {
          * @enum {string}
          */
         Origin: "analyst" | "rule" | "agent";
-        /** @description A case or a nested hypothesis in the selected project. */
+        /** @description A named projection over the owning investigation's shared factual graph. It cannot have child hypotheses, but that does not restrict which events, entities, or edges belong to its graph. Memberships may overlap. */
+        Hypothesis: {
+            /** Format: uuid */
+            id: string;
+            /** @description Project that owns the investigation and hypothesis. */
+            project_id: string;
+            /**
+             * Format: uuid
+             * @description Investigation whose shared graph this hypothesis projects.
+             */
+            investigation_id: string;
+            /** @description The version of events being tested. */
+            statement: string;
+            /** @description Optional working context and intended verification steps. */
+            description: string | null;
+            /** @description Current hypothesis workflow state. */
+            status: components["schemas"]["HypothesisStatus"];
+            /** @description Resolution rationale. Present only while status is resolved. */
+            reason: string | null;
+            /** @description Creator type. Manual creation always returns analyst. */
+            origin: components["schemas"]["Origin"];
+            /** @description Version of hypothesis fields for optimistic locking. Membership changes do not increment it. */
+            version: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+            /**
+             * Format: date-time
+             * @description Resolution time. Present only while status is resolved.
+             */
+            resolved_at: string | null;
+        };
+        HypothesisCreate: {
+            /** @description The version of events being proposed. Blank after trimming is invalid. */
+            statement: string;
+            /** @description Optional working context. */
+            description?: string;
+        };
+        /** @description Fields to change. Omitted fields stay unchanged. An explicitly empty description clears it; resolving requires a non-empty reason. */
+        HypothesisPatch: {
+            /** @description Version the client last read. A mismatch is a 409. */
+            version: number;
+            /** @description Revised version of events. Blank after trimming is invalid. */
+            statement?: string;
+            /** @description Revised working context. Send an empty string to clear it. */
+            description?: string;
+            /** @description New workflow state. Transitions back to proposed are forbidden. */
+            status?: components["schemas"]["HypothesisStatus"];
+            /** @description Resolution rationale, or a correction while already resolved. */
+            reason?: string;
+        };
+        /** @enum {string} */
+        HypothesisStatus: "proposed" | "active" | "resolved";
+        HypothesisPage: {
+            /** @description Hypotheses ordered by created_at and id, newest first. */
+            hypotheses: components["schemas"]["Hypothesis"][];
+            /** @description Pass as cursor to continue the same filtered list. */
+            next_cursor?: string | null;
+        };
+        /** @description A standalone root or child case in the selected project. Hypotheses are separate projections and never appear in the investigation tree. */
         Investigation: {
             /**
              * Format: uuid
@@ -1424,10 +1772,10 @@ export interface components {
             project_id: string;
             /**
              * Format: uuid
-             * @description The investigation this one refines. Null means it is a root case; anything else means it is a hypothesis inside a larger case.
+             * @description Parent case. Null means this is a root case; a value means this is an independently managed child case.
              */
             parent_id?: string | null;
-            /** @description What is being investigated. For a hypothesis this is the claim being tested, phrased so a verdict makes sense against it. */
+            /** @description What this case investigates. */
             title: string;
             /** @description Free-form context — what is known, what is being checked and why. */
             description?: string | null;
@@ -1435,11 +1783,11 @@ export interface components {
             status: components["schemas"]["InvestigationStatus"];
             /** @description How bad this looks. Set during triage and revised as evidence arrives. Absent until someone judges it. */
             severity?: components["schemas"]["Severity"];
-            /** @description The conclusion. Absent while the investigation is still open, required to close it. Which values are allowed depends on whether this is a root case or a hypothesis — see Verdict. */
+            /** @description The conclusion. Absent while the investigation is still open, required to close it. Root and child cases use the same vocabulary. */
             verdict?: components["schemas"]["Verdict"];
-            /** @description Reason for the verdict. Required when rejecting. */
+            /** @description Optional explanation of the case verdict. */
             verdict_reason?: string | null;
-            /** @description How sure the conclusion is. Meaningful for a hypothesis, rarely used on a root case. */
+            /** @description How sure the case conclusion is. */
             confidence?: number | null;
             /** @description Creator type, assigned by the server. */
             origin?: components["schemas"]["Origin"];
@@ -1451,7 +1799,7 @@ export interface components {
             som_workspace_ids: string[];
             /** @description Size of the case at a glance, so the list does not need a query per row. */
             counters: {
-                /** @description Direct child investigations — the open hypotheses under this one. */
+                /** @description Direct child investigations. Hypotheses are not counted here. */
                 children: number;
                 /** @description First-class incidents, correlations and attacks attached here. */
                 findings: number;
@@ -1556,15 +1904,15 @@ export interface components {
             /** @description Safe summaries for objects whose available context is partial. */
             warnings: string[];
         };
-        /** @description A new case, or a new hypothesis inside an existing one. */
+        /** @description A new root case or an independently managed child case. */
         InvestigationCreate: {
-            /** @description What is being investigated, or the claim being tested. */
+            /** @description What is being investigated. */
             title: string;
             /** @description Context — what is known so far and what needs checking. */
             description?: string;
             /**
              * Format: uuid
-             * @description The investigation this one refines. Omit it to open a root case.
+             * @description Parent case for a nested investigation. Omit it to open a root case.
              */
             parent_id?: string;
             /** @description Initial assessment. Can be revised later. */
@@ -1582,11 +1930,11 @@ export interface components {
             description?: string;
             /** @description Close the investigation, or reopen a closed one. Closing needs a verdict; reopening clears it. */
             status?: components["schemas"]["InvestigationStatus"];
-            /** @description The conclusion. Which values are allowed depends on whether this is a root case or a hypothesis. */
+            /** @description Case conclusion for either a root or child investigation. */
             verdict?: components["schemas"]["Verdict"];
-            /** @description Why. Required when the verdict is rejected. */
+            /** @description Optional explanation of the case verdict. */
             verdict_reason?: string;
-            /** @description How sure the conclusion is. Meaningful for a hypothesis. */
+            /** @description How sure the case conclusion is. */
             confidence?: number;
             /** @description Revised assessment of how bad this is. */
             severity?: components["schemas"]["Severity"];
@@ -1599,10 +1947,10 @@ export interface components {
          */
         InvestigationStatus: "open" | "closed";
         /**
-         * @description The conclusion, drawn from two vocabularies that share one field. A root case ends as incident, false_positive, not_affected or inconclusive. A hypothesis ends as confirmed, rejected or inconclusive. The server checks the value against the investigation's position in the tree, so a hypothesis cannot be closed as an incident.
+         * @description Conclusion of a root or child case. Hypotheses have their own status and resolution reason rather than investigation verdicts.
          * @enum {string}
          */
-        Verdict: "incident" | "false_positive" | "not_affected" | "inconclusive" | "confirmed" | "rejected";
+        Verdict: "incident" | "false_positive" | "not_affected" | "inconclusive";
         /** @description One page of investigations and the cursor for continuing it. */
         InvestigationPage: {
             /** @description The investigations on this page. */
@@ -1736,7 +2084,7 @@ export interface components {
             /** @description Display name. */
             name: string;
         };
-        /** @description A SOM issue — a research task (skill) that an agent can execute. */
+        /** @description A SOM issue — a task or verification step that an agent can execute. */
         SomIssue: {
             /**
              * Format: uuid
@@ -1760,7 +2108,7 @@ export interface components {
             priority?: string | null;
             /**
              * Format: uuid
-             * @description Parent issue for sub-issues.
+             * @description Parent task for a nested verification step.
              */
             parent_issue_id?: string | null;
         };
@@ -1777,6 +2125,11 @@ export interface components {
              * @description Investigation the agent should enrich. Passed to the agent inside the prompt so it knows where to attach found events and nodes.
              */
             investigation_id: string;
+            /**
+             * Format: uuid
+             * @description Optional active hypothesis to work on. Omit it to keep the existing unscoped run against the full investigation graph.
+             */
+            hypothesis_id?: string;
             /** @description Daemon executor variant, e.g. DEFAULT. Omitted uses the executor's default variant. */
             variant?: string;
             /** @description OpenCode model id in `provider/model` form, forwarded as executor_config.model_id. Omitted value is `openrouter/deepseek/deepseek-v4-flash`. */
@@ -1915,6 +2268,8 @@ export interface components {
         EntityId: string;
         /** @description Identifier of an event in the selected project. */
         EventId: string;
+        /** @description Identifier of a hypothesis owned by the investigation in the path. */
+        HypothesisId: string;
         /** @description Identifier of a graph node. Edges reference this, not the entity or event behind it. */
         NodeId: string;
         /** @description Identifier of an edge — one claim that two nodes are related. */
@@ -2410,6 +2765,120 @@ export interface operations {
             501: components["responses"]["NotImplemented"];
         };
     };
+    getHypothesisGraph: {
+        parameters: {
+            query?: {
+                /** @description Drop member edges whose producer confidence is below this value. */
+                min_confidence?: number;
+                /** @description Which member edge states to include. Defaults to proposed and confirmed; pass rejected explicitly to include ruled-out claims. */
+                statuses?: components["schemas"]["GraphEdgeStatus"][];
+            };
+            header: {
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
+            path: {
+                /** @description Identifier of an investigation in the selected project. */
+                investigation_id: components["parameters"]["InvestigationId"];
+                /** @description Identifier of a hypothesis owned by the investigation in the path. */
+                hypothesis_id: components["parameters"]["HypothesisId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The hypothesis graph projection */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HypothesisGraph"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["ValidationError"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    createHypothesisNode: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
+            path: {
+                /** @description Identifier of an investigation in the selected project. */
+                investigation_id: components["parameters"]["InvestigationId"];
+                /** @description Identifier of a hypothesis owned by the investigation in the path. */
+                hypothesis_id: components["parameters"]["HypothesisId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NodeCreate"];
+            };
+        };
+        responses: {
+            /** @description The shared node now included in the hypothesis */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GraphNode"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationError"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    createHypothesisGraphEdge: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
+            path: {
+                /** @description Identifier of an investigation in the selected project. */
+                investigation_id: components["parameters"]["InvestigationId"];
+                /** @description Identifier of a hypothesis owned by the investigation in the path. */
+                hypothesis_id: components["parameters"]["HypothesisId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GraphEdgeCreate"];
+            };
+        };
+        responses: {
+            /** @description The new shared edge included in the hypothesis */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GraphEdge"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationError"];
+            500: components["responses"]["InternalError"];
+        };
+    };
     listNodes: {
         parameters: {
             query?: {
@@ -2880,6 +3349,311 @@ export interface operations {
             501: components["responses"]["NotImplemented"];
         };
     };
+    listHypotheses: {
+        parameters: {
+            query?: {
+                /** @description Keep only hypotheses in this status. */
+                status?: components["schemas"]["HypothesisStatus"];
+                /** @description How many items to return. The server may return fewer, never more. */
+                limit?: components["parameters"]["Limit"];
+                /** @description Opaque keyset cursor taken from `next_cursor` of the previous page. Encodes a position, not a query — do not build one by hand. Omit it to start from the beginning. */
+                cursor?: components["parameters"]["Cursor"];
+            };
+            header: {
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
+            path: {
+                /** @description Identifier of an investigation in the selected project. */
+                investigation_id: components["parameters"]["InvestigationId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description One page of hypotheses */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HypothesisPage"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["ValidationError"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    createHypothesis: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
+            path: {
+                /** @description Identifier of an investigation in the selected project. */
+                investigation_id: components["parameters"]["InvestigationId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HypothesisCreate"];
+            };
+        };
+        responses: {
+            /** @description The proposed hypothesis */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Hypothesis"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["ValidationError"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getHypothesis: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
+            path: {
+                /** @description Identifier of an investigation in the selected project. */
+                investigation_id: components["parameters"]["InvestigationId"];
+                /** @description Identifier of a hypothesis owned by the investigation in the path. */
+                hypothesis_id: components["parameters"]["HypothesisId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The hypothesis */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Hypothesis"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    deleteHypothesis: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
+            path: {
+                /** @description Identifier of an investigation in the selected project. */
+                investigation_id: components["parameters"]["InvestigationId"];
+                /** @description Identifier of a hypothesis owned by the investigation in the path. */
+                hypothesis_id: components["parameters"]["HypothesisId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    updateHypothesis: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
+            path: {
+                /** @description Identifier of an investigation in the selected project. */
+                investigation_id: components["parameters"]["InvestigationId"];
+                /** @description Identifier of a hypothesis owned by the investigation in the path. */
+                hypothesis_id: components["parameters"]["HypothesisId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HypothesisPatch"];
+            };
+        };
+        responses: {
+            /** @description The updated hypothesis */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Hypothesis"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationError"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    addHypothesisNode: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
+            path: {
+                /** @description Identifier of an investigation in the selected project. */
+                investigation_id: components["parameters"]["InvestigationId"];
+                /** @description Identifier of a hypothesis owned by the investigation in the path. */
+                hypothesis_id: components["parameters"]["HypothesisId"];
+                /** @description Identifier of a graph node. Edges reference this, not the entity or event behind it. */
+                node_id: components["parameters"]["NodeId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The membership exists */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    deleteHypothesisNode: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
+            path: {
+                /** @description Identifier of an investigation in the selected project. */
+                investigation_id: components["parameters"]["InvestigationId"];
+                /** @description Identifier of a hypothesis owned by the investigation in the path. */
+                hypothesis_id: components["parameters"]["HypothesisId"];
+                /** @description Identifier of a graph node. Edges reference this, not the entity or event behind it. */
+                node_id: components["parameters"]["NodeId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Membership removed */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    addHypothesisEdge: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
+            path: {
+                /** @description Identifier of an investigation in the selected project. */
+                investigation_id: components["parameters"]["InvestigationId"];
+                /** @description Identifier of a hypothesis owned by the investigation in the path. */
+                hypothesis_id: components["parameters"]["HypothesisId"];
+                /** @description Identifier of an edge — one claim that two nodes are related. */
+                edge_id: components["parameters"]["GraphEdgeId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The edge and endpoint memberships exist */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    deleteHypothesisEdge: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
+            path: {
+                /** @description Identifier of an investigation in the selected project. */
+                investigation_id: components["parameters"]["InvestigationId"];
+                /** @description Identifier of a hypothesis owned by the investigation in the path. */
+                hypothesis_id: components["parameters"]["HypothesisId"];
+                /** @description Identifier of an edge — one claim that two nodes are related. */
+                edge_id: components["parameters"]["GraphEdgeId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Membership removed */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalError"];
+        };
+    };
     listInvestigations: {
         parameters: {
             query?: {
@@ -3028,6 +3802,82 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            422: components["responses"]["ValidationError"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    addHypothesisContext: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
+            path: {
+                /** @description Identifier of an investigation in the selected project. */
+                investigation_id: components["parameters"]["InvestigationId"];
+                /** @description Identifier of a hypothesis owned by the investigation in the path. */
+                hypothesis_id: components["parameters"]["HypothesisId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ContextSelection"];
+            };
+        };
+        responses: {
+            /** @description Import counters */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContextImportResult"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationError"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    addHypothesisAgentResults: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
+            path: {
+                /** @description Identifier of an investigation in the selected project. */
+                investigation_id: components["parameters"]["InvestigationId"];
+                /** @description Identifier of a hypothesis owned by the investigation in the path. */
+                hypothesis_id: components["parameters"]["HypothesisId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentResultBatch"];
+            };
+        };
+        responses: {
+            /** @description Import counters */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContextImportResult"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
             422: components["responses"]["ValidationError"];
             500: components["responses"]["InternalError"];
         };
@@ -3409,6 +4259,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
             422: components["responses"]["ValidationError"];
             500: components["responses"]["InternalError"];
             501: components["responses"]["NotImplemented"];

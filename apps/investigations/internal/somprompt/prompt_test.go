@@ -48,6 +48,9 @@ func TestBuildExpandsURLsAndHeaders(t *testing.T) {
 			t.Errorf("prompt leaks forbidden direct-service instruction %q", forbidden)
 		}
 	}
+	if strings.Contains(got, "hypothesis_id:") || strings.Contains(got, "/hypotheses/") {
+		t.Error("unscoped prompt contains hypothesis context")
+	}
 }
 
 func TestBuildSkipsEmptyDescription(t *testing.T) {
@@ -64,5 +67,31 @@ func TestBuildSkipsEmptyDescription(t *testing.T) {
 	got = Build("Enrich context", "Look at the attached alert.", sampleContext())
 	if !strings.Contains(got, "Enrich context\n\nLook at the attached alert.\n\n---\nIR context") {
 		t.Fatalf("description should sit between title and IR context:\n%s", got[:min(len(got), 200)])
+	}
+}
+
+func TestBuildScopesGraphAndResultsToHypothesis(t *testing.T) {
+	t.Parallel()
+
+	ctx := sampleContext()
+	ctx.HypothesisID = "22222222-2222-2222-2222-222222222222"
+	ctx.HypothesisStatement = "The account was reused after phishing"
+	ctx.HypothesisDescription = "Check authentication and process evidence"
+	got := Build("Verify access", "", ctx)
+	for _, want := range []string{
+		"hypothesis_id: 22222222-2222-2222-2222-222222222222",
+		"hypothesis_statement: The account was reused after phishing",
+		"hypothesis_description: Check authentication and process evidence",
+		"`list_investigation_events`",
+		"`get_investigation_graph` for investigation_id 496f2041-7949-4816-8d07-734de89d121f and hypothesis_id 22222222-2222-2222-2222-222222222222",
+		"`add_investigation_agent_results` with investigation_id 496f2041-7949-4816-8d07-734de89d121f, hypothesis_id 22222222-2222-2222-2222-222222222222",
+		"Only explicitly listed nodes and edges gain hypothesis membership",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %q", want)
+		}
+	}
+	if strings.Contains(got, "`get_investigation_graph` for investigation_id") && !strings.Contains(got, "hypothesis_id 22222222-2222-2222-2222-222222222222") {
+		t.Fatal("hypothesis-scoped graph read must include hypothesis_id")
 	}
 }

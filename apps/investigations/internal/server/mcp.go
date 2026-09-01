@@ -24,7 +24,8 @@ import (
 )
 
 type investigationArgs struct {
-	InvestigationID openapi_types.UUID `json:"investigation_id" jsonschema:"Investigation UUID"`
+	InvestigationID openapi_types.UUID  `json:"investigation_id" jsonschema:"Investigation UUID"`
+	HypothesisID    *openapi_types.UUID `json:"hypothesis_id,omitempty" jsonschema:"Optional hypothesis UUID; when set, read only its graph projection"`
 }
 
 type listEventsArgs struct {
@@ -34,7 +35,8 @@ type listEventsArgs struct {
 }
 
 type addAgentResultsArgs struct {
-	InvestigationID openapi_types.UUID `json:"investigation_id" jsonschema:"Investigation UUID"`
+	InvestigationID openapi_types.UUID  `json:"investigation_id" jsonschema:"Investigation UUID"`
+	HypothesisID    *openapi_types.UUID `json:"hypothesis_id,omitempty" jsonschema:"Optional active hypothesis UUID; when set, add explicit results to its graph projection"`
 	investigations.AgentResultBatch
 }
 
@@ -45,7 +47,7 @@ func (s *Server) MCPHandler() http.Handler {
 	}, nil)
 	mcp.AddTool[investigationArgs, any](server, mcpTool[investigationArgs](
 		"get_investigation_graph",
-		"Read the investigation graph, including proposed agent edges.",
+		"Read the investigation graph or an optional hypothesis graph projection, including proposed agent edges.",
 	), s.getInvestigationGraphTool)
 	mcp.AddTool[listEventsArgs, any](server, mcpTool[listEventsArgs](
 		"list_investigation_events",
@@ -53,7 +55,7 @@ func (s *Server) MCPHandler() http.Handler {
 	), s.listInvestigationEventsTool)
 	mcp.AddTool[addAgentResultsArgs, any](server, mcpTool[addAgentResultsArgs](
 		"add_investigation_agent_results",
-		"Atomically add graph nodes and proposed evidence-backed edges.",
+		"Atomically add graph nodes and proposed evidence-backed edges, optionally scoped to an active hypothesis.",
 	), s.addInvestigationAgentResultsTool)
 	addGatewayTools(server, s)
 
@@ -88,6 +90,24 @@ func (s *Server) getInvestigationGraphTool(
 	id, err := requireMCPInvestigation(args.InvestigationID)
 	if err != nil {
 		return mcpFailure(err)
+	}
+	if err := requireMCPHypothesis(args.HypothesisID); err != nil {
+		return mcpFailure(err)
+	}
+	if args.HypothesisID != nil {
+		response, err := s.GetHypothesisGraph(ctx, graph.GetHypothesisGraphRequestObject{
+			InvestigationId: id,
+			HypothesisId:    *args.HypothesisID,
+			Params:          graph.GetHypothesisGraphParams{},
+		})
+		if err != nil {
+			return mcpFailure(err)
+		}
+		value, ok := response.(graph.GetHypothesisGraph200JSONResponse)
+		if !ok {
+			return mcpFailure(errors.New("tool returned an unexpected response"))
+		}
+		return nil, graph.HypothesisGraph(value), nil
 	}
 	response, err := s.GetGraph(ctx, graph.GetGraphRequestObject{
 		InvestigationId: id,
@@ -141,6 +161,9 @@ func (s *Server) addInvestigationAgentResultsTool(
 	if err != nil {
 		return mcpFailure(err)
 	}
+	if err := requireMCPHypothesis(args.HypothesisID); err != nil {
+		return mcpFailure(err)
+	}
 	if len(args.SomIssueIds) == 0 || len(args.Events) > 500 || len(args.Entities) > 2000 {
 		return mcpFailure(errors.New("invalid arguments: expected at least one SOM issue, at most 500 events and at most 2000 entities"))
 	}
@@ -155,6 +178,23 @@ func (s *Server) addInvestigationAgentResultsTool(
 		if edge.Confidence != nil && (*edge.Confidence < 0 || *edge.Confidence > 1) {
 			return mcpFailure(errors.New("invalid arguments: edge confidence must be between 0 and 1"))
 		}
+	}
+
+	if args.HypothesisID != nil {
+		response, err := s.AddHypothesisAgentResults(ctx, investigations.AddHypothesisAgentResultsRequestObject{
+			InvestigationId: id,
+			HypothesisId:    *args.HypothesisID,
+			Params:          investigations.AddHypothesisAgentResultsParams{},
+			Body:            &body,
+		})
+		if err != nil {
+			return mcpFailure(err)
+		}
+		value, ok := response.(investigations.AddHypothesisAgentResults201JSONResponse)
+		if !ok {
+			return mcpFailure(errors.New("tool returned an unexpected response"))
+		}
+		return nil, investigations.ContextImportResult(value), nil
 	}
 
 	response, err := s.AddAgentResults(ctx, investigations.AddAgentResultsRequestObject{
@@ -176,6 +216,13 @@ func requireMCPInvestigation(id openapi_types.UUID) (uuid.UUID, error) {
 		return uuid.Nil, errors.New("invalid arguments: investigation_id must be a non-zero UUID")
 	}
 	return id, nil
+}
+
+func requireMCPHypothesis(id *openapi_types.UUID) error {
+	if id != nil && *id == uuid.Nil {
+		return errors.New("invalid arguments: hypothesis_id must be a non-zero UUID")
+	}
+	return nil
 }
 
 func mcpFailure(err error) (*mcp.CallToolResult, any, error) {

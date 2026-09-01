@@ -30,6 +30,90 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/investigations/{investigation_id}/hypotheses/{hypothesis_id}/graph": {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
+            path: {
+                /** @description Identifier of an investigation in the selected project. */
+                investigation_id: components["parameters"]["InvestigationId"];
+                /** @description Identifier of a hypothesis owned by the investigation in the path. */
+                hypothesis_id: components["parameters"]["HypothesisId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Graph projection of a hypothesis
+         * @description Returns explicit member nodes and edges of this hypothesis. The payload includes isolated member nodes and both endpoints of every member edge. Rejected member edges are hidden by default. This is a projection over one investigation graph, so include_subtree does not apply.
+         */
+        get: operations["getHypothesisGraph"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/investigations/{investigation_id}/hypotheses/{hypothesis_id}/nodes": {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
+            path: {
+                /** @description Identifier of an investigation in the selected project. */
+                investigation_id: components["parameters"]["InvestigationId"];
+                /** @description Identifier of a hypothesis owned by the investigation in the path. */
+                hypothesis_id: components["parameters"]["HypothesisId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create or find a graph node in a hypothesis
+         * @description Uses the normal NodeCreate contract to create or find a node in the investigation's shared graph, then atomically adds its hypothesis membership. The referenced event or entity must already belong to this exact investigation. Resolved hypotheses reject graph writes.
+         */
+        post: operations["createHypothesisNode"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/investigations/{investigation_id}/hypotheses/{hypothesis_id}/edges": {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
+            path: {
+                /** @description Identifier of an investigation in the selected project. */
+                investigation_id: components["parameters"]["InvestigationId"];
+                /** @description Identifier of a hypothesis owned by the investigation in the path. */
+                hypothesis_id: components["parameters"]["HypothesisId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Draw a shared graph edge in a hypothesis
+         * @description Creates the normal confirmed analyst edge and its evidence in the investigation's shared graph, then atomically adds the edge and both endpoint nodes to the hypothesis. A duplicate shared edge returns 409; attach an existing edge through the membership PUT operation. Resolved hypotheses reject graph writes.
+         */
+        post: operations["createHypothesisGraphEdge"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/investigations/{investigation_id}/nodes": {
         parameters: {
             query?: never;
@@ -250,6 +334,23 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** @description Explicit graph memberships of one hypothesis. */
+        HypothesisGraph: {
+            /**
+             * Format: uuid
+             * @description Hypothesis whose memberships are projected.
+             */
+            hypothesis_id: string;
+            /**
+             * Format: uuid
+             * @description Investigation that owns every returned graph object.
+             */
+            investigation_id: string;
+            /** @description Explicit node members, including isolated nodes, plus guaranteed endpoints of every returned member edge. */
+            nodes: components["schemas"]["GraphNode"][];
+            /** @description Explicit edge members surviving status and confidence filters. */
+            edges: components["schemas"]["GraphEdge"][];
+        };
         /** @description Nodes and edges as one payload, ready to render. */
         Graph: {
             /**
@@ -591,6 +692,8 @@ export interface components {
         ProjectId: string;
         /** @description Identifier of an investigation in the selected project. */
         InvestigationId: string;
+        /** @description Identifier of a hypothesis owned by the investigation in the path. */
+        HypothesisId: string;
         /** @description How many items to return. The server may return fewer, never more. */
         Limit: number;
         /** @description Opaque keyset cursor taken from `next_cursor` of the previous page. Encodes a position, not a query — do not build one by hand. Omit it to start from the beginning. */
@@ -645,6 +748,120 @@ export interface operations {
             422: components["responses"]["ValidationError"];
             500: components["responses"]["InternalError"];
             501: components["responses"]["NotImplemented"];
+        };
+    };
+    getHypothesisGraph: {
+        parameters: {
+            query?: {
+                /** @description Drop member edges whose producer confidence is below this value. */
+                min_confidence?: number;
+                /** @description Which member edge states to include. Defaults to proposed and confirmed; pass rejected explicitly to include ruled-out claims. */
+                statuses?: components["schemas"]["GraphEdgeStatus"][];
+            };
+            header: {
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
+            path: {
+                /** @description Identifier of an investigation in the selected project. */
+                investigation_id: components["parameters"]["InvestigationId"];
+                /** @description Identifier of a hypothesis owned by the investigation in the path. */
+                hypothesis_id: components["parameters"]["HypothesisId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The hypothesis graph projection */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HypothesisGraph"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["ValidationError"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    createHypothesisNode: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
+            path: {
+                /** @description Identifier of an investigation in the selected project. */
+                investigation_id: components["parameters"]["InvestigationId"];
+                /** @description Identifier of a hypothesis owned by the investigation in the path. */
+                hypothesis_id: components["parameters"]["HypothesisId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NodeCreate"];
+            };
+        };
+        responses: {
+            /** @description The shared node now included in the hypothesis */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GraphNode"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationError"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    createHypothesisGraphEdge: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
+            path: {
+                /** @description Identifier of an investigation in the selected project. */
+                investigation_id: components["parameters"]["InvestigationId"];
+                /** @description Identifier of a hypothesis owned by the investigation in the path. */
+                hypothesis_id: components["parameters"]["HypothesisId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GraphEdgeCreate"];
+            };
+        };
+        responses: {
+            /** @description The new shared edge included in the hypothesis */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GraphEdge"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationError"];
+            500: components["responses"]["InternalError"];
         };
     };
     listNodes: {
