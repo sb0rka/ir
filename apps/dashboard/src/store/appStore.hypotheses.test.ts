@@ -85,6 +85,7 @@ const snapshot = {
   hypotheses: {},
   hypothesisMembership: {},
   activeHypothesisId: {},
+  hypothesisViewMode: {},
   investigations: {},
   graphNodes: {},
   graphEdges: {},
@@ -351,5 +352,13 @@ describe('hypothesis store', () => {
     })
     expect(useAppStore.getState().activeHypothesisId['inv-1']).toBe('h2')
     expect(useAppStore.getState().hypothesisMembership.h2?.nodeIds).toEqual(['n-evt'])
+  })
+
+  it('stores isolate vs dim per investigation', () => {
+    expect(useAppStore.getState().hypothesisViewMode['inv-1']).toBeUndefined()
+    useAppStore.getState().setHypothesisViewMode('inv-1', 'isolate')
+    expect(useAppStore.getState().hypothesisViewMode['inv-1']).toBe('isolate')
+    useAppStore.getState().setHypothesisViewMode('inv-1', 'dim')
+    expect(useAppStore.getState().hypothesisViewMode['inv-1']).toBe('dim')
   })
 })

@@ -68,6 +68,7 @@ import {
   membershipFromGraph,
   nodeIdsForEntityRefs,
   type HypothesisMembership,
+  type HypothesisViewMode,
 } from '../lib/hypotheses'
 import type { components as Ir } from '@ir/contract'
 
@@ -147,6 +148,7 @@ interface AppState {
   hypotheses: Record<string, Hypothesis>
   hypothesisMembership: Record<string, HypothesisMembership>
   activeHypothesisId: Record<string, string | null>
+  hypothesisViewMode: Record<string, HypothesisViewMode>
   detailPanelOpen: boolean
 
   alerts: Record<string, AlertEvent>
@@ -232,6 +234,7 @@ interface AppState {
   ) => Promise<Hypothesis | null>
   deleteHypothesis: (investigationId: string, hypothesisId: string) => Promise<void>
   setActiveHypothesis: (investigationId: string, hypothesisId: string | null) => Promise<void>
+  setHypothesisViewMode: (investigationId: string, mode: HypothesisViewMode) => void
   addSelectionToHypothesis: (investigationId: string, hypothesisId: string) => Promise<void>
   addEventsToActiveHypothesis: (investigationId: string, eventIds: string[]) => Promise<void>
   toggleHypothesisNode: (investigationId: string, nodeId: string) => Promise<void>
@@ -379,6 +382,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   hypotheses: {},
   hypothesisMembership: {},
   activeHypothesisId: {},
+  hypothesisViewMode: {},
   detailPanelOpen: false,
 
   alerts: {},
@@ -1471,6 +1475,12 @@ export const useAppStore = create<AppState>((set, get) => ({
     } catch (err) {
       set({ lastError: errorMessage(err) })
     }
+  },
+
+  setHypothesisViewMode: (investigationId, mode) => {
+    set({
+      hypothesisViewMode: { ...get().hypothesisViewMode, [investigationId]: mode },
+    })
   },
 
   setActiveHypothesis: async (investigationId, hypothesisId) => {

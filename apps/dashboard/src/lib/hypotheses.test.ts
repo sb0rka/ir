@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   edgesBetweenNodes,
+  hypothesisViewModeLabel,
   isHypothesisWritable,
   membershipFromGraph,
   nodeIdsForEntityRefs,
@@ -61,5 +62,12 @@ describe('membership helpers', () => {
         edges: [{ id: 'e1' }],
       }),
     ).toEqual({ nodeIds: ['n1', 'n2'], edgeIds: ['e1'] })
+  })
+})
+
+describe('hypothesisViewModeLabel', () => {
+  it('labels dim and isolate', () => {
+    expect(hypothesisViewModeLabel('dim')).toBe('подсветка')
+    expect(hypothesisViewModeLabel('isolate')).toBe('только гипотеза')
   })
 })

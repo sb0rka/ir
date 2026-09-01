@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { Lightbulb, RotateCcw } from 'lucide-react'
 import { useWorkspaceStore } from '../../state/useWorkspaceStore'
 import { useAppStore } from '../../store/appStore'
+import { HypothesisViewToggle } from '../HypothesisViewToggle'
 import {
   ALL_ENTITY_TYPES,
   DEFAULT_ENTITY_TYPES,
@@ -98,6 +99,7 @@ export function GraphToolbar() {
           <span className="max-w-[220px] truncate rounded-md border border-[var(--border-strong)] bg-[var(--accent-soft)] px-1.5 py-0.5 text-[10px] text-[var(--accent)]">
             H: {activeHypothesis.statement}
           </span>
+          <HypothesisViewToggle investigationId={investigationId} />
           {activeHypothesis.status !== 'resolved' && selectedCount > 0 && (
             <button
               type="button"

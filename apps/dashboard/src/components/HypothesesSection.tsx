@@ -6,6 +6,7 @@ import {
 } from '../lib/hypotheses'
 import { useAppStore } from '../store/appStore'
 import { Button, Chip } from './ui'
+import { HypothesisViewToggle } from './HypothesisViewToggle'
 import { clsx } from '../lib/utils'
 import { ChevronDown, ChevronRight, Plus } from 'lucide-react'
 
@@ -76,6 +77,8 @@ export function HypothesesSection({ investigationId }: { investigationId: string
           <Plus className="h-3.5 w-3.5" />
         </Button>
       </div>
+
+      {activeId && <HypothesisViewToggle investigationId={investigationId} />}
 
       {draftOpen && (
         <form

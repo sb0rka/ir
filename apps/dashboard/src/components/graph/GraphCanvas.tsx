@@ -52,14 +52,18 @@ function GraphInner({ fitToken }: { fitToken: FitToken }) {
   const lensWritable = useAppStore((s) =>
     hypothesisId ? s.hypotheses[hypothesisId]?.status !== 'resolved' : false,
   )
+  const viewMode = useAppStore((s) =>
+    session?.id ? (s.hypothesisViewMode[session.id] ?? 'dim') : 'dim',
+  )
   const hypothesisLens = useMemo(() => {
     if (!hypothesisId) return null
     return {
       nodeIds: new Set(membership?.nodeIds ?? []),
       edgeIds: new Set(membership?.edgeIds ?? []),
       writable: lensWritable,
+      mode: viewMode,
     }
-  }, [hypothesisId, membership, lensWritable])
+  }, [hypothesisId, membership, lensWritable, viewMode])
 
   const { fitView } = useReactFlow()
   const paneWidth = useStore((s) => s.width)

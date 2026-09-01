@@ -10,6 +10,7 @@ export {
   eventsInRange,
   type GraphFilters,
   type GraphNodeData,
+  type HypothesisLens,
 } from './graph-adapters'
 export {
   ALL_ENTITY_TYPES,

@@ -6,6 +6,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from 'react'
 import { useWorkspaceStore } from '../../state/useWorkspaceStore'
+import { useAppStore } from '../../store/appStore'
 import { SEVERITY_COLOR } from './constants'
 import { eventsInRange } from './graph-adapters'
 import { clamp, formatClock, formatEventTooltip, formatShortDate, toMs } from './time'
@@ -26,7 +27,22 @@ export function Timeline() {
   const windowEnd = toMs(
     activeInvestigation?.windowEnd ?? '2026-07-17T12:30:00.000Z',
   )
-  const events = activeInvestigation?.events ?? []
+  const investigationId = activeInvestigation?.id
+  const hypothesisId = useAppStore((s) =>
+    investigationId ? (s.activeHypothesisId[investigationId] ?? null) : null,
+  )
+  const viewMode = useAppStore((s) =>
+    investigationId ? (s.hypothesisViewMode[investigationId] ?? 'dim') : 'dim',
+  )
+  const membership = useAppStore((s) =>
+    hypothesisId ? (s.hypothesisMembership[hypothesisId] ?? null) : null,
+  )
+  const events = useMemo(() => {
+    const all = activeInvestigation?.events ?? []
+    if (!hypothesisId || viewMode !== 'isolate' || !membership) return all
+    const nodeIds = new Set(membership.nodeIds)
+    return all.filter((ev) => ev.alert_id != null && nodeIds.has(ev.alert_id))
+  }, [activeInvestigation?.events, hypothesisId, membership, viewMode])
   const range =
     activeInvestigation?.filters.timeRange ?? {
       start: windowStart,

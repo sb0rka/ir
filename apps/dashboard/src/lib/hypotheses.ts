@@ -1,8 +1,14 @@
 import type { HypothesisStatus } from '../api/hypotheses'
 
+export type HypothesisViewMode = 'dim' | 'isolate'
+
 export interface HypothesisMembership {
   nodeIds: string[]
   edgeIds: string[]
+}
+
+export function hypothesisViewModeLabel(mode: HypothesisViewMode): string {
+  return mode === 'isolate' ? 'только гипотеза' : 'подсветка'
 }
 
 export function validHypothesisTransition(from: string, to: string): boolean {
