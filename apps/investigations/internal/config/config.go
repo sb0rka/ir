@@ -54,15 +54,6 @@ func Load() (Config, error) {
 			BaseURL: strings.TrimRight(coreconfig.GetStringEnv("GATEWAY_BASE_URL", ""), "/"),
 		},
 	}
-	// Публичные адреса по умолчанию совпадают с внутренними: на стенде,
-	// где daemon VM видит те же имена, лишние переменные не нужны.
-	cfg.Prompt = PromptConfig{
-		IRBaseURL: strings.TrimRight(coreconfig.GetStringEnv(
-			"IR_PUBLIC_BASE_URL", "http://localhost:"+cfg.Server.Port), "/"),
-		GatewayBaseURL: strings.TrimRight(coreconfig.GetStringEnv(
-			"GATEWAY_PUBLIC_BASE_URL", cfg.Gateway.BaseURL), "/"),
-	}
-
 	key, err := loadPublicKey()
 	if err != nil {
 		return cfg, err

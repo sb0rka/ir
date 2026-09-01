@@ -308,13 +308,23 @@ export interface components {
             source_code: string;
             source_entity_id: string;
         };
-        /** @description A unique local ref and exactly one target: an event/entity selection from this batch, or an existing node in this investigation. */
+        /** @description A unique local ref and exactly one target: an event/entity selection from this batch, an event/entity already attached to this investigation, or an existing node in this investigation. */
         AgentNode: {
             ref: string;
             /** @description Local ref of an event selection from this batch. */
             event_ref?: string;
             /** @description Local ref of an entity selection from this batch. */
             entity_ref?: string;
+            /**
+             * Format: uuid
+             * @description Event UUID already attached to this investigation.
+             */
+            event_id?: string;
+            /**
+             * Format: uuid
+             * @description Entity UUID already attached to this investigation.
+             */
+            entity_id?: string;
             /** Format: uuid */
             node_id?: string;
         };

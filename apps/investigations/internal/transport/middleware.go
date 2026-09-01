@@ -129,6 +129,22 @@ func corsMiddleware(cfg config.ServerConfig) middlewareChain {
 	}
 }
 
+// mcpOriginMiddleware applies the Streamable HTTP DNS-rebinding protection.
+// Non-browser MCP clients normally omit Origin; browser-originated requests
+// must come from the same allowlist as the REST API.
+func mcpOriginMiddleware(cfg config.ServerConfig) middlewareChain {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			origin := r.Header.Get("Origin")
+			if origin != "" && !cfg.CORSWhitelist["*"] && !cfg.CORSWhitelist[origin] {
+				http.Error(w, "forbidden origin", http.StatusForbidden)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
 func authMiddleware(cfg config.ServerConfig, log *slog.Logger) middlewareChain {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

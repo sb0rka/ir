@@ -217,6 +217,8 @@ type AgentNode struct {
 	Ref              string
 	SnapshotEventID  *string
 	SnapshotEntityID *string
+	EventID          *string
+	EntityID         *string
 	NodeID           *string
 }
 

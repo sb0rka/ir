@@ -189,10 +189,16 @@ type AgentEventSelection struct {
 	SourceEventId string `json:"source_event_id"`
 }
 
-// AgentNode A unique local ref and exactly one target: an event/entity selection from this batch, or an existing node in this investigation.
+// AgentNode A unique local ref and exactly one target: an event/entity selection from this batch, an event/entity already attached to this investigation, or an existing node in this investigation.
 type AgentNode struct {
+	// EntityId Entity UUID already attached to this investigation.
+	EntityId *openapi_types.UUID `json:"entity_id,omitempty"`
+
 	// EntityRef Local ref of an entity selection from this batch.
 	EntityRef *string `json:"entity_ref,omitempty"`
+
+	// EventId Event UUID already attached to this investigation.
+	EventId *openapi_types.UUID `json:"event_id,omitempty"`
 
 	// EventRef Local ref of an event selection from this batch.
 	EventRef *string             `json:"event_ref,omitempty"`

@@ -94,8 +94,6 @@ services:
       SOM_EXECUTOR: "${SOM_EXECUTOR:-OPENCODE}"
 
       GATEWAY_BASE_URL: "${GATEWAY_BASE_URL:-http://host.docker.internal:8091}"
-      IR_PUBLIC_BASE_URL: "${IR_PUBLIC_BASE_URL:-http://host.docker.internal:8090}"
-      GATEWAY_PUBLIC_BASE_URL: "${GATEWAY_PUBLIC_BASE_URL:-http://host.docker.internal:8091}"
       # Приватный ключ общий с Auth/API; IR выводит из него публичную половину.
       ACCESS_TOKEN_PRIVATE_KEY: "${ACCESS_TOKEN_PRIVATE_KEY:-}"
       ACCESS_TOKEN_PRIVATE_KEY_FILE_PATH: "${ACCESS_TOKEN_PRIVATE_KEY_FILE_PATH:-}"
