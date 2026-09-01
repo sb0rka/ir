@@ -4,7 +4,7 @@ import { Button, Chip, SeverityBadge } from './ui'
 import { clsx, formatTime } from '../lib/utils'
 import { hasGroupValueSelection, parseQueuePdql, queueSelectFields } from '../lib/pdql'
 import { alertIsInContext, contextEventKeys } from '../lib/queueContext'
-import { ChevronDown, ChevronRight, Layers, Play, Plus } from 'lucide-react'
+import { ChevronDown, ChevronRight, Layers, Loader2, Play, Plus } from 'lucide-react'
 
 const COL_FIT = 'w-px whitespace-nowrap'
 const COL_TITLE = 'min-w-0 w-full'
@@ -273,6 +273,7 @@ function CorrelationRow({
 export function AlertTable({ investigationId }: { investigationId?: string } = {}) {
   const globalSelected = useAppStore((s) => s.selectedAlertIds)
   const start = useAppStore((s) => s.startInvestigation)
+  const starting = useAppStore((s) => s.investigationLoading)
   const clear = useAppStore((s) => s.clearAlertSelection)
   const globalAlerts = useAppStore((s) => s.alerts)
   const correlations = useAppStore((s) => s.correlations)
@@ -394,8 +395,16 @@ export function AlertTable({ investigationId }: { investigationId?: string } = {
                 Добавить в расследование
               </Button>
             ) : (
-              <Button size="sm" onClick={() => start(selected)}>
-                <Play className="h-3 w-3" />
+              <Button
+                size="sm"
+                disabled={starting}
+                onClick={() => void start(selected)}
+              >
+                {starting ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <Play className="h-3 w-3" />
+                )}
                 Начать расследование
               </Button>
             )}
