@@ -482,6 +482,12 @@ func importSelectionTx(ctx context.Context, tx pgx.Tx, request model.ImportReque
 		if spec.SnapshotEntityID != nil {
 			targets++
 		}
+		if spec.EventID != nil {
+			targets++
+		}
+		if spec.EntityID != nil {
+			targets++
+		}
 		if spec.NodeID != nil {
 			targets++
 		}
@@ -503,6 +509,34 @@ func importSelectionTx(ctx context.Context, tx pgx.Tx, request model.ImportReque
 			}
 			entityID := entityIDs[*spec.SnapshotEntityID]
 			node, inserted, err = upsertNodeTx(ctx, tx, request.InvestigationID, "entity", &entityID, nil, "agent", request.SomIssueIDs)
+		} else if spec.EventID != nil {
+			eventID := strings.TrimSpace(*spec.EventID)
+			err = tx.QueryRow(ctx, `SELECT e.id::text
+				FROM events e
+				JOIN investigation_events ie
+				  ON ie.event_id=e.id AND ie.project_id=e.project_id
+				WHERE e.id=$1::uuid AND e.project_id=$2
+				  AND ie.investigation_id=$3::uuid`, eventID, request.ProjectID, request.InvestigationID).Scan(&eventID)
+			if errors.Is(err, pgx.ErrNoRows) {
+				return stats, store.ErrUnknownReference
+			}
+			if err == nil {
+				node, inserted, err = upsertNodeTx(ctx, tx, request.InvestigationID, "event", nil, &eventID, "agent", request.SomIssueIDs)
+			}
+		} else if spec.EntityID != nil {
+			entityID := strings.TrimSpace(*spec.EntityID)
+			err = tx.QueryRow(ctx, `SELECT e.id::text
+				FROM entities e
+				JOIN investigation_entities ie
+				  ON ie.entity_id=e.id AND ie.project_id=e.project_id
+				WHERE e.id=$1::uuid AND e.project_id=$2
+				  AND ie.investigation_id=$3::uuid`, entityID, request.ProjectID, request.InvestigationID).Scan(&entityID)
+			if errors.Is(err, pgx.ErrNoRows) {
+				return stats, store.ErrUnknownReference
+			}
+			if err == nil {
+				node, inserted, err = upsertNodeTx(ctx, tx, request.InvestigationID, "entity", &entityID, nil, "agent", request.SomIssueIDs)
+			}
 		} else {
 			node, err = graphNodeByIDTx(ctx, tx, request.ProjectID, request.InvestigationID, *spec.NodeID)
 			if err == nil {

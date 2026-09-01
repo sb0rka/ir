@@ -205,6 +205,29 @@ func TestCORSAllowsAuthorizationForConfiguredOrigin(t *testing.T) {
 	}
 }
 
+func TestMCPOriginMiddlewareRejectsUnknownBrowserOrigin(t *testing.T) {
+	t.Parallel()
+	cfg := config.ServerConfig{CORSWhitelist: map[string]bool{"http://localhost:5173": true}}
+	handler := mcpOriginMiddleware(cfg)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+
+	request := httptest.NewRequest(http.MethodPost, "/mcp", nil)
+	request.Header.Set("Origin", "https://attacker.example")
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusForbidden {
+		t.Fatalf("got %d, want 403", recorder.Code)
+	}
+
+	request = httptest.NewRequest(http.MethodPost, "/mcp", nil)
+	recorder = httptest.NewRecorder()
+	handler.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusNoContent {
+		t.Fatalf("non-browser client got %d, want 204", recorder.Code)
+	}
+}
+
 func signAccessToken(
 	t *testing.T,
 	privateKey ed25519.PrivateKey,

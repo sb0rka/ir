@@ -145,14 +145,14 @@ func (s *Server) RunSomIssue(ctx context.Context, request som.RunSomIssueRequest
 	if err := s.som.RunConfigured(); err != nil {
 		return nil, somNotConfigured(err)
 	}
-	if s.prompt.GatewayBaseURL == "" {
-		return nil, somNotConfigured(errors.New("GATEWAY_PUBLIC_BASE_URL is not set"))
-	}
 	scope, err := s.scope(ctx)
 	if err != nil {
 		return nil, err
 	}
-
+	investigationID := request.Body.InvestigationId.String()
+	if _, err := s.db.GetInvestigation(ctx, scope.ProjectID, investigationID); err != nil {
+		return nil, storeError(err)
+	}
 	issueID := request.IssueId.String()
 	var issue somclient.Issue
 	err = s.withSOMBearer(ctx, false, func(bearer string) error {
@@ -168,14 +168,11 @@ func (s *Server) RunSomIssue(ctx context.Context, request som.RunSomIssueRequest
 		return nil, err
 	}
 
-	investigationID := request.Body.InvestigationId.String()
 	description := ""
 	if issue.Description != nil {
 		description = *issue.Description
 	}
 	prompt := somprompt.Build(issue.Title, description, somprompt.Context{
-		IRBaseURL:       s.prompt.IRBaseURL,
-		GatewayBaseURL:  s.prompt.GatewayBaseURL,
 		ProjectID:       scope.ProjectID,
 		InvestigationID: investigationID,
 		SomIssueID:      issue.ID,

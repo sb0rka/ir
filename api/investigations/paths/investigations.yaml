@@ -465,7 +465,8 @@ components:
       type: object
       description: >-
         A unique local ref and exactly one target: an event/entity selection
-        from this batch, or an existing node in this investigation.
+        from this batch, an event/entity already attached to this investigation,
+        or an existing node in this investigation.
       required: [ref]
       properties:
         ref: { type: string, minLength: 1, maxLength: 128 }
@@ -479,6 +480,14 @@ components:
           minLength: 1
           maxLength: 128
           description: Local ref of an entity selection from this batch.
+        event_id:
+          type: string
+          format: uuid
+          description: Event UUID already attached to this investigation.
+        entity_id:
+          type: string
+          format: uuid
+          description: Entity UUID already attached to this investigation.
         node_id: { type: string, format: uuid }
 
     AgentEdge:
