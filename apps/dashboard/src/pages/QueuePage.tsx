@@ -25,9 +25,6 @@ export function QueuePage() {
             </span>
           )}
         </div>
-        <p className="mt-0.5 text-xs text-fg-dim">
-          Триаж событий и корреляций из Gateway — откройте строку, чтобы начать расследование
-        </p>
       </div>
       <GlobalQueryComposer />
       <div className="flex min-h-0 flex-1">
