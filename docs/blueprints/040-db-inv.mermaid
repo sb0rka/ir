@@ -68,7 +68,6 @@ erDiagram
 		uuid workspace_id PK
 		timestamptz created_at
 	}
-
 	hypotheses {
 		uuid id PK
 		varchar project_id FK
@@ -83,7 +82,7 @@ erDiagram
 		timestamptz updated_at
 		timestamptz resolved_at
 	}
-	%% investigations.status CHECK: open, closed
+	%% investigations.status CHECK: open, in_progress, closed
 	%% investigations.severity CHECK: low, medium, high, critical
 	%% investigations.verdict CHECK: incident, false_positive, not_affected, inconclusive
 	%% investigations.origin CHECK: analyst, rule, agent

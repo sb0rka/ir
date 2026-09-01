@@ -92,6 +92,99 @@ func (d *DB) GetInvestigation(ctx context.Context, projectID, investigationID st
 	return out, nil
 }
 
+func (d *DB) UpdateInvestigation(ctx context.Context, patch model.InvestigationPatch) (model.Investigation, error) {
+	tx, err := d.Pgx().Begin(ctx)
+	if err != nil {
+		return model.Investigation{}, fmt.Errorf("begin investigation update: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	current, err := investigationTx(ctx, tx, patch.ProjectID, patch.InvestigationID)
+	if err != nil {
+		return model.Investigation{}, err
+	}
+	if current.Version != patch.Version {
+		return model.Investigation{}, store.ErrConflict
+	}
+
+	status := current.Status
+	if patch.Status != nil {
+		status = *patch.Status
+	}
+	verdict := current.Verdict
+	verdictReason := current.VerdictReason
+	confidence := current.Confidence
+	if current.Status == "closed" && status != "closed" {
+		verdict, verdictReason, confidence = nil, nil, nil
+	} else {
+		if patch.Verdict != nil {
+			verdict = patch.Verdict
+		}
+		if patch.VerdictReason != nil {
+			verdictReason = patch.VerdictReason
+		}
+		if patch.Confidence != nil {
+			confidence = patch.Confidence
+		}
+	}
+	if status == "closed" && verdict == nil {
+		return model.Investigation{}, store.ErrInvalidValue
+	}
+	if verdict != nil {
+		allowed := map[string]bool{"inconclusive": true}
+		if current.ParentID == nil {
+			allowed["incident"], allowed["false_positive"], allowed["not_affected"] = true, true, true
+		} else {
+			allowed["confirmed"], allowed["rejected"] = true, true
+		}
+		if !allowed[*verdict] || (*verdict == "rejected" && (verdictReason == nil || *verdictReason == "")) {
+			return model.Investigation{}, store.ErrInvalidValue
+		}
+		if *verdict == "confirmed" {
+			var hasEvidence bool
+			if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM investigation_events WHERE investigation_id=$1::uuid AND project_id=$2)`, patch.InvestigationID, patch.ProjectID).Scan(&hasEvidence); err != nil {
+				return model.Investigation{}, fmt.Errorf("check hypothesis evidence: %w", mapConstraint(err))
+			}
+			if !hasEvidence {
+				return model.Investigation{}, store.ErrInvalidValue
+			}
+		}
+	}
+
+	tag, err := tx.Exec(ctx, `UPDATE investigations SET
+		title=COALESCE($4,title),description=COALESCE($5,description),status=$6,
+		verdict=$7,verdict_reason=$8,confidence=$9,severity=COALESCE($10,severity),
+		closed_at=CASE WHEN $6='closed' THEN COALESCE(closed_at,now()) ELSE NULL END,
+		version=version+1
+		WHERE id=$1::uuid AND project_id=$2 AND version=$3`,
+		patch.InvestigationID, patch.ProjectID, patch.Version, patch.Title, patch.Description,
+		status, verdict, verdictReason, confidence, patch.Severity)
+	if err != nil {
+		return model.Investigation{}, fmt.Errorf("update investigation: %w", mapConstraint(err))
+	}
+	if tag.RowsAffected() == 0 {
+		return model.Investigation{}, store.ErrConflict
+	}
+	if patch.WorkspaceIDs != nil {
+		if _, err := tx.Exec(ctx, `DELETE FROM investigation_som_workspaces WHERE investigation_id=$1::uuid AND project_id=$2`, patch.InvestigationID, patch.ProjectID); err != nil {
+			return model.Investigation{}, fmt.Errorf("replace workspaces: %w", mapConstraint(err))
+		}
+		for _, workspaceID := range *patch.WorkspaceIDs {
+			if _, err := tx.Exec(ctx, `INSERT INTO investigation_som_workspaces (investigation_id,project_id,workspace_id) VALUES ($1::uuid,$2,$3::uuid)`, patch.InvestigationID, patch.ProjectID, workspaceID); err != nil {
+				return model.Investigation{}, fmt.Errorf("link workspace: %w", mapConstraint(err))
+			}
+		}
+	}
+	out, err := investigationTx(ctx, tx, patch.ProjectID, patch.InvestigationID)
+	if err != nil {
+		return model.Investigation{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return model.Investigation{}, fmt.Errorf("commit investigation update: %w", err)
+	}
+	return out, nil
+}
+
 func (d *DB) ListInvestigations(ctx context.Context, projectID string, filter model.InvestigationFilter) ([]model.Investigation, error) {
 	var parentID any
 	if filter.ParentID != nil {

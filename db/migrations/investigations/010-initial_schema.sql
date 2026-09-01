@@ -90,8 +90,8 @@ CREATE TABLE IF NOT EXISTS investigations (
 
     title VARCHAR NOT NULL,
     description VARCHAR,
-    status VARCHAR(8) DEFAULT 'open' NOT NULL
-        CHECK (status IN ('open', 'closed')),
+    status VARCHAR(11) DEFAULT 'open' NOT NULL
+        CHECK (status IN ('open', 'in_progress', 'closed')),
     severity VARCHAR(8)
         CHECK (severity IN ('low', 'medium', 'high', 'critical')),
     verdict VARCHAR(16)
@@ -605,6 +605,7 @@ CREATE TABLE IF NOT EXISTS investigation_events (
     directly_added BOOLEAN DEFAULT true NOT NULL,
     derived BOOLEAN DEFAULT false NOT NULL,
     reason VARCHAR,
+    is_seed BOOLEAN DEFAULT false NOT NULL,
 
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
 

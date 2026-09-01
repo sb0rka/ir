@@ -292,7 +292,7 @@ export function mapIrInvestigation(
     id: inv.id,
     title: inv.title,
     severity: mapSeverity(inv.severity),
-    status: inv.status === 'closed' ? 'closed' : 'open',
+    status: inv.status,
     parentId: inv.parent_id ?? undefined,
     assignee: 'аналитик',
     seedEventIds: extras?.seedEventIds ?? [],
