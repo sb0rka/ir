@@ -56,6 +56,14 @@ func TestMCPInitializeAndListTools(t *testing.T) {
 	if !strings.Contains(listed.Body.String(), `"format":"uuid"`) || strings.Contains(listed.Body.String(), `"minItems":16`) {
 		t.Fatalf("tools/list must expose UUIDs as strings: %s", listed.Body.String())
 	}
+	for _, field := range []string{"time_range", "source_code", "record_type", "external_id"} {
+		if !strings.Contains(listed.Body.String(), field) {
+			t.Fatalf("tools/list Gateway schema missing generated field %s: %s", field, listed.Body.String())
+		}
+	}
+	if strings.Contains(listed.Body.String(), "X-Project-ID") || strings.Contains(listed.Body.String(), "XProjectID") {
+		t.Fatalf("tools/list must not expose server-owned project scope: %s", listed.Body.String())
+	}
 }
 
 func TestMCPGatewayToolsForwardProjectAndBearer(t *testing.T) {
@@ -68,7 +76,7 @@ func TestMCPGatewayToolsForwardProjectAndBearer(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
 		case "/api/v1/sources":
-			if r.Method != http.MethodGet || r.URL.Query().Get("refresh") != "true" {
+			if r.Method != http.MethodGet || r.URL.Query().Has("refresh") {
 				t.Fatalf("list sources request: method=%s query=%s", r.Method, r.URL.RawQuery)
 			}
 			seen["sources"] = true
@@ -93,7 +101,7 @@ func TestMCPGatewayToolsForwardProjectAndBearer(t *testing.T) {
 	server := &Server{gateway: gatewayclient.New(gatewayclient.Config{BaseURL: gateway.URL})}
 
 	for _, body := range []string{
-		`{"jsonrpc":"2.0","id":20,"method":"tools/call","params":{"name":"gateway_list_sources","arguments":{"refresh":true}}}`,
+		`{"jsonrpc":"2.0","id":20,"method":"tools/call","params":{"name":"gateway_list_sources","arguments":{}}}`,
 		`{"jsonrpc":"2.0","id":21,"method":"tools/call","params":{"name":"gateway_search_events","arguments":{"time_range":{"from":"2026-08-31T00:00:00Z","to":"2026-09-01T00:00:00Z"},"limit":2}}}`,
 	} {
 		request := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(body))

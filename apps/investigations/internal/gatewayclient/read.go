@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
-	"time"
 
 	gatewaycontract "github.com/sb0rka/ir/packages/contract/gateway"
 )
@@ -16,12 +15,12 @@ type gatewayResponse interface {
 	StatusCode() int
 }
 
-func (client *Client) ListSources(ctx context.Context, projectID, bearer string, refresh *bool) (json.RawMessage, error) {
+func (client *Client) ListSources(ctx context.Context, projectID, bearer string) (json.RawMessage, error) {
 	if err := client.ready(); err != nil {
 		return nil, err
 	}
 	response, err := client.api.ListSourcesWithResponse(ctx,
-		&gatewaycontract.ListSourcesParams{XProjectID: projectID, Refresh: refresh}, bearerEditor(bearer))
+		&gatewaycontract.ListSourcesParams{XProjectID: projectID}, bearerEditor(bearer))
 	return gatewayJSON("list sources", response, err)
 }
 
@@ -61,13 +60,13 @@ func (client *Client) SearchFindings(ctx context.Context, projectID, bearer stri
 	return gatewayJSON("search findings", response, err)
 }
 
-func (client *Client) GetFinding(ctx context.Context, projectID, bearer, source string, kind gatewaycontract.FindingKind, externalID string, sourceInstance *string, from, to time.Time) (json.RawMessage, error) {
+func (client *Client) GetFinding(ctx context.Context, projectID, bearer string, ref gatewaycontract.SourceObjectRef) (json.RawMessage, error) {
 	if err := client.ready(); err != nil {
 		return nil, err
 	}
-	response, err := client.api.GetFindingWithResponse(ctx, source,
-		gatewaycontract.GetFindingParamsKind(kind), externalID, &gatewaycontract.GetFindingParams{
-			XProjectID: projectID, SourceInstance: sourceInstance, From: from, To: to,
+	response, err := client.api.GetFindingWithResponse(ctx, ref.SourceCode,
+		gatewaycontract.GetFindingParamsKind(ref.RecordType), ref.ExternalId, &gatewaycontract.GetFindingParams{
+			XProjectID: projectID, SourceInstance: ref.SourceInstance, From: ref.TimeRange.From, To: ref.TimeRange.To,
 		}, bearerEditor(bearer))
 	return gatewayJSON("get finding", response, err)
 }
@@ -81,12 +80,16 @@ func (client *Client) SearchSessions(ctx context.Context, projectID, bearer stri
 	return gatewayJSON("search sessions", response, err)
 }
 
-func (client *Client) GetSession(ctx context.Context, projectID, bearer, source, externalID, sourceInstance string, from, to time.Time) (json.RawMessage, error) {
+func (client *Client) GetSession(ctx context.Context, projectID, bearer string, ref gatewaycontract.SourceObjectRef) (json.RawMessage, error) {
 	if err := client.ready(); err != nil {
 		return nil, err
 	}
-	response, err := client.api.GetSessionWithResponse(ctx, source, externalID, &gatewaycontract.GetSessionParams{
-		XProjectID: projectID, SourceInstance: sourceInstance, From: from, To: to,
+	sourceInstance := ""
+	if ref.SourceInstance != nil {
+		sourceInstance = *ref.SourceInstance
+	}
+	response, err := client.api.GetSessionWithResponse(ctx, ref.SourceCode, ref.ExternalId, &gatewaycontract.GetSessionParams{
+		XProjectID: projectID, SourceInstance: sourceInstance, From: ref.TimeRange.From, To: ref.TimeRange.To,
 	}, bearerEditor(bearer))
 	return gatewayJSON("get session", response, err)
 }

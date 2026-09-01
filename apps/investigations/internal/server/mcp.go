@@ -38,46 +38,6 @@ type addAgentResultsArgs struct {
 	investigations.AgentResultBatch
 }
 
-type gatewayListSourcesArgs struct {
-	Refresh *bool `json:"refresh,omitempty" jsonschema:"Bypass cached source statuses"`
-}
-
-type gatewaySearchEventsArgs struct {
-	gatewaycontract.SearchEventsRequest
-}
-type gatewayAggregateEventsArgs struct {
-	gatewaycontract.AggregateEventsRequest
-}
-type gatewayLookupEntityArgs struct {
-	gatewaycontract.LookupEntityRequest
-}
-type gatewaySearchFindingsArgs struct {
-	gatewaycontract.SearchFindingsRequest
-}
-type gatewaySearchSessionsArgs struct {
-	gatewaycontract.SearchSessionsRequest
-}
-type gatewaySearchEndpointsArgs struct {
-	gatewaycontract.SearchEndpointsRequest
-}
-
-type gatewayGetFindingArgs struct {
-	Source         string                      `json:"source" jsonschema:"Gateway source code"`
-	Kind           gatewaycontract.FindingKind `json:"kind" jsonschema:"siem_incident, siem_correlation, or nad_attack"`
-	ExternalID     string                      `json:"external_id" jsonschema:"Finding identifier in the source"`
-	SourceInstance *string                     `json:"source_instance,omitempty" jsonschema:"Provider instance such as a PT NAD store ID"`
-	From           time.Time                   `json:"from" jsonschema:"Inclusive lookup window start"`
-	To             time.Time                   `json:"to" jsonschema:"Inclusive lookup window end"`
-}
-
-type gatewayGetSessionArgs struct {
-	Source         string    `json:"source" jsonschema:"Gateway source code"`
-	ExternalID     string    `json:"external_id" jsonschema:"Session identifier in the source"`
-	SourceInstance string    `json:"source_instance" jsonschema:"Provider instance such as a PT NAD store ID"`
-	From           time.Time `json:"from" jsonschema:"Inclusive lookup window start"`
-	To             time.Time `json:"to" jsonschema:"Inclusive lookup window end"`
-}
-
 func (s *Server) MCPHandler() http.Handler {
 	server := mcp.NewServer(&mcp.Implementation{
 		Name:    "sb0rka-investigation",
@@ -233,56 +193,58 @@ func mcpFailure(err error) (*mcp.CallToolResult, any, error) {
 }
 
 func addGatewayTools(server *mcp.Server, s *Server) {
-	mcp.AddTool(server, mcpTool[gatewayListSourcesArgs](
+	mcp.AddTool(server, mcpTool[struct{}](
 		"gateway_list_sources", "List project-allowed Gateway sources and their capabilities.",
-	), gatewayHandler(s, func(ctx context.Context, args gatewayListSourcesArgs, scope socctx.Scope, bearer string) (json.RawMessage, error) {
-		return s.gateway.ListSources(ctx, scope.ProjectID, bearer, args.Refresh)
+	), gatewayHandler(s, func(ctx context.Context, _ struct{}, scope socctx.Scope, bearer string) (json.RawMessage, error) {
+		return s.gateway.ListSources(ctx, scope.ProjectID, bearer)
 	}))
-	mcp.AddTool(server, mcpTool[gatewaySearchEventsArgs](
+	mcp.AddTool(server, mcpTool[gatewaycontract.SearchEventsRequest](
 		"gateway_search_events", "Search normalized events across project-allowed sources.",
-	), gatewayHandler(s, func(ctx context.Context, args gatewaySearchEventsArgs, scope socctx.Scope, bearer string) (json.RawMessage, error) {
-		return s.gateway.SearchEvents(ctx, scope.ProjectID, bearer, args.SearchEventsRequest)
+	), gatewayHandler(s, func(ctx context.Context, args gatewaycontract.SearchEventsRequest, scope socctx.Scope, bearer string) (json.RawMessage, error) {
+		return s.gateway.SearchEvents(ctx, scope.ProjectID, bearer, args)
 	}))
-	mcp.AddTool(server, mcpTool[gatewayAggregateEventsArgs](
+	mcp.AddTool(server, mcpTool[gatewaycontract.AggregateEventsRequest](
 		"gateway_aggregate_events", "Group and count events using source-supported fields.",
-	), gatewayHandler(s, func(ctx context.Context, args gatewayAggregateEventsArgs, scope socctx.Scope, bearer string) (json.RawMessage, error) {
-		return s.gateway.AggregateEvents(ctx, scope.ProjectID, bearer, args.AggregateEventsRequest)
+	), gatewayHandler(s, func(ctx context.Context, args gatewaycontract.AggregateEventsRequest, scope socctx.Scope, bearer string) (json.RawMessage, error) {
+		return s.gateway.AggregateEvents(ctx, scope.ProjectID, bearer, args)
 	}))
-	mcp.AddTool(server, mcpTool[gatewayLookupEntityArgs](
+	mcp.AddTool(server, mcpTool[gatewaycontract.LookupEntityRequest](
 		"gateway_lookup_entity", "Enrich an entity through project-allowed sources.",
-	), gatewayHandler(s, func(ctx context.Context, args gatewayLookupEntityArgs, scope socctx.Scope, bearer string) (json.RawMessage, error) {
-		return s.gateway.LookupEntity(ctx, scope.ProjectID, bearer, args.LookupEntityRequest)
+	), gatewayHandler(s, func(ctx context.Context, args gatewaycontract.LookupEntityRequest, scope socctx.Scope, bearer string) (json.RawMessage, error) {
+		return s.gateway.LookupEntity(ctx, scope.ProjectID, bearer, args)
 	}))
-	mcp.AddTool(server, mcpTool[gatewaySearchFindingsArgs](
+	mcp.AddTool(server, mcpTool[gatewaycontract.SearchFindingsRequest](
 		"gateway_search_findings", "Search source-native incidents, correlations, and attacks.",
-	), gatewayHandler(s, func(ctx context.Context, args gatewaySearchFindingsArgs, scope socctx.Scope, bearer string) (json.RawMessage, error) {
-		return s.gateway.SearchFindings(ctx, scope.ProjectID, bearer, args.SearchFindingsRequest)
+	), gatewayHandler(s, func(ctx context.Context, args gatewaycontract.SearchFindingsRequest, scope socctx.Scope, bearer string) (json.RawMessage, error) {
+		return s.gateway.SearchFindings(ctx, scope.ProjectID, bearer, args)
 	}))
-	mcp.AddTool(server, mcpTool[gatewayGetFindingArgs](
+	mcp.AddTool(server, mcpTool[gatewaycontract.SourceObjectRef](
 		"gateway_get_finding", "Resolve one source-native finding and its current context.",
-	), gatewayHandler(s, func(ctx context.Context, args gatewayGetFindingArgs, scope socctx.Scope, bearer string) (json.RawMessage, error) {
-		if strings.TrimSpace(args.Source) == "" || strings.TrimSpace(args.ExternalID) == "" || !args.Kind.Valid() || args.From.IsZero() || !args.From.Before(args.To) {
-			return nil, errors.New("invalid arguments: source, supported kind, external_id, and an increasing from/to window are required")
+	), gatewayHandler(s, func(ctx context.Context, args gatewaycontract.SourceObjectRef, scope socctx.Scope, bearer string) (json.RawMessage, error) {
+		if strings.TrimSpace(args.SourceCode) == "" || strings.TrimSpace(args.ExternalId) == "" ||
+			!gatewaycontract.FindingKind(args.RecordType).Valid() || args.TimeRange.From.IsZero() || !args.TimeRange.From.Before(args.TimeRange.To) {
+			return nil, errors.New("invalid arguments: source_code, finding record_type, external_id, and an increasing time_range are required")
 		}
-		return s.gateway.GetFinding(ctx, scope.ProjectID, bearer, args.Source, args.Kind, args.ExternalID, args.SourceInstance, args.From, args.To)
+		return s.gateway.GetFinding(ctx, scope.ProjectID, bearer, args)
 	}))
-	mcp.AddTool(server, mcpTool[gatewaySearchSessionsArgs](
+	mcp.AddTool(server, mcpTool[gatewaycontract.SearchSessionsRequest](
 		"gateway_search_sessions", "Search source-native network sessions.",
-	), gatewayHandler(s, func(ctx context.Context, args gatewaySearchSessionsArgs, scope socctx.Scope, bearer string) (json.RawMessage, error) {
-		return s.gateway.SearchSessions(ctx, scope.ProjectID, bearer, args.SearchSessionsRequest)
+	), gatewayHandler(s, func(ctx context.Context, args gatewaycontract.SearchSessionsRequest, scope socctx.Scope, bearer string) (json.RawMessage, error) {
+		return s.gateway.SearchSessions(ctx, scope.ProjectID, bearer, args)
 	}))
-	mcp.AddTool(server, mcpTool[gatewayGetSessionArgs](
+	mcp.AddTool(server, mcpTool[gatewaycontract.SourceObjectRef](
 		"gateway_get_session", "Resolve one source-native network session.",
-	), gatewayHandler(s, func(ctx context.Context, args gatewayGetSessionArgs, scope socctx.Scope, bearer string) (json.RawMessage, error) {
-		if strings.TrimSpace(args.Source) == "" || strings.TrimSpace(args.ExternalID) == "" || strings.TrimSpace(args.SourceInstance) == "" || args.From.IsZero() || !args.From.Before(args.To) {
-			return nil, errors.New("invalid arguments: source, external_id, source_instance, and an increasing from/to window are required")
+	), gatewayHandler(s, func(ctx context.Context, args gatewaycontract.SourceObjectRef, scope socctx.Scope, bearer string) (json.RawMessage, error) {
+		if strings.TrimSpace(args.SourceCode) == "" || strings.TrimSpace(args.ExternalId) == "" || args.RecordType != gatewaycontract.SourceObjectRefRecordTypeNadSession ||
+			args.SourceInstance == nil || strings.TrimSpace(*args.SourceInstance) == "" || args.TimeRange.From.IsZero() || !args.TimeRange.From.Before(args.TimeRange.To) {
+			return nil, errors.New("invalid arguments: source_code, nad_session record_type, external_id, source_instance, and an increasing time_range are required")
 		}
-		return s.gateway.GetSession(ctx, scope.ProjectID, bearer, args.Source, args.ExternalID, args.SourceInstance, args.From, args.To)
+		return s.gateway.GetSession(ctx, scope.ProjectID, bearer, args)
 	}))
-	mcp.AddTool(server, mcpTool[gatewaySearchEndpointsArgs](
+	mcp.AddTool(server, mcpTool[gatewaycontract.SearchEndpointsRequest](
 		"gateway_search_endpoints", "Search endpoint inventory through project-allowed sources.",
-	), gatewayHandler(s, func(ctx context.Context, args gatewaySearchEndpointsArgs, scope socctx.Scope, bearer string) (json.RawMessage, error) {
-		return s.gateway.SearchEndpoints(ctx, scope.ProjectID, bearer, args.SearchEndpointsRequest)
+	), gatewayHandler(s, func(ctx context.Context, args gatewaycontract.SearchEndpointsRequest, scope socctx.Scope, bearer string) (json.RawMessage, error) {
+		return s.gateway.SearchEndpoints(ctx, scope.ProjectID, bearer, args)
 	}))
 }
 
