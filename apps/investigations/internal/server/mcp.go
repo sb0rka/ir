@@ -260,6 +260,9 @@ func gatewayHandler[T any](s *Server, call func(context.Context, T, socctx.Scope
 		}
 		raw, err := call(ctx, args, scope, bearer)
 		if err != nil {
+			if strings.HasPrefix(err.Error(), "invalid arguments") {
+				return mcpFailure(err)
+			}
 			var upstream *gatewayclient.HTTPError
 			if errors.As(err, &upstream) {
 				return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: upstream.Message}}, IsError: true}, nil, nil

@@ -120,6 +120,21 @@ func TestMCPGatewayToolsForwardProjectAndBearer(t *testing.T) {
 	}
 }
 
+func TestMCPGatewayValidationError(t *testing.T) {
+	t.Parallel()
+	request := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(
+		`{"jsonrpc":"2.0","id":22,"method":"tools/call","params":{"name":"gateway_get_session","arguments":{"source_code":"pt-nad","source_instance":"19","record_type":"siem_incident","external_id":"session-1","time_range":{"from":"2026-08-31T00:00:00Z","to":"2026-09-01T00:00:00Z"}}}}`))
+	request.Header.Set("Accept", "application/json, text/event-stream")
+	request.Header.Set("Content-Type", "application/json")
+	ctx := socctx.WithScope(request.Context(), socctx.Scope{ProjectID: "abcdef1234"})
+	ctx = socctx.WithBearer(ctx, "user-access-jwt")
+	recorder := httptest.NewRecorder()
+	(&Server{}).MCPHandler().ServeHTTP(recorder, request.WithContext(ctx))
+	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), "invalid arguments") || strings.Contains(recorder.Body.String(), "Gateway is unavailable") {
+		t.Fatalf("Gateway validation error: status=%d body=%s", recorder.Code, recorder.Body.String())
+	}
+}
+
 func TestMCPNotificationAndToolError(t *testing.T) {
 	t.Parallel()
 	handler := (&Server{}).MCPHandler()
