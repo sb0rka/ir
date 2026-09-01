@@ -46,9 +46,10 @@ SOC аналитик открывает рабочее место и видит 
 ## Этап 2. Обогащение и насыщение контекста
 
 ИИ-агент читает прикреплённые события, сущности и граф через Investigation MCP,
-а дополнительное evidence ищет напрямую через Gateway REST. Для временного
-demo-flow OpenCode получает короткоживущий пользовательский JWT через
-`ACCESS_KEY` и передаёт обязательный `X-Project-ID`. Через
+а дополнительное evidence ищет через его read-only `gateway_*` tools. Для
+временного demo-flow OpenCode получает пользовательский JWT через `ACCESS_KEY`;
+`ir-api` server-side передаёт тот же bearer и обязательный project scope в
+Gateway. Через
 `add_investigation_agent_results`
 агент передаёт локальные UUID либо выбранные source references. В запрос также
 входят выбранные для графа узлы и связи,

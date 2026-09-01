@@ -30,23 +30,20 @@ func TestBuildExpandsURLsAndHeaders(t *testing.T) {
 		}
 	}
 	for _, want := range []string{
-		"The `investigation` MCP server and `ACCESS_KEY` are configured",
+		"The `investigation` MCP server is configured",
 		"list_investigation_events",
 		"get_investigation_graph",
 		"add_investigation_agent_results",
+		"gateway_list_sources",
+		"gateway_*",
 		"investigation_id 496f2041-7949-4816-8d07-734de89d121f",
 		"event_ref/entity_ref",
-		"ACCESS_KEY",
-		"http://gateway:8091/api/v1",
-		"GET /sources",
-		"X-Project-ID: abcdef1234",
-		"Do not call Platform API or Secrets directly",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("missing %q", want)
 		}
 	}
-	for _, forbidden := range []string{"gateway_base_url", "search_gateway_events", "lookup_gateway_entity", "Bearer eyJ"} {
+	for _, forbidden := range []string{"gateway_base_url", "ACCESS_KEY", "http://gateway:8091", "curl", "Bearer eyJ"} {
 		if strings.Contains(got, forbidden) {
 			t.Errorf("prompt leaks forbidden direct-service instruction %q", forbidden)
 		}

@@ -38,7 +38,12 @@ func TestMCPInitializeAndListTools(t *testing.T) {
 	}
 
 	listed := mcpPost(t, handler, `{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}`)
-	for _, name := range []string{"get_investigation_graph", "list_investigation_events", "add_investigation_agent_results"} {
+	for _, name := range []string{
+		"get_investigation_graph", "list_investigation_events", "add_investigation_agent_results",
+		"gateway_list_sources", "gateway_search_events", "gateway_aggregate_events",
+		"gateway_lookup_entity", "gateway_search_findings", "gateway_get_finding",
+		"gateway_search_sessions", "gateway_get_session", "gateway_search_endpoints",
+	} {
 		if !strings.Contains(listed.Body.String(), name) {
 			t.Fatalf("tools/list missing %s: %s", name, listed.Body.String())
 		}
@@ -50,6 +55,60 @@ func TestMCPInitializeAndListTools(t *testing.T) {
 	}
 	if !strings.Contains(listed.Body.String(), `"format":"uuid"`) || strings.Contains(listed.Body.String(), `"minItems":16`) {
 		t.Fatalf("tools/list must expose UUIDs as strings: %s", listed.Body.String())
+	}
+}
+
+func TestMCPGatewayToolsForwardProjectAndBearer(t *testing.T) {
+	t.Parallel()
+	seen := map[string]bool{}
+	gateway := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer user-access-jwt" || r.Header.Get("X-Project-ID") != "abcdef1234" {
+			t.Fatalf("Gateway auth headers: authorization=%q project=%q", r.Header.Get("Authorization"), r.Header.Get("X-Project-ID"))
+		}
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/api/v1/sources":
+			if r.Method != http.MethodGet || r.URL.Query().Get("refresh") != "true" {
+				t.Fatalf("list sources request: method=%s query=%s", r.Method, r.URL.RawQuery)
+			}
+			seen["sources"] = true
+			_, _ = w.Write([]byte(`{"items":[{"code":"mock","name":"Mock","kind":"siem","mode":"proxy","status":"online","capabilities":["events"]}]}`))
+		case "/api/v1/events/search":
+			if r.Method != http.MethodPost {
+				t.Fatalf("search events method: %s", r.Method)
+			}
+			var body struct {
+				TimeRange map[string]string `json:"time_range"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.TimeRange["from"] == "" || body.TimeRange["to"] == "" {
+				t.Fatalf("search events body: %#v err=%v", body, err)
+			}
+			seen["events"] = true
+			_, _ = w.Write([]byte(`{"events":[],"entities":[],"relations":[],"source_states":[],"source_errors":[]}`))
+		default:
+			t.Fatalf("unexpected Gateway path: %s", r.URL.Path)
+		}
+	}))
+	defer gateway.Close()
+	server := &Server{gateway: gatewayclient.New(gatewayclient.Config{BaseURL: gateway.URL})}
+
+	for _, body := range []string{
+		`{"jsonrpc":"2.0","id":20,"method":"tools/call","params":{"name":"gateway_list_sources","arguments":{"refresh":true}}}`,
+		`{"jsonrpc":"2.0","id":21,"method":"tools/call","params":{"name":"gateway_search_events","arguments":{"time_range":{"from":"2026-08-31T00:00:00Z","to":"2026-09-01T00:00:00Z"},"limit":2}}}`,
+	} {
+		request := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(body))
+		request.Header.Set("Accept", "application/json, text/event-stream")
+		request.Header.Set("Content-Type", "application/json")
+		ctx := socctx.WithScope(request.Context(), socctx.Scope{ProjectID: "abcdef1234"})
+		ctx = socctx.WithBearer(ctx, "user-access-jwt")
+		recorder := httptest.NewRecorder()
+		server.MCPHandler().ServeHTTP(recorder, request.WithContext(ctx))
+		if recorder.Code != http.StatusOK || strings.Contains(recorder.Body.String(), `"isError":true`) {
+			t.Fatalf("Gateway MCP call: status=%d body=%s", recorder.Code, recorder.Body.String())
+		}
+	}
+	if !seen["sources"] || !seen["events"] {
+		t.Fatalf("Gateway calls not observed: %#v", seen)
 	}
 }
 

@@ -24,11 +24,13 @@ SOM-агент читают нормализованные events/entities/relat
 `DEMO_SOM_ACCESS_TOKEN` выбранного проекта и кэшируется в памяти; входящий
 Bearer используется для чтения Sb0rka Secrets, но не передаётся в SOM.
 
-Streamable HTTP MCP на `/mcp` предоставляет три tools: чтение графа, чтение
-таймлайна и запись `agent-results`. Он использует тот же пользовательский
-`access+jwt` и `X-Project-ID`, что REST. Для demo сервер и заголовки один раз
-настраиваются в OpenCode profile SOM; JWT берётся из `ACCESS_KEY`. Поиск и
-обогащение агент выполняет напрямую через Gateway REST.
+Streamable HTTP MCP на `/mcp` предоставляет три investigation tools для чтения
+графа/таймлайна и записи `agent-results`, а также девять read-only `gateway_*`
+tools для sources, events, findings, sessions, entities и endpoints. Он
+использует тот же пользовательский `access+jwt` и `X-Project-ID`, что REST;
+`ir-api` server-side передаёт их Gateway. Для demo MCP Authorization один раз
+настраивается в OpenCode profile SOM через `ACCESS_KEY`, сам агент токен не
+читает и прямые Gateway REST-запросы не выполняет.
 
 Событие в Gateway и `ir-api` находится по паре `source_code + source_event_id`.
 Сущность объединяется по `type_code + canonical_key`, а её исходные записи — по
