@@ -185,7 +185,7 @@ interface AppState {
 
   setActiveTab: (tab: TabId) => void
   closeTab: (tab: TabId) => void
-  startInvestigation: (alertOrCorrIds: string[]) => Promise<string>
+  startInvestigation: (alertOrCorrIds: string[], title: string) => Promise<string>
   createChildInvestigation: (parentId: string, entityIds: string[]) => Promise<string>
   updateInvestigation: (id: string, patch: Partial<Investigation>) => void
   persistInvestigation: (id: string, patch: Partial<Investigation>) => Promise<void>
@@ -617,14 +617,10 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
-  startInvestigation: async (ids) => {
+  startInvestigation: async (ids, title) => {
+    const trimmed = title.trim().slice(0, 255)
+    if (!trimmed) return ''
     const { alerts, correlations } = get()
-    const title =
-      ids.length === 1 && correlations[ids[0]]
-        ? correlations[ids[0]].title
-        : ids.length === 1 && alerts[ids[0]]
-          ? alerts[ids[0]].title
-          : `Расследование (${ids.length})`
     const severity =
       ids
         .map((id) => correlations[id]?.severity ?? alerts[id]?.severity)
@@ -636,7 +632,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     set({ investigationLoading: true, lastError: null })
     try {
-      const created = await createInvestigation({ title, severity })
+      const created = await createInvestigation({ title: trimmed, severity })
       const refs = contextRefsFromIds(ids, alerts, correlations, get().contextEvents)
       if (refs.events.length || refs.findings.length) await addContext(created.id, refs)
       const bundle = await loadInvestigationBundle(created.id, {

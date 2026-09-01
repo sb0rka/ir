@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import {
   ArrowUpRight,
   Lightbulb,
@@ -12,7 +12,9 @@ import {
 import { emptyContextQueue, useAppStore } from '../store/appStore'
 import type { AlertEvent, CorrelationGroup } from '../types'
 import { Button, Chip, Panel, SeverityBadge } from './ui'
+import { StartInvestigationModal } from './StartInvestigationModal'
 import { isHypothesisWritable } from '../lib/hypotheses'
+import { titlesForQueueIds } from '../lib/investigationTitle'
 import { formatTime, statusLabel } from '../lib/utils'
 import { alertIsInContext, contextEventKeys } from '../lib/queueContext'
 import { EventCard, eventCardModelFromAlert } from './event-card'
@@ -52,6 +54,7 @@ export function QueueDetailPanel({
   const contextEvents = useAppStore((s) => s.contextEvents)
   const correlations = useAppStore((s) => s.correlations)
   const loading = useAppStore((s) => s.investigationLoading)
+  const [naming, setNaming] = useState(false)
 
   useEffect(() => {
     if (!item) return
@@ -84,6 +87,7 @@ export function QueueDetailPanel({
       : activeHypothesis.statement
 
   return (
+    <>
     <Panel
       title={alert ? 'Событие' : 'Корреляция'}
       className="w-[32rem] shrink-0"
@@ -180,7 +184,7 @@ export function QueueDetailPanel({
                 variant="primary"
                 className="w-full"
                 disabled={loading}
-                onClick={() => void start([item.id])}
+                onClick={() => setNaming(true)}
               >
                 <Play className="h-3.5 w-3.5" />
                 Начать расследование
@@ -198,6 +202,18 @@ export function QueueDetailPanel({
         </div>
       </div>
     </Panel>
+    {naming && (
+      <StartInvestigationModal
+        eventTitles={titlesForQueueIds([item.id], alerts, correlations)}
+        busy={loading}
+        onClose={() => setNaming(false)}
+        onConfirm={async (title) => {
+          const createdId = await start([item.id], title)
+          if (createdId) setNaming(false)
+        }}
+      />
+    )}
+    </>
   )
 }
 
