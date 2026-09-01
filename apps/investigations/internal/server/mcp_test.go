@@ -53,6 +53,9 @@ func TestMCPInitializeAndListTools(t *testing.T) {
 			t.Fatalf("tools/list schema missing %s: %s", field, listed.Body.String())
 		}
 	}
+	if count := strings.Count(listed.Body.String(), `"hypothesis_id"`); count != 2 {
+		t.Fatalf("tools/list must expose optional hypothesis scope only for graph and agent results: count=%d body=%s", count, listed.Body.String())
+	}
 	if !strings.Contains(listed.Body.String(), `"format":"uuid"`) || strings.Contains(listed.Body.String(), `"minItems":16`) {
 		t.Fatalf("tools/list must expose UUIDs as strings: %s", listed.Body.String())
 	}
@@ -175,10 +178,10 @@ func mcpResponseJSON(t *testing.T, response *httptest.ResponseRecorder) []byte {
 
 func TestMCPAgentResultsUsesLocalIDsWithoutGateway(t *testing.T) {
 	t.Parallel()
-	db := &mcpRecordingDB{}
+	db := &hypothesisFakeDB{hypothesis: model.Hypothesis{Status: "active"}}
 	server := &Server{db: db, gateway: nil}
 	request := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(
-		`{"jsonrpc":"2.0","id":10,"method":"tools/call","params":{"name":"add_investigation_agent_results","arguments":{"investigation_id":"11111111-1111-1111-1111-111111111111","som_issue_ids":["22222222-2222-2222-2222-222222222222"],"events":[],"entities":[],"nodes":[{"ref":"event","event_id":"33333333-3333-3333-3333-333333333333"},{"ref":"entity","entity_id":"44444444-4444-4444-4444-444444444444"}],"edges":[{"source_ref":"event","target_ref":"entity","relation_code":"mentions","why":"event evidence","evidence_event_refs":["event"]}]}}}`))
+		`{"jsonrpc":"2.0","id":10,"method":"tools/call","params":{"name":"add_investigation_agent_results","arguments":{"investigation_id":"11111111-1111-1111-1111-111111111111","hypothesis_id":"55555555-5555-5555-5555-555555555555","som_issue_ids":["22222222-2222-2222-2222-222222222222"],"events":[],"entities":[],"nodes":[{"ref":"event","event_id":"33333333-3333-3333-3333-333333333333"},{"ref":"entity","entity_id":"44444444-4444-4444-4444-444444444444"},{"ref":"existing","node_id":"66666666-6666-6666-6666-666666666666"}],"edges":[{"source_ref":"event","target_ref":"entity","relation_code":"mentions","why":"event evidence","evidence_event_refs":["event"]}]}}}`))
 	request.Header.Set("Accept", "application/json, text/event-stream")
 	request.Header.Set("Content-Type", "application/json")
 	ctx := socctx.WithScope(request.Context(), socctx.Scope{ProjectID: "abcdef1234"})
@@ -187,11 +190,14 @@ func TestMCPAgentResultsUsesLocalIDsWithoutGateway(t *testing.T) {
 	if recorder.Code != http.StatusOK || strings.Contains(recorder.Body.String(), `"isError":true`) {
 		t.Fatalf("agent results: status=%d body=%s", recorder.Code, recorder.Body.String())
 	}
-	if len(db.request.Selection.Events) != 0 || len(db.request.Selection.Entities) != 0 {
-		t.Fatalf("MCP created a Gateway selection: %#v", db.request.Selection)
+	if len(db.lastImport.Selection.Events) != 0 || len(db.lastImport.Selection.Entities) != 0 {
+		t.Fatalf("MCP created a Gateway selection: %#v", db.lastImport.Selection)
 	}
-	if len(db.request.Nodes) != 2 || db.request.Nodes[0].EventID == nil || db.request.Nodes[1].EntityID == nil {
-		t.Fatalf("local node locators were not preserved: %#v", db.request.Nodes)
+	if db.lastImport.HypothesisID == nil || *db.lastImport.HypothesisID != "55555555-5555-5555-5555-555555555555" || !db.lastImport.RequireActiveHypothesis {
+		t.Fatalf("hypothesis scope was not preserved: %#v", db.lastImport)
+	}
+	if len(db.lastImport.Nodes) != 3 || db.lastImport.Nodes[0].EventID == nil || db.lastImport.Nodes[1].EntityID == nil || db.lastImport.Nodes[2].NodeID == nil {
+		t.Fatalf("local node locators were not preserved: %#v", db.lastImport.Nodes)
 	}
 }
 

@@ -47,11 +47,14 @@ Bearer используется для чтения Sb0rka Secrets, но не п
 
 Streamable HTTP MCP на `/mcp` предоставляет три investigation tools для чтения
 графа/таймлайна и записи `agent-results`, а также девять read-only `gateway_*`
-tools для sources, events, findings, sessions, entities и endpoints. Он
-использует тот же пользовательский `access+jwt` и `X-Project-ID`, что REST;
-`ir-api` server-side передаёт их Gateway. Для demo MCP Authorization один раз
-настраивается в OpenCode profile SOM через `ACCESS_KEY`, сам агент токен не
-читает и прямые Gateway REST-запросы не выполняет.
+tools для sources, events, findings, sessions, entities и endpoints. Graph и
+agent-results tools принимают optional `hypothesis_id`: первый читает graph
+projection этой гипотезы, второй добавляет явные результаты только в active
+hypothesis; timeline при этом остаётся общим для расследования. MCP использует
+тот же пользовательский `access+jwt` и `X-Project-ID`, что REST; `ir-api`
+server-side передаёт их Gateway. Для demo MCP Authorization один раз настраивается
+в OpenCode profile SOM через `ACCESS_KEY`, сам агент токен не читает и прямые
+Gateway REST-запросы не выполняет.
 
 Событие в Gateway и `ir-api` находится по паре `source_code + source_event_id`.
 Сущность объединяется по `type_code + canonical_key`, а её исходные записи — по

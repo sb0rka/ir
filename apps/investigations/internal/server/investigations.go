@@ -767,6 +767,14 @@ func (s *Server) AddHypothesisAgentResults(ctx context.Context, request investig
 			value := resolved.EntitiesBySource[sourceKey]
 			converted.SnapshotEntityID = &value
 		}
+		if node.EventId != nil {
+			value := node.EventId.String()
+			converted.EventID = &value
+		}
+		if node.EntityId != nil {
+			value := node.EntityId.String()
+			converted.EntityID = &value
+		}
 		if node.NodeId != nil {
 			value := node.NodeId.String()
 			converted.NodeID = &value
