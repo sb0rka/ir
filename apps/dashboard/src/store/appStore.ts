@@ -65,10 +65,12 @@ import {
 } from '../api/hypotheses'
 import {
   edgesBetweenNodes,
+  layerItemIds,
   membershipFromGraph,
+  mergeVisibleLayerIds,
   nodeIdsForEntityRefs,
+  toggleLayerId,
   type HypothesisMembership,
-  type HypothesisViewMode,
 } from '../lib/hypotheses'
 import type { components as Ir } from '@ir/contract'
 
@@ -148,7 +150,8 @@ interface AppState {
   hypotheses: Record<string, Hypothesis>
   hypothesisMembership: Record<string, HypothesisMembership>
   activeHypothesisId: Record<string, string | null>
-  hypothesisViewMode: Record<string, HypothesisViewMode>
+  visibleHypothesisIds: Record<string, string[]>
+  highlightedHypothesisIds: Record<string, string[]>
   detailPanelOpen: boolean
 
   alerts: Record<string, AlertEvent>
@@ -234,7 +237,8 @@ interface AppState {
   ) => Promise<Hypothesis | null>
   deleteHypothesis: (investigationId: string, hypothesisId: string) => Promise<void>
   setActiveHypothesis: (investigationId: string, hypothesisId: string | null) => Promise<void>
-  setHypothesisViewMode: (investigationId: string, mode: HypothesisViewMode) => void
+  toggleHypothesisVisible: (investigationId: string, itemId: string, solo?: boolean) => void
+  toggleHypothesisHighlight: (investigationId: string, itemId: string, solo?: boolean) => void
   addSelectionToHypothesis: (investigationId: string, hypothesisId: string) => Promise<void>
   addEventsToActiveHypothesis: (investigationId: string, eventIds: string[]) => Promise<void>
   toggleHypothesisNode: (investigationId: string, nodeId: string) => Promise<void>
@@ -382,7 +386,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   hypotheses: {},
   hypothesisMembership: {},
   activeHypothesisId: {},
-  hypothesisViewMode: {},
+  visibleHypothesisIds: {},
+  highlightedHypothesisIds: {},
   detailPanelOpen: false,
 
   alerts: {},
@@ -1348,6 +1353,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       const hypotheses = { ...get().hypotheses }
       for (const item of items) hypotheses[item.id] = item
       const inv = get().investigations[investigationId]
+      const hypothesisIds = items.map((item) => item.id)
       set({
         hypotheses,
         investigations: inv
@@ -1355,11 +1361,39 @@ export const useAppStore = create<AppState>((set, get) => ({
               ...get().investigations,
               [investigationId]: {
                 ...inv,
-                hypothesisIds: items.map((item) => item.id),
+                hypothesisIds,
               },
             }
           : get().investigations,
+        visibleHypothesisIds: {
+          ...get().visibleHypothesisIds,
+          [investigationId]: mergeVisibleLayerIds(
+            get().visibleHypothesisIds[investigationId],
+            hypothesisIds,
+          ),
+        },
+        highlightedHypothesisIds: {
+          ...get().highlightedHypothesisIds,
+          [investigationId]: (get().highlightedHypothesisIds[investigationId] ?? []).filter((id) =>
+            layerItemIds(hypothesisIds).includes(id),
+          ),
+        },
       })
+      const graphs = await Promise.all(
+        items.map(async (item) => {
+          try {
+            return [item.id, membershipFromGraph(await getHypothesisGraph(investigationId, item.id))] as const
+          } catch {
+            return null
+          }
+        }),
+      )
+      const membership = { ...get().hypothesisMembership }
+      for (const entry of graphs) {
+        if (!entry) continue
+        membership[entry[0]] = entry[1]
+      }
+      set({ hypothesisMembership: membership })
     } catch (err) {
       set({ lastError: errorMessage(err) })
     }
@@ -1375,6 +1409,10 @@ export const useAppStore = create<AppState>((set, get) => ({
         description: input.description?.trim() || undefined,
       })
       const inv = get().investigations[investigationId]
+      const hypothesisIds = inv
+        ? [created.id, ...inv.hypothesisIds.filter((id) => id !== created.id)]
+        : [created.id]
+      const prevVisible = get().visibleHypothesisIds[investigationId]
       set({
         hypotheses: { ...get().hypotheses, [created.id]: created },
         investigations: inv
@@ -1382,10 +1420,18 @@ export const useAppStore = create<AppState>((set, get) => ({
               ...get().investigations,
               [investigationId]: {
                 ...inv,
-                hypothesisIds: [created.id, ...inv.hypothesisIds.filter((id) => id !== created.id)],
+                hypothesisIds,
               },
             }
           : get().investigations,
+        visibleHypothesisIds: {
+          ...get().visibleHypothesisIds,
+          [investigationId]: prevVisible
+            ? prevVisible.includes(created.id)
+              ? prevVisible
+              : [...prevVisible, created.id]
+            : layerItemIds(hypothesisIds),
+        },
         hypothesisDraftOpen: false,
         sidebarSection: 'hypotheses',
         agentPanelOpen: false,
@@ -1454,10 +1500,22 @@ export const useAppStore = create<AppState>((set, get) => ({
       const inv = get().investigations[investigationId]
       const active = { ...get().activeHypothesisId }
       if (active[investigationId] === hypothesisId) active[investigationId] = null
+      const visible = { ...get().visibleHypothesisIds }
+      if (visible[investigationId]) {
+        visible[investigationId] = visible[investigationId].filter((id) => id !== hypothesisId)
+      }
+      const highlighted = { ...get().highlightedHypothesisIds }
+      if (highlighted[investigationId]) {
+        highlighted[investigationId] = highlighted[investigationId].filter(
+          (id) => id !== hypothesisId,
+        )
+      }
       set({
         hypotheses,
         hypothesisMembership: membership,
         activeHypothesisId: active,
+        visibleHypothesisIds: visible,
+        highlightedHypothesisIds: highlighted,
         investigations: inv
           ? {
               ...get().investigations,
@@ -1473,9 +1531,25 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
-  setHypothesisViewMode: (investigationId, mode) => {
+  toggleHypothesisVisible: (investigationId, itemId, solo = false) => {
+    const inv = get().investigations[investigationId]
+    const current =
+      get().visibleHypothesisIds[investigationId] ?? layerItemIds(inv?.hypothesisIds ?? [])
     set({
-      hypothesisViewMode: { ...get().hypothesisViewMode, [investigationId]: mode },
+      visibleHypothesisIds: {
+        ...get().visibleHypothesisIds,
+        [investigationId]: toggleLayerId(current, itemId, solo),
+      },
+    })
+  },
+
+  toggleHypothesisHighlight: (investigationId, itemId, solo = false) => {
+    const current = get().highlightedHypothesisIds[investigationId] ?? []
+    set({
+      highlightedHypothesisIds: {
+        ...get().highlightedHypothesisIds,
+        [investigationId]: toggleLayerId(current, itemId, solo),
+      },
     })
   },
 

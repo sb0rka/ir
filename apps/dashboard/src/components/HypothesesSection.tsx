@@ -1,14 +1,17 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import type { Hypothesis } from '../api/hypotheses'
 import {
+  EMPTY_LAYER_IDS,
   hypothesisOriginLabel,
   hypothesisStatusLabel,
+  INVESTIGATION_LAYER_ID,
+  investigationLayerNodeIds,
+  layerItemIds,
 } from '../lib/hypotheses'
 import { useAppStore } from '../store/appStore'
 import { Button, Chip } from './ui'
-import { HypothesisViewToggle } from './HypothesisViewToggle'
 import { clsx } from '../lib/utils'
-import { ChevronDown, ChevronRight, Plus } from 'lucide-react'
+import { ChevronDown, ChevronRight, Eye, EyeOff, Highlighter, Plus } from 'lucide-react'
 
 type StatusFilter = 'all' | 'open' | 'resolved'
 
@@ -17,12 +20,16 @@ export function HypothesesSection({ investigationId }: { investigationId: string
   const hypotheses = useAppStore((s) => s.hypotheses)
   const membership = useAppStore((s) => s.hypothesisMembership)
   const activeId = useAppStore((s) => s.activeHypothesisId[investigationId] ?? null)
+  const storedVisibleIds = useAppStore((s) => s.visibleHypothesisIds[investigationId])
+  const storedHighlightedIds = useAppStore((s) => s.highlightedHypothesisIds[investigationId])
   const draftOpen = useAppStore((s) => s.hypothesisDraftOpen)
   const setDraftOpen = useAppStore((s) => s.setHypothesisDraftOpen)
   const setActive = useAppStore((s) => s.setActiveHypothesis)
   const createHypothesis = useAppStore((s) => s.createHypothesis)
   const patchHypothesis = useAppStore((s) => s.patchHypothesis)
   const deleteHypothesis = useAppStore((s) => s.deleteHypothesis)
+  const toggleVisible = useAppStore((s) => s.toggleHypothesisVisible)
+  const toggleHighlight = useAppStore((s) => s.toggleHypothesisHighlight)
 
   const [filter, setFilter] = useState<StatusFilter>('all')
   const [expandedId, setExpandedId] = useState<string | null>(null)
@@ -34,7 +41,7 @@ export function HypothesesSection({ investigationId }: { investigationId: string
   const [deleteId, setDeleteId] = useState<string | null>(null)
 
   const items = useMemo(() => {
-    const ids = inv?.hypothesisIds ?? []
+    const ids = inv?.hypothesisIds ?? EMPTY_LAYER_IDS
     return ids
       .map((id) => hypotheses[id])
       .filter(Boolean)
@@ -45,9 +52,21 @@ export function HypothesesSection({ investigationId }: { investigationId: string
       })
   }, [filter, hypotheses, inv?.hypothesisIds])
 
+  const investigationNodeCount = useMemo(() => {
+    if (!inv) return 0
+    return investigationLayerNodeIds(inv.nodeIds, inv.hypothesisIds, hypotheses, membership).length
+  }, [hypotheses, inv, membership])
+
+  const visibleIds = useMemo(
+    () => storedVisibleIds ?? layerItemIds(inv?.hypothesisIds ?? EMPTY_LAYER_IDS),
+    [inv?.hypothesisIds, storedVisibleIds],
+  )
+  const highlightedIds = storedHighlightedIds ?? EMPTY_LAYER_IDS
+
   if (!inv) return null
 
   const selectedCount = inv.selectedEntityIds.length
+  const investigationSelected = activeId == null
 
   return (
     <div className="space-y-3 p-3">
@@ -77,8 +96,6 @@ export function HypothesesSection({ investigationId }: { investigationId: string
           <Plus className="h-3.5 w-3.5" />
         </Button>
       </div>
-
-      {activeId && <HypothesisViewToggle investigationId={investigationId} />}
 
       {draftOpen && (
         <form
@@ -133,6 +150,26 @@ export function HypothesesSection({ investigationId }: { investigationId: string
         </form>
       )}
 
+      <LayerCard
+        selected={investigationSelected}
+        visible={visibleIds.includes(INVESTIGATION_LAYER_ID)}
+        highlighted={highlightedIds.includes(INVESTIGATION_LAYER_ID)}
+        onSelect={() => void setActive(investigationId, null)}
+        onToggleVisible={(solo) =>
+          toggleVisible(investigationId, INVESTIGATION_LAYER_ID, solo)
+        }
+        onToggleHighlight={(solo) =>
+          toggleHighlight(investigationId, INVESTIGATION_LAYER_ID, solo)
+        }
+        title={inv.title}
+        meta={
+          <>
+            <Chip tone="default">расследование</Chip>
+            <NodeCount count={investigationNodeCount} />
+          </>
+        }
+      />
+
       {items.map((item) => (
         <HypothesisCard
           key={item.id}
@@ -140,12 +177,16 @@ export function HypothesesSection({ investigationId }: { investigationId: string
           active={activeId === item.id}
           expanded={expandedId === item.id}
           nodeCount={membership[item.id]?.nodeIds.length}
+          visible={visibleIds.includes(item.id)}
+          highlighted={highlightedIds.includes(item.id)}
           resolving={resolveId === item.id}
           deleting={deleteId === item.id}
           reason={reason}
           onReason={setReason}
           onToggleActive={() => void setActive(investigationId, item.id)}
           onToggleExpand={() => setExpandedId((id) => (id === item.id ? null : item.id))}
+          onToggleVisible={(solo) => toggleVisible(investigationId, item.id, solo)}
+          onToggleHighlight={(solo) => toggleHighlight(investigationId, item.id, solo)}
           onActivate={() => void patchHypothesis(investigationId, item.id, { status: 'active' })}
           onReopen={() => void patchHypothesis(investigationId, item.id, { status: 'active' })}
           onAskResolve={() => {
@@ -173,9 +214,6 @@ export function HypothesesSection({ investigationId }: { investigationId: string
             void deleteHypothesis(investigationId, item.id)
             setDeleteId(null)
           }}
-          onSaveStatement={(next) =>
-            void patchHypothesis(investigationId, item.id, { statement: next })
-          }
         />
       ))}
 
@@ -193,17 +231,127 @@ export function HypothesesSection({ investigationId }: { investigationId: string
   )
 }
 
+function NodeCount({ count }: { count: number }) {
+  return <span className="rounded bg-surface-2 px-1.5 py-0.5">узлов: {count}</span>
+}
+
+function LayerCard({
+  selected,
+  visible,
+  highlighted,
+  onSelect,
+  onToggleVisible,
+  onToggleHighlight,
+  title,
+  meta,
+}: {
+  selected: boolean
+  visible: boolean
+  highlighted: boolean
+  onSelect: () => void
+  onToggleVisible: (solo: boolean) => void
+  onToggleHighlight: (solo: boolean) => void
+  title: string
+  meta: ReactNode
+}) {
+  return (
+    <div
+      className={clsx(
+        'overflow-hidden rounded border shadow-xs',
+        selected
+          ? 'border-accent bg-accent/10 ring-1 ring-accent/50'
+          : 'border-border bg-surface-0',
+      )}
+    >
+      <div className="flex items-start gap-1.5 p-3">
+        <span className="mt-0.5 p-0.5" aria-hidden>
+          <span className="block h-3.5 w-3.5" />
+        </span>
+        <button type="button" className="min-w-0 flex-1 text-left" onClick={onSelect}>
+          <span className="block break-words text-xs font-semibold text-fg">{title}</span>
+          <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[10px] text-fg-dim">
+            {meta}
+          </div>
+        </button>
+        <LayerToggles
+          visible={visible}
+          highlighted={highlighted}
+          onToggleVisible={onToggleVisible}
+          onToggleHighlight={onToggleHighlight}
+        />
+      </div>
+    </div>
+  )
+}
+
+function LayerToggles({
+  visible,
+  highlighted,
+  onToggleVisible,
+  onToggleHighlight,
+}: {
+  visible: boolean
+  highlighted: boolean
+  onToggleVisible: (solo: boolean) => void
+  onToggleHighlight: (solo: boolean) => void
+}) {
+  return (
+    <div className="mt-0.5 flex shrink-0 items-center gap-0.5">
+      <button
+        type="button"
+        className={clsx(
+          'rounded p-0.5',
+          visible ? 'bg-accent/15 text-accent' : 'text-fg-dim hover:text-fg',
+        )}
+        title={
+          visible
+            ? 'Скрыть узлы. Alt+клик — только этот слой'
+            : 'Показать узлы. Alt+клик — только этот слой'
+        }
+        onClick={(e) => {
+          e.stopPropagation()
+          onToggleVisible(e.altKey || e.metaKey)
+        }}
+      >
+        {visible ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
+      </button>
+      <button
+        type="button"
+        className={clsx(
+          'rounded p-0.5',
+          highlighted ? 'bg-accent/15 text-accent' : 'text-fg-dim hover:text-fg',
+        )}
+        title={
+          highlighted
+            ? 'Снять подсветку. Alt+клик — подсветить только этот слой'
+            : 'Подсветить. Alt+клик — подсветить только этот слой'
+        }
+        onClick={(e) => {
+          e.stopPropagation()
+          onToggleHighlight(e.altKey || e.metaKey)
+        }}
+      >
+        <Highlighter className="h-3.5 w-3.5" />
+      </button>
+    </div>
+  )
+}
+
 function HypothesisCard({
   item,
   active,
   expanded,
   nodeCount,
+  visible,
+  highlighted,
   resolving,
   deleting,
   reason,
   onReason,
   onToggleActive,
   onToggleExpand,
+  onToggleVisible,
+  onToggleHighlight,
   onActivate,
   onReopen,
   onAskResolve,
@@ -212,18 +360,21 @@ function HypothesisCard({
   onAskDelete,
   onCancelDelete,
   onDelete,
-  onSaveStatement,
 }: {
   item: Hypothesis
   active: boolean
   expanded: boolean
   nodeCount?: number
+  visible: boolean
+  highlighted: boolean
   resolving: boolean
   deleting: boolean
   reason: string
   onReason: (value: string) => void
   onToggleActive: () => void
   onToggleExpand: () => void
+  onToggleVisible: (solo: boolean) => void
+  onToggleHighlight: (solo: boolean) => void
   onActivate: () => void
   onReopen: () => void
   onAskResolve: () => void
@@ -232,23 +383,23 @@ function HypothesisCard({
   onAskDelete: () => void
   onCancelDelete: () => void
   onDelete: () => void
-  onSaveStatement: (statement: string) => void
 }) {
-  const [draft, setDraft] = useState(item.statement)
   const tone =
     item.status === 'resolved' ? 'confirmed' : item.status === 'active' ? 'proposed' : 'default'
 
   return (
     <div
       className={clsx(
-        'rounded border bg-surface-0 overflow-hidden shadow-xs',
-        active ? 'border-accent' : 'border-border',
+        'overflow-hidden rounded border shadow-xs',
+        active
+          ? 'border-accent bg-accent/10 ring-1 ring-accent/50'
+          : 'border-border bg-surface-0',
       )}
     >
-      <div className="flex items-start gap-2 p-2.5">
+      <div className="flex items-start gap-1.5 p-3">
         <button
           type="button"
-          className="mt-0.5 text-fg-dim hover:text-fg p-0.5"
+          className="mt-0.5 p-0.5 text-fg-dim hover:text-fg"
           onClick={onToggleExpand}
         >
           {expanded ? (
@@ -258,45 +409,26 @@ function HypothesisCard({
           )}
         </button>
         <button type="button" className="min-w-0 flex-1 text-left" onClick={onToggleActive}>
-          <div className="flex items-center gap-2">
-            <span
-              className={clsx(
-                'h-1.5 w-1.5 shrink-0 rounded-full',
-                item.status === 'active' && 'bg-proposed',
-                item.status === 'proposed' && 'bg-fg-dim',
-                item.status === 'resolved' && 'bg-confirmed',
-              )}
-            />
-            <span className="line-clamp-2 text-xs font-semibold text-fg">{item.statement}</span>
-          </div>
+          <span className="block break-words text-xs font-semibold text-fg">{item.statement}</span>
           <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[10px] text-fg-dim">
             <Chip tone={tone}>{hypothesisStatusLabel(item.status)}</Chip>
             <span>{hypothesisOriginLabel(item.origin)}</span>
-            {nodeCount != null && <span>· узлов: {nodeCount}</span>}
+            {nodeCount != null && <NodeCount count={nodeCount} />}
           </div>
           {item.status === 'resolved' && item.reason && !expanded && (
             <div className="mt-1 line-clamp-2 text-xs text-fg-muted">{item.reason}</div>
           )}
         </button>
+        <LayerToggles
+          visible={visible}
+          highlighted={highlighted}
+          onToggleVisible={onToggleVisible}
+          onToggleHighlight={onToggleHighlight}
+        />
       </div>
 
       {expanded && (
-        <div className="space-y-2 border-t border-border/80 bg-surface-2/30 p-2.5 text-xs">
-          <label className="block space-y-1">
-            <span className="text-[10px] uppercase tracking-wider text-fg-dim">Формулировка</span>
-            <textarea
-              className="w-full resize-none rounded border border-border bg-surface-0 px-2 py-1 text-xs outline-none focus:border-fg/30"
-              rows={2}
-              maxLength={255}
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              onBlur={() => {
-                const next = draft.trim()
-                if (next && next !== item.statement) onSaveStatement(next)
-                else setDraft(item.statement)
-              }}
-            />
-          </label>
+        <div className="space-y-2 border-t border-border/80 bg-surface-2/30 p-3 text-xs">
           {item.description && (
             <p className="whitespace-pre-wrap text-fg-muted">{item.description}</p>
           )}

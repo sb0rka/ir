@@ -1,8 +1,6 @@
 import type { ReactNode } from 'react'
-import { Lightbulb, RotateCcw } from 'lucide-react'
+import { RotateCcw } from 'lucide-react'
 import { useWorkspaceStore } from '../../state/useWorkspaceStore'
-import { useAppStore } from '../../store/appStore'
-import { HypothesisViewToggle } from '../HypothesisViewToggle'
 import {
   ALL_ENTITY_TYPES,
   DEFAULT_ENTITY_TYPES,
@@ -26,17 +24,6 @@ export function GraphToolbar() {
     toggleEdgeOrigin,
     resetGraphFilters,
   } = useWorkspaceStore()
-  const investigationId = activeInvestigation?.id
-  const activeHypothesis = useAppStore((s) => {
-    if (!investigationId) return null
-    const id = s.activeHypothesisId[investigationId]
-    return id ? s.hypotheses[id] ?? null : null
-  })
-  const selectedCount = useAppStore((s) =>
-    investigationId ? (s.investigations[investigationId]?.selectedEntityIds.length ?? 0) : 0,
-  )
-  const addSelection = useAppStore((s) => s.addSelectionToHypothesis)
-  const setActiveHypothesis = useAppStore((s) => s.setActiveHypothesis)
 
   if (!activeInvestigation) return null
 
@@ -93,32 +80,6 @@ export function GraphToolbar() {
           </Chip>
         ))}
       </FilterGroup>
-
-      {activeHypothesis && investigationId && (
-        <FilterGroup label="Гипотеза">
-          <span className="max-w-[220px] truncate rounded-md border border-[var(--border-strong)] bg-[var(--accent-soft)] px-1.5 py-0.5 text-[10px] text-[var(--accent)]">
-            H: {activeHypothesis.statement}
-          </span>
-          <HypothesisViewToggle investigationId={investigationId} />
-          {activeHypothesis.status !== 'resolved' && selectedCount > 0 && (
-            <button
-              type="button"
-              onClick={() => void addSelection(investigationId, activeHypothesis.id)}
-              className="inline-flex items-center gap-1 rounded-md border border-[var(--border)] px-1.5 py-0.5 text-[10px] text-[var(--text)] hover:border-[var(--border-strong)]"
-            >
-              <Lightbulb size={10} /> В гипотезу ({selectedCount})
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={() => void setActiveHypothesis(investigationId, null)}
-            className="rounded-md px-1 text-[11px] text-[var(--text-muted)] hover:text-[var(--text)]"
-            title="Снять линзу"
-          >
-            ×
-          </button>
-        </FilterGroup>
-      )}
 
       <button
         type="button"

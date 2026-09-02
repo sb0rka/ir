@@ -1,5 +1,4 @@
 import type { Edge as RFEdge, Node as RFNode } from '@xyflow/react'
-import type { HypothesisViewMode } from '../../lib/hypotheses'
 import type {
   AlertNode,
   Edge,
@@ -11,11 +10,11 @@ import type {
 } from './types'
 import { formatEventTooltip, toMs } from './time'
 
-export type HypothesisLens = {
-  nodeIds: Set<string>
-  edgeIds: Set<string>
+export type GraphVisibility = {
+  visibleNodeIds: Set<string> | null
+  highlightedNodeIds: Set<string> | null
+  activeNodeIds: Set<string>
   writable: boolean
-  mode: HypothesisViewMode
 }
 
 export type GraphNodeData = {
@@ -50,12 +49,15 @@ export function buildVisibleGraph(args: {
   filters: GraphFilters
   selection: { kind: string; id: string } | null
   hoverEventId: string | null
-  hypothesisLens?: HypothesisLens | null
+  graphVisibility?: GraphVisibility | null
 }): { nodes: RFNode<GraphNodeData>[]; edges: RFEdge[] } {
   const { entities, alerts, edges, events, filters, selection, hoverEventId } =
     args
-  const lens = args.hypothesisLens ?? null
-  const isolate = lens?.mode === 'isolate'
+  const visibility = args.graphVisibility ?? null
+  const visibleNodeIds = visibility?.visibleNodeIds ?? null
+  const highlightedNodeIds = visibility?.highlightedNodeIds ?? null
+  const activeNodeIds = visibility?.activeNodeIds ?? new Set<string>()
+  const isolate = visibleNodeIds != null
 
   const range = filters.timeRange
   const inRange = (startIso?: string, endIso?: string) => {
@@ -82,9 +84,9 @@ export function buildVisibleGraph(args: {
       alertInTime(a) &&
       originVisible(a.origin),
   )
-  if (isolate && lens) {
-    visibleEntities = visibleEntities.filter((e) => lens.nodeIds.has(e.id))
-    visibleAlerts = visibleAlerts.filter((a) => lens.nodeIds.has(a.id))
+  if (isolate && visibleNodeIds) {
+    visibleEntities = visibleEntities.filter((e) => visibleNodeIds.has(e.id))
+    visibleAlerts = visibleAlerts.filter((a) => visibleNodeIds.has(a.id))
   }
 
   const visibleIds = new Set([
@@ -113,7 +115,7 @@ export function buildVisibleGraph(args: {
 
   const nodes: RFNode<GraphNodeData>[] = [
     ...visibleEntities.map((e) => {
-      const inHypothesis = Boolean(lens?.nodeIds.has(e.id))
+      const inHypothesis = activeNodeIds.has(e.id)
       return {
         id: e.id,
         type: 'entity',
@@ -123,22 +125,23 @@ export function buildVisibleGraph(args: {
           label: e.display_name,
           sublabel: e.type_code,
           entityType: e.type_code,
-          dimmed: hovering || Boolean(lens && !isolate && !inHypothesis),
+          dimmed: hovering || Boolean(highlightedNodeIds && !highlightedNodeIds.has(e.id)),
           highlighted: false,
           selected:
             selectedId === e.id ||
             (!!e.entity_id && selectedId === e.entity_id),
           entityId: e.entity_id ?? e.id,
           inHypothesis,
-          canToggleHypothesis: Boolean(lens?.writable),
+          canToggleHypothesis: Boolean(visibility?.writable),
         },
       }
     }),
     ...visibleAlerts.map((a) => {
       const highlighted = isHoveredAlert(a)
-      const inHypothesis = Boolean(lens?.nodeIds.has(a.id))
+      const inHypothesis = activeNodeIds.has(a.id)
       const dimmed =
-        (hovering && !highlighted) || Boolean(lens && !isolate && !inHypothesis)
+        (hovering && !highlighted) ||
+        Boolean(highlightedNodeIds && !highlightedNodeIds.has(a.id))
       return {
         id: a.id,
         type: 'alert',
@@ -160,7 +163,7 @@ export function buildVisibleGraph(args: {
             a.event_ts ? formatEventTooltip(a.event_ts, a.title) : a.title
           }`,
           inHypothesis,
-          canToggleHypothesis: Boolean(lens?.writable),
+          canToggleHypothesis: Boolean(visibility?.writable),
         },
       }
     }),
@@ -170,7 +173,6 @@ export function buildVisibleGraph(args: {
   const rfEdges: RFEdge[] = edges
     .filter((e) => filters.edgeOrigins.has(e.origin))
     .filter((e) => visibleIds.has(e.source_id) && visibleIds.has(e.target_id))
-    .filter((e) => !isolate || Boolean(lens?.edgeIds.has(e.id)))
     .map((e) => {
       const fromAgent = e.origin === 'agent'
       const opacity =
@@ -179,7 +181,10 @@ export function buildVisibleGraph(args: {
         hovering &&
         !hoveredAlertNodeIds.has(e.source_id) &&
         !hoveredAlertNodeIds.has(e.target_id)
-      const outsideLens = Boolean(lens && !isolate && !lens.edgeIds.has(e.id))
+      const outsideHighlight = Boolean(
+        highlightedNodeIds &&
+          (!highlightedNodeIds.has(e.source_id) || !highlightedNodeIds.has(e.target_id)),
+      )
       const curveIndex = curvatureByTarget.get(e.target_id) ?? 0
       curvatureByTarget.set(e.target_id, curveIndex + 1)
 
@@ -194,7 +199,7 @@ export function buildVisibleGraph(args: {
           stroke: fromAgent ? 'var(--edge-expanded)' : 'var(--edge-seed)',
           strokeWidth: 1.5,
           strokeDasharray: fromAgent ? '5 4' : undefined,
-          opacity: endpointsDimmed || outsideLens ? 0.15 : opacity,
+          opacity: endpointsDimmed || outsideHighlight ? 0.15 : opacity,
         },
         labelStyle: {
           fill: 'var(--text-dim)',

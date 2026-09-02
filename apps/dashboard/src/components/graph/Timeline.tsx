@@ -5,10 +5,11 @@ import {
   useState,
   type PointerEvent as ReactPointerEvent,
 } from 'react'
+import { EMPTY_LAYER_IDS } from '../../lib/hypotheses'
 import { useWorkspaceStore } from '../../state/useWorkspaceStore'
-import { useAppStore } from '../../store/appStore'
 import { SEVERITY_COLOR } from './constants'
 import { eventsInRange } from './graph-adapters'
+import { useHypothesisGraphView } from './useHypothesisGraphView'
 import { clamp, formatClock, formatEventTooltip, formatShortDate, toMs } from './time'
 import type { EventRef, Selection } from './types'
 
@@ -28,21 +29,22 @@ export function Timeline() {
     activeInvestigation?.windowEnd ?? '2026-07-17T12:30:00.000Z',
   )
   const investigationId = activeInvestigation?.id
-  const hypothesisId = useAppStore((s) =>
-    investigationId ? (s.activeHypothesisId[investigationId] ?? null) : null,
+  const allNodeIds = useMemo(
+    () =>
+      activeInvestigation
+        ? [
+            ...activeInvestigation.entities.map((e) => e.id),
+            ...activeInvestigation.alerts.map((a) => a.id),
+          ]
+        : EMPTY_LAYER_IDS,
+    [activeInvestigation],
   )
-  const viewMode = useAppStore((s) =>
-    investigationId ? (s.hypothesisViewMode[investigationId] ?? 'dim') : 'dim',
-  )
-  const membership = useAppStore((s) =>
-    hypothesisId ? (s.hypothesisMembership[hypothesisId] ?? null) : null,
-  )
+  const { visibleNodeIds } = useHypothesisGraphView(investigationId, allNodeIds)
   const events = useMemo(() => {
     const all = activeInvestigation?.events ?? []
-    if (!hypothesisId || viewMode !== 'isolate' || !membership) return all
-    const nodeIds = new Set(membership.nodeIds)
-    return all.filter((ev) => ev.alert_id != null && nodeIds.has(ev.alert_id))
-  }, [activeInvestigation?.events, hypothesisId, membership, viewMode])
+    if (!visibleNodeIds) return all
+    return all.filter((ev) => ev.alert_id != null && visibleNodeIds.has(ev.alert_id))
+  }, [activeInvestigation?.events, visibleNodeIds])
   const range =
     activeInvestigation?.filters.timeRange ?? {
       start: windowStart,

@@ -34,7 +34,7 @@ export function Chip({
   return (
     <span
       className={clsx(
-        'inline-flex items-center gap-1 rounded border px-2 py-0.5 text-xs font-mono',
+        'inline-flex items-center gap-1 rounded border px-2 py-0.5 text-xs font-medium',
         tones[tone],
         onClick && 'cursor-pointer hover:border-fg/40',
         flash && 'chip-flash-critical',

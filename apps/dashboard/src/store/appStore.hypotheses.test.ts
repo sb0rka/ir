@@ -85,7 +85,8 @@ const snapshot = {
   hypotheses: {},
   hypothesisMembership: {},
   activeHypothesisId: {},
-  hypothesisViewMode: {},
+  visibleHypothesisIds: {},
+  highlightedHypothesisIds: {},
   investigations: {},
   graphNodes: {},
   graphEdges: {},
@@ -157,6 +158,10 @@ describe('hypothesis store', () => {
     expect(useAppStore.getState().investigations['inv-1']?.hypothesisIds).toEqual(['h1'])
     expect(useAppStore.getState().activeHypothesisId['inv-1']).toBe('h1')
     expect(useAppStore.getState().sidebarSection).toBe('hypotheses')
+    expect(useAppStore.getState().visibleHypothesisIds['inv-1']).toEqual([
+      '__investigation__',
+      'h1',
+    ])
   })
 
   it('refreshes the card on 409 and does not keep the stale patch', async () => {
@@ -354,11 +359,20 @@ describe('hypothesis store', () => {
     expect(useAppStore.getState().hypothesisMembership.h2?.nodeIds).toEqual(['n-evt'])
   })
 
-  it('stores isolate vs dim per investigation', () => {
-    expect(useAppStore.getState().hypothesisViewMode['inv-1']).toBeUndefined()
-    useAppStore.getState().setHypothesisViewMode('inv-1', 'isolate')
-    expect(useAppStore.getState().hypothesisViewMode['inv-1']).toBe('isolate')
-    useAppStore.getState().setHypothesisViewMode('inv-1', 'dim')
-    expect(useAppStore.getState().hypothesisViewMode['inv-1']).toBe('dim')
+  it('toggles and isolates visibility independently of the selected hypothesis', () => {
+    expect(useAppStore.getState().visibleHypothesisIds['inv-1']).toBeUndefined()
+    useAppStore.getState().toggleHypothesisVisible('inv-1', 'h1')
+    expect(useAppStore.getState().visibleHypothesisIds['inv-1']).toEqual(['__investigation__', 'h1'])
+    useAppStore.getState().toggleHypothesisVisible('inv-1', 'h1', true)
+    expect(useAppStore.getState().visibleHypothesisIds['inv-1']).toEqual(['h1'])
+    expect(useAppStore.getState().activeHypothesisId['inv-1']).toBeUndefined()
+  })
+
+  it('highlights layers only when at least one bulb is on', () => {
+    expect(useAppStore.getState().highlightedHypothesisIds['inv-1']).toBeUndefined()
+    useAppStore.getState().toggleHypothesisHighlight('inv-1', 'h1')
+    expect(useAppStore.getState().highlightedHypothesisIds['inv-1']).toEqual(['h1'])
+    useAppStore.getState().toggleHypothesisHighlight('inv-1', 'h1')
+    expect(useAppStore.getState().highlightedHypothesisIds['inv-1']).toEqual([])
   })
 })

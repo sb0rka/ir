@@ -16,10 +16,11 @@ import {
   type OnNodeDrag,
 } from '@xyflow/react'
 import { LayoutGrid } from 'lucide-react'
+import { EMPTY_LAYER_IDS } from '../../lib/hypotheses'
 import { useWorkspaceStore } from '../../state/useWorkspaceStore'
-import { useAppStore } from '../../store/appStore'
 import { SEVERITY_COLOR } from './constants'
 import { buildVisibleGraph, type GraphNodeData } from './graph-adapters'
+import { useHypothesisGraphView } from './useHypothesisGraphView'
 import { AlertNode } from './nodes/AlertNode'
 import { EntityNode } from './nodes/EntityNode'
 
@@ -43,27 +44,14 @@ function GraphInner({ fitToken }: { fitToken: FitToken }) {
     updateNodePosition,
     arrangeNodes,
   } = useWorkspaceStore()
-  const hypothesisId = useAppStore((s) =>
-    session?.id ? (s.activeHypothesisId[session.id] ?? null) : null,
+  const allNodeIds = useMemo(
+    () =>
+      session
+        ? [...session.entities.map((e) => e.id), ...session.alerts.map((a) => a.id)]
+        : EMPTY_LAYER_IDS,
+    [session],
   )
-  const membership = useAppStore((s) =>
-    hypothesisId ? (s.hypothesisMembership[hypothesisId] ?? null) : null,
-  )
-  const lensWritable = useAppStore((s) =>
-    hypothesisId ? s.hypotheses[hypothesisId]?.status !== 'resolved' : false,
-  )
-  const viewMode = useAppStore((s) =>
-    session?.id ? (s.hypothesisViewMode[session.id] ?? 'dim') : 'dim',
-  )
-  const hypothesisLens = useMemo(() => {
-    if (!hypothesisId) return null
-    return {
-      nodeIds: new Set(membership?.nodeIds ?? []),
-      edgeIds: new Set(membership?.edgeIds ?? []),
-      writable: lensWritable,
-      mode: viewMode,
-    }
-  }, [hypothesisId, membership, lensWritable, viewMode])
+  const graphVisibility = useHypothesisGraphView(session?.id, allNodeIds)
 
   const { fitView } = useReactFlow()
   const paneWidth = useStore((s) => s.width)
@@ -90,9 +78,9 @@ function GraphInner({ fitToken }: { fitToken: FitToken }) {
       },
       selection,
       hoverEventId,
-      hypothesisLens,
+      graphVisibility,
     })
-  }, [session, selection, hoverEventId, hypothesisLens])
+  }, [session, selection, hoverEventId, graphVisibility])
 
   // Length alone misses “same count, new ids” after agent enrichment.
   const graphSig = useMemo(() => {

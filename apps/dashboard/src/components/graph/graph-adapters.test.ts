@@ -58,17 +58,18 @@ const base = {
   hoverEventId: null,
 }
 
-const lens = {
-  nodeIds: new Set(['n-host', 'n-evt']),
-  edgeIds: new Set(['e-in']),
+const visibility = {
+  visibleNodeIds: new Set(['n-host', 'n-evt']),
+  highlightedNodeIds: new Set(['n-host', 'n-evt']),
+  activeNodeIds: new Set(['n-host', 'n-evt']),
   writable: true,
 }
 
-describe('buildVisibleGraph hypothesis lens', () => {
+describe('buildVisibleGraph hypothesis layers', () => {
   it('dims outsiders and keeps them on the canvas', () => {
     const { nodes, edges } = buildVisibleGraph({
       ...base,
-      hypothesisLens: { ...lens, mode: 'dim' },
+      graphVisibility: { ...visibility, visibleNodeIds: null },
     })
     expect(nodes.map((n) => n.id).sort()).toEqual(['n-evt', 'n-host', 'n-noise', 'n-other'])
     expect(nodes.find((n) => n.id === 'n-host')?.data.dimmed).toBe(false)
@@ -78,10 +79,10 @@ describe('buildVisibleGraph hypothesis lens', () => {
     expect(edges.find((e) => e.id === 'e-out')?.style?.opacity).toBe(0.15)
   })
 
-  it('hides outsiders and non-member edges in isolate mode', () => {
+  it('hides outsiders when visibleNodeIds is set', () => {
     const { nodes, edges } = buildVisibleGraph({
       ...base,
-      hypothesisLens: { ...lens, mode: 'isolate' },
+      graphVisibility: { ...visibility, highlightedNodeIds: null },
     })
     expect(nodes.map((n) => n.id).sort()).toEqual(['n-evt', 'n-host'])
     expect(nodes.every((n) => n.data.dimmed === false)).toBe(true)
