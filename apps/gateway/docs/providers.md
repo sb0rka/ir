@@ -17,7 +17,7 @@ SIEM object identity is `pt-maxpatrol-siem + empty source_instance + kind + UUID
 ## PT NAD (`pt-nad`)
 
 - Session and attack search fan out only across process-configured store IDs using fixed BQL templates.
-- Session resolution calls `/api/v2/flow/{id}` with the original store and time window.
+- Session resolution calls `/api/v2/flow/{id}` with the original store and time window. When the flow detail reaches PT NAD's 100-item nested HTTP limit, the adapter follows with fixed exact-session BQL pages by increasing `tx_id` until an empty proof page; a failed or bounded-out continuation keeps the root session and marks its resolution `partial`.
 - Attack resolution uses an exact escaped alert ID, resolves its parent session, and obtains the complete safe flow detail. The related session is first-class.
 - Session criticality uses the reviewed normalized scale. Conflicting alert priority semantics yield `severity=unknown` while preserving `raw_priority`.
 - Flow metadata is reduced to safe protocol, endpoint, traffic, state, file, and authentication hints. Payloads, cookies, credentials, NTLM material, PCAP, and file contents are discarded.

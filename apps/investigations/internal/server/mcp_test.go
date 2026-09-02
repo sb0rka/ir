@@ -28,6 +28,12 @@ func (db *mcpRecordingDB) ImportContext(_ context.Context, request model.ImportR
 	return model.ImportStats{Nodes: len(request.Nodes), Edges: len(request.Edges)}, nil
 }
 
+func (db *mcpRecordingDB) Reference(context.Context) (model.Reference, error) {
+	return model.Reference{RelationTypes: []model.RelationType{{
+		Code: "mentions", Title: "Mentions", SourceKind: "event", TargetKind: "entity", Directed: true,
+	}}}, nil
+}
+
 func TestMCPInitializeAndListTools(t *testing.T) {
 	t.Parallel()
 	handler := (&Server{}).MCPHandler()
@@ -39,9 +45,9 @@ func TestMCPInitializeAndListTools(t *testing.T) {
 
 	listed := mcpPost(t, handler, `{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}`)
 	for _, name := range []string{
-		"get_investigation_graph", "list_investigation_events", "add_investigation_agent_results",
+		"get_investigation_graph", "list_investigation_events", "add_investigation_agent_results", "get_investigation_reference",
 		"gateway_list_sources", "gateway_search_events", "gateway_aggregate_events",
-		"gateway_lookup_entity", "gateway_search_findings", "gateway_get_finding",
+		"gateway_lookup_entity", "gateway_resolve_context", "gateway_search_findings", "gateway_get_finding",
 		"gateway_search_sessions", "gateway_get_session", "gateway_search_endpoints",
 	} {
 		if !strings.Contains(listed.Body.String(), name) {
@@ -96,16 +102,31 @@ func TestMCPGatewayToolsForwardProjectAndBearer(t *testing.T) {
 			}
 			seen["events"] = true
 			_, _ = w.Write([]byte(`{"events":[],"entities":[],"relations":[],"source_states":[],"source_errors":[]}`))
+		case "/api/v1/context/resolve":
+			if r.Method != http.MethodPost {
+				t.Fatalf("resolve context method: %s", r.Method)
+			}
+			var body struct {
+				Sessions []struct {
+					ExternalID string `json:"external_id"`
+				} `json:"sessions"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil || len(body.Sessions) != 1 || body.Sessions[0].ExternalID != "session-1" {
+				t.Fatalf("resolve context body: %#v err=%v", body, err)
+			}
+			seen["context"] = true
+			_, _ = w.Write([]byte(`{"findings":[],"sessions":[],"events":[],"entities":[],"relations":[],"resolutions":[],"source_errors":[]}`))
 		default:
 			t.Fatalf("unexpected Gateway path: %s", r.URL.Path)
 		}
 	}))
 	defer gateway.Close()
-	server := &Server{gateway: gatewayclient.New(gatewayclient.Config{BaseURL: gateway.URL})}
+	server := &Server{db: &mcpRecordingDB{}, gateway: gatewayclient.New(gatewayclient.Config{BaseURL: gateway.URL})}
 
 	for _, body := range []string{
 		`{"jsonrpc":"2.0","id":20,"method":"tools/call","params":{"name":"gateway_list_sources","arguments":{}}}`,
 		`{"jsonrpc":"2.0","id":21,"method":"tools/call","params":{"name":"gateway_search_events","arguments":{"time_range":{"from":"2026-08-31T00:00:00Z","to":"2026-09-01T00:00:00Z"},"limit":2}}}`,
+		`{"jsonrpc":"2.0","id":22,"method":"tools/call","params":{"name":"gateway_resolve_context","arguments":{"sessions":[{"source_code":"pt-nad","source_instance":"19","record_type":"nad_session","external_id":"session-1","time_range":{"from":"2026-08-31T00:00:00Z","to":"2026-09-01T00:00:00Z"}}]}}}`,
 	} {
 		request := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(body))
 		request.Header.Set("Accept", "application/json, text/event-stream")
@@ -118,8 +139,19 @@ func TestMCPGatewayToolsForwardProjectAndBearer(t *testing.T) {
 			t.Fatalf("Gateway MCP call: status=%d body=%s", recorder.Code, recorder.Body.String())
 		}
 	}
-	if !seen["sources"] || !seen["events"] {
+	if !seen["sources"] || !seen["events"] || !seen["context"] {
 		t.Fatalf("Gateway calls not observed: %#v", seen)
+	}
+
+	referenceRequest := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(
+		`{"jsonrpc":"2.0","id":23,"method":"tools/call","params":{"name":"get_investigation_reference","arguments":{}}}`))
+	referenceRequest.Header.Set("Accept", "application/json, text/event-stream")
+	referenceRequest.Header.Set("Content-Type", "application/json")
+	referenceRecorder := httptest.NewRecorder()
+	server.MCPHandler().ServeHTTP(referenceRecorder, referenceRequest.WithContext(socctx.WithScope(referenceRequest.Context(), socctx.Scope{ProjectID: "abcdef1234"})))
+	if referenceRecorder.Code != http.StatusOK || !strings.Contains(referenceRecorder.Body.String(), `"relation_types"`) ||
+		!strings.Contains(referenceRecorder.Body.String(), `"source_kind":"event"`) || !strings.Contains(referenceRecorder.Body.String(), `"target_kind":"entity"`) {
+		t.Fatalf("reference MCP call: status=%d body=%s", referenceRecorder.Code, referenceRecorder.Body.String())
 	}
 }
 

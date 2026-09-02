@@ -21,6 +21,7 @@ import (
 	gatewaycontract "github.com/sb0rka/ir/packages/contract/gateway"
 	"github.com/sb0rka/ir/packages/contract/graph"
 	"github.com/sb0rka/ir/packages/contract/investigations"
+	"github.com/sb0rka/ir/packages/contract/reference"
 )
 
 type investigationArgs struct {
@@ -57,6 +58,10 @@ func (s *Server) MCPHandler() http.Handler {
 		"add_investigation_agent_results",
 		"Atomically add graph nodes and proposed evidence-backed edges, optionally scoped to an active hypothesis.",
 	), s.addInvestigationAgentResultsTool)
+	mcp.AddTool[struct{}, any](server, mcpTool[struct{}](
+		"get_investigation_reference",
+		"Read IR entity and relation dictionaries. Check relation endpoint kinds and direction before submitting edges.",
+	), s.getInvestigationReferenceTool)
 	addGatewayTools(server, s)
 
 	handler := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server {
@@ -211,6 +216,22 @@ func (s *Server) addInvestigationAgentResultsTool(
 	return nil, investigations.ContextImportResult(value), nil
 }
 
+func (s *Server) getInvestigationReferenceTool(
+	ctx context.Context,
+	_ *mcp.CallToolRequest,
+	_ struct{},
+) (*mcp.CallToolResult, any, error) {
+	response, err := s.GetReference(ctx, reference.GetReferenceRequestObject{})
+	if err != nil {
+		return mcpFailure(err)
+	}
+	value, ok := response.(reference.GetReference200JSONResponse)
+	if !ok {
+		return mcpFailure(errors.New("tool returned an unexpected response"))
+	}
+	return nil, reference.Reference(value), nil
+}
+
 func requireMCPInvestigation(id openapi_types.UUID) (uuid.UUID, error) {
 	if id == uuid.Nil {
 		return uuid.Nil, errors.New("invalid arguments: investigation_id must be a non-zero UUID")
@@ -259,6 +280,16 @@ func addGatewayTools(server *mcp.Server, s *Server) {
 		"gateway_lookup_entity", "Enrich an entity through project-allowed sources.",
 	), gatewayHandler(s, func(ctx context.Context, args gatewaycontract.LookupEntityRequest, scope socctx.Scope, bearer string) (json.RawMessage, error) {
 		return s.gateway.LookupEntity(ctx, scope.ProjectID, bearer, args)
+	}))
+	mcp.AddTool(server, mcpTool[gatewaycontract.ResolveContextRequest](
+		"gateway_resolve_context",
+		"Resolve selected finding, session, event, or entity references into normalized context. Read-only: persist only explicitly selected events and entities through add_investigation_agent_results.",
+	), gatewayHandler(s, func(ctx context.Context, args gatewaycontract.ResolveContextRequest, scope socctx.Scope, bearer string) (json.RawMessage, error) {
+		value, err := s.gateway.ResolveContext(ctx, scope.ProjectID, bearer, args)
+		if err != nil {
+			return nil, err
+		}
+		return json.Marshal(value)
 	}))
 	mcp.AddTool(server, mcpTool[gatewaycontract.SearchFindingsRequest](
 		"gateway_search_findings", "Search source-native incidents, correlations, and attacks.",

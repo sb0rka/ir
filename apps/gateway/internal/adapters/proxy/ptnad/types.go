@@ -91,8 +91,11 @@ type Counters struct {
 }
 
 type Session struct {
-	SourceRef            SourceRef            `json:"source_ref"`
-	FetchedAt            time.Time            `json:"fetched_at"`
+	SourceRef SourceRef `json:"source_ref"`
+	FetchedAt time.Time `json:"fetched_at"`
+	// ContextErrors keeps a usable root session while making failed bounded
+	// child enrichment visible through ObjectResolution.
+	ContextErrors        []error              `json:"-"`
 	Start                time.Time            `json:"start"`
 	End                  time.Time            `json:"end"`
 	DurationSeconds      float64              `json:"duration_seconds"`
