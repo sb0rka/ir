@@ -165,6 +165,100 @@ type attackFlowRow struct {
 	State               []string
 }
 
+type httpPageResponse struct {
+	Took   int64         `json:"took"`
+	Total  int64         `json:"total"`
+	Result []httpPageRow `json:"result"`
+}
+
+type httpPageRow struct {
+	SessionID    string
+	Transactions []httpTransactionRow
+}
+
+func (row *httpPageRow) UnmarshalJSON(data []byte) error {
+	var values []json.RawMessage
+	if err := json.Unmarshal(data, &values); err != nil {
+		return err
+	}
+	if len(values) != 2 {
+		return fmt.Errorf("PT NAD HTTP page row has %d columns, want 2", len(values))
+	}
+	if err := decodeRequired(values[0], &row.SessionID); err != nil {
+		return fmt.Errorf("decode PT NAD HTTP page session ID: %w", err)
+	}
+	if err := decodeNullableSlice(values[1], &row.Transactions); err != nil {
+		return fmt.Errorf("decode PT NAD HTTP page transactions: %w", err)
+	}
+	return nil
+}
+
+type httpTransactionRow struct {
+	ID                  string
+	TxID                int64
+	Timestamp           string
+	Method              string
+	URL                 string
+	RequestBytes        int64
+	RequestContentType  string
+	Host                string
+	ResponseCode        int64
+	ResponseStatus      string
+	ResponseBytes       int64
+	ResponseServer      string
+	ResponseContentType string
+}
+
+func (row *httpTransactionRow) UnmarshalJSON(data []byte) error {
+	var values []json.RawMessage
+	if err := json.Unmarshal(data, &values); err != nil {
+		return err
+	}
+	if len(values) != 13 {
+		return fmt.Errorf("PT NAD HTTP transaction row has %d columns, want 13", len(values))
+	}
+	decoders := []func(json.RawMessage) error{
+		func(raw json.RawMessage) error { return decodeRequired(raw, &row.ID) },
+		func(raw json.RawMessage) error { return decodeRequired(raw, &row.TxID) },
+		func(raw json.RawMessage) error { return decodeRequired(raw, &row.Timestamp) },
+		func(raw json.RawMessage) error { return decodeNullableString(raw, &row.Method) },
+		func(raw json.RawMessage) error { return decodeNullableString(raw, &row.URL) },
+		func(raw json.RawMessage) error { return decodeNullableValue(raw, &row.RequestBytes) },
+		func(raw json.RawMessage) error { return decodeNullableString(raw, &row.RequestContentType) },
+		func(raw json.RawMessage) error { return decodeNullableString(raw, &row.Host) },
+		func(raw json.RawMessage) error { return decodeNullableValue(raw, &row.ResponseCode) },
+		func(raw json.RawMessage) error { return decodeNullableString(raw, &row.ResponseStatus) },
+		func(raw json.RawMessage) error { return decodeNullableValue(raw, &row.ResponseBytes) },
+		func(raw json.RawMessage) error { return decodeNullableString(raw, &row.ResponseServer) },
+		func(raw json.RawMessage) error { return decodeNullableString(raw, &row.ResponseContentType) },
+	}
+	for index, decode := range decoders {
+		if err := decode(values[index]); err != nil {
+			return fmt.Errorf("decode PT NAD HTTP transaction column %d: %w", index, err)
+		}
+	}
+	return nil
+}
+
+func (row httpTransactionRow) detail(parentID string) httpDTO {
+	value := httpDTO{}
+	value.ID = row.ID
+	value.Parent = parentID
+	value.TxID = row.TxID
+	value.Timestamp = row.Timestamp
+	value.Request.Method = row.Method
+	value.Request.URL = row.URL
+	value.Request.EntityLength = row.RequestBytes
+	value.Request.ContentType = row.RequestContentType
+	value.Request.Host = row.Host
+	value.Response.Code = row.ResponseCode
+	value.Response.Status = row.ResponseStatus
+	value.Response.EntityLength = row.ResponseBytes
+	value.Response.Server = row.ResponseServer
+	value.Response.ContentType = row.ResponseContentType
+	return value
+}
+
 func (row *attackFlowRow) UnmarshalJSON(data []byte) error {
 	var values []json.RawMessage
 	if err := json.Unmarshal(data, &values); err != nil {
@@ -230,6 +324,15 @@ func decodeNullableString(raw json.RawMessage, target *string) error {
 func decodeNullableSlice[T any](raw json.RawMessage, target *[]T) error {
 	if string(raw) == "null" {
 		*target = nil
+		return nil
+	}
+	return json.Unmarshal(raw, target)
+}
+
+func decodeNullableValue[T any](raw json.RawMessage, target *T) error {
+	if string(raw) == "null" {
+		var zero T
+		*target = zero
 		return nil
 	}
 	return json.Unmarshal(raw, target)

@@ -34,8 +34,14 @@ func TestBuildExpandsURLsAndHeaders(t *testing.T) {
 		"list_investigation_events",
 		"get_investigation_graph",
 		"add_investigation_agent_results",
+		"get_investigation_reference",
 		"gateway_list_sources",
+		"gateway_resolve_context",
 		"gateway_*",
+		"next_cursor",
+		"source_states",
+		"source_errors",
+		"partial or truncated",
 		"investigation_id 496f2041-7949-4816-8d07-734de89d121f",
 		"event_ref/entity_ref",
 	} {
@@ -83,9 +89,13 @@ func TestBuildScopesGraphAndResultsToHypothesis(t *testing.T) {
 		"hypothesis_statement: The account was reused after phishing",
 		"hypothesis_description: Check authentication and process evidence",
 		"`list_investigation_events`",
-		"`get_investigation_graph` for investigation_id 496f2041-7949-4816-8d07-734de89d121f and hypothesis_id 22222222-2222-2222-2222-222222222222",
+		"shared graph with `get_investigation_graph`",
+		"without hypothesis_id",
+		"active hypothesis projection for investigation_id 496f2041-7949-4816-8d07-734de89d121f and hypothesis_id 22222222-2222-2222-2222-222222222222",
 		"`add_investigation_agent_results` with investigation_id 496f2041-7949-4816-8d07-734de89d121f, hypothesis_id 22222222-2222-2222-2222-222222222222",
 		"Only explicitly listed nodes and edges gain hypothesis membership",
+		"supporting and contradicting evidence",
+		"do not turn temporal proximity or correlation into causation",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("missing %q", want)

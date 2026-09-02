@@ -165,6 +165,10 @@ func (provider *Provider) ResolveFinding(ctx context.Context, access capability.
 		return page, nil
 	}
 	appendSessionContext(&page, session)
+	for _, contextErr := range session.ContextErrors {
+		page.Resolutions[0].Status = "partial"
+		page.Resolutions[0].Errors = append(page.Resolutions[0].Errors, contextWarning("finding session HTTP transaction pagination", contextErr))
+	}
 	// Flow detail carries the reviewed rule metadata. Replace only the matching
 	// root snapshot while retaining the exact BQL root when the child omits it.
 	rootEnriched := false
