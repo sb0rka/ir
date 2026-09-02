@@ -16,6 +16,7 @@ import {
   type OnNodeDrag,
 } from '@xyflow/react'
 import { LayoutGrid } from 'lucide-react'
+import { useTheme } from '../theme-provider'
 import { EMPTY_LAYER_IDS } from '../../lib/hypotheses'
 import { useWorkspaceStore } from '../../state/useWorkspaceStore'
 import { SEVERITY_COLOR } from './constants'
@@ -32,6 +33,7 @@ const nodeTypes = {
 type FitToken = number | string
 
 function GraphInner({ fitToken }: { fitToken: FitToken }) {
+  const { resolvedAppearance } = useTheme()
   const {
     activeInvestigation: session,
     selection,
@@ -204,7 +206,7 @@ function GraphInner({ fitToken }: { fitToken: FitToken }) {
       minZoom={0.3}
       maxZoom={1.8}
       proOptions={{ hideAttribution: true }}
-      colorMode="dark"
+      colorMode={resolvedAppearance}
       style={{ width: '100%', height: '100%' }}
     >
       <Background
@@ -233,7 +235,9 @@ function GraphInner({ fitToken }: { fitToken: FitToken }) {
           if (d.kind === 'alert' && d.severity) return SEVERITY_COLOR[d.severity]
           return 'var(--border-strong)'
         }}
-        maskColor="rgba(0, 0, 0, 0.7)"
+        maskColor={
+          resolvedAppearance === 'dark' ? 'rgba(0, 0, 0, 0.5)' : 'rgba(255, 255, 255, 0.6)'
+        }
       />
     </ReactFlow>
   )

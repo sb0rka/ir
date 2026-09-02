@@ -128,7 +128,7 @@ export function FilterSection() {
                       step={1}
                       value={condition.value}
                       onChange={(e) => updateCondition(condition.id, { value: e.target.value })}
-                      className="rounded border border-border bg-surface-1 px-1.5 py-0.5 font-mono text-[11px] text-fg [color-scheme:dark]"
+                      className="rounded border border-border bg-surface-1 px-1.5 py-0.5 font-mono text-[11px] text-fg"
                     />
                   )}
                   {needsValue && condition.op !== 'in' && (type === 'string' || type === 'ip') && (

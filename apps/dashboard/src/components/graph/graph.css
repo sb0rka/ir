@@ -25,7 +25,10 @@
   --timeline-track: var(--color-border);
   --timeline-brush: color-mix(in srgb, var(--color-accent) 9%, transparent);
   --grid-dot: var(--color-surface-3);
-  color-scheme: dark;
+}
+
+html.light {
+  --edge-seed: #aaaaaa;
 }
 
 .react-flow {

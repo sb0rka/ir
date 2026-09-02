@@ -5,6 +5,7 @@ import { QueuePage } from './pages/QueuePage'
 import { InvestigationPage } from './pages/InvestigationPage'
 import { useAppStore } from './store/appStore'
 import { Button, ErrorBanner } from './components/ui'
+import { ThemeToggle } from './components/theme-toggle'
 import {
   bootstrapAuth,
   getAccessToken,
@@ -169,12 +170,18 @@ function Dashboard({
           <span className="hidden max-w-48 truncate px-2 font-mono text-[11px] text-fg-dim sm:block">
             {subject.user?.username ?? subject.subject_id}
           </span>
-          <Button size="sm" variant="ghost" onClick={() => setConfigurationOpen(true)}>
-            <Settings2 className="h-3.5 w-3.5" />
-            Конфигурация
-          </Button>
           <Button
-            size="sm"
+            size="icon"
+            variant="ghost"
+            title="Конфигурация"
+            aria-label="Конфигурация"
+            onClick={() => setConfigurationOpen(true)}
+          >
+            <Settings2 className="h-3.5 w-3.5" />
+          </Button>
+          <ThemeToggle />
+          <Button
+            size="icon"
             variant="ghost"
             title="Выйти"
             onClick={() => {
