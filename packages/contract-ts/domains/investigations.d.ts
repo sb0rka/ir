@@ -295,11 +295,37 @@ export interface components {
             entities: components["schemas"]["EntitySourceRef"][];
         };
         AgentResultBatch: {
+            /** @description Proposed resolved_entity groups in this investigation tree, using only local node refs. */
+            entity_group_proposals?: components["schemas"]["AgentGroupProposal"][];
+            /** @description Proposed same_event/composite/sequence/correlation groups; never shared across independent roots. */
+            event_group_proposals?: components["schemas"]["AgentGroupProposal"][];
             som_issue_ids: string[];
             events: components["schemas"]["AgentEventSelection"][];
             entities: components["schemas"]["AgentEntitySelection"][];
             nodes: components["schemas"]["AgentNode"][];
             edges: components["schemas"]["AgentEdge"][];
+        };
+        AgentGroupProposal: {
+            /** Format: uuid */
+            proposal_id: string;
+            /** @enum {string} */
+            kind: "resolved_entity" | "same_event" | "composite" | "sequence" | "correlation";
+            /** @description Required subject entity type for resolved_entity groups. */
+            type_code?: string;
+            title: string;
+            why: string;
+            evidence_event_refs: string[];
+            members: {
+                node_ref: string;
+                /** @enum {string} */
+                role: "subject" | "identifier" | "primary" | "duplicate" | "parent" | "part" | "step" | "evidence";
+                ordinal?: number;
+                confidence?: number;
+                /** Format: date-time */
+                valid_from?: string;
+                /** Format: date-time */
+                valid_to?: string;
+            }[];
         };
         /** @description An event selected by the agent and its batch-local reference. */
         AgentEventSelection: {
@@ -344,6 +370,15 @@ export interface components {
             evidence_event_refs: string[];
         };
         ContextImportResult: {
+            groups?: {
+                /** Format: uuid */
+                group_id: string;
+                /** @enum {string} */
+                family: "entity" | "event";
+                /** Format: uuid */
+                root_investigation_id: string;
+                member_ids: string[];
+            }[];
             findings: number;
             sessions: number;
             events: number;

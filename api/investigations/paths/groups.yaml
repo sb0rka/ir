@@ -1,0 +1,723 @@
+openapi: 3.0.3
+info:
+  title: IR — investigation tree groups
+  version: 0.0.1
+servers:
+  - url: /api/v1
+security:
+  - bearerAuth: []
+paths:
+  /investigations/{investigation_id}/graph/projection:
+    parameters:
+      - { $ref: '../shared/parameters.yaml#/components/parameters/ProjectId' }
+      - { $ref: '../shared/parameters.yaml#/components/parameters/InvestigationId' }
+    get:
+      tags: [groups]
+      operationId: getGraphProjection
+      summary: Read lossless grouped graph in the requested view
+      description: Groups belong to the root investigation tree. This view never imports absent evidence or groups from another root. Raw UUID graph CRUD is unchanged.
+      parameters:
+        - name: include_subtree
+          in: query
+          description: Include descendants of this case, never ancestors or sibling branches.
+          schema: { type: boolean, default: false }
+        - name: min_confidence
+          in: query
+          schema: { type: number, minimum: 0, maximum: 1 }
+        - name: statuses
+          in: query
+          style: form
+          explode: false
+          schema:
+            type: array
+            items: { type: string, enum: [proposed, confirmed, rejected] }
+      responses:
+        '200':
+          description: Scoped result; missing and foreign-tree groups are indistinguishable.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GraphProjection' }
+        '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
+        '409': { $ref: '../shared/responses.yaml#/components/responses/Conflict' }
+        '422': { $ref: '../shared/responses.yaml#/components/responses/ValidationError' }
+        '500': { $ref: '../shared/responses.yaml#/components/responses/InternalError' }
+  /investigations/{investigation_id}/hypotheses/{hypothesis_id}/graph/projection:
+    parameters:
+      - { $ref: '../shared/parameters.yaml#/components/parameters/ProjectId' }
+      - { $ref: '../shared/parameters.yaml#/components/parameters/InvestigationId' }
+      - { $ref: '../shared/parameters.yaml#/components/parameters/HypothesisId' }
+    get:
+      tags: [groups]
+      operationId: getHypothesisGraphProjection
+      summary: Read lossless grouped graph in the requested view
+      description: Groups belong to the root investigation tree. This view never imports absent evidence or groups from another root. Raw UUID graph CRUD is unchanged.
+      parameters:
+        - name: min_confidence
+          in: query
+          schema: { type: number, minimum: 0, maximum: 1 }
+        - name: statuses
+          in: query
+          style: form
+          explode: false
+          schema:
+            type: array
+            items: { type: string, enum: [proposed, confirmed, rejected] }
+      responses:
+        '200':
+          description: Scoped result; missing and foreign-tree groups are indistinguishable.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GraphProjection' }
+        '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
+        '409': { $ref: '../shared/responses.yaml#/components/responses/Conflict' }
+        '422': { $ref: '../shared/responses.yaml#/components/responses/ValidationError' }
+        '500': { $ref: '../shared/responses.yaml#/components/responses/InternalError' }
+  /investigations/{root_id}/entity-groups/{group_id}:
+    parameters:
+      - { $ref: '../shared/parameters.yaml#/components/parameters/ProjectId' }
+      - name: root_id
+        in: path
+        required: true
+        description: Root investigation UUID; the server verifies it has no parent.
+        schema: { type: string, format: uuid }
+      - name: group_id
+        in: path
+        required: true
+        description: Group UUID in this project and root investigation tree.
+        schema: { type: string, format: uuid }
+    get:
+      tags: [groups]
+      operationId: getEntityGroup
+      summary: detail entity group within one investigation tree
+      description: Decisions apply to the root and all descendants. No cross-root sharing or implicit merge is allowed. Retries require the same operation ID and payload.
+      responses:
+        '200':
+          description: Scoped result; missing and foreign-tree groups are indistinguishable.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Group' }
+        '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
+        '409': { $ref: '../shared/responses.yaml#/components/responses/Conflict' }
+        '422': { $ref: '../shared/responses.yaml#/components/responses/ValidationError' }
+        '500': { $ref: '../shared/responses.yaml#/components/responses/InternalError' }
+  /investigations/{root_id}/entity-groups/{group_id}/review:
+    parameters:
+      - { $ref: '../shared/parameters.yaml#/components/parameters/ProjectId' }
+      - name: root_id
+        in: path
+        required: true
+        description: Root investigation UUID; the server verifies it has no parent.
+        schema: { type: string, format: uuid }
+      - name: group_id
+        in: path
+        required: true
+        description: Group UUID in this project and root investigation tree.
+        schema: { type: string, format: uuid }
+    post:
+      tags: [groups]
+      operationId: reviewEntityGroup
+      summary: review entity group within one investigation tree
+      description: Decisions apply to the root and all descendants. No cross-root sharing or implicit merge is allowed. Retries require the same operation ID and payload.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GroupReview' }
+      responses:
+        '200':
+          description: Scoped result; missing and foreign-tree groups are indistinguishable.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GroupMutationResult' }
+        '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
+        '409': { $ref: '../shared/responses.yaml#/components/responses/Conflict' }
+        '422': { $ref: '../shared/responses.yaml#/components/responses/ValidationError' }
+        '500': { $ref: '../shared/responses.yaml#/components/responses/InternalError' }
+  /investigations/{root_id}/entity-groups/{group_id}/merge:
+    parameters:
+      - { $ref: '../shared/parameters.yaml#/components/parameters/ProjectId' }
+      - name: root_id
+        in: path
+        required: true
+        description: Root investigation UUID; the server verifies it has no parent.
+        schema: { type: string, format: uuid }
+      - name: group_id
+        in: path
+        required: true
+        description: Group UUID in this project and root investigation tree.
+        schema: { type: string, format: uuid }
+    post:
+      tags: [groups]
+      operationId: mergeEntityGroup
+      summary: merge entity group within one investigation tree
+      description: Decisions apply to the root and all descendants. No cross-root sharing or implicit merge is allowed. Retries require the same operation ID and payload.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GroupMerge' }
+      responses:
+        '200':
+          description: Scoped result; missing and foreign-tree groups are indistinguishable.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GroupMutationResult' }
+        '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
+        '409': { $ref: '../shared/responses.yaml#/components/responses/Conflict' }
+        '422': { $ref: '../shared/responses.yaml#/components/responses/ValidationError' }
+        '500': { $ref: '../shared/responses.yaml#/components/responses/InternalError' }
+  /investigations/{root_id}/entity-groups/{group_id}/split:
+    parameters:
+      - { $ref: '../shared/parameters.yaml#/components/parameters/ProjectId' }
+      - name: root_id
+        in: path
+        required: true
+        description: Root investigation UUID; the server verifies it has no parent.
+        schema: { type: string, format: uuid }
+      - name: group_id
+        in: path
+        required: true
+        description: Group UUID in this project and root investigation tree.
+        schema: { type: string, format: uuid }
+    post:
+      tags: [groups]
+      operationId: splitEntityGroup
+      summary: split entity group within one investigation tree
+      description: Decisions apply to the root and all descendants. No cross-root sharing or implicit merge is allowed. Retries require the same operation ID and payload.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GroupSplit' }
+      responses:
+        '200':
+          description: Scoped result; missing and foreign-tree groups are indistinguishable.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GroupMutationResult' }
+        '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
+        '409': { $ref: '../shared/responses.yaml#/components/responses/Conflict' }
+        '422': { $ref: '../shared/responses.yaml#/components/responses/ValidationError' }
+        '500': { $ref: '../shared/responses.yaml#/components/responses/InternalError' }
+  /investigations/{root_id}/entity-groups/{group_id}/history:
+    parameters:
+      - { $ref: '../shared/parameters.yaml#/components/parameters/ProjectId' }
+      - name: root_id
+        in: path
+        required: true
+        description: Root investigation UUID; the server verifies it has no parent.
+        schema: { type: string, format: uuid }
+      - name: group_id
+        in: path
+        required: true
+        description: Group UUID in this project and root investigation tree.
+        schema: { type: string, format: uuid }
+    get:
+      tags: [groups]
+      operationId: getEntityGroupHistory
+      summary: history entity group within one investigation tree
+      description: Decisions apply to the root and all descendants. No cross-root sharing or implicit merge is allowed. Retries require the same operation ID and payload.
+      parameters:
+        - name: cursor
+          in: query
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+      responses:
+        '200':
+          description: Scoped result; missing and foreign-tree groups are indistinguishable.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GroupHistory' }
+        '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
+        '409': { $ref: '../shared/responses.yaml#/components/responses/Conflict' }
+        '422': { $ref: '../shared/responses.yaml#/components/responses/ValidationError' }
+        '500': { $ref: '../shared/responses.yaml#/components/responses/InternalError' }
+  /investigations/{root_id}/event-groups/{group_id}:
+    parameters:
+      - { $ref: '../shared/parameters.yaml#/components/parameters/ProjectId' }
+      - name: root_id
+        in: path
+        required: true
+        description: Root investigation UUID; the server verifies it has no parent.
+        schema: { type: string, format: uuid }
+      - name: group_id
+        in: path
+        required: true
+        description: Group UUID in this project and root investigation tree.
+        schema: { type: string, format: uuid }
+    get:
+      tags: [groups]
+      operationId: getEventGroup
+      summary: detail event group within one investigation tree
+      description: Decisions apply to the root and all descendants. No cross-root sharing or implicit merge is allowed. Retries require the same operation ID and payload.
+      responses:
+        '200':
+          description: Scoped result; missing and foreign-tree groups are indistinguishable.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Group' }
+        '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
+        '409': { $ref: '../shared/responses.yaml#/components/responses/Conflict' }
+        '422': { $ref: '../shared/responses.yaml#/components/responses/ValidationError' }
+        '500': { $ref: '../shared/responses.yaml#/components/responses/InternalError' }
+  /investigations/{root_id}/event-groups/{group_id}/review:
+    parameters:
+      - { $ref: '../shared/parameters.yaml#/components/parameters/ProjectId' }
+      - name: root_id
+        in: path
+        required: true
+        description: Root investigation UUID; the server verifies it has no parent.
+        schema: { type: string, format: uuid }
+      - name: group_id
+        in: path
+        required: true
+        description: Group UUID in this project and root investigation tree.
+        schema: { type: string, format: uuid }
+    post:
+      tags: [groups]
+      operationId: reviewEventGroup
+      summary: review event group within one investigation tree
+      description: Decisions apply to the root and all descendants. No cross-root sharing or implicit merge is allowed. Retries require the same operation ID and payload.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GroupReview' }
+      responses:
+        '200':
+          description: Scoped result; missing and foreign-tree groups are indistinguishable.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GroupMutationResult' }
+        '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
+        '409': { $ref: '../shared/responses.yaml#/components/responses/Conflict' }
+        '422': { $ref: '../shared/responses.yaml#/components/responses/ValidationError' }
+        '500': { $ref: '../shared/responses.yaml#/components/responses/InternalError' }
+  /investigations/{root_id}/event-groups/{group_id}/merge:
+    parameters:
+      - { $ref: '../shared/parameters.yaml#/components/parameters/ProjectId' }
+      - name: root_id
+        in: path
+        required: true
+        description: Root investigation UUID; the server verifies it has no parent.
+        schema: { type: string, format: uuid }
+      - name: group_id
+        in: path
+        required: true
+        description: Group UUID in this project and root investigation tree.
+        schema: { type: string, format: uuid }
+    post:
+      tags: [groups]
+      operationId: mergeEventGroup
+      summary: merge event group within one investigation tree
+      description: Decisions apply to the root and all descendants. No cross-root sharing or implicit merge is allowed. Retries require the same operation ID and payload.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GroupMerge' }
+      responses:
+        '200':
+          description: Scoped result; missing and foreign-tree groups are indistinguishable.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GroupMutationResult' }
+        '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
+        '409': { $ref: '../shared/responses.yaml#/components/responses/Conflict' }
+        '422': { $ref: '../shared/responses.yaml#/components/responses/ValidationError' }
+        '500': { $ref: '../shared/responses.yaml#/components/responses/InternalError' }
+  /investigations/{root_id}/event-groups/{group_id}/split:
+    parameters:
+      - { $ref: '../shared/parameters.yaml#/components/parameters/ProjectId' }
+      - name: root_id
+        in: path
+        required: true
+        description: Root investigation UUID; the server verifies it has no parent.
+        schema: { type: string, format: uuid }
+      - name: group_id
+        in: path
+        required: true
+        description: Group UUID in this project and root investigation tree.
+        schema: { type: string, format: uuid }
+    post:
+      tags: [groups]
+      operationId: splitEventGroup
+      summary: split event group within one investigation tree
+      description: Decisions apply to the root and all descendants. No cross-root sharing or implicit merge is allowed. Retries require the same operation ID and payload.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GroupSplit' }
+      responses:
+        '200':
+          description: Scoped result; missing and foreign-tree groups are indistinguishable.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GroupMutationResult' }
+        '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
+        '409': { $ref: '../shared/responses.yaml#/components/responses/Conflict' }
+        '422': { $ref: '../shared/responses.yaml#/components/responses/ValidationError' }
+        '500': { $ref: '../shared/responses.yaml#/components/responses/InternalError' }
+  /investigations/{root_id}/event-groups/{group_id}/history:
+    parameters:
+      - { $ref: '../shared/parameters.yaml#/components/parameters/ProjectId' }
+      - name: root_id
+        in: path
+        required: true
+        description: Root investigation UUID; the server verifies it has no parent.
+        schema: { type: string, format: uuid }
+      - name: group_id
+        in: path
+        required: true
+        description: Group UUID in this project and root investigation tree.
+        schema: { type: string, format: uuid }
+    get:
+      tags: [groups]
+      operationId: getEventGroupHistory
+      summary: history event group within one investigation tree
+      description: Decisions apply to the root and all descendants. No cross-root sharing or implicit merge is allowed. Retries require the same operation ID and payload.
+      parameters:
+        - name: cursor
+          in: query
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+      responses:
+        '200':
+          description: Scoped result; missing and foreign-tree groups are indistinguishable.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GroupHistory' }
+        '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
+        '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
+        '409': { $ref: '../shared/responses.yaml#/components/responses/Conflict' }
+        '422': { $ref: '../shared/responses.yaml#/components/responses/ValidationError' }
+        '500': { $ref: '../shared/responses.yaml#/components/responses/InternalError' }
+components:
+  schemas:
+    Group:
+      type: object
+      required: [id, project_id, root_investigation_id, family, kind, group_key, title, state, version, members, successor_ids, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        project_id: { type: string }
+        root_investigation_id: { type: string, format: uuid }
+        family: { type: string, enum: [entity, event] }
+        kind: { type: string, enum: [resolved_entity, same_event, composite, sequence, correlation] }
+        type_code: { type: string }
+        group_key: { type: string }
+        title: { type: string }
+        state: { type: string, enum: [active, superseded] }
+        version: { type: integer, minimum: 1 }
+        members:
+          type: array
+          items: { $ref: '#/components/schemas/GroupMember' }
+        successor_ids:
+          type: array
+          items: { type: string, format: uuid }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    GroupMember:
+      type: object
+      required: [id, object_id, role, status, decision_reason, version, assertions]
+      properties:
+        id: { type: string, format: uuid }
+        object_id:
+          type: string
+          format: uuid
+          description: Atomic entity UUID for entity groups, event UUID for event groups; never a graph node UUID.
+        role: { type: string, enum: [subject, identifier, primary, duplicate, parent, part, step, evidence] }
+        ordinal: { type: integer, minimum: 0 }
+        status: { type: string, enum: [proposed, confirmed, rejected] }
+        confidence: { type: number, minimum: 0, maximum: 1 }
+        decision_reason: { type: string }
+        version: { type: integer, minimum: 1 }
+        assertions:
+          type: array
+          items: { $ref: '#/components/schemas/GroupAssertion' }
+    GroupAssertion:
+      type: object
+      required: [investigation_id, origin, origin_ref, method, method_version, evidence_event_ids, reason]
+      properties:
+        investigation_id: { type: string, format: uuid }
+        origin: { type: string, enum: [source, rule, analyst, agent] }
+        origin_ref: { type: string }
+        method: { type: string }
+        method_version: { type: string }
+        evidence_event_ids:
+          type: array
+          items: { type: string, format: uuid }
+        valid_from: { type: string, format: date-time }
+        valid_to: { type: string, format: date-time }
+        reason: { type: string }
+    GroupReview:
+      type: object
+      additionalProperties: false
+      required: [operation_id, version, reason, members]
+      properties:
+        operation_id: { type: string, format: uuid }
+        version: { type: integer, minimum: 1 }
+        reason: { type: string, minLength: 1, maxLength: 4096 }
+        members:
+          type: array
+          minItems: 1
+          maxItems: 2500
+          items:
+            type: object
+            required: [id, version, status]
+            properties:
+              id: { type: string, format: uuid }
+              version: { type: integer, minimum: 1 }
+              status: { type: string, enum: [confirmed, rejected] }
+    GroupPlacement:
+      type: object
+      required: [member_id, role]
+      properties:
+        member_id: { type: string, format: uuid }
+        role: { type: string, enum: [subject, identifier, primary, duplicate, parent, part, step, evidence] }
+        ordinal: { type: integer, minimum: 0 }
+    GroupMerge:
+      type: object
+      additionalProperties: false
+      required: [operation_id, version, reason, sources, members]
+      properties:
+        operation_id: { type: string, format: uuid }
+        version: { type: integer, minimum: 1 }
+        reason: { type: string, minLength: 1, maxLength: 4096 }
+        sources:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items:
+            type: object
+            required: [id, version]
+            properties:
+              id: { type: string, format: uuid }
+              version: { type: integer, minimum: 1 }
+        members:
+          type: array
+          minItems: 1
+          maxItems: 2500
+          description: Complete explicit placement of every survivor and source member. Conflicting decisions must be reviewed before merging.
+          items: { $ref: '#/components/schemas/GroupPlacement' }
+    GroupPartition:
+      type: object
+      required: [title, members]
+      properties:
+        title: { type: string, minLength: 1, maxLength: 255 }
+        members:
+          type: array
+          minItems: 1
+          maxItems: 2500
+          items: { $ref: '#/components/schemas/GroupPlacement' }
+    GroupSplit:
+      type: object
+      additionalProperties: false
+      required: [operation_id, version, reason, partitions]
+      properties:
+        operation_id: { type: string, format: uuid }
+        version: { type: integer, minimum: 1 }
+        reason: { type: string, minLength: 1, maxLength: 4096 }
+        partitions:
+          type: array
+          minItems: 2
+          maxItems: 100
+          description: Complete partition; only entity identifiers may explicitly appear in multiple partitions.
+          items: { $ref: '#/components/schemas/GroupPartition' }
+    GroupMutationResult:
+      type: object
+      required: [groups]
+      properties:
+        groups:
+          type: array
+          items: { $ref: '#/components/schemas/Group' }
+    GroupOperation:
+      type: object
+      required: [id, project_id, root_investigation_id, operation_id, kind, actor, reason, before, after, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        project_id: { type: string }
+        root_investigation_id: { type: string, format: uuid }
+        operation_id: { type: string }
+        kind: { type: string, enum: [source, proposal, review, merge, split] }
+        actor: { type: string }
+        reason: { type: string }
+        before:
+          type: array
+          items: { $ref: '#/components/schemas/Group' }
+        after:
+          type: array
+          items: { $ref: '#/components/schemas/Group' }
+        created_at: { type: string, format: date-time }
+    GroupHistory:
+      type: object
+      required: [operations]
+      properties:
+        operations:
+          type: array
+          items: { $ref: '#/components/schemas/GroupOperation' }
+        next_cursor: { type: string }
+    GraphProjection:
+      type: object
+      required: [investigation_id, root_investigation_id, include_subtree, nodes, edges, groups, annotations, diagnostics, raw_nodes, raw_edges]
+      properties:
+        investigation_id: { type: string, format: uuid }
+        root_investigation_id: { type: string, format: uuid }
+        hypothesis_id: { type: string, format: uuid }
+        include_subtree: { type: boolean }
+        groups:
+          description: Active groups with only members and assertions supported inside this view. Includes proposed/rejected memberships without collapsing them. Whole-tree labels and review reasons are available only via the explicit root detail endpoint.
+          type: array
+          items: { $ref: '#/components/schemas/ProjectionGroup' }
+        nodes:
+          type: array
+          items: { $ref: '#/components/schemas/ProjectionNode' }
+        edges:
+          type: array
+          items: { $ref: '#/components/schemas/ProjectionEdge' }
+        annotations:
+          type: array
+          items: { $ref: '#/components/schemas/ProjectionAnnotation' }
+        diagnostics:
+          type: array
+          items: { $ref: '#/components/schemas/ProjectionDiagnostic' }
+        raw_nodes:
+          type: array
+          items: { $ref: '#/components/schemas/ProjectionRawNode' }
+        raw_edges:
+          type: array
+          items: { $ref: '#/components/schemas/ProjectionRawEdge' }
+    ProjectionGroup:
+      type: object
+      required: [id, family, kind, version, members]
+      properties:
+        id: { type: string, format: uuid }
+        family: { type: string, enum: [entity, event] }
+        kind: { type: string }
+        version: { type: integer, minimum: 1 }
+        members:
+          type: array
+          items: { $ref: '#/components/schemas/ProjectionGroupMember' }
+    ProjectionGroupMember:
+      type: object
+      required: [id, node_ids, role, status, version, assertions]
+      properties:
+        id: { type: string, format: uuid }
+        node_ids:
+          type: array
+          items: { type: string, format: uuid }
+        role: { type: string }
+        ordinal: { type: integer, minimum: 0 }
+        status: { type: string, enum: [proposed, confirmed, rejected] }
+        version: { type: integer, minimum: 1 }
+        confidence: { type: number, minimum: 0, maximum: 1 }
+        assertions:
+          type: array
+          items: { $ref: '#/components/schemas/GroupAssertion' }
+    ProjectionNode:
+      type: object
+      required: [id, node_type, member_node_ids]
+      properties:
+        id: { type: string, description: 'Virtual string ID for a group, atomic UUID otherwise.' }
+        node_type: { type: string, enum: [entity, event, entity_group, event_group] }
+        group_id: { type: string, format: uuid }
+        group_kind: { type: string }
+        member_node_ids:
+          type: array
+          items: { type: string, format: uuid }
+    ProjectionEdge:
+      type: object
+      required: [id, source_node_id, target_node_id, relation_code, status, origins, member_edge_ids, evidence_event_ids]
+      properties:
+        id: { type: string }
+        source_node_id: { type: string }
+        target_node_id: { type: string }
+        relation_code: { type: string }
+        status: { type: string }
+        origins:
+          type: array
+          items: { type: string }
+        member_edge_ids:
+          type: array
+          items: { type: string, format: uuid }
+        evidence_event_ids:
+          type: array
+          items: { type: string, format: uuid }
+        confidence_min: { type: number }
+        confidence_max: { type: number }
+    ProjectionAnnotation:
+      type: object
+      required: [group_id, kind, member_node_ids]
+      properties:
+        group_id: { type: string, format: uuid }
+        kind: { type: string }
+        member_node_ids:
+          type: array
+          items: { type: string, format: uuid }
+    ProjectionDiagnostic:
+      type: object
+      required: [code, node_ids]
+      properties:
+        code: { type: string }
+        node_ids:
+          type: array
+          items: { type: string, format: uuid }
+    ProjectionRawNode:
+      type: object
+      required: [id, investigation_id, node_type, origin, som_issue_ids]
+      properties:
+        id: { type: string, format: uuid }
+        investigation_id: { type: string, format: uuid }
+        node_type: { type: string }
+        entity_id: { type: string, format: uuid }
+        event_id: { type: string, format: uuid }
+        label: { type: string }
+        type_code: { type: string }
+        origin: { type: string }
+        som_issue_ids:
+          type: array
+          items: { type: string, format: uuid }
+        occurred_at: { type: string, format: date-time }
+    ProjectionRawEdge:
+      type: object
+      required: [id, investigation_id, source_node_id, target_node_id, relation_code, status, origin, evidence_event_ids]
+      properties:
+        id: { type: string, format: uuid }
+        investigation_id: { type: string, format: uuid }
+        source_node_id: { type: string, format: uuid }
+        target_node_id: { type: string, format: uuid }
+        relation_code: { type: string }
+        status: { type: string }
+        origin: { type: string }
+        confidence: { type: number }
+        why: { type: string }
+        evidence_event_ids:
+          type: array
+          items: { type: string, format: uuid }

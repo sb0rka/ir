@@ -6,7 +6,8 @@ on:
       - 'api/**'
       - 'packages/contract/**'
       - 'packages/contract-ts/**'
-      - 'apps/investigations/internal/server/**'
+      - 'apps/investigations/**'
+      - 'db/migrations/investigations/**'
       - 'apps/gateway/**'
       - 'Taskfile.yml'
       - '.github/workflows/check_generated.yml'
@@ -16,7 +17,8 @@ on:
       - 'api/**'
       - 'packages/contract/**'
       - 'packages/contract-ts/**'
-      - 'apps/investigations/internal/server/**'
+      - 'apps/investigations/**'
+      - 'db/migrations/investigations/**'
       - 'apps/gateway/**'
       - 'Taskfile.yml'
       - '.github/workflows/check_generated.yml'
@@ -32,6 +34,18 @@ jobs:
   check:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_PASSWORD: integration-tests-only
+          POSTGRES_DB: ir_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres -d ir_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      INVESTIGATIONS_TEST_DATABASE_URI: 'postgres://postgres:integration-tests-only@localhost:5432/ir_test?sslmode=disable&search_path=inv'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -60,5 +74,13 @@ jobs:
       - name: Install TypeScript dependencies
         run: npm ci --prefix packages/contract-ts
 
-      - name: Check
+      - name: Prepare isolated integration database
+        env:
+          PGPASSWORD: integration-tests-only
+        run: |
+          for migration in 007-extensions 008-schema 009-version 010-initial_schema 901-seed_reference; do
+            psql -h localhost -U postgres -d ir_test -v ON_ERROR_STOP=1 -v DB_INV_SCHEMA_NAME=inv -f "db/migrations/investigations/$migration.sql"
+          done
+
+      - name: Check (including database and HTTP/MCP runtime tests)
         run: task check

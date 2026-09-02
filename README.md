@@ -55,4 +55,6 @@ task db:down
 ```
 
 Состояние покрытия требований и реализации — в [api/investigations/COVERAGE.md](api/investigations/COVERAGE.md).
+Группировка entities/events в рамках дерева расследования, API и frontend handoff —
+в [docs/grouping.md](docs/grouping.md). Dashboard пока использует прежний raw graph.
 Правила разработки — в [AGENTS.md](AGENTS.md).

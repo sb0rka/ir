@@ -18,6 +18,87 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
+// Defines values for AgentGroupProposalKind.
+const (
+	Composite      AgentGroupProposalKind = "composite"
+	Correlation    AgentGroupProposalKind = "correlation"
+	ResolvedEntity AgentGroupProposalKind = "resolved_entity"
+	SameEvent      AgentGroupProposalKind = "same_event"
+	Sequence       AgentGroupProposalKind = "sequence"
+)
+
+// Valid indicates whether the value is a known member of the AgentGroupProposalKind enum.
+func (e AgentGroupProposalKind) Valid() bool {
+	switch e {
+	case Composite:
+		return true
+	case Correlation:
+		return true
+	case ResolvedEntity:
+		return true
+	case SameEvent:
+		return true
+	case Sequence:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AgentGroupProposalMembersRole.
+const (
+	Duplicate  AgentGroupProposalMembersRole = "duplicate"
+	Evidence   AgentGroupProposalMembersRole = "evidence"
+	Identifier AgentGroupProposalMembersRole = "identifier"
+	Parent     AgentGroupProposalMembersRole = "parent"
+	Part       AgentGroupProposalMembersRole = "part"
+	Primary    AgentGroupProposalMembersRole = "primary"
+	Step       AgentGroupProposalMembersRole = "step"
+	Subject    AgentGroupProposalMembersRole = "subject"
+)
+
+// Valid indicates whether the value is a known member of the AgentGroupProposalMembersRole enum.
+func (e AgentGroupProposalMembersRole) Valid() bool {
+	switch e {
+	case Duplicate:
+		return true
+	case Evidence:
+		return true
+	case Identifier:
+		return true
+	case Parent:
+		return true
+	case Part:
+		return true
+	case Primary:
+		return true
+	case Step:
+		return true
+	case Subject:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ContextImportResultGroupsFamily.
+const (
+	Entity ContextImportResultGroupsFamily = "entity"
+	Event  ContextImportResultGroupsFamily = "event"
+)
+
+// Valid indicates whether the value is a known member of the ContextImportResultGroupsFamily enum.
+func (e ContextImportResultGroupsFamily) Valid() bool {
+	switch e {
+	case Entity:
+		return true
+	case Event:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ErrorResponseErrorCode.
 const (
 	ErrorResponseErrorCodeConflict          ErrorResponseErrorCode = "conflict"
@@ -192,6 +273,32 @@ type AgentEventSelection struct {
 	SourceEventId string `json:"source_event_id"`
 }
 
+// AgentGroupProposal defines model for AgentGroupProposal.
+type AgentGroupProposal struct {
+	EvidenceEventRefs []string               `json:"evidence_event_refs"`
+	Kind              AgentGroupProposalKind `json:"kind"`
+	Members           []struct {
+		Confidence *float32                      `json:"confidence,omitempty"`
+		NodeRef    string                        `json:"node_ref"`
+		Ordinal    *int                          `json:"ordinal,omitempty"`
+		Role       AgentGroupProposalMembersRole `json:"role"`
+		ValidFrom  *time.Time                    `json:"valid_from,omitempty"`
+		ValidTo    *time.Time                    `json:"valid_to,omitempty"`
+	} `json:"members"`
+	ProposalId openapi_types.UUID `json:"proposal_id"`
+	Title      string             `json:"title"`
+
+	// TypeCode Required subject entity type for resolved_entity groups.
+	TypeCode *string `json:"type_code,omitempty"`
+	Why      string  `json:"why"`
+}
+
+// AgentGroupProposalKind defines model for AgentGroupProposal.Kind.
+type AgentGroupProposalKind string
+
+// AgentGroupProposalMembersRole defines model for AgentGroupProposal.Members.Role.
+type AgentGroupProposalMembersRole string
+
 // AgentNode A unique local ref and exactly one target: an event/entity selection from this batch, an event/entity already attached to this investigation, or an existing node in this investigation.
 type AgentNode struct {
 	// EntityId Entity UUID already attached to this investigation.
@@ -214,11 +321,17 @@ type AgentNode struct {
 
 // AgentResultBatch defines model for AgentResultBatch.
 type AgentResultBatch struct {
-	Edges       []AgentEdge            `json:"edges"`
-	Entities    []AgentEntitySelection `json:"entities"`
-	Events      []AgentEventSelection  `json:"events"`
-	Nodes       []AgentNode            `json:"nodes"`
-	SomIssueIds []openapi_types.UUID   `json:"som_issue_ids"`
+	Edges    []AgentEdge            `json:"edges"`
+	Entities []AgentEntitySelection `json:"entities"`
+
+	// EntityGroupProposals Proposed resolved_entity groups in this investigation tree, using only local node refs.
+	EntityGroupProposals *[]AgentGroupProposal `json:"entity_group_proposals,omitempty"`
+
+	// EventGroupProposals Proposed same_event/composite/sequence/correlation groups; never shared across independent roots.
+	EventGroupProposals *[]AgentGroupProposal `json:"event_group_proposals,omitempty"`
+	Events              []AgentEventSelection `json:"events"`
+	Nodes               []AgentNode           `json:"nodes"`
+	SomIssueIds         []openapi_types.UUID  `json:"som_issue_ids"`
 }
 
 // ContextImportResult defines model for ContextImportResult.
@@ -227,12 +340,21 @@ type ContextImportResult struct {
 	Entities int `json:"entities"`
 	Events   int `json:"events"`
 	Findings int `json:"findings"`
+	Groups   *[]struct {
+		Family              ContextImportResultGroupsFamily `json:"family"`
+		GroupId             openapi_types.UUID              `json:"group_id"`
+		MemberIds           []openapi_types.UUID            `json:"member_ids"`
+		RootInvestigationId openapi_types.UUID              `json:"root_investigation_id"`
+	} `json:"groups,omitempty"`
 	Nodes    int `json:"nodes"`
 	Sessions int `json:"sessions"`
 
 	// Warnings Safe summaries for objects whose available context is partial.
 	Warnings []string `json:"warnings"`
 }
+
+// ContextImportResultGroupsFamily defines model for ContextImportResult.Groups.Family.
+type ContextImportResultGroupsFamily string
 
 // ContextSelection Source-owned identifiers selected in Gateway. At least one item across all four arrays is required; the server validates that aggregate rule.
 type ContextSelection struct {

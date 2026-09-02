@@ -258,9 +258,12 @@ type ImportRequest struct {
 	Edges                   []AgentEdge
 	Warnings                []string
 	Seed                    bool
+	EntityGroupProposals    []GroupProposal
+	EventGroupProposals     []GroupProposal
 }
 
 type ImportStats struct {
+	Groups   []GroupImportResult
 	Findings int
 	Sessions int
 	Events   int

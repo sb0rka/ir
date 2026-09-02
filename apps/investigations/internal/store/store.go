@@ -37,6 +37,10 @@ type Database interface {
 	DeleteInvestigation(ctx context.Context, projectID, investigationID string) error
 	InvestigationExists(ctx context.Context, projectID, investigationID string) (bool, error)
 	ImportContext(ctx context.Context, request model.ImportRequest) (model.ImportStats, error)
+	GetGroup(ctx context.Context, scope model.GroupScope, family, groupID string) (model.Group, error)
+	MutateGroup(ctx context.Context, request model.GroupMutation) ([]model.Group, error)
+	GroupHistory(ctx context.Context, scope model.GroupScope, family, groupID string, cursor *string, limit int) (model.GroupHistory, error)
+	GraphProjection(ctx context.Context, request model.ProjectionRequest) (model.GraphProjection, error)
 
 	CreateHypothesis(ctx context.Context, hypothesis model.HypothesisNew) (model.Hypothesis, error)
 	ListHypotheses(ctx context.Context, projectID, investigationID string, filter model.HypothesisFilter) ([]model.Hypothesis, error)
