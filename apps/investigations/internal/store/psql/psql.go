@@ -32,7 +32,7 @@ const (
 
 func investigationExistsTx(ctx context.Context, tx pgx.Tx, projectID, investigationID string) (bool, error) {
 	var one int
-	err := tx.QueryRow(ctx, `SELECT 1 FROM investigations WHERE id=$1::uuid AND project_id=$2`, investigationID, projectID).Scan(&one)
+	err := tx.QueryRow(ctx, `SELECT 1 FROM investigations WHERE id=$1::uuid AND project_id=$2 AND is_deleted=false`, investigationID, projectID).Scan(&one)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return false, nil
 	}

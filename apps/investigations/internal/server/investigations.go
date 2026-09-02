@@ -722,8 +722,15 @@ func (s *Server) UpdateInvestigation(ctx context.Context, request investigations
 func (s *Server) GetInvestigationTree(context.Context, investigations.GetInvestigationTreeRequestObject) (investigations.GetInvestigationTreeResponseObject, error) {
 	return nil, httperr.ErrNotImplemented
 }
-func (s *Server) DeleteInvestigation(context.Context, investigations.DeleteInvestigationRequestObject) (investigations.DeleteInvestigationResponseObject, error) {
-	return nil, httperr.ErrNotImplemented
+func (s *Server) DeleteInvestigation(ctx context.Context, request investigations.DeleteInvestigationRequestObject) (investigations.DeleteInvestigationResponseObject, error) {
+	scope, err := s.scope(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.db.DeleteInvestigation(ctx, scope.ProjectID, request.InvestigationId.String()); err != nil {
+		return nil, storeError(err)
+	}
+	return investigations.DeleteInvestigation204Response{}, nil
 }
 
 // AddHypothesisAgentResults Save explicit SOM agent results for an active hypothesis

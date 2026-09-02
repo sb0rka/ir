@@ -103,6 +103,7 @@ CREATE TABLE IF NOT EXISTS investigations (
         CHECK (origin IN ('analyst', 'rule', 'agent')),
     origin_ref VARCHAR,
     version INTEGER DEFAULT 1 NOT NULL,
+    is_deleted BOOLEAN DEFAULT false NOT NULL,
 
     created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
@@ -123,13 +124,16 @@ FOR EACH ROW
 EXECUTE FUNCTION set_updated_at();
 
 CREATE INDEX IF NOT EXISTS ix_investigations_project_created_at
-    ON investigations (project_id, created_at DESC, id DESC);
+    ON investigations (project_id, created_at DESC, id DESC)
+    WHERE is_deleted = false;
 
 CREATE INDEX IF NOT EXISTS ix_investigations_parent
-    ON investigations (parent_id);
+    ON investigations (parent_id)
+    WHERE is_deleted = false;
 
 CREATE INDEX IF NOT EXISTS ix_investigations_status
-    ON investigations (project_id, status, created_at DESC);
+    ON investigations (project_id, status, created_at DESC)
+    WHERE is_deleted = false;
 
 -- A hypothesis is a named projection of an investigation's common graph.
 -- Its memberships never own or copy the underlying graph objects.
@@ -146,6 +150,7 @@ CREATE TABLE IF NOT EXISTS hypotheses (
     origin VARCHAR(8) DEFAULT 'analyst' NOT NULL
         CHECK (origin IN ('analyst', 'rule', 'agent')),
     version INTEGER DEFAULT 1 NOT NULL,
+    is_deleted BOOLEAN DEFAULT false NOT NULL,
 
     created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
@@ -170,10 +175,12 @@ FOR EACH ROW
 EXECUTE FUNCTION set_updated_at();
 
 CREATE INDEX IF NOT EXISTS ix_hypotheses_project_investigation_created
-    ON hypotheses (project_id, investigation_id, created_at DESC, id DESC);
+    ON hypotheses (project_id, investigation_id, created_at DESC, id DESC)
+    WHERE is_deleted = false;
 
 CREATE INDEX IF NOT EXISTS ix_hypotheses_project_investigation_status
-    ON hypotheses (project_id, investigation_id, status, created_at DESC, id DESC);
+    ON hypotheses (project_id, investigation_id, status, created_at DESC, id DESC)
+    WHERE is_deleted = false;
 
 CREATE TABLE IF NOT EXISTS investigation_som_workspaces (
     investigation_id UUID NOT NULL,
@@ -819,11 +826,11 @@ CREATE INDEX IF NOT EXISTS ix_edge_evidence_event ON edge_evidence (event_id);
 
 WITH updated AS (
     UPDATE version_investigations
-    SET version_num = '202608280001'
+    SET version_num = '202609020001'
     RETURNING version_investigations.version_num
 )
 INSERT INTO version_investigations (version_num)
-SELECT '202608280001'
+SELECT '202609020001'
 WHERE NOT EXISTS (SELECT 1 FROM updated)
 RETURNING version_num;
 

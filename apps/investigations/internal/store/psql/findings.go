@@ -79,7 +79,10 @@ func (d *DB) GetFinding(ctx context.Context, projectID, findingID string) (model
 	if err != nil {
 		return model.Finding{}, fmt.Errorf("get finding: %w", mapConstraint(err))
 	}
-	rows, err := d.Pgx().Query(ctx, `SELECT investigation_id::text FROM investigation_findings WHERE finding_id=$1::uuid AND project_id=$2 ORDER BY investigation_id`, findingID, projectID)
+	rows, err := d.Pgx().Query(ctx, `SELECT m.investigation_id::text
+		FROM investigation_findings m JOIN investigations i
+		  ON i.id=m.investigation_id AND i.project_id=m.project_id AND i.is_deleted=false
+		WHERE m.finding_id=$1::uuid AND m.project_id=$2 ORDER BY m.investigation_id`, findingID, projectID)
 	if err != nil {
 		return model.Finding{}, fmt.Errorf("list finding investigations: %w", mapConstraint(err))
 	}
