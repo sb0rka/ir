@@ -161,7 +161,7 @@ export interface paths {
         post?: never;
         /**
          * Delete an investigation
-         * @description Deletes the investigation subtree, its graph data and its links to shared events and entities. Project event and entity records remain.
+         * @description Soft-deletes the investigation subtree and all of its hypotheses. Deleted records and their graph data remain stored but are no longer available through the API. Project event and entity records remain.
          */
         delete: operations["deleteInvestigation"];
         options?: never;

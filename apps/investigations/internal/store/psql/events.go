@@ -97,7 +97,10 @@ func (d *DB) GetEvent(ctx context.Context, projectID, eventID string) (model.Eve
 	if err != nil {
 		return model.Event{}, fmt.Errorf("get event: %w", mapConstraint(err))
 	}
-	rows, err := d.Pgx().Query(ctx, `SELECT investigation_id::text FROM investigation_events WHERE event_id=$1::uuid AND project_id=$2 ORDER BY investigation_id`, eventID, projectID)
+	rows, err := d.Pgx().Query(ctx, `SELECT ie.investigation_id::text
+		FROM investigation_events ie JOIN investigations i
+		  ON i.id=ie.investigation_id AND i.project_id=ie.project_id AND i.is_deleted=false
+		WHERE ie.event_id=$1::uuid AND ie.project_id=$2 ORDER BY ie.investigation_id`, eventID, projectID)
 	if err != nil {
 		return model.Event{}, err
 	}

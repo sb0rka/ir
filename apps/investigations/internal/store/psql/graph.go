@@ -14,7 +14,7 @@ import (
 	"github.com/sb0rka/ir/apps/investigations/internal/store"
 )
 
-const graphNodeSelect = `SELECT n.id::text,n.investigation_id::text,n.node_type,n.entity_id::text,n.event_id::text,n.origin,COALESCE((SELECT array_agg(som_issue_id::text ORDER BY som_issue_id) FROM graph_node_som_issues WHERE graph_node_id=n.id),'{}'),COALESCE(ev.title,en.display_name,en.canonical_key),en.type_code,en.canonical_key,ev.occurred_at,n.created_at FROM graph_nodes n JOIN investigations i ON i.id=n.investigation_id LEFT JOIN events ev ON ev.id=n.event_id LEFT JOIN entities en ON en.id=n.entity_id`
+const graphNodeSelect = `SELECT n.id::text,n.investigation_id::text,n.node_type,n.entity_id::text,n.event_id::text,n.origin,COALESCE((SELECT array_agg(som_issue_id::text ORDER BY som_issue_id) FROM graph_node_som_issues WHERE graph_node_id=n.id),'{}'),COALESCE(ev.title,en.display_name,en.canonical_key),en.type_code,en.canonical_key,ev.occurred_at,n.created_at FROM graph_nodes n JOIN investigations i ON i.id=n.investigation_id AND i.is_deleted=false LEFT JOIN events ev ON ev.id=n.event_id LEFT JOIN entities en ON en.id=n.entity_id`
 
 func scanGraphNode(row pgx.Row) (model.GraphNode, error) {
 	var n model.GraphNode
@@ -75,7 +75,7 @@ func (d *DB) GraphNodes(ctx context.Context, projectID, investigationID string, 
 	prefix := ""
 	scopeClause := "n.investigation_id=$1::uuid"
 	if filter.IncludeSubtree {
-		prefix = `WITH RECURSIVE inv_scope(id) AS (SELECT id FROM investigations WHERE id=$1::uuid AND project_id=$2 UNION ALL SELECT child.id FROM investigations child JOIN inv_scope parent ON child.parent_id=parent.id WHERE child.project_id=$2) `
+		prefix = `WITH RECURSIVE inv_scope(id) AS (SELECT id FROM investigations WHERE id=$1::uuid AND project_id=$2 AND is_deleted=false UNION ALL SELECT child.id FROM investigations child JOIN inv_scope parent ON child.parent_id=parent.id WHERE child.project_id=$2 AND child.is_deleted=false) `
 		scopeClause = "n.investigation_id IN (SELECT id FROM inv_scope)"
 	}
 	rows, err := d.Pgx().Query(ctx, prefix+graphNodeSelect+` WHERE `+scopeClause+` AND i.project_id=$2 AND ($3::text IS NULL OR n.node_type=$3) AND ($4::text IS NULL OR ev.title ILIKE '%'||$4||'%' OR en.display_name ILIKE '%'||$4||'%' OR en.canonical_key ILIKE '%'||$4||'%') AND ($5::timestamptz IS NULL OR (n.created_at,n.id)>($5,$6::uuid)) ORDER BY n.created_at,n.id LIMIT $7`, investigationID, projectID, filter.NodeType, filter.Q, cursorTime, cursorID, limit)
@@ -105,7 +105,7 @@ func (d *DB) GetNode(ctx context.Context, projectID, investigationID, nodeID str
 	return n, nil
 }
 
-const graphEdgeSelect = `SELECT e.id::text,e.investigation_id::text,e.source_node_id::text,e.target_node_id::text,e.relation_code,e.status,e.reject_reason,e.confidence,e.why,e.origin,e.origin_ref,COALESCE((SELECT array_agg(event_id::text ORDER BY event_id) FROM edge_evidence WHERE edge_id=e.id),'{}'),e.metadata,e.version,e.created_at,e.updated_at FROM edges e JOIN investigations i ON i.id=e.investigation_id`
+const graphEdgeSelect = `SELECT e.id::text,e.investigation_id::text,e.source_node_id::text,e.target_node_id::text,e.relation_code,e.status,e.reject_reason,e.confidence,e.why,e.origin,e.origin_ref,COALESCE((SELECT array_agg(event_id::text ORDER BY event_id) FROM edge_evidence WHERE edge_id=e.id),'{}'),e.metadata,e.version,e.created_at,e.updated_at FROM edges e JOIN investigations i ON i.id=e.investigation_id AND i.is_deleted=false`
 
 func scanGraphEdge(row pgx.Row) (model.GraphEdge, error) {
 	var e model.GraphEdge
@@ -136,7 +136,7 @@ func (d *DB) GraphEdges(ctx context.Context, projectID, investigationID string, 
 	prefix := ""
 	scopeClause := "e.investigation_id=$1::uuid"
 	if filter.IncludeSubtree {
-		prefix = `WITH RECURSIVE inv_scope(id) AS (SELECT id FROM investigations WHERE id=$1::uuid AND project_id=$2 UNION ALL SELECT child.id FROM investigations child JOIN inv_scope parent ON child.parent_id=parent.id WHERE child.project_id=$2) `
+		prefix = `WITH RECURSIVE inv_scope(id) AS (SELECT id FROM investigations WHERE id=$1::uuid AND project_id=$2 AND is_deleted=false UNION ALL SELECT child.id FROM investigations child JOIN inv_scope parent ON child.parent_id=parent.id WHERE child.project_id=$2 AND child.is_deleted=false) `
 		scopeClause = "e.investigation_id IN (SELECT id FROM inv_scope)"
 	}
 	rows, err := d.Pgx().Query(ctx, prefix+graphEdgeSelect+` WHERE `+scopeClause+` AND i.project_id=$2 AND e.status=ANY($3::text[]) AND ($4::text IS NULL OR e.origin=$4) AND ($5::text IS NULL OR e.relation_code=$5) AND ($6::uuid IS NULL OR e.source_node_id=$6::uuid OR e.target_node_id=$6::uuid) AND ($7::real IS NULL OR e.confidence >= $7) AND ($8::timestamptz IS NULL OR (e.created_at,e.id)>($8,$9::uuid)) ORDER BY e.created_at,e.id LIMIT $10`, investigationID, projectID, statuses, filter.Origin, filter.RelationCode, filter.NodeID, filter.MinConfidence, cursorTime, cursorID, limit)
@@ -388,7 +388,8 @@ func (d *DB) UpdateGraphEdge(ctx context.Context, patch model.GraphEdgePatch) (m
 
 func (d *DB) DeleteGraphEdge(ctx context.Context, projectID, investigationID, edgeID string) error {
 	tag, err := d.Pgx().Exec(ctx, `DELETE FROM edges e USING investigations i
-		WHERE e.id=$1::uuid AND e.investigation_id=$2::uuid AND i.id=e.investigation_id AND i.project_id=$3`, edgeID, investigationID, projectID)
+		WHERE e.id=$1::uuid AND e.investigation_id=$2::uuid AND i.id=e.investigation_id
+		  AND i.project_id=$3 AND i.is_deleted=false`, edgeID, investigationID, projectID)
 	if err != nil {
 		return fmt.Errorf("delete graph edge: %w", mapConstraint(err))
 	}
@@ -567,7 +568,8 @@ func (d *DB) ReviewGraphEdges(ctx context.Context, request model.EdgeReviewReque
 	rows, err := tx.Query(ctx, `SELECT e.id::text,e.status,e.origin,e.version,
 		(SELECT count(*)::int FROM edge_evidence ee WHERE ee.edge_id=e.id)
 		FROM edges e JOIN investigations i ON i.id=e.investigation_id
-		WHERE e.investigation_id=$1::uuid AND i.project_id=$2 AND e.id=ANY($3::uuid[])
+		WHERE e.investigation_id=$1::uuid AND i.project_id=$2 AND i.is_deleted=false
+		  AND e.id=ANY($3::uuid[])
 		ORDER BY e.id FOR UPDATE OF e`, request.InvestigationID, request.ProjectID, lockIDs)
 	if err != nil {
 		return model.EdgeReviewResult{}, fmt.Errorf("lock graph edges for review: %w", mapConstraint(err))

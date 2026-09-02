@@ -629,7 +629,7 @@ export interface paths {
         post?: never;
         /**
          * Delete a hypothesis
-         * @description Deletes only the hypothesis and its node and edge memberships. The investigation's shared graph objects remain unchanged.
+         * @description Soft-deletes only the hypothesis. Its node and edge memberships and the investigation's shared graph objects remain stored but are no longer available through the API for this hypothesis.
          */
         delete: operations["deleteHypothesis"];
         options?: never;
@@ -866,7 +866,7 @@ export interface paths {
         post?: never;
         /**
          * Delete an investigation
-         * @description Deletes the investigation subtree, its graph data and its links to shared events and entities. Project event and entity records remain.
+         * @description Soft-deletes the investigation subtree and all of its hypotheses. Deleted records and their graph data remain stored but are no longer available through the API. Project event and entity records remain.
          */
         delete: operations["deleteInvestigation"];
         options?: never;
