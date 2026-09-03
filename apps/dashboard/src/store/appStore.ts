@@ -1440,11 +1440,14 @@ export const useAppStore = create<AppState>((set, get) => ({
         sidebarSection: 'hypotheses',
         agentPanelOpen: false,
       })
+      const activated = await get().patchHypothesis(investigationId, created.id, {
+        status: 'active',
+      })
       if (input.includeSelection) {
         await get().addSelectionToHypothesis(investigationId, created.id)
       }
       await get().setActiveHypothesis(investigationId, created.id)
-      return created
+      return activated ?? get().hypotheses[created.id] ?? created
     } catch (err) {
       set({ lastError: errorMessage(err) })
       return null

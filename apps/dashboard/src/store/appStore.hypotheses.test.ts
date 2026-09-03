@@ -98,6 +98,12 @@ const snapshot = {
 }
 
 beforeEach(() => {
+  patchHypothesisRequest.mockImplementation(async (_investigationId, id, body) => {
+    const current = useAppStore.getState().hypotheses[id]
+    if (!current) throw new Error(`missing hypothesis ${id}`)
+    const { version: _version, ...fields } = body
+    return { ...current, ...fields, version: current.version + 1 }
+  })
   useAppStore.setState({
     ...snapshot,
     investigations: { 'inv-1': investigation() },
@@ -140,7 +146,7 @@ afterEach(() => {
 })
 
 describe('hypothesis store', () => {
-  it('creates a proposed hypothesis and turns on the lens', async () => {
+  it('creates a hypothesis, activates it, and turns on the lens', async () => {
     const created = hypothesis()
     createHypothesisRequest.mockResolvedValue(created)
     getHypothesisGraph.mockResolvedValue({
@@ -154,7 +160,12 @@ describe('hypothesis store', () => {
       statement: 'lateral movement',
     })
 
-    expect(result?.status).toBe('proposed')
+    expect(patchHypothesisRequest).toHaveBeenCalledWith('inv-1', 'h1', {
+      version: 1,
+      status: 'active',
+    })
+    expect(result?.status).toBe('active')
+    expect(useAppStore.getState().hypotheses.h1?.status).toBe('active')
     expect(useAppStore.getState().investigations['inv-1']?.hypothesisIds).toEqual(['h1'])
     expect(useAppStore.getState().activeHypothesisId['inv-1']).toBe('h1')
     expect(useAppStore.getState().sidebarSection).toBe('hypotheses')
@@ -350,6 +361,7 @@ describe('hypothesis store', () => {
     const result = await useAppStore.getState().createHypothesisFromEvents('inv-1', ['evt-1'])
 
     expect(result?.id).toBe('h2')
+    expect(result?.status).toBe('active')
     expect(createHypothesisRequest).toHaveBeenCalledWith('inv-1', { statement: 'login' })
     expect(addHypothesisContext).toHaveBeenCalledWith('inv-1', 'h2', {
       events: [{ source_code: 'pt-maxpatrol-siem', source_event_id: 'src-1' }],
