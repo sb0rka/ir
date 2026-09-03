@@ -183,7 +183,7 @@ export function HypothesesSection({ investigationId }: { investigationId: string
           deleting={deleteId === item.id}
           reason={reason}
           onReason={setReason}
-          onToggleActive={() => void setActive(investigationId, item.id)}
+          onSelect={() => void setActive(investigationId, item.id)}
           onToggleExpand={() => setExpandedId((id) => (id === item.id ? null : item.id))}
           onToggleVisible={(solo) => toggleVisible(investigationId, item.id, solo)}
           onToggleHighlight={(solo) => toggleHighlight(investigationId, item.id, solo)}
@@ -348,7 +348,7 @@ function HypothesisCard({
   deleting,
   reason,
   onReason,
-  onToggleActive,
+  onSelect,
   onToggleExpand,
   onToggleVisible,
   onToggleHighlight,
@@ -371,7 +371,7 @@ function HypothesisCard({
   deleting: boolean
   reason: string
   onReason: (value: string) => void
-  onToggleActive: () => void
+  onSelect: () => void
   onToggleExpand: () => void
   onToggleVisible: (solo: boolean) => void
   onToggleHighlight: (solo: boolean) => void
@@ -408,7 +408,7 @@ function HypothesisCard({
             <ChevronRight className="h-3.5 w-3.5" />
           )}
         </button>
-        <button type="button" className="min-w-0 flex-1 text-left" onClick={onToggleActive}>
+        <button type="button" className="min-w-0 flex-1 text-left" onClick={onSelect}>
           <span className="block break-words text-xs font-semibold text-fg">{item.statement}</span>
           <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[10px] text-fg-dim">
             <Chip tone={tone}>{hypothesisStatusLabel(item.status)}</Chip>
