@@ -193,7 +193,6 @@ export function buildVisibleGraph(args: {
         source: e.source_id,
         target: e.target_id,
         label: e.kind,
-        animated: fromAgent,
         pathOptions: { curvature: 0.2 + (curveIndex % 5) * 0.08 },
         style: {
           stroke: fromAgent ? 'var(--edge-expanded)' : 'var(--edge-seed)',
