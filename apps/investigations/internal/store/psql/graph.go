@@ -14,11 +14,11 @@ import (
 	"github.com/sb0rka/ir/apps/investigations/internal/store"
 )
 
-const graphNodeSelect = `SELECT n.id::text,n.investigation_id::text,n.node_type,n.entity_id::text,n.event_id::text,n.origin,COALESCE((SELECT array_agg(som_issue_id::text ORDER BY som_issue_id) FROM graph_node_som_issues WHERE graph_node_id=n.id),'{}'),COALESCE(ev.title,en.display_name,en.canonical_key),en.type_code,en.canonical_key,ev.occurred_at,n.created_at FROM graph_nodes n JOIN investigations i ON i.id=n.investigation_id AND i.is_deleted=false LEFT JOIN events ev ON ev.id=n.event_id LEFT JOIN entities en ON en.id=n.entity_id`
+const graphNodeSelect = `SELECT n.id::text,n.investigation_id::text,n.node_type,n.entity_id::text,n.event_id::text,n.origin,n.why,COALESCE((SELECT array_agg(som_issue_id::text ORDER BY som_issue_id) FROM graph_node_som_issues WHERE graph_node_id=n.id),'{}'),COALESCE(ev.title,en.display_name,en.canonical_key),en.type_code,en.canonical_key,ev.occurred_at,n.created_at FROM graph_nodes n JOIN investigations i ON i.id=n.investigation_id AND i.is_deleted=false LEFT JOIN events ev ON ev.id=n.event_id LEFT JOIN entities en ON en.id=n.entity_id`
 
 func scanGraphNode(row pgx.Row) (model.GraphNode, error) {
 	var n model.GraphNode
-	err := row.Scan(&n.ID, &n.InvestigationID, &n.NodeType, &n.EntityID, &n.EventID, &n.Origin, &n.SomIssueIDs, &n.Label, &n.TypeCode, &n.CanonicalKey, &n.OccurredAt, &n.CreatedAt)
+	err := row.Scan(&n.ID, &n.InvestigationID, &n.NodeType, &n.EntityID, &n.EventID, &n.Origin, &n.Why, &n.SomIssueIDs, &n.Label, &n.TypeCode, &n.CanonicalKey, &n.OccurredAt, &n.CreatedAt)
 	return n, err
 }
 
@@ -46,7 +46,7 @@ func (d *DB) CreateNode(ctx context.Context, projectID, investigationID, nodeTyp
 	if !exists {
 		return model.GraphNode{}, store.ErrInvestigationNotFound
 	}
-	n, _, err := upsertNodeTx(ctx, tx, investigationID, nodeType, entityID, eventID, origin, somIssueIDs)
+	n, _, err := upsertNodeTx(ctx, tx, investigationID, nodeType, entityID, eventID, origin, nil, somIssueIDs)
 	if err != nil {
 		return model.GraphNode{}, err
 	}

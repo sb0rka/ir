@@ -55,6 +55,7 @@ type mcpAgentEntitySelection struct {
 
 type mcpAgentNode struct {
 	Ref       string              `json:"ref" jsonschema:"Batch-local node id used by edges source_ref/target_ref and evidence_event_refs"`
+	Why       string              `json:"why" jsonschema:"Why this node belongs on the graph: what the event/entity shows for the task"`
 	EventRef  *string             `json:"event_ref,omitempty" jsonschema:"Batch-local events[].ref from this same request — not a URN and not a source object"`
 	EntityRef *string             `json:"entity_ref,omitempty" jsonschema:"Batch-local entities[].ref from this same request — not a URN and not a source object"`
 	EventId   *openapi_types.UUID `json:"event_id,omitempty" jsonschema:"UUID of an event already attached to this investigation"`
@@ -101,7 +102,7 @@ func (args addAgentResultsArgs) toBatch() investigations.AgentResultBatch {
 	}
 	for i, node := range args.Nodes {
 		batch.Nodes[i] = investigations.AgentNode{
-			Ref: node.Ref, EventRef: node.EventRef, EntityRef: node.EntityRef,
+			Ref: node.Ref, Why: node.Why, EventRef: node.EventRef, EntityRef: node.EntityRef,
 			EventId: node.EventId, EntityId: node.EntityId, NodeId: node.NodeId,
 		}
 	}
@@ -136,13 +137,14 @@ func (s *Server) MCPHandler() http.Handler {
 			"Already-attached evidence uses event_id/entity_id/node_id instead. Never put an IR UUID into source_entity_id/source_event_id. "+
 			"Example: events:[{ref:\"e0\",source_code:\"mock\",source_event_id:\"evt-1\"}], "+
 			"entities:[{ref:\"a0\",source_code:\"mock\",source_entity_id:\"ent-1\"}], "+
-			"nodes:[{ref:\"n-event\",event_ref:\"e0\"},{ref:\"n-entity\",entity_ref:\"a0\"}], "+
+			"nodes:[{ref:\"n-event\",why:\"matched task evidence\",event_ref:\"e0\"},{ref:\"n-entity\",why:\"task target\",entity_ref:\"a0\"}], "+
 			"edges:[{source_ref:\"n-event\",target_ref:\"n-entity\",relation_code:\"actor\",why:\"…\",evidence_event_refs:[\"n-event\"]}].",
 	), s.addInvestigationAgentResultsTool)
 	mcp.AddTool[importEntityEventsArgs, any](server, mcpTool[importEntityEventsArgs](
 		"import_entity_events",
 		"Find Gateway events for one entity and import them onto the investigation graph with proposed role edges. "+
 			"Pass entity.entity_id when the issue/graph already has an IR UUID, or entity.type+entity.value otherwise. "+
+			"If the issue names a predicate or order, pass it via filter/sort instead of hand-building a Gateway batch. "+
 			"Never put an IR UUID into type/value. Prefer this over manually assembling add_investigation_agent_results for the common enrich-entity workflow. "+
 			"Example: entity:{entity_id:\"b71336ed-25f7-42fa-840a-688ceb087c74\"}, time_range optional, limit defaults to 50.",
 	), s.importEntityEventsTool)
@@ -416,24 +418,30 @@ type importEntitySelector struct {
 }
 
 type importEntityEventsArgs struct {
-	InvestigationID     openapi_types.UUID         `json:"investigation_id" jsonschema:"Investigation UUID"`
-	HypothesisID        *openapi_types.UUID        `json:"hypothesis_id,omitempty" jsonschema:"Optional active hypothesis UUID"`
-	SomIssueIds         []openapi_types.UUID       `json:"som_issue_ids" jsonschema:"SOM issue UUIDs that produced these results"`
-	Entity              importEntitySelector       `json:"entity" jsonschema:"Exactly one of entity_id or type+value"`
-	TimeRange           *gatewaycontract.TimeRange `json:"time_range,omitempty" jsonschema:"Optional search window; defaults to investigation timeline ±24h or last 30 days"`
-	Sources             *[]string                  `json:"sources,omitempty" jsonschema:"Optional source codes; defaults by entity capability (SIEM for account/host/process)"`
-	Limit               *int                       `json:"limit,omitempty" jsonschema:"Max events to import (1-100, default 50)"`
-	IncludeParticipants *bool                      `json:"include_participants,omitempty" jsonschema:"When true, also import other entities mentioned on the events. Default false"`
+	InvestigationID     openapi_types.UUID           `json:"investigation_id" jsonschema:"Investigation UUID"`
+	HypothesisID        *openapi_types.UUID          `json:"hypothesis_id,omitempty" jsonschema:"Optional active hypothesis UUID"`
+	SomIssueIds         []openapi_types.UUID         `json:"som_issue_ids" jsonschema:"SOM issue UUIDs that produced these results"`
+	Entity              importEntitySelector         `json:"entity" jsonschema:"Exactly one of entity_id or type+value"`
+	TimeRange           *gatewaycontract.TimeRange   `json:"time_range,omitempty" jsonschema:"Optional search window; defaults to investigation timeline ±24h or last 30 days"`
+	Sources             *[]string                    `json:"sources,omitempty" jsonschema:"Optional source codes; defaults by entity capability (SIEM for account/host/process)"`
+	Filter              *string                      `json:"filter,omitempty" jsonschema:"Bounded SIEM predicate, e.g. correlation_name != null; combined with the entity condition"`
+	Sort                *[]gatewaycontract.EventSort `json:"sort,omitempty" jsonschema:"Defaults to time desc — the newest events; use time asc for the start of the window"`
+	Limit               *int                         `json:"limit,omitempty" jsonschema:"Max events to import (1-100, default 50)"`
+	IncludeParticipants *bool                        `json:"include_participants,omitempty" jsonschema:"When true, also import other entities mentioned on the events. Default false"`
 }
 
 type importEntityEventsSummary struct {
-	Entity         importEntityEventsEntitySummary `json:"entity"`
-	EventsFound    int                             `json:"events_found"`
-	EventsImported int                             `json:"events_imported"`
-	Truncated      bool                            `json:"truncated"`
-	NextCursor     *string                         `json:"next_cursor,omitempty"`
-	SourceStates   []gatewaycontract.SourceState   `json:"source_states,omitempty"`
-	SourceErrors   []gatewaycontract.SourceError   `json:"source_errors,omitempty"`
+	Entity           importEntityEventsEntitySummary `json:"entity"`
+	EventsFound      int                             `json:"events_found"`
+	EventsImported   int                             `json:"events_imported"`
+	EventsTotal      *int64                          `json:"events_total,omitempty"`
+	EventsTotalExact bool                            `json:"events_total_exact"`
+	Truncated        bool                            `json:"truncated"`
+	Filter           *string                         `json:"filter,omitempty"`
+	Sort             *[]gatewaycontract.EventSort    `json:"sort,omitempty"`
+	NextCursor       *string                         `json:"next_cursor,omitempty"`
+	SourceStates     []gatewaycontract.SourceState   `json:"source_states,omitempty"`
+	SourceErrors     []gatewaycontract.SourceError   `json:"source_errors,omitempty"`
 }
 
 type importEntityEventsEntitySummary struct {
@@ -512,21 +520,27 @@ func (s *Server) importEntityEventsTool(
 			sources = &defaultSources
 		}
 	}
+	entities := &[]gatewaycontract.EntityRef{{
+		Type:  resolvedEntity.Type,
+		Value: resolvedEntity.Value,
+	}}
+	eventsTotal, eventsTotalExact, aggregateSourceErrors, aggregateWarnings := s.importEntityEventsTotal(
+		ctx, scope.ProjectID, bearer, sources, timeRange, entities, args.Filter,
+	)
 
 	searchReq := gatewaycontract.SearchEventsRequest{
 		Sources:   sources,
 		TimeRange: timeRange,
-		Entities: &[]gatewaycontract.EntityRef{{
-			Type:  resolvedEntity.Type,
-			Value: resolvedEntity.Value,
-		}},
-		Limit: &limit,
+		Entities:  entities,
+		Filter:    args.Filter,
+		Sort:      args.Sort,
+		Limit:     &limit,
 	}
 	var (
 		foundEvents  []gatewaycontract.Event
 		pageEntities []gatewaycontract.Entity
 		sourceStates []gatewaycontract.SourceState
-		sourceErrors []gatewaycontract.SourceError
+		sourceErrors = append([]gatewaycontract.SourceError{}, aggregateSourceErrors...)
 		nextCursor   *string
 		truncated    bool
 	)
@@ -573,11 +587,15 @@ func (s *Server) importEntityEventsTool(
 			Type:  resolvedEntity.Type,
 			Value: resolvedEntity.Value,
 		},
-		EventsFound:  len(foundEvents),
-		Truncated:    truncated,
-		NextCursor:   nextCursor,
-		SourceStates: sourceStates,
-		SourceErrors: sourceErrors,
+		EventsFound:      len(foundEvents),
+		EventsTotal:      eventsTotal,
+		EventsTotalExact: eventsTotalExact,
+		Truncated:        truncated || eventsTotal != nil && *eventsTotal > int64(len(foundEvents)),
+		Filter:           args.Filter,
+		Sort:             args.Sort,
+		NextCursor:       nextCursor,
+		SourceStates:     sourceStates,
+		SourceErrors:     sourceErrors,
 	}
 	if resolvedEntity.EntityID != "" {
 		id := resolvedEntity.EntityID
@@ -585,11 +603,11 @@ func (s *Server) importEntityEventsTool(
 	}
 
 	if len(foundEvents) == 0 {
-		empty := investigations.ContextImportResult{Warnings: []string{}}
+		empty := investigations.ContextImportResult{Warnings: aggregateWarnings}
 		return nil, importEntityEventsResult{ContextImportResult: empty, Summary: summary}, nil
 	}
 
-	batch, err := buildEntityEventsBatch(args.SomIssueIds, resolvedEntity, foundEvents, includeParticipants)
+	batch, err := buildEntityEventsBatch(args.SomIssueIds, resolvedEntity, foundEvents, includeParticipants, timeRange, args.Filter, args.Sort)
 	if err != nil {
 		return mcpImportFailure(summary, err)
 	}
@@ -628,8 +646,37 @@ func (s *Server) importEntityEventsTool(
 		return mcpImportFailure(summary, err)
 	}
 	result := importResult(stats)
+	result.Warnings = append(aggregateWarnings, result.Warnings...)
 	summary.EventsImported = result.Events
 	return nil, importEntityEventsResult{ContextImportResult: result, Summary: summary}, nil
+}
+
+func (s *Server) importEntityEventsTotal(
+	ctx context.Context,
+	projectID, bearer string,
+	sources *[]string,
+	timeRange gatewaycontract.TimeRange,
+	entities *[]gatewaycontract.EntityRef,
+	filter *string,
+) (*int64, bool, []gatewaycontract.SourceError, []string) {
+	groupLimit := 50
+	raw, err := s.gateway.AggregateEvents(ctx, projectID, bearer, gatewaycontract.AggregateEventsRequest{
+		Sources: sources, TimeRange: timeRange, Entities: entities, Filter: filter,
+		GroupBy: []string{"correlation_type"}, Limit: &groupLimit,
+	})
+	if err != nil {
+		return nil, false, nil, []string{"events_total unavailable: " + err.Error()}
+	}
+	var aggregate gatewaycontract.AggregateEventsResponse
+	if err := json.Unmarshal(raw, &aggregate); err != nil {
+		return nil, false, nil, []string{"events_total unavailable: invalid Gateway aggregate response"}
+	}
+	var total int64
+	for _, group := range aggregate.Groups {
+		total += group.Count
+	}
+	exact := len(aggregate.Groups) < groupLimit && len(aggregate.SourceErrors) == 0
+	return &total, exact, aggregate.SourceErrors, nil
 }
 
 func markSearchEntityDirect(resolved *resolvedGatewayContext, typeCode, value string) {
@@ -750,6 +797,9 @@ func buildEntityEventsBatch(
 	entity resolvedImportEntity,
 	events []gatewaycontract.Event,
 	includeParticipants bool,
+	timeRange gatewaycontract.TimeRange,
+	filter *string,
+	sortRules *[]gatewaycontract.EventSort,
 ) (investigations.AgentResultBatch, error) {
 	batch := investigations.AgentResultBatch{
 		SomIssueIds: somIssueIDs,
@@ -761,6 +811,7 @@ func buildEntityEventsBatch(
 	entityNodeRef := "n-entity"
 	entitySelectionRef := "a0"
 	confidence := float32(1)
+	targetWhy := fmt.Sprintf("target entity of import_entity_events (issue %s)", formatIssueIDs(somIssueIDs))
 
 	if entity.Attached && entity.EntityID != "" {
 		entityUUID, err := uuid.Parse(entity.EntityID)
@@ -768,7 +819,7 @@ func buildEntityEventsBatch(
 			return investigations.AgentResultBatch{}, err
 		}
 		id := openapi_types.UUID(entityUUID)
-		batch.Nodes = append(batch.Nodes, investigations.AgentNode{Ref: entityNodeRef, EntityId: &id})
+		batch.Nodes = append(batch.Nodes, investigations.AgentNode{Ref: entityNodeRef, Why: targetWhy, EntityId: &id})
 	} else {
 		sourceCode, sourceEntityID := pickEntitySource(entity, events)
 		if sourceCode == "" || sourceEntityID == "" {
@@ -778,7 +829,7 @@ func buildEntityEventsBatch(
 			Ref: entitySelectionRef, SourceCode: sourceCode, SourceEntityId: normalizeSourceEntityID(sourceEntityID),
 		})
 		ref := entitySelectionRef
-		batch.Nodes = append(batch.Nodes, investigations.AgentNode{Ref: entityNodeRef, EntityRef: &ref})
+		batch.Nodes = append(batch.Nodes, investigations.AgentNode{Ref: entityNodeRef, Why: targetWhy, EntityRef: &ref})
 	}
 
 	seenEvents := map[string]struct{}{}
@@ -794,7 +845,9 @@ func buildEntityEventsBatch(
 		batch.Events = append(batch.Events, investigations.AgentEventSelection{
 			Ref: eventRef, SourceCode: event.SourceCode, SourceEventId: event.SourceEventId,
 		})
-		batch.Nodes = append(batch.Nodes, investigations.AgentNode{Ref: nodeRef, EventRef: &eventRef})
+		batch.Nodes = append(batch.Nodes, investigations.AgentNode{
+			Ref: nodeRef, Why: importEventNodeWhy(entity, event, timeRange, filter, sortRules), EventRef: &eventRef,
+		})
 
 		matched := false
 		for _, mention := range event.Entities {
@@ -831,7 +884,12 @@ func buildEntityEventsBatch(
 					Ref: partRef, SourceCode: event.SourceCode, SourceEntityId: normalizeSourceEntityID(sourceEntityID),
 				})
 				partNode := "n-" + partRef
-				batch.Nodes = append(batch.Nodes, investigations.AgentNode{Ref: partNode, EntityRef: &partRef})
+				batch.Nodes = append(batch.Nodes, investigations.AgentNode{
+					Ref: partNode,
+					Why: fmt.Sprintf("participant entity %s %s observed in %s event %s imported by import_entity_events",
+						mention.Type, mentionValue, event.SourceCode, event.SourceEventId),
+					EntityRef: &partRef,
+				})
 				participantRefs[partKey+"\x00node"] = partNode
 			}
 			partNode := participantRefs[partKey+"\x00node"]
@@ -862,6 +920,64 @@ func buildEntityEventsBatch(
 		}
 	}
 	return batch, nil
+}
+
+func formatIssueIDs(ids []openapi_types.UUID) string {
+	values := make([]string, 0, len(ids))
+	for _, id := range ids {
+		values = append(values, id.String())
+	}
+	return strings.Join(values, ", ")
+}
+
+func importEventNodeWhy(
+	entity resolvedImportEntity,
+	event gatewaycontract.Event,
+	timeRange gatewaycontract.TimeRange,
+	filter *string,
+	sortRules *[]gatewaycontract.EventSort,
+) string {
+	roles := make([]string, 0)
+	for _, mention := range event.Entities {
+		if !strings.EqualFold(mention.Type, entity.Type) ||
+			!strings.EqualFold(normalizeEntityValue(mention.Type, mention.Value), entity.Value) {
+			continue
+		}
+		if len(mention.Roles) == 0 {
+			roles = append(roles, string(gatewaycontract.Mentions))
+			continue
+		}
+		for _, role := range mention.Roles {
+			roles = append(roles, string(role))
+		}
+	}
+	if len(roles) == 0 {
+		roles = append(roles, string(gatewaycontract.Mentions))
+	}
+	return fmt.Sprintf(
+		"matched import_entity_events for %s %s in %s, window %s..%s, filter %s, sort %s, role %s",
+		entity.Type, entity.Value, event.SourceCode,
+		timeRange.From.UTC().Format(time.RFC3339), timeRange.To.UTC().Format(time.RFC3339),
+		formatImportFilter(filter), formatImportSort(sortRules), strings.Join(roles, ","),
+	)
+}
+
+func formatImportFilter(filter *string) string {
+	if filter == nil || strings.TrimSpace(*filter) == "" {
+		return "none"
+	}
+	return fmt.Sprintf("%q", strings.TrimSpace(*filter))
+}
+
+func formatImportSort(rules *[]gatewaycontract.EventSort) string {
+	if rules == nil || len(*rules) == 0 {
+		return "time desc (default)"
+	}
+	values := make([]string, 0, len(*rules))
+	for _, rule := range *rules {
+		values = append(values, strings.TrimSpace(rule.Field)+" "+string(rule.Direction))
+	}
+	return strings.Join(values, ",")
 }
 
 func pickEntitySource(entity resolvedImportEntity, events []gatewaycontract.Event) (sourceCode, sourceEntityID string) {

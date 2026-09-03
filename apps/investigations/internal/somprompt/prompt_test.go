@@ -49,7 +49,12 @@ func TestBuildExpandsURLsAndHeaders(t *testing.T) {
 		"nothing was written",
 		"events_found",
 		"events_imported",
+		"events_total",
+		"`filter`/`sort`",
+		"Every `nodes[]` entry needs `why`",
+		"which slice was imported and the total",
 		"imported < found",
+		"imported < total",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("missing %q", want)

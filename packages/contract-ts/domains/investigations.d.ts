@@ -316,6 +316,8 @@ export interface components {
         /** @description A unique local ref and exactly one target: an event/entity selection from this batch, an event/entity already attached to this investigation, or an existing node in this investigation. */
         AgentNode: {
             ref: string;
+            /** @description Why this event or entity belongs on the graph for the task. */
+            why: string;
             /** @description Local ref of an event selection from this batch. */
             event_ref?: string;
             /** @description Local ref of an entity selection from this batch. */

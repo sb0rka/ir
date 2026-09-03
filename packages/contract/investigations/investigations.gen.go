@@ -207,6 +207,9 @@ type AgentNode struct {
 	EventRef *string             `json:"event_ref,omitempty"`
 	NodeId   *openapi_types.UUID `json:"node_id,omitempty"`
 	Ref      string              `json:"ref"`
+
+	// Why Why this event or entity belongs on the graph for the task.
+	Why string `json:"why"`
 }
 
 // AgentResultBatch defines model for AgentResultBatch.

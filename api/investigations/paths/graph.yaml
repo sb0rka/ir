@@ -587,6 +587,10 @@ components:
         origin:
           allOf: [{ $ref: '../shared/enums.yaml#/components/schemas/Origin' }]
           description: Who put this node on the graph.
+        why:
+          type: string
+          nullable: true
+          description: Why the agent put this event or entity on the graph.
         som_issue_ids:
           type: array
           description: SOM issues linked to this node.

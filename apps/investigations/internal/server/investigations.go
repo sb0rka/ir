@@ -329,7 +329,10 @@ func (s *Server) agentNodesFromBatch(
 	out := make([]model.AgentNode, 0, len(nodes))
 	skipped := map[string]struct{}{}
 	for _, node := range nodes {
-		converted := model.AgentNode{Ref: strings.TrimSpace(node.Ref)}
+		converted := model.AgentNode{Ref: strings.TrimSpace(node.Ref), Why: strings.TrimSpace(node.Why)}
+		if converted.Why == "" {
+			return nil, nil, validationError("node " + converted.Ref + ": why is required")
+		}
 		if node.EventRef != nil {
 			eventRef := strings.TrimSpace(*node.EventRef)
 			sourceKey, ok := eventRefs[eventRef]

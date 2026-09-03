@@ -541,9 +541,13 @@ components:
         A unique local ref and exactly one target: an event/entity selection
         from this batch, an event/entity already attached to this investigation,
         or an existing node in this investigation.
-      required: [ref]
+      required: [ref, why]
       properties:
         ref: { type: string, minLength: 1, maxLength: 128 }
+        why:
+          type: string
+          minLength: 1
+          description: Why this event or entity belongs on the graph for the task.
         event_ref:
           type: string
           minLength: 1

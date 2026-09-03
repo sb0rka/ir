@@ -107,7 +107,7 @@ func (d *DB) CreateEntity(ctx context.Context, input model.EntityNew) (model.Ent
 	if err != nil {
 		return model.Entity{}, mapConstraint(err)
 	}
-	if _, _, err = upsertNodeTx(ctx, tx, input.InvestigationID, "entity", &id, nil, "analyst", nil); err != nil {
+	if _, _, err = upsertNodeTx(ctx, tx, input.InvestigationID, "entity", &id, nil, "analyst", nil, nil); err != nil {
 		return model.Entity{}, err
 	}
 	out, err := scanEntity(tx.QueryRow(ctx, `SELECT e.id::text,e.type_code,e.canonical_key,e.display_name,e.metadata,e.first_seen,e.last_seen,ie.added_via,ie.added_at FROM entities e JOIN investigation_entities ie ON ie.entity_id=e.id WHERE e.id=$1::uuid AND e.project_id=$2 AND ie.investigation_id=$3::uuid`, id, input.ProjectID, input.InvestigationID))

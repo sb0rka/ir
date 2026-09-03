@@ -673,6 +673,7 @@ CREATE TABLE IF NOT EXISTS graph_nodes (
     entity_id UUID,
     event_id UUID,
     origin VARCHAR(8) NOT NULL CHECK (origin IN ('analyst', 'rule', 'agent')),
+    why VARCHAR,
 
     created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
@@ -826,11 +827,11 @@ CREATE INDEX IF NOT EXISTS ix_edge_evidence_event ON edge_evidence (event_id);
 
 WITH updated AS (
     UPDATE version_investigations
-    SET version_num = '202609020001'
+    SET version_num = '202609030001'
     RETURNING version_investigations.version_num
 )
 INSERT INTO version_investigations (version_num)
-SELECT '202609020001'
+SELECT '202609030001'
 WHERE NOT EXISTS (SELECT 1 FROM updated)
 RETURNING version_num;
 

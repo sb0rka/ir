@@ -316,6 +316,9 @@ type GraphNode struct {
 
 	// TypeCode Kind of entity, which is what picks the icon. Entity nodes only.
 	TypeCode *string `json:"type_code,omitempty"`
+
+	// Why Why the agent put this event or entity on the graph.
+	Why *string `json:"why,omitempty"`
 }
 
 // HypothesisGraph Explicit graph memberships of one hypothesis.
