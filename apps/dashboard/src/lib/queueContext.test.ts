@@ -53,6 +53,7 @@ describe('queueContext identity', () => {
         source: 'pt-maxpatrol-siem',
         entityIds: [],
         origin: 'seed',
+        isSeed: true,
         review: 'confirmed',
         description: 'd',
         sourceEventId: 'evt-1',

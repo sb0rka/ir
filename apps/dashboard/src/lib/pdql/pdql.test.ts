@@ -9,12 +9,13 @@ import {
   astToEventSearch,
   astToFilterChips,
   drillGroupValues,
+  findingUuidFromAst,
   hasGroupValueSelection,
   pdqlToSearchParts,
   queueSelectFields,
 } from './toSearch'
 import { addFieldToAst, addFieldToPdql, setGroupAggregate } from './ast'
-import { appendCondition } from './append'
+import { appendCondition, findingUuidQuery } from './append'
 import { relatedFieldColumns } from './relatedFields'
 
 function mustParse(text: string): QueryAst {
@@ -212,6 +213,15 @@ describe('pdqlToChips', () => {
     ])
   })
 
+  it('labels finding filters as Incident or Correlation', () => {
+    expect(pdqlToChips(mustParse(findingUuidQuery('inc-1', 'siem_incident')))[0]?.label).toBe(
+      'Инцидент = "inc-1"',
+    )
+    expect(pdqlToChips(mustParse(findingUuidQuery('corr-1', 'siem_correlation')))[0]?.label).toBe(
+      'Корреляция = "corr-1"',
+    )
+  })
+
   it('removing a filter chip keeps the remaining query', () => {
     const ast = mustParse('filter(action = "login" and event_src.host = "dc01") | select(time)')
     const host = ast.filter.find((condition) => condition.field === 'event_src.host')
@@ -296,6 +306,13 @@ describe('relatedFieldColumns', () => {
     expect(relatedFieldColumns('object.process.hash.md5')).toEqual([
       { title: 'Процесс', fields: ['subject.process.hash.md5', 'object.process.hash.md5'] },
       { title: 'Файл', fields: ['object.file.hash.md5'] },
+    ])
+  })
+
+  it('pairs subject and object process chain', () => {
+    expect(relatedFieldColumns('object.process.chain')).toEqual([
+      { title: 'Субъект', fields: ['subject.process.chain'] },
+      { title: 'Объект', fields: ['object.process.chain'] },
     ])
   })
 
@@ -525,6 +542,36 @@ describe('drillGroupValues', () => {
     expect(drillGroupValues(ast, ['dc01', 'login'], 'event_src.host', 'ws01')).toEqual(['ws01'])
     expect(drillGroupValues(ast, ['dc01'], 'action', 'login')).toEqual(['dc01', 'login'])
     expect(drillGroupValues(ast, [], 'src.ip', '1.1.1.1')).toBeNull()
+  })
+})
+
+describe('findingUuidQuery', () => {
+  it('replaces the query with an incident or correlation filter', () => {
+    expect(findingUuidQuery('corr-1', 'siem_correlation')).toBe(
+      'filter(siem_correlation = "corr-1") | select(time) | sort(time desc)',
+    )
+    expect(findingUuidQuery('inc-1', 'siem_incident')).toBe(
+      'filter(siem_incident = "inc-1") | select(time) | sort(time desc)',
+    )
+  })
+})
+
+describe('findingUuidFromAst', () => {
+  it('returns the finding even when other filters are present', () => {
+    expect(findingUuidFromAst(mustParse(findingUuidQuery('inc-42', 'siem_incident')))).toEqual({
+      uuid: 'inc-42',
+      recordType: 'siem_incident',
+    })
+    expect(
+      findingUuidFromAst(
+        mustParse('filter(siem_correlation = "corr-1" and action = "login") | select(time)'),
+      ),
+    ).toEqual({ uuid: 'corr-1', recordType: 'siem_correlation' })
+  })
+
+  it('ignores queries without a finding filter', () => {
+    expect(findingUuidFromAst(mustParse('filter(uuid = "inc-42") | select(time)'))).toBeNull()
+    expect(findingUuidFromAst(mustParse('filter(action = "login") | select(time)'))).toBeNull()
   })
 })
 

@@ -1,6 +1,7 @@
 export { parse } from './parse'
 export { formatCondition, formatConditionLabel, serialize } from './serialize'
-export { appendCondition } from './append'
+export { appendCondition, FINDING_FILTER_LABELS, findingUuidQuery, isFindingFilterField } from './append'
+export type { FindingFilterField } from './append'
 export {
   addFieldToAst,
   addFieldToPdql,
@@ -16,6 +17,7 @@ export {
   eventHeaderMeta,
   groupEventFields,
   isCorrelationRecord,
+  isFindingRecord,
   isSiemSource,
 } from './siemGroups'
 export type { EventHeaderMeta, FieldColumn, FieldGroup, FieldRow } from './siemGroups'
@@ -33,6 +35,7 @@ export {
   astToEventSearch,
   astToFilterChips,
   drillGroupValues,
+  findingUuidFromAst,
   hasGroupValueSelection,
   pdqlToSearchParts,
   queueSelectFields,

@@ -10,9 +10,11 @@ export {
   eventsInRange,
   type GraphFilters,
   type GraphNodeData,
+  type GraphVisibility,
 } from './graph-adapters'
 export {
   ALL_ENTITY_TYPES,
+  DEFAULT_ENTITY_TYPES,
   ALL_SEVERITIES,
   SEVERITY_COLOR,
 } from './constants'

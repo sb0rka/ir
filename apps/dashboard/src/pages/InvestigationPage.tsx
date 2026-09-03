@@ -4,14 +4,13 @@ import { ContextQueuePage } from '../components/ContextQueue'
 import { InvestigationGraph } from '../components/graph'
 import { DetailPanel } from '../components/DetailPanel'
 import { QueueDetailPanel } from '../components/QueueDetailPanel'
-import { AgentPanel } from '../components/AgentPanel'
+import { WorkspaceSidebar } from '../components/WorkspaceSidebar'
 import { useAppStore } from '../store/appStore'
 import { useWorkspaceStore } from '../state/useWorkspaceStore'
 
 export function InvestigationPage({ investigationId }: { investigationId: string }) {
   const inv = useAppStore((s) => s.investigations[investigationId])
   const detailPanelOpen = useAppStore((s) => s.detailPanelOpen)
-  const agentPanelOpen = useAppStore((s) => s.agentPanelOpen)
   const loadInvestigation = useAppStore((s) => s.loadInvestigation)
   const loading = useAppStore((s) => s.investigationLoading)
 
@@ -43,7 +42,7 @@ export function InvestigationPage({ investigationId }: { investigationId: string
     <div className="flex h-full flex-col">
       <InvestigationHeader investigationId={investigationId} />
       <div className="flex min-h-0 flex-1">
-        {agentPanelOpen && <AgentPanel investigationId={investigationId} />}
+        <WorkspaceSidebar investigationId={investigationId} />
         <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
           {inv.view === 'table' ? (
             <ContextTable investigationId={investigationId} />

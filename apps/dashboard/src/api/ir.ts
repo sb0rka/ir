@@ -12,7 +12,15 @@ import {
   mapIrEvent,
   mapIrInvestigation,
 } from './adapters'
-import type { ContextEvent, Entity, GraphEdge, GraphNode, Investigation } from '../types'
+import type {
+  ContextEvent,
+  Entity,
+  GraphEdge,
+  GraphNode,
+  Investigation,
+  InvestigationStatus,
+  Severity,
+} from '../types'
 
 type EventSourceRef = Ir['schemas']['EventSourceRef']
 type SourceObjectRef = Ir['schemas']['SourceObjectRef']
@@ -50,20 +58,49 @@ async function throwIfError<T>(result: {
   return result.data
 }
 
-export async function listInvestigations(): Promise<Investigation[]> {
-  const items: Investigation[] = []
-  let cursor: string | undefined
-  for (let i = 0; i < 8; i++) {
-    const page = await throwIfError(
-      await irClient.GET('/investigations', {
-        params: { ...projectParams(), query: { limit: 100, cursor } },
-      }),
-    )
-    items.push(...page.investigations.map((inv) => mapIrInvestigation(inv)))
-    if (!page.next_cursor) break
-    cursor = page.next_cursor
+async function throwIfFailed(result: { error?: unknown; response: Response }): Promise<void> {
+  if (result.error || !result.response.ok) {
+    throw unwrapError(result.error, result.response.status)
   }
-  return items
+}
+
+export interface ListInvestigationsQuery {
+  parentId?: string
+  status?: InvestigationStatus
+  severity?: Exclude<Severity, 'info'>
+  q?: string
+  limit?: number
+  cursor?: string
+}
+
+export interface InvestigationListPage {
+  items: Investigation[]
+  nextCursor: string | null
+}
+
+export async function listInvestigations(
+  query: ListInvestigationsQuery = {},
+): Promise<InvestigationListPage> {
+  const q = query.q?.trim()
+  const page = await throwIfError(
+    await irClient.GET('/investigations', {
+      params: {
+        ...projectParams(),
+        query: {
+          parent_id: query.parentId,
+          status: query.status,
+          severity: query.severity,
+          q: q || undefined,
+          limit: query.limit ?? 100,
+          cursor: query.cursor,
+        },
+      },
+    }),
+  )
+  return {
+    items: page.investigations.map((inv) => mapIrInvestigation(inv)),
+    nextCursor: page.next_cursor ?? null,
+  }
 }
 
 export async function resolveSomCatalog(): Promise<SomCatalog> {
@@ -308,6 +345,14 @@ export async function patchInvestigation(
     await irClient.PATCH('/investigations/{investigation_id}', {
       params: { ...projectParams(), path: { investigation_id: investigationId } },
       body,
+    }),
+  )
+}
+
+export async function deleteInvestigation(investigationId: string): Promise<void> {
+  return throwIfFailed(
+    await irClient.DELETE('/investigations/{investigation_id}', {
+      params: { ...projectParams(), path: { investigation_id: investigationId } },
     }),
   )
 }

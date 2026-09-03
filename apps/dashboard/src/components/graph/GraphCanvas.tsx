@@ -16,9 +16,12 @@ import {
   type OnNodeDrag,
 } from '@xyflow/react'
 import { LayoutGrid } from 'lucide-react'
+import { useTheme } from '../theme-provider'
+import { EMPTY_LAYER_IDS } from '../../lib/hypotheses'
 import { useWorkspaceStore } from '../../state/useWorkspaceStore'
 import { SEVERITY_COLOR } from './constants'
 import { buildVisibleGraph, type GraphNodeData } from './graph-adapters'
+import { useHypothesisGraphView } from './useHypothesisGraphView'
 import { AlertNode } from './nodes/AlertNode'
 import { EntityNode } from './nodes/EntityNode'
 
@@ -30,6 +33,7 @@ const nodeTypes = {
 type FitToken = number | string
 
 function GraphInner({ fitToken }: { fitToken: FitToken }) {
+  const { resolvedAppearance } = useTheme()
   const {
     activeInvestigation: session,
     selection,
@@ -42,6 +46,14 @@ function GraphInner({ fitToken }: { fitToken: FitToken }) {
     updateNodePosition,
     arrangeNodes,
   } = useWorkspaceStore()
+  const allNodeIds = useMemo(
+    () =>
+      session
+        ? [...session.entities.map((e) => e.id), ...session.alerts.map((a) => a.id)]
+        : EMPTY_LAYER_IDS,
+    [session],
+  )
+  const graphVisibility = useHypothesisGraphView(session?.id, allNodeIds)
 
   const { fitView } = useReactFlow()
   const paneWidth = useStore((s) => s.width)
@@ -68,8 +80,9 @@ function GraphInner({ fitToken }: { fitToken: FitToken }) {
       },
       selection,
       hoverEventId,
+      graphVisibility,
     })
-  }, [session, selection, hoverEventId])
+  }, [session, selection, hoverEventId, graphVisibility])
 
   // Length alone misses “same count, new ids” after agent enrichment.
   const graphSig = useMemo(() => {
@@ -193,7 +206,7 @@ function GraphInner({ fitToken }: { fitToken: FitToken }) {
       minZoom={0.3}
       maxZoom={1.8}
       proOptions={{ hideAttribution: true }}
-      colorMode="dark"
+      colorMode={resolvedAppearance}
       style={{ width: '100%', height: '100%' }}
     >
       <Background
@@ -222,7 +235,9 @@ function GraphInner({ fitToken }: { fitToken: FitToken }) {
           if (d.kind === 'alert' && d.severity) return SEVERITY_COLOR[d.severity]
           return 'var(--border-strong)'
         }}
-        maskColor="rgba(0, 0, 0, 0.7)"
+        maskColor={
+          resolvedAppearance === 'dark' ? 'rgba(0, 0, 0, 0.5)' : 'rgba(255, 255, 255, 0.6)'
+        }
       />
     </ReactFlow>
   )

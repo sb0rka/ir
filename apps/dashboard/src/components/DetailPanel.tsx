@@ -30,6 +30,7 @@ export function DetailPanel({ investigationId }: { investigationId: string }) {
   const entities = useAppStore((s) => s.entities)
   const contextEvents = useAppStore((s) => s.contextEvents)
   const appendPdqlFilter = useAppStore((s) => s.appendPdqlFilter)
+  const filterByFindingUuid = useAppStore((s) => s.filterByFindingUuid)
   const addFieldToContext = useAppStore((s) => s.addFieldToContext)
   const setContextQueue = useAppStore((s) => s.setContextQueue)
   const executeContextQuery = useAppStore((s) => s.executeContextQuery)
@@ -342,6 +343,9 @@ export function DetailPanel({ investigationId }: { investigationId: string }) {
                 void executeContextQuery(investigationId)
               }}
               onAddFilter={(field, value) => appendPdqlFilter(investigationId, field, value)}
+              onFilterFindingUuid={(uuid, recordType) =>
+                filterByFindingUuid(investigationId, uuid, recordType)
+              }
               onAddToContext={(field, value, includeEvent) =>
                 addFieldToContext(investigationId, {
                   field,

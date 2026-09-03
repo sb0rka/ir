@@ -1,3 +1,5 @@
+import type { Verdict } from '../types'
+
 export function formatTime(iso: string): string {
   const d = new Date(iso)
   return d.toLocaleString('ru-RU', {
@@ -50,6 +52,20 @@ export const severityDot: Record<string, string> = {
   info: 'bg-info',
 }
 
+export const verdictLabel: Record<string, string> = {
+  incident: 'инцидент',
+  false_positive: 'ложное',
+  not_affected: 'не затронуто',
+  inconclusive: 'неясно',
+}
+
+export const CLOSE_VERDICTS: { id: Verdict; label: string }[] = [
+  { id: 'incident', label: 'Инцидент' },
+  { id: 'false_positive', label: 'Ложное срабатывание' },
+  { id: 'not_affected', label: 'Не затронуто' },
+  { id: 'inconclusive', label: 'Неясно' },
+]
+
 export const statusLabel: Record<string, string> = {
   new: 'новое',
   investigating: 'в расследовании',
@@ -66,6 +82,21 @@ export const statusLabel: Record<string, string> = {
   seed: 'исходный',
   agent: 'агент',
   analyst: 'аналитик',
+}
+
+export function matchesOriginFilter(
+  ev: { origin: string; isSeed?: boolean },
+  filter: string,
+): boolean {
+  if (filter === 'all') return true
+  if (filter === 'seed') return Boolean(ev.isSeed)
+  if (filter === 'analyst') return ev.origin === 'analyst' && !ev.isSeed
+  return ev.origin === filter
+}
+
+export function eventOriginLabel(ev: { origin: string; isSeed?: boolean }): string {
+  if (ev.isSeed) return statusLabel.seed
+  return statusLabel[ev.origin] ?? ev.origin
 }
 
 export const kindLabel: Record<string, string> = {

@@ -16,12 +16,14 @@ export function Chip({
   onClick,
   title,
   tone = 'default',
+  flash = false,
 }: {
   children: React.ReactNode
   onRemove?: () => void
   onClick?: () => void
   title?: string
   tone?: 'default' | 'proposed' | 'confirmed' | 'rejected'
+  flash?: boolean
 }) {
   const tones = {
     default: 'border-border bg-surface-2 text-fg',
@@ -32,9 +34,10 @@ export function Chip({
   return (
     <span
       className={clsx(
-        'inline-flex items-center gap-1 rounded border px-2 py-0.5 text-xs font-mono',
+        'inline-flex items-center gap-1 rounded border px-2 py-0.5 text-xs font-medium',
         tones[tone],
         onClick && 'cursor-pointer hover:border-fg/40',
+        flash && 'chip-flash-critical',
       )}
       title={title}
       role={onClick ? 'button' : undefined}
@@ -82,7 +85,7 @@ export function Button({
   children: React.ReactNode
   onClick?: (e: React.MouseEvent) => void
   variant?: 'default' | 'primary' | 'ghost' | 'danger'
-  size?: 'sm' | 'md'
+  size?: 'sm' | 'md' | 'icon'
   disabled?: boolean
   className?: string
   type?: 'button' | 'submit'
@@ -91,13 +94,14 @@ export function Button({
 }) {
   const variants = {
     default: 'border-border bg-surface-2 text-fg hover:bg-surface-3',
-    primary: 'border-fg/30 bg-fg text-surface-0 hover:bg-white',
+    primary: 'border-fg/30 bg-fg/90 text-surface-0 hover:bg-fg',
     ghost: 'border-transparent bg-transparent text-fg-muted hover:bg-surface-2 hover:text-fg',
     danger: 'border-critical/40 bg-critical/10 text-critical hover:bg-critical/20',
   }
   const sizes = {
     sm: 'px-2 py-1 text-xs',
     md: 'px-3 py-1.5 text-sm',
+    icon: 'h-8 w-8 p-0',
   }
   return (
     <button

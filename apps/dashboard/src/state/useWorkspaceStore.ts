@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import {
-  ALL_ENTITY_TYPES,
+  DEFAULT_ENTITY_TYPES,
   ALL_SEVERITIES,
 } from '../components/graph/constants'
 import type {
@@ -59,7 +59,7 @@ function mapSeverity(s: string): Severity {
 
 function defaultFilters(windowStart: string, windowEnd: string): GraphSessionFilters {
   return {
-    entityTypes: [...ALL_ENTITY_TYPES],
+    entityTypes: [...DEFAULT_ENTITY_TYPES],
     severities: [...ALL_SEVERITIES],
     edgeOrigins: ['agent', 'analyst'],
     timeRange: {
@@ -80,13 +80,14 @@ function collectTimes(values: Array<string | undefined>): number[] {
 }
 
 function isSeedEvent(
-  origin: string | undefined,
+  marked: boolean | undefined,
   ids: Array<string | undefined>,
   seedEventIds: string[],
 ): boolean {
+  if (marked) return true
+  if (seedEventIds.length === 0) return false
   const seed = new Set(seedEventIds)
-  if (ids.some((id) => id && seed.has(id))) return true
-  return origin === 'seed'
+  return ids.some((id) => Boolean(id && seed.has(id)))
 }
 
 function graphOrigin(origin: string | undefined): EdgeOrigin {
@@ -137,7 +138,7 @@ function buildFromApp(inv: Investigation): GraphInvestigation {
   const alerts: AlertNode[] = eventGraphNodes.map((n) => {
     const ev = contextEvents[n.refId]
     const isSeed = isSeedEvent(
-      ev?.origin ?? n.origin,
+      ev?.isSeed,
       [n.refId, n.id, ev?.id],
       inv.seedEventIds,
     )
@@ -217,7 +218,7 @@ function buildFromApp(inv: Investigation): GraphInvestigation {
         summary: ev.description,
         entity_ids: [...entityIds],
         alert_id: alertId,
-        isSeed: isSeedEvent(ev.origin, [ev.id], inv.seedEventIds),
+        isSeed: isSeedEvent(ev.isSeed, [ev.id], inv.seedEventIds),
       }
     })
 

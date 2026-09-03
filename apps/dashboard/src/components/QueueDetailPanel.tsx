@@ -1,6 +1,7 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import {
   ArrowUpRight,
+  Lightbulb,
   Play,
   Plus,
   Sparkles,
@@ -11,6 +12,9 @@ import {
 import { emptyContextQueue, useAppStore } from '../store/appStore'
 import type { AlertEvent, CorrelationGroup } from '../types'
 import { Button, Chip, Panel, SeverityBadge } from './ui'
+import { StartInvestigationModal } from './StartInvestigationModal'
+import { isHypothesisWritable } from '../lib/hypotheses'
+import { titlesForQueueIds } from '../lib/investigationTitle'
 import { formatTime, statusLabel } from '../lib/utils'
 import { alertIsInContext, contextEventKeys } from '../lib/queueContext'
 import { EventCard, eventCardModelFromAlert } from './event-card'
@@ -25,7 +29,10 @@ export function QueueDetailPanel({
   const inspect = useAppStore((s) => s.inspectQueueItem)
   const start = useAppStore((s) => s.startInvestigation)
   const addEventsToContext = useAppStore((s) => s.addEventsToContext)
+  const addEventsToActiveHypothesis = useAppStore((s) => s.addEventsToActiveHypothesis)
+  const createHypothesisFromEvents = useAppStore((s) => s.createHypothesisFromEvents)
   const appendPdqlFilter = useAppStore((s) => s.appendPdqlFilter)
+  const filterByFindingUuid = useAppStore((s) => s.filterByFindingUuid)
   const globalTime = useAppStore((s) => s.timeInterval)
   const setTimeInterval = useAppStore((s) => s.setTimeInterval)
   const loadQueue = useAppStore((s) => s.loadQueue)
@@ -39,9 +46,15 @@ export function QueueDetailPanel({
     investigationId ? (s.contextQueue[investigationId] ?? emptyContextQueue) : null,
   )
   const inv = useAppStore((s) => (investigationId ? s.investigations[investigationId] : undefined))
+  const activeHypothesis = useAppStore((s) => {
+    if (!investigationId) return null
+    const id = s.activeHypothesisId[investigationId]
+    return id ? (s.hypotheses[id] ?? null) : null
+  })
   const contextEvents = useAppStore((s) => s.contextEvents)
   const correlations = useAppStore((s) => s.correlations)
   const loading = useAppStore((s) => s.investigationLoading)
+  const [naming, setNaming] = useState(false)
 
   useEffect(() => {
     if (!item) return
@@ -64,8 +77,17 @@ export function QueueDetailPanel({
   const inContext = Boolean(
     investigationId && alert && alertIsInContext(alert, inv?.findingSourceKeys ?? [], eventKeys),
   )
+  const canAddToHypothesis = Boolean(
+    alert && activeHypothesis && isHypothesisWritable(activeHypothesis.status),
+  )
+  const addToHypothesisTitle = !activeHypothesis
+    ? 'Сначала выберите гипотезу'
+    : activeHypothesis.status === 'resolved'
+      ? 'Гипотеза закрыта'
+      : activeHypothesis.statement
 
   return (
+    <>
     <Panel
       title={alert ? 'Событие' : 'Корреляция'}
       className="w-[32rem] shrink-0"
@@ -83,6 +105,9 @@ export function QueueDetailPanel({
               alert={alert}
               onAddFilter={(field, value) =>
                 appendPdqlFilter(investigationId ?? null, field, value)
+              }
+              onFilterFindingUuid={(uuid, recordType) =>
+                filterByFindingUuid(investigationId ?? null, uuid, recordType)
               }
               timeInterval={timeInterval}
               onTimeChange={(interval) => {
@@ -111,20 +136,47 @@ export function QueueDetailPanel({
 
         <div className="sticky bottom-0 space-y-2 border-t border-border bg-surface-1 p-3">
           {investigationId ? (
-            inContext ? (
-              <div className="text-xs text-fg-dim">Уже в расследовании</div>
-            ) : (
-              <Button
-                size="md"
-                variant="primary"
-                className="w-full"
-                disabled={loading || !alert}
-                onClick={() => void addEventsToContext(investigationId, [item.id])}
-              >
-                <Plus className="h-3.5 w-3.5" />
-                Добавить в расследование
-              </Button>
-            )
+            <>
+              {inContext ? (
+                <div className="text-xs text-fg-dim">Уже в расследовании</div>
+              ) : (
+                <Button
+                  size="md"
+                  variant="primary"
+                  className="w-full"
+                  disabled={loading || !alert}
+                  onClick={() => void addEventsToContext(investigationId, [item.id])}
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Добавить в расследование
+                </Button>
+              )}
+              {alert && (
+                <>
+                  <Button
+                    size="md"
+                    variant={inContext && canAddToHypothesis ? 'primary' : 'default'}
+                    className="w-full"
+                    disabled={loading || !canAddToHypothesis}
+                    title={addToHypothesisTitle}
+                    onClick={() => void addEventsToActiveHypothesis(investigationId, [item.id])}
+                  >
+                    <Lightbulb className="h-3.5 w-3.5" />
+                    Добавить в текущую гипотезу
+                  </Button>
+                  <Button
+                    size="md"
+                    variant="ghost"
+                    className="w-full"
+                    disabled={loading}
+                    onClick={() => void createHypothesisFromEvents(investigationId, [item.id])}
+                  >
+                    <Lightbulb className="h-3.5 w-3.5" />
+                    Создать гипотезу
+                  </Button>
+                </>
+              )}
+            </>
           ) : (
             <>
               <Button
@@ -132,7 +184,7 @@ export function QueueDetailPanel({
                 variant="primary"
                 className="w-full"
                 disabled={loading}
-                onClick={() => void start([item.id])}
+                onClick={() => setNaming(true)}
               >
                 <Play className="h-3.5 w-3.5" />
                 Начать расследование
@@ -150,6 +202,18 @@ export function QueueDetailPanel({
         </div>
       </div>
     </Panel>
+    {naming && (
+      <StartInvestigationModal
+        eventTitles={titlesForQueueIds([item.id], alerts, correlations)}
+        busy={loading}
+        onClose={() => setNaming(false)}
+        onConfirm={async (title) => {
+          const createdId = await start([item.id], title)
+          if (createdId) setNaming(false)
+        }}
+      />
+    )}
+    </>
   )
 }
 
@@ -171,12 +235,14 @@ function DecoButton({
 function AlertDetails({
   alert,
   onAddFilter,
+  onFilterFindingUuid,
   timeInterval,
   onTimeChange,
   onTimeExecute,
 }: {
   alert: AlertEvent
   onAddFilter: (field: string, value: string) => void
+  onFilterFindingUuid: (uuid: string, recordType: 'siem_incident' | 'siem_correlation') => void
   timeInterval: TimeInterval
   onTimeChange: (value: TimeInterval) => void
   onTimeExecute: (value: TimeInterval) => void
@@ -190,6 +256,7 @@ function AlertDetails({
         onTimeChange={onTimeChange}
         onTimeExecute={onTimeExecute}
         onAddFilter={onAddFilter}
+        onFilterFindingUuid={onFilterFindingUuid}
       />
     </>
   )

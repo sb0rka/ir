@@ -1,6 +1,6 @@
-import { useAppStore } from '../store/appStore'
+import { FolderKanban, LayoutList, X } from 'lucide-react'
+import { PINNED_TABS, isPinnedTab, useAppStore } from '../store/appStore'
 import { clsx, severityDot } from '../lib/utils'
-import { LayoutList, X } from 'lucide-react'
 
 export function TabBar() {
   const tabs = useAppStore((s) => s.tabs)
@@ -9,12 +9,15 @@ export function TabBar() {
   const setActiveTab = useAppStore((s) => s.setActiveTab)
   const closeTab = useAppStore((s) => s.closeTab)
   const issues = useAppStore((s) => s.issues)
+  const workspaceTabs = tabs.filter((tab) => !isPinnedTab(tab))
+  const visibleTabs = [...PINNED_TABS, ...workspaceTabs]
 
   return (
     <div className="flex items-center gap-0.5 overflow-x-auto border-b border-border bg-surface-0 px-2 pt-2">
-      {tabs.map((tab) => {
+      {visibleTabs.map((tab) => {
         const isQueue = tab === 'queue'
-        const inv = isQueue ? null : investigations[tab]
+        const isCatalog = tab === 'investigations'
+        const inv = isPinnedTab(tab) ? null : investigations[tab]
         const running =
           inv?.issueIds.some((id) => issues[id]?.status === 'running') ?? false
         const active = activeTab === tab
@@ -34,6 +37,11 @@ export function TabBar() {
               <>
                 <LayoutList className="h-3.5 w-3.5" />
                 <span>Очередь</span>
+              </>
+            ) : isCatalog ? (
+              <>
+                <FolderKanban className="h-3.5 w-3.5" />
+                <span>Расследования</span>
               </>
             ) : (
               <>

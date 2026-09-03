@@ -1,21 +1,14 @@
+import { useState } from 'react'
 import {
   emptyContextQueue,
   useAppStore,
 } from '../store/appStore'
 import { ContextQueueToolbar } from './ContextQueue'
+import { CloseInvestigationModal } from './CloseInvestigationModal'
 import { Button, Chip, SeverityBadge } from '../components/ui'
-import { clsx, formatTime, statusLabel } from '../lib/utils'
+import { clsx, eventOriginLabel, formatTime, matchesOriginFilter, statusLabel, verdictLabel } from '../lib/utils'
 import { fieldForEntityKind } from '../lib/filters'
-import {
-  Bot,
-  Check,
-  GitBranch,
-  Inbox,
-  Network,
-  PanelRight,
-  Table2,
-  X,
-} from 'lucide-react'
+import { Check, Inbox, Network, Table2, X } from 'lucide-react'
 
 export function InvestigationHeader({ investigationId }: { investigationId: string }) {
   const inv = useAppStore((s) => s.investigations[investigationId])
@@ -24,31 +17,44 @@ export function InvestigationHeader({ investigationId }: { investigationId: stri
   )
   const issues = useAppStore((s) => s.issues)
   const update = useAppStore((s) => s.updateInvestigation)
-  const openAgentPanel = useAppStore((s) => s.openAgentPanel)
-  const createChild = useAppStore((s) => s.createChildInvestigation)
-  const setAgentPanelOpen = useAppStore((s) => s.setAgentPanelOpen)
-  const agentPanelOpen = useAppStore((s) => s.agentPanelOpen)
-  const setDetailPanelOpen = useAppStore((s) => s.setDetailPanelOpen)
-  const detailPanelOpen = useAppStore((s) => s.detailPanelOpen)
-  const setActiveTab = useAppStore((s) => s.setActiveTab)
-  const edgeReviews = useAppStore((s) => s.edgeReviews)
-  const graphEdges = useAppStore((s) => s.graphEdges)
+  const persistInvestigation = useAppStore((s) => s.persistInvestigation)
+  const openInvestigationTab = useAppStore((s) => s.openInvestigationTab)
+  const [closeOpen, setCloseOpen] = useState(false)
+  const [closing, setClosing] = useState(false)
 
   if (!inv) return null
 
   const running = inv.issueIds.some((id) => issues[id]?.status === 'running')
-  const proposedCount = inv.edgeIds.filter(
-    (id) => (edgeReviews[id] ?? graphEdges[id]?.review) === 'proposed',
-  ).length
+  const closed = inv.status === 'closed'
 
   return (
     <div className="border-b border-border bg-surface-1 px-4 py-3">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="text-sm font-semibold">{inv.title}</h1>
             <SeverityBadge severity={inv.severity} />
             <Chip>{statusLabel[inv.status]}</Chip>
+            {inv.verdict ? <Chip>{verdictLabel[inv.verdict] ?? inv.verdict}</Chip> : null}
+            {closed ? (
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={closing}
+                onClick={() => {
+                  setClosing(true)
+                  void persistInvestigation(investigationId, { status: 'open' }).finally(() =>
+                    setClosing(false),
+                  )
+                }}
+              >
+                Вернуть в работу
+              </Button>
+            ) : (
+              <Button size="sm" onClick={() => setCloseOpen(true)}>
+                Закрыть…
+              </Button>
+            )}
             <span className="text-xs text-fg-dim">аналитик: {inv.assignee}</span>
             {running && (
               <span className="inline-flex items-center gap-1.5 text-xs text-proposed">
@@ -61,7 +67,7 @@ export function InvestigationHeader({ investigationId }: { investigationId: stri
             <button
               type="button"
               className="mt-1 text-xs text-fg-muted hover:text-fg"
-              onClick={() => setActiveTab(parent.id)}
+              onClick={() => openInvestigationTab(parent.id)}
             >
               ← родитель: {parent.title}
             </button>
@@ -104,49 +110,27 @@ export function InvestigationHeader({ investigationId }: { investigationId: stri
               Очередь
             </button>
           </div>
-
-          <Button size="sm" onClick={() => void openAgentPanel()}>
-            <Bot className="h-3.5 w-3.5" />
-            Насыщение контекста
-          </Button>
-
-          <Button
-            size="sm"
-            variant="ghost"
-            disabled={inv.selectedEntityIds.length === 0}
-            onClick={() => createChild(investigationId, inv.selectedEntityIds)}
-            title="Создать дочернее расследование из выбранных сущностей"
-          >
-            <GitBranch className="h-3.5 w-3.5" />
-            Дочернее ({inv.selectedEntityIds.length})
-          </Button>
-
-          <Button
-            size="sm"
-            variant={detailPanelOpen ? 'default' : 'ghost'}
-            onClick={() => setDetailPanelOpen(!detailPanelOpen)}
-            title="Панель деталей выбранной сущности или события"
-          >
-            <PanelRight className="h-3.5 w-3.5" />
-            Детали
-          </Button>
-
-          <Button
-            size="sm"
-            variant={agentPanelOpen ? 'default' : 'ghost'}
-            onClick={() => setAgentPanelOpen(!agentPanelOpen)}
-            title="Задачи и предложенные связи ИИ-агента"
-          >
-            <Bot className="h-3.5 w-3.5" />
-            Агент
-            {proposedCount > 0 && (
-              <span className="rounded bg-proposed/20 px-1 font-mono text-[10px] text-proposed">
-                {proposedCount}
-              </span>
-            )}
-          </Button>
         </div>
       </div>
+      {closeOpen && !closed ? (
+        <CloseInvestigationModal
+          title={inv.title}
+          busy={closing}
+          onClose={() => {
+            if (!closing) setCloseOpen(false)
+          }}
+          onConfirm={async ({ verdict, reason }) => {
+            setClosing(true)
+            const ok = await persistInvestigation(investigationId, {
+              status: 'closed',
+              verdict,
+              verdictReason: reason || null,
+            })
+            setClosing(false)
+            if (ok) setCloseOpen(false)
+          }}
+        />
+      ) : null}
     </div>
   )
 }
@@ -166,7 +150,7 @@ export function ContextTable({ investigationId }: { investigationId: string }) {
   const rows = inv.eventIds
     .map((id) => contextEvents[id])
     .filter(Boolean)
-    .filter((ev) => queue.originFilter === 'all' || ev.origin === queue.originFilter)
+    .filter((ev) => matchesOriginFilter(ev, queue.originFilter))
     .filter((ev) => {
       if (queue.reviewFilter === 'all') return true
       return (eventReviews[ev.id] ?? ev.review) === queue.reviewFilter
@@ -263,7 +247,7 @@ export function ContextTable({ investigationId }: { investigationId: string }) {
                     })}
                   </div>
                 </td>
-                <td className="px-3 py-2 text-xs text-fg-muted">{statusLabel[ev.origin]}</td>
+                <td className="px-3 py-2 text-xs text-fg-muted">{eventOriginLabel(ev)}</td>
                 <td className="px-3 py-2">
                   <Chip
                     tone={

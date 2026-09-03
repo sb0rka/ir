@@ -10,6 +10,13 @@ import type {
 } from './types'
 import { formatEventTooltip, toMs } from './time'
 
+export type GraphVisibility = {
+  visibleNodeIds: Set<string> | null
+  highlightedNodeIds: Set<string> | null
+  activeNodeIds: Set<string>
+  writable: boolean
+}
+
 export type GraphNodeData = {
   kind: 'entity' | 'alert'
   label: string
@@ -23,6 +30,8 @@ export type GraphNodeData = {
   alertId?: string
   isSeed?: boolean
   tooltip?: string
+  inHypothesis?: boolean
+  canToggleHypothesis?: boolean
 }
 
 export type GraphFilters = {
@@ -40,9 +49,15 @@ export function buildVisibleGraph(args: {
   filters: GraphFilters
   selection: { kind: string; id: string } | null
   hoverEventId: string | null
+  graphVisibility?: GraphVisibility | null
 }): { nodes: RFNode<GraphNodeData>[]; edges: RFEdge[] } {
   const { entities, alerts, edges, events, filters, selection, hoverEventId } =
     args
+  const visibility = args.graphVisibility ?? null
+  const visibleNodeIds = visibility?.visibleNodeIds ?? null
+  const highlightedNodeIds = visibility?.highlightedNodeIds ?? null
+  const activeNodeIds = visibility?.activeNodeIds ?? new Set<string>()
+  const isolate = visibleNodeIds != null
 
   const range = filters.timeRange
   const inRange = (startIso?: string, endIso?: string) => {
@@ -57,18 +72,22 @@ export function buildVisibleGraph(args: {
   const alertInTime = (alert: AlertNode) => inRange(alert.event_ts, alert.event_ts)
   const originVisible = (origin: EdgeOrigin) => filters.edgeOrigins.has(origin)
 
-  const visibleEntities = entities.filter(
+  let visibleEntities = entities.filter(
     (e) =>
       filters.entityTypes.has(e.type_code) &&
       entityInTime(e) &&
       originVisible(e.origin),
   )
-  const visibleAlerts = alerts.filter(
+  let visibleAlerts = alerts.filter(
     (a) =>
       filters.severities.has(a.severity) &&
       alertInTime(a) &&
       originVisible(a.origin),
   )
+  if (isolate && visibleNodeIds) {
+    visibleEntities = visibleEntities.filter((e) => visibleNodeIds.has(e.id))
+    visibleAlerts = visibleAlerts.filter((a) => visibleNodeIds.has(a.id))
+  }
 
   const visibleIds = new Set([
     ...visibleEntities.map((e) => e.id),
@@ -95,26 +114,34 @@ export function buildVisibleGraph(args: {
   )
 
   const nodes: RFNode<GraphNodeData>[] = [
-    ...visibleEntities.map((e) => ({
-      id: e.id,
-      type: 'entity',
-      position: e.position,
-      data: {
-        kind: 'entity' as const,
-        label: e.display_name,
-        sublabel: e.type_code,
-        entityType: e.type_code,
-        dimmed: hovering,
-        highlighted: false,
-        selected:
-          selectedId === e.id ||
-          (!!e.entity_id && selectedId === e.entity_id),
-        entityId: e.entity_id ?? e.id,
-      },
-    })),
+    ...visibleEntities.map((e) => {
+      const inHypothesis = activeNodeIds.has(e.id)
+      return {
+        id: e.id,
+        type: 'entity',
+        position: e.position,
+        data: {
+          kind: 'entity' as const,
+          label: e.display_name,
+          sublabel: e.type_code,
+          entityType: e.type_code,
+          dimmed: hovering || Boolean(highlightedNodeIds && !highlightedNodeIds.has(e.id)),
+          highlighted: false,
+          selected:
+            selectedId === e.id ||
+            (!!e.entity_id && selectedId === e.entity_id),
+          entityId: e.entity_id ?? e.id,
+          inHypothesis,
+          canToggleHypothesis: Boolean(visibility?.writable),
+        },
+      }
+    }),
     ...visibleAlerts.map((a) => {
       const highlighted = isHoveredAlert(a)
-      const dimmed = hovering && !highlighted
+      const inHypothesis = activeNodeIds.has(a.id)
+      const dimmed =
+        (hovering && !highlighted) ||
+        Boolean(highlightedNodeIds && !highlightedNodeIds.has(a.id))
       return {
         id: a.id,
         type: 'alert',
@@ -135,6 +162,8 @@ export function buildVisibleGraph(args: {
           tooltip: `${a.isSeed ? 'исходный · ' : ''}${
             a.event_ts ? formatEventTooltip(a.event_ts, a.title) : a.title
           }`,
+          inHypothesis,
+          canToggleHypothesis: Boolean(visibility?.writable),
         },
       }
     }),
@@ -152,6 +181,10 @@ export function buildVisibleGraph(args: {
         hovering &&
         !hoveredAlertNodeIds.has(e.source_id) &&
         !hoveredAlertNodeIds.has(e.target_id)
+      const outsideHighlight = Boolean(
+        highlightedNodeIds &&
+          (!highlightedNodeIds.has(e.source_id) || !highlightedNodeIds.has(e.target_id)),
+      )
       const curveIndex = curvatureByTarget.get(e.target_id) ?? 0
       curvatureByTarget.set(e.target_id, curveIndex + 1)
 
@@ -166,7 +199,7 @@ export function buildVisibleGraph(args: {
           stroke: fromAgent ? 'var(--edge-expanded)' : 'var(--edge-seed)',
           strokeWidth: 1.5,
           strokeDasharray: fromAgent ? '5 4' : undefined,
-          opacity: endpointsDimmed ? 0.15 : opacity,
+          opacity: endpointsDimmed || outsideHighlight ? 0.15 : opacity,
         },
         labelStyle: {
           fill: 'var(--text-dim)',

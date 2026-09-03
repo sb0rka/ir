@@ -74,6 +74,11 @@ export function isCorrelationRecord(raw: Record<string, string>): boolean {
   return Boolean(raw.correlation_name)
 }
 
+export function isFindingRecord(raw: Record<string, string>, recordType?: string): boolean {
+  const kind = recordType || raw.finding_kind || ''
+  return kind === 'siem_incident' || kind === 'siem_correlation' || isCorrelationRecord(raw)
+}
+
 export function eventHeaderMeta(raw: Record<string, string>, source: string): EventHeaderMeta {
   const sourceRows = rowsOf(raw, ['event_src.vendor', 'event_src.title'])
   if (sourceRows.length === 0 && source) sourceRows.push({ field: 'source', value: source })

@@ -4,6 +4,7 @@ import {
   eventHeaderMeta,
   groupEventFields,
   isCorrelationRecord,
+  isFindingRecord,
   isSiemSource,
 } from './siemGroups'
 
@@ -33,6 +34,13 @@ describe('groupEventFields', () => {
   it('treats MaxPatrol SIEM as a grouped source', () => {
     expect(isSiemSource('pt-maxpatrol-siem')).toBe(true)
     expect(isSiemSource('pt-nad')).toBe(false)
+  })
+
+  it('treats incidents and correlations as finding cards', () => {
+    expect(isFindingRecord({ finding_kind: 'siem_incident' })).toBe(true)
+    expect(isFindingRecord({ correlation_name: 'brute' })).toBe(true)
+    expect(isFindingRecord({}, 'siem_correlation')).toBe(true)
+    expect(isFindingRecord({ msgid: 'openat' })).toBe(false)
   })
 
   it('groups a SIEM event like the vendor card', () => {

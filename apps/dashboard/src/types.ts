@@ -24,6 +24,23 @@ export type ReviewState = 'confirmed' | 'proposed' | 'rejected'
 
 export type InvestigationStatus = 'open' | 'in_progress' | 'closed'
 
+export type Verdict = 'incident' | 'false_positive' | 'not_affected' | 'inconclusive'
+
+export interface InvestigationCounters {
+  children: number
+  findings: number
+  sessions: number
+  events: number
+  entities: number
+  proposed_edges: number
+}
+
+export interface InvestigationListFilter {
+  status: 'all' | InvestigationStatus
+  severity: 'all' | Exclude<Severity, 'info'>
+  q: string
+}
+
 export type IssueStatus = 'running' | 'completed' | 'error' | 'cancelled'
 
 export type FilterField =
@@ -94,6 +111,8 @@ export interface ContextEvent {
   source: Source
   entityIds: string[]
   origin: EventOrigin
+  /** Investigation-event link flag (`is_seed`), not `attached_by`. */
+  isSeed: boolean
   review: ReviewState
   description: string
   sourceEventId?: string
@@ -175,7 +194,14 @@ export interface Investigation {
   /** Gateway finding identities attached to this investigation (`source/instance?/kind/external_id`). */
   findingSourceKeys: string[]
   issueIds: string[]
+  hypothesisIds: string[]
   createdAt: string
+  updatedAt?: string
+  closedAt?: string | null
+  description?: string | null
+  verdict?: Verdict
+  verdictReason?: string | null
+  counters?: InvestigationCounters
   view: 'table' | 'graph' | 'queue'
   selectedNodeId?: string
   selectedEventId?: string
@@ -228,6 +254,8 @@ export interface ContextQueueState {
   eventGroups: EventGroupItem[]
   executedFingerprint: string | null
   queryHistory: QueryHistoryEntry[]
+  /** Bumped when a finding resolve chip blocks adding another filter. */
+  findingFilterWarnAt: number
   selectedIds: string[]
   hideAdded: boolean
   originFilter: EventOrigin | 'all'

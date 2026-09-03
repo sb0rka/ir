@@ -43,6 +43,10 @@ export function isUnauthorized(err: unknown): boolean {
   return isApiError(err) && (err.code === 'unauthorized' || err.status === 401)
 }
 
+export function isConflict(err: unknown): boolean {
+  return isApiError(err) && (err.code === 'conflict' || err.status === 409)
+}
+
 type Envelope = {
   error?: {
     code?: string

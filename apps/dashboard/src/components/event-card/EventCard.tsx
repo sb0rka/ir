@@ -25,6 +25,7 @@ export function EventCard({
   onTimeChange,
   onTimeExecute,
   onAddFilter,
+  onFilterFindingUuid,
   onAddToContext,
 }: {
   event: EventCardModel
@@ -34,11 +35,29 @@ export function EventCard({
   onTimeChange: (value: TimeInterval) => void
   onTimeExecute: (value: TimeInterval) => void
   onAddFilter: (field: string, value: string) => void
+  onFilterFindingUuid?: (uuid: string, recordType: 'siem_incident' | 'siem_correlation') => void
   onAddToContext?: (field: string, value: string, includeEvent: boolean) => Promise<void>
 }) {
   const [picked, setPicked] = useState<{ field: string; value: string } | null>(null)
   const [openSubevent, setOpenSubevent] = useState<EventCardModel | null>(null)
   const raw = event.raw ?? {}
+  const findingRecordType =
+    event.findingRef?.record_type === 'siem_incident' ||
+    event.findingRef?.record_type === 'siem_correlation'
+      ? event.findingRef.record_type
+      : raw.finding_kind === 'siem_incident'
+        ? 'siem_incident'
+        : raw.finding_kind === 'siem_correlation' || isCorrelationRecord(raw)
+          ? 'siem_correlation'
+          : null
+
+  const onValueClick = (field: string, value: string) => {
+    if (field === 'uuid' && findingRecordType && onFilterFindingUuid) {
+      onFilterFindingUuid(value, findingRecordType)
+      return
+    }
+    setPicked({ field, value })
+  }
 
   useEffect(() => {
     setOpenSubevent(null)
@@ -63,6 +82,7 @@ export function EventCard({
           onTimeChange={onTimeChange}
           onTimeExecute={onTimeExecute}
           onAddFilter={onAddFilter}
+          onFilterFindingUuid={onFilterFindingUuid}
           onAddToContext={onAddToContext}
         />
       </div>
@@ -87,12 +107,12 @@ export function EventCard({
         source={event.source}
         raw={raw}
         severity={event.severity}
-        onValueClick={(field, value) => setPicked({ field, value })}
+        onValueClick={onValueClick}
       />
       <EventFields
         source={event.source}
         raw={raw}
-        onValueClick={(field, value) => setPicked({ field, value })}
+        onValueClick={onValueClick}
       />
       <CorrelationSubevents
         event={event}

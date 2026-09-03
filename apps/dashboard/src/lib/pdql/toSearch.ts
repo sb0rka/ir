@@ -1,3 +1,4 @@
+import { isFindingFilterField, type FindingFilterField } from './append'
 import type { FilterChip } from '../../types'
 import type { Condition, QueryAst } from './model'
 import { formatCondition } from './serialize'
@@ -219,6 +220,20 @@ export function astToEventAggregate(ast: QueryAst): EventAggregateParts | undefi
   if (groupSort?.sort) sort.push({ field, direction: groupSort.sort.dir })
   if (sort.length) parts.sort = sort
   return parts
+}
+
+/** Finding resolve chip, even when other filters are also present (they are ignored). */
+export function findingUuidFromAst(ast: QueryAst): {
+  uuid: string
+  recordType: FindingFilterField
+} | null {
+  for (const condition of ast.filter) {
+    if (!isFindingFilterField(condition.field) || condition.op !== '=' || condition.negated) continue
+    const value = condition.value.trim()
+    if (!value) continue
+    return { uuid: value, recordType: condition.field }
+  }
+  return null
 }
 
 export function astToEventSearch(

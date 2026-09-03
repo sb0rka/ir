@@ -5,9 +5,11 @@ import {
   useState,
   type PointerEvent as ReactPointerEvent,
 } from 'react'
+import { EMPTY_LAYER_IDS } from '../../lib/hypotheses'
 import { useWorkspaceStore } from '../../state/useWorkspaceStore'
 import { SEVERITY_COLOR } from './constants'
 import { eventsInRange } from './graph-adapters'
+import { useHypothesisGraphView } from './useHypothesisGraphView'
 import { clamp, formatClock, formatEventTooltip, formatShortDate, toMs } from './time'
 import type { EventRef, Selection } from './types'
 
@@ -26,7 +28,23 @@ export function Timeline() {
   const windowEnd = toMs(
     activeInvestigation?.windowEnd ?? '2026-07-17T12:30:00.000Z',
   )
-  const events = activeInvestigation?.events ?? []
+  const investigationId = activeInvestigation?.id
+  const allNodeIds = useMemo(
+    () =>
+      activeInvestigation
+        ? [
+            ...activeInvestigation.entities.map((e) => e.id),
+            ...activeInvestigation.alerts.map((a) => a.id),
+          ]
+        : EMPTY_LAYER_IDS,
+    [activeInvestigation],
+  )
+  const { visibleNodeIds } = useHypothesisGraphView(investigationId, allNodeIds)
+  const events = useMemo(() => {
+    const all = activeInvestigation?.events ?? []
+    if (!visibleNodeIds) return all
+    return all.filter((ev) => ev.alert_id != null && visibleNodeIds.has(ev.alert_id))
+  }, [activeInvestigation?.events, visibleNodeIds])
   const range =
     activeInvestigation?.filters.timeRange ?? {
       start: windowStart,

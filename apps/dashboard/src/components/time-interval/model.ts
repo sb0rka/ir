@@ -356,6 +356,15 @@ export function resolve(value: TimeInterval, now: Date = new Date()): ResolvedIn
   return { from: new Date(fromMs).toISOString(), to: new Date(toMs).toISOString() }
 }
 
+/** Inclusive bounds: an event at `from` or `to` stays in the window. */
+export function inResolvedInterval(iso: string, range: ResolvedInterval): boolean {
+  const at = Date.parse(iso)
+  const from = Date.parse(range.from)
+  const to = Date.parse(range.to)
+  if (!Number.isFinite(at) || !Number.isFinite(from) || !Number.isFinite(to)) return false
+  return at >= from && at <= to
+}
+
 export function normalizeRange(from: string, to: string): ResolvedInterval & { swapped: boolean } {
   if (Date.parse(from) <= Date.parse(to)) return { from, to, swapped: false }
   return { from: to, to: from, swapped: true }

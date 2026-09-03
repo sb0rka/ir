@@ -1,10 +1,13 @@
+import { useState } from 'react'
 import { useAppStore, emptyContextQueue } from '../store/appStore'
 import type { AlertEvent, CorrelationGroup, QueueItem } from '../types'
 import { Button, Chip, SeverityBadge } from './ui'
+import { StartInvestigationModal } from './StartInvestigationModal'
 import { clsx, formatTime } from '../lib/utils'
+import { titlesForQueueIds } from '../lib/investigationTitle'
 import { hasGroupValueSelection, parseQueuePdql, queueSelectFields } from '../lib/pdql'
 import { alertIsInContext, contextEventKeys } from '../lib/queueContext'
-import { ChevronDown, ChevronRight, Layers, Play, Plus } from 'lucide-react'
+import { ChevronDown, ChevronRight, Layers, Loader2, Play, Plus } from 'lucide-react'
 
 const COL_FIT = 'w-px whitespace-nowrap'
 const COL_TITLE = 'min-w-0 w-full'
@@ -273,6 +276,7 @@ function CorrelationRow({
 export function AlertTable({ investigationId }: { investigationId?: string } = {}) {
   const globalSelected = useAppStore((s) => s.selectedAlertIds)
   const start = useAppStore((s) => s.startInvestigation)
+  const starting = useAppStore((s) => s.investigationLoading)
   const clear = useAppStore((s) => s.clearAlertSelection)
   const globalAlerts = useAppStore((s) => s.alerts)
   const correlations = useAppStore((s) => s.correlations)
@@ -289,6 +293,7 @@ export function AlertTable({ investigationId }: { investigationId?: string } = {
   const setContextQueue = useAppStore((s) => s.setContextQueue)
   const addEventsToContext = useAppStore((s) => s.addEventsToContext)
   const toggleAlertSelect = useAppStore((s) => s.toggleAlertSelect)
+  const [naming, setNaming] = useState(false)
 
   const alerts = queue?.alerts ?? globalAlerts
   const queueOrder = queue?.queueOrder ?? globalOrder
@@ -394,8 +399,16 @@ export function AlertTable({ investigationId }: { investigationId?: string } = {
                 Добавить в расследование
               </Button>
             ) : (
-              <Button size="sm" onClick={() => start(selected)}>
-                <Play className="h-3 w-3" />
+              <Button
+                size="sm"
+                disabled={starting}
+                onClick={() => setNaming(true)}
+              >
+                {starting ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <Play className="h-3 w-3" />
+                )}
                 Начать расследование
               </Button>
             )}
@@ -471,6 +484,17 @@ export function AlertTable({ investigationId }: { investigationId?: string } = {
           </tbody>
         </table>
       </div>
+      {naming && !investigationId && (
+        <StartInvestigationModal
+          eventTitles={titlesForQueueIds(selected, alerts, correlations)}
+          busy={starting}
+          onClose={() => setNaming(false)}
+          onConfirm={async (title) => {
+            const createdId = await start(selected, title)
+            if (createdId) setNaming(false)
+          }}
+        />
+      )}
     </div>
   )
 }

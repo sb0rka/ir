@@ -25,6 +25,7 @@ export {
   normalizeRange,
   parseTimestamp,
   resolve,
+  inResolvedInterval,
   windowSpanMs,
   intervalAroundInstant,
 } from './model'
