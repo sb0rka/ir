@@ -1,3 +1,5 @@
+import type { Verdict } from '../types'
+
 export function formatTime(iso: string): string {
   const d = new Date(iso)
   return d.toLocaleString('ru-RU', {
@@ -49,6 +51,20 @@ export const severityDot: Record<string, string> = {
   low: 'bg-low',
   info: 'bg-info',
 }
+
+export const verdictLabel: Record<string, string> = {
+  incident: 'инцидент',
+  false_positive: 'ложное',
+  not_affected: 'не затронуто',
+  inconclusive: 'неясно',
+}
+
+export const CLOSE_VERDICTS: { id: Verdict; label: string }[] = [
+  { id: 'incident', label: 'Инцидент' },
+  { id: 'false_positive', label: 'Ложное срабатывание' },
+  { id: 'not_affected', label: 'Не затронуто' },
+  { id: 'inconclusive', label: 'Неясно' },
+]
 
 export const statusLabel: Record<string, string> = {
   new: 'новое',

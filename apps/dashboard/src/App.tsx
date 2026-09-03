@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { LogOut, Settings2 } from 'lucide-react'
 import { TabBar } from './components/TabBar'
 import { QueuePage } from './pages/QueuePage'
+import { InvestigationsPage } from './pages/InvestigationsPage'
 import { InvestigationPage } from './pages/InvestigationPage'
 import { useAppStore } from './store/appStore'
 import { Button, ErrorBanner } from './components/ui'
@@ -202,6 +203,8 @@ function Dashboard({
       <main className="min-h-0 flex-1">
         {activeTab === 'queue' ? (
           <QueuePage />
+        ) : activeTab === 'investigations' ? (
+          <InvestigationsPage />
         ) : (
           <InvestigationPage investigationId={activeTab} />
         )}

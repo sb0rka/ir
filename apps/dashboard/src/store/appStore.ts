@@ -14,6 +14,7 @@ import {
   type GraphEdge,
   type GraphNode,
   type Investigation,
+  type InvestigationListFilter,
   type Issue,
   type QueueItem,
   type QueueSource,
@@ -43,6 +44,7 @@ import {
   listInvestigations,
   loadInvestigationBundle,
   patchInvestigation,
+  deleteInvestigation as deleteInvestigationRequest,
   resolveSomCatalog,
   reviewEdges,
   runSomIssue,
@@ -76,7 +78,19 @@ import type { components as Ir } from '@ir/contract'
 
 export type SidebarSectionId = 'agent' | 'hypotheses'
 
-export type TabId = 'queue' | string
+export type TabId = 'queue' | 'investigations' | string
+
+export const PINNED_TABS = ['queue', 'investigations'] as const
+
+export function isPinnedTab(tab: TabId): tab is (typeof PINNED_TABS)[number] {
+  return tab === 'queue' || tab === 'investigations'
+}
+
+export const DEFAULT_INVESTIGATION_FILTER: InvestigationListFilter = {
+  status: 'all',
+  severity: 'all',
+  q: '',
+}
 
 const DEFAULT_QUEUE_PDQL = serialize(defaultQuery())
 const DEFAULT_TIME_INTERVAL = demoDayInterval()
@@ -137,6 +151,14 @@ interface AppState {
   tabs: TabId[]
   activeTab: TabId
   investigations: Record<string, Investigation>
+  investigationRootIds: string[]
+  investigationsNextCursor: string | null
+  investigationsLoading: boolean
+  investigationDeletingId: string | null
+  investigationFilters: InvestigationListFilter
+  expandedInvestigationIds: string[]
+  investigationChildren: Record<string, string[]>
+  investigationChildrenLoading: Record<string, boolean>
   issues: Record<string, Issue>
   eventReviews: Record<string, ReviewState>
   nodeReviews: Record<string, ReviewState>
@@ -188,13 +210,18 @@ interface AppState {
 
   setActiveTab: (tab: TabId) => void
   closeTab: (tab: TabId) => void
+  openInvestigationTab: (id: string) => void
   startInvestigation: (alertOrCorrIds: string[], title: string) => Promise<string>
   createChildInvestigation: (parentId: string, entityIds: string[]) => Promise<string>
   updateInvestigation: (id: string, patch: Partial<Investigation>) => void
-  persistInvestigation: (id: string, patch: Partial<Investigation>) => Promise<void>
+  persistInvestigation: (id: string, patch: Partial<Investigation>) => Promise<boolean>
   loadQueue: () => Promise<void>
   bootstrap: () => Promise<void>
   loadInvestigation: (id: string) => Promise<void>
+  loadInvestigationList: (reset?: boolean) => Promise<void>
+  setInvestigationFilter: (patch: Partial<InvestigationListFilter>) => Promise<void>
+  toggleInvestigationExpand: (id: string) => Promise<void>
+  deleteInvestigation: (id: string) => Promise<void>
   clearError: () => void
 
   setReview: (
@@ -356,6 +383,90 @@ function applyBundle(
   }
 }
 
+function listQueryFromFilters(
+  filters: InvestigationListFilter,
+  extra: { parentId?: string; cursor?: string } = {},
+) {
+  return {
+    parentId: extra.parentId,
+    cursor: extra.cursor,
+    status: filters.status === 'all' ? undefined : filters.status,
+    severity: filters.severity === 'all' ? undefined : filters.severity,
+    q: filters.q,
+    limit: 100,
+  }
+}
+
+function mergeListedInvestigation(
+  existing: Investigation | undefined,
+  listed: Investigation,
+): Investigation {
+  if (!existing) return listed
+  return {
+    ...existing,
+    title: listed.title,
+    severity: listed.severity,
+    status: listed.status,
+    parentId: listed.parentId,
+    createdAt: listed.createdAt,
+    updatedAt: listed.updatedAt,
+    closedAt: listed.closedAt,
+    description: listed.description,
+    verdict: listed.verdict,
+    verdictReason: listed.verdictReason,
+    counters: listed.counters,
+    version: listed.version,
+    somWorkspaceIds: listed.somWorkspaceIds,
+  }
+}
+
+function mergeListed(
+  current: Record<string, Investigation>,
+  items: Investigation[],
+): Record<string, Investigation> {
+  const next = { ...current }
+  for (const item of items) next[item.id] = mergeListedInvestigation(next[item.id], item)
+  return next
+}
+
+function uniqueAppend(ids: string[], extra: string[]): string[] {
+  const seen = new Set(ids)
+  const next = [...ids]
+  for (const id of extra) {
+    if (seen.has(id)) continue
+    seen.add(id)
+    next.push(id)
+  }
+  return next
+}
+
+function prependId(ids: string[], id: string): string[] {
+  return [id, ...ids.filter((item) => item !== id)]
+}
+
+function collectSubtreeIds(
+  rootId: string,
+  investigations: Record<string, Investigation>,
+  children: Record<string, string[]>,
+): string[] {
+  const ids = new Set<string>([rootId])
+  const queue = [rootId]
+  while (queue.length) {
+    const current = queue.pop()!
+    for (const childId of children[current] ?? []) {
+      if (ids.has(childId)) continue
+      ids.add(childId)
+      queue.push(childId)
+    }
+    for (const inv of Object.values(investigations)) {
+      if (inv.parentId !== current || ids.has(inv.id)) continue
+      ids.add(inv.id)
+      queue.push(inv.id)
+    }
+  }
+  return [...ids]
+}
+
 export const useAppStore = create<AppState>((set, get) => ({
   chips: [],
   timeInterval: DEFAULT_TIME_INTERVAL,
@@ -370,9 +481,17 @@ export const useAppStore = create<AppState>((set, get) => ({
   expandedCorrelationIds: [],
   inspectedQueueItem: null,
 
-  tabs: ['queue'],
+  tabs: ['queue', 'investigations'],
   activeTab: 'queue',
   investigations: {},
+  investigationRootIds: [],
+  investigationsNextCursor: null,
+  investigationsLoading: false,
+  investigationDeletingId: null,
+  investigationFilters: DEFAULT_INVESTIGATION_FILTER,
+  expandedInvestigationIds: [],
+  investigationChildren: {},
+  investigationChildrenLoading: {},
   issues: {},
   eventReviews: {},
   nodeReviews: {},
@@ -525,29 +644,29 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
   setActiveTab: (activeTab) => set({ activeTab }),
   closeTab: (tab) => {
-    if (tab === 'queue') return
+    if (isPinnedTab(tab)) return
     const tabs = get().tabs.filter((t) => t !== tab)
-    const activeTab = get().activeTab === tab ? tabs[tabs.length - 1] ?? 'queue' : get().activeTab
+    const activeTab =
+      get().activeTab === tab ? (tabs[tabs.length - 1] ?? 'investigations') : get().activeTab
     set({ tabs, activeTab })
+  },
+  openInvestigationTab: (id) => {
+    if (isPinnedTab(id)) {
+      set({ activeTab: id })
+      return
+    }
+    const tabs = get().tabs
+    if (tabs.includes(id)) {
+      set({ activeTab: id })
+      return
+    }
+    set({ tabs: [...tabs, id], activeTab: id })
   },
 
   clearError: () => set({ lastError: null, lastNotImplemented: null }),
 
   bootstrap: async () => {
-    try {
-      const listed = await listInvestigations()
-      if (listed.length) {
-        const investigations = { ...get().investigations }
-        const tabs = [...get().tabs]
-        for (const inv of listed) {
-          investigations[inv.id] = inv
-          if (!tabs.includes(inv.id)) tabs.push(inv.id)
-        }
-        set({ investigations, tabs })
-      }
-    } catch (err) {
-      set({ lastError: errorMessage(err) })
-    }
+    await get().loadInvestigationList(true)
     await get().loadQueue()
   },
 
@@ -622,6 +741,123 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
+  loadInvestigationList: async (reset = true) => {
+    const filters = get().investigationFilters
+    const cursor = reset ? undefined : (get().investigationsNextCursor ?? undefined)
+    if (!reset && !cursor) return
+    set({ investigationsLoading: true, lastError: null })
+    try {
+      const page = await listInvestigations(listQueryFromFilters(filters, { cursor }))
+      const ids = page.items.map((item) => item.id)
+      set({
+        investigations: mergeListed(get().investigations, page.items),
+        investigationRootIds: reset
+          ? ids
+          : uniqueAppend(get().investigationRootIds, ids),
+        investigationsNextCursor: page.nextCursor,
+        investigationsLoading: false,
+        ...(reset
+          ? { expandedInvestigationIds: [], investigationChildren: {}, investigationChildrenLoading: {} }
+          : {}),
+      })
+    } catch (err) {
+      set({ investigationsLoading: false, lastError: errorMessage(err) })
+    }
+  },
+
+  setInvestigationFilter: async (patch) => {
+    set({ investigationFilters: { ...get().investigationFilters, ...patch } })
+    await get().loadInvestigationList(true)
+  },
+
+  toggleInvestigationExpand: async (id) => {
+    const expanded = get().expandedInvestigationIds
+    if (expanded.includes(id)) {
+      set({ expandedInvestigationIds: expanded.filter((item) => item !== id) })
+      return
+    }
+    set({ expandedInvestigationIds: [...expanded, id] })
+    if (get().investigationChildren[id]) return
+    set({
+      investigationChildrenLoading: { ...get().investigationChildrenLoading, [id]: true },
+    })
+    try {
+      const page = await listInvestigations(
+        listQueryFromFilters(get().investigationFilters, { parentId: id }),
+      )
+      set({
+        investigations: mergeListed(get().investigations, page.items),
+        investigationChildren: {
+          ...get().investigationChildren,
+          [id]: page.items.map((item) => item.id),
+        },
+        investigationChildrenLoading: { ...get().investigationChildrenLoading, [id]: false },
+      })
+    } catch (err) {
+      set({
+        investigationChildrenLoading: { ...get().investigationChildrenLoading, [id]: false },
+        lastError: errorMessage(err),
+      })
+    }
+  },
+
+  deleteInvestigation: async (id) => {
+    if (isPinnedTab(id) || get().investigationDeletingId) return
+    const target = get().investigations[id]
+    if (!target) return
+    const parentId = target.parentId
+    const removedIds = collectSubtreeIds(id, get().investigations, get().investigationChildren)
+    const removed = new Set(removedIds)
+    set({ investigationDeletingId: id, lastError: null, lastNotImplemented: null })
+    try {
+      await deleteInvestigationRequest(id)
+      const investigations = { ...get().investigations }
+      for (const removedId of removedIds) delete investigations[removedId]
+      if (parentId && investigations[parentId]?.counters) {
+        const parent = investigations[parentId]
+        investigations[parentId] = {
+          ...parent,
+          counters: {
+            ...parent.counters!,
+            children: Math.max(0, parent.counters!.children - 1),
+          },
+        }
+      }
+      const investigationChildren: Record<string, string[]> = {}
+      for (const [parent, childIds] of Object.entries(get().investigationChildren)) {
+        if (removed.has(parent)) continue
+        investigationChildren[parent] = childIds.filter((childId) => !removed.has(childId))
+      }
+      const investigationChildrenLoading = { ...get().investigationChildrenLoading }
+      for (const removedId of removedIds) delete investigationChildrenLoading[removedId]
+      const contextQueue = { ...get().contextQueue }
+      for (const removedId of removedIds) delete contextQueue[removedId]
+      const tabs = get().tabs.filter((tab) => !removed.has(tab))
+      const activeTab = removed.has(get().activeTab)
+        ? (tabs[tabs.length - 1] ?? 'investigations')
+        : get().activeTab
+      set({
+        investigations,
+        investigationRootIds: get().investigationRootIds.filter((rootId) => !removed.has(rootId)),
+        investigationChildren,
+        investigationChildrenLoading,
+        expandedInvestigationIds: get().expandedInvestigationIds.filter(
+          (expandedId) => !removed.has(expandedId),
+        ),
+        contextQueue,
+        tabs,
+        activeTab,
+        investigationDeletingId: null,
+      })
+    } catch (err) {
+      if (isNotImplemented(err)) {
+        set({ investigationDeletingId: null, lastNotImplemented: errorMessage(err) })
+        return
+      }
+      set({ investigationDeletingId: null, lastError: errorMessage(err) })
+    }
+  },
+
   startInvestigation: async (ids, title) => {
     const trimmed = title.trim().slice(0, 255)
     if (!trimmed) return ''
@@ -647,8 +883,9 @@ export const useAppStore = create<AppState>((set, get) => ({
       })
       set({
         ...applyBundle(get, bundle),
-        tabs: [...get().tabs, created.id],
+        tabs: get().tabs.includes(created.id) ? get().tabs : [...get().tabs, created.id],
         activeTab: created.id,
+        investigationRootIds: prependId(get().investigationRootIds, created.id),
         selectedAlertIds: [],
         inspectedQueueItem: null,
         investigationLoading: false,
@@ -709,11 +946,31 @@ export const useAppStore = create<AppState>((set, get) => ({
         groupValues: get().groupValues,
         queryHistory: get().queryHistory,
       }
+      const children = get().investigationChildren[parentId]
+      const bundled = applyBundle(get, bundle)
+      const parentInv = bundled.investigations[parentId]
       set({
-        ...applyBundle(get, bundle),
-        tabs: [...get().tabs, created.id],
+        ...bundled,
+        tabs: get().tabs.includes(created.id) ? get().tabs : [...get().tabs, created.id],
         activeTab: created.id,
         investigationLoading: false,
+        investigationChildren: children
+          ? {
+              ...get().investigationChildren,
+              [parentId]: prependId(children, created.id),
+            }
+          : get().investigationChildren,
+        investigations: parentInv
+          ? {
+              ...bundled.investigations,
+              [parentId]: {
+                ...parentInv,
+                counters: parentInv.counters
+                  ? { ...parentInv.counters, children: parentInv.counters.children + 1 }
+                  : parentInv.counters,
+              },
+            }
+          : bundled.investigations,
         contextQueue: {
           ...get().contextQueue,
           [created.id]: {
@@ -749,26 +1006,39 @@ export const useAppStore = create<AppState>((set, get) => ({
     const inv = get().investigations[id]
     if (!inv || inv.version == null) {
       get().updateInvestigation(id, patch)
-      return
+      return true
     }
     try {
-      await patchInvestigation(id, {
+      const status =
+        patch.status === 'closed' || patch.status === 'in_progress' || patch.status === 'open'
+          ? patch.status
+          : undefined
+      const updated = await patchInvestigation(id, {
         version: inv.version,
         title: patch.title,
-        status:
-          patch.status === 'closed' || patch.status === 'in_progress' || patch.status === 'open'
-            ? patch.status
-            : undefined,
-        severity:
-          patch.severity && patch.severity !== 'info' ? patch.severity : undefined,
+        status,
+        severity: patch.severity && patch.severity !== 'info' ? patch.severity : undefined,
+        verdict: patch.verdict,
+        verdict_reason: patch.verdictReason ?? undefined,
       })
-      get().updateInvestigation(id, patch)
+      get().updateInvestigation(id, {
+        status: updated.status,
+        verdict: updated.verdict,
+        verdictReason: updated.verdict_reason,
+        closedAt: updated.closed_at,
+        updatedAt: updated.updated_at,
+        version: updated.version,
+        ...(patch.title != null ? { title: patch.title } : {}),
+        ...(patch.severity != null ? { severity: patch.severity } : {}),
+      })
+      return true
     } catch (err) {
       if (isNotImplemented(err)) {
         set({ lastNotImplemented: errorMessage(err) })
-        return
+        return false
       }
       set({ lastError: errorMessage(err) })
+      return false
     }
   },
 

@@ -1,10 +1,12 @@
+import { useState } from 'react'
 import {
   emptyContextQueue,
   useAppStore,
 } from '../store/appStore'
 import { ContextQueueToolbar } from './ContextQueue'
+import { CloseInvestigationModal } from './CloseInvestigationModal'
 import { Button, Chip, SeverityBadge } from '../components/ui'
-import { clsx, eventOriginLabel, formatTime, matchesOriginFilter, statusLabel } from '../lib/utils'
+import { clsx, eventOriginLabel, formatTime, matchesOriginFilter, statusLabel, verdictLabel } from '../lib/utils'
 import { fieldForEntityKind } from '../lib/filters'
 import { Check, Inbox, Network, Table2, X } from 'lucide-react'
 
@@ -15,11 +17,15 @@ export function InvestigationHeader({ investigationId }: { investigationId: stri
   )
   const issues = useAppStore((s) => s.issues)
   const update = useAppStore((s) => s.updateInvestigation)
-  const setActiveTab = useAppStore((s) => s.setActiveTab)
+  const persistInvestigation = useAppStore((s) => s.persistInvestigation)
+  const openInvestigationTab = useAppStore((s) => s.openInvestigationTab)
+  const [closeOpen, setCloseOpen] = useState(false)
+  const [closing, setClosing] = useState(false)
 
   if (!inv) return null
 
   const running = inv.issueIds.some((id) => issues[id]?.status === 'running')
+  const closed = inv.status === 'closed'
 
   return (
     <div className="border-b border-border bg-surface-1 px-4 py-3">
@@ -29,6 +35,26 @@ export function InvestigationHeader({ investigationId }: { investigationId: stri
             <h1 className="text-sm font-semibold">{inv.title}</h1>
             <SeverityBadge severity={inv.severity} />
             <Chip>{statusLabel[inv.status]}</Chip>
+            {inv.verdict ? <Chip>{verdictLabel[inv.verdict] ?? inv.verdict}</Chip> : null}
+            {closed ? (
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={closing}
+                onClick={() => {
+                  setClosing(true)
+                  void persistInvestigation(investigationId, { status: 'open' }).finally(() =>
+                    setClosing(false),
+                  )
+                }}
+              >
+                Вернуть в работу
+              </Button>
+            ) : (
+              <Button size="sm" onClick={() => setCloseOpen(true)}>
+                Закрыть…
+              </Button>
+            )}
             <span className="text-xs text-fg-dim">аналитик: {inv.assignee}</span>
             {running && (
               <span className="inline-flex items-center gap-1.5 text-xs text-proposed">
@@ -41,7 +67,7 @@ export function InvestigationHeader({ investigationId }: { investigationId: stri
             <button
               type="button"
               className="mt-1 text-xs text-fg-muted hover:text-fg"
-              onClick={() => setActiveTab(parent.id)}
+              onClick={() => openInvestigationTab(parent.id)}
             >
               ← родитель: {parent.title}
             </button>
@@ -86,6 +112,25 @@ export function InvestigationHeader({ investigationId }: { investigationId: stri
           </div>
         </div>
       </div>
+      {closeOpen && !closed ? (
+        <CloseInvestigationModal
+          title={inv.title}
+          busy={closing}
+          onClose={() => {
+            if (!closing) setCloseOpen(false)
+          }}
+          onConfirm={async ({ verdict, reason }) => {
+            setClosing(true)
+            const ok = await persistInvestigation(investigationId, {
+              status: 'closed',
+              verdict,
+              verdictReason: reason || null,
+            })
+            setClosing(false)
+            if (ok) setCloseOpen(false)
+          }}
+        />
+      ) : null}
     </div>
   )
 }
