@@ -1,14 +1,14 @@
 import { useState } from 'react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import {
-  eventHeaderMeta,
+  eventFieldLabelRu,
   groupEventFields,
+  incidentTypeLabelRu,
   type FieldColumn,
   type FieldGroup,
   type FieldRow,
 } from '../../lib/pdql'
 import type { AlertEvent, Severity } from '../../types'
-import { SeverityBadge } from '../ui'
 
 export interface EventCardModel {
   id: string
@@ -67,57 +67,6 @@ export function EventFields({
           onValueClick={onValueClick}
         />
       ))}
-    </div>
-  )
-}
-
-export function EventHeaderFacts({
-  source,
-  raw,
-  severity,
-  onValueClick,
-}: {
-  source: string
-  raw: Record<string, string>
-  severity?: Severity
-  onValueClick: (field: string, value: string) => void
-}) {
-  const meta = eventHeaderMeta(raw, source)
-  return (
-    <div className="space-y-2">
-      {severity && <SeverityBadge severity={severity} />}
-      <div className="flex flex-wrap gap-x-5 gap-y-1 text-[11px]">
-        <MetaFact label="Источник" rows={meta.source} onValueClick={onValueClick} />
-        <MetaFact label="Идентификатор" rows={meta.identifier} onValueClick={onValueClick} />
-        <MetaFact label="Категория" rows={meta.category} joiner=" / " onValueClick={onValueClick} />
-      </div>
-    </div>
-  )
-}
-
-function MetaFact({
-  label,
-  rows,
-  joiner = ' ',
-  onValueClick,
-}: {
-  label: string
-  rows: FieldRow[]
-  joiner?: string
-  onValueClick: (field: string, value: string) => void
-}) {
-  if (rows.length === 0) return null
-  return (
-    <div>
-      <div className="text-[11px] text-fg-dim">{label}</div>
-      <div className="flex flex-wrap items-baseline">
-        {rows.map((row, index) => (
-          <span key={row.field} className="flex items-baseline">
-            {index > 0 && <span className="text-fg-dim">{joiner}</span>}
-            <ValueButton row={row} onValueClick={onValueClick} />
-          </span>
-        ))}
-      </div>
     </div>
   )
 }
@@ -194,7 +143,7 @@ function FieldValueRow({
 }) {
   return (
     <div className="flex items-start justify-between gap-2 text-xs">
-      <dt className="min-w-0 max-w-[45%] break-all text-fg-dim">{row.field}</dt>
+      <dt className="min-w-0 max-w-[45%] break-all text-fg-dim">{eventFieldLabelRu(row.field)}</dt>
       <dd className="min-w-0 flex-1 break-all text-right">
         {row.value ? (
           <ValueButton row={row} onValueClick={onValueClick} />
@@ -227,6 +176,7 @@ function ValueButton({
 
 function formatFieldValue(field: string, value: string): string {
   if (!value) return value
+  if (field === 'incident.type') return incidentTypeLabelRu(value)
   if (
     field === 'time' ||
     field === 'original_time' ||

@@ -68,6 +68,7 @@ type RuleRef struct {
 type IncidentDetails struct {
 	Key            string
 	ExternalKey    string
+	Type           string
 	Verdict        string
 	Damage         string
 	Recommendation string

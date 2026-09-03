@@ -16,11 +16,10 @@ import { FilterSection } from './FilterSection'
 import { GroupsSection } from './GroupsSection'
 import { PdqlPreview } from './PdqlPreview'
 
-export function PdqlBuilder() {
+export function PdqlBuilder({ onClose }: { onClose: () => void }) {
   const loadFields = usePdqlStore((s) => s.loadFields)
   const addField = usePdqlStore((s) => s.addField)
   const reorder = usePdqlStore((s) => s.reorder)
-  const resetQuery = usePdqlStore((s) => s.resetQuery)
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }))
 
   useEffect(() => {
@@ -73,9 +72,9 @@ export function PdqlBuilder() {
               <Button
                 size="icon"
                 variant="ghost"
-                title="Сбросить"
-                aria-label="Сбросить"
-                onClick={resetQuery}
+                title="Закрыть"
+                aria-label="Закрыть"
+                onClick={onClose}
               >
                 <X className="h-3.5 w-3.5" />
               </Button>

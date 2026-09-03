@@ -13,7 +13,7 @@ import { getProjectId, resolveTimeRange } from './env'
 import { gatewayClient } from './clients'
 import { unwrapError } from './error'
 import { mapGatewayEntity, mapGatewayEvent, mapGatewayFinding } from './adapters'
-import { pickFindingChildEvents, type FindingResolveKey } from '../lib/correlationSubevents'
+import { pickFindingAccounts, pickFindingChildEvents, pickFindingHosts, type FindingResolveKey } from '../lib/correlationSubevents'
 import { matchesChips } from '../lib/filters'
 import {
   astToEventAggregate,
@@ -21,7 +21,9 @@ import {
   astToFilterChips,
   findingUuidFromAst,
   pdqlToSearchParts,
+  timeIntervalFromAst,
   type QueryAst,
+  type PdqlSearchEntity,
 } from '../lib/pdql'
 import { sortQueueAlerts, type QueueSort } from '../lib/queueSort'
 import { inResolvedInterval, resolve, type TimeInterval } from '../components/time-interval/model'
@@ -54,6 +56,8 @@ export interface QueueSearchResult {
   availableSources: string[]
   /** @deprecated Mock sources removed from Gateway; always empty. */
   mockSources: string[]
+  /** Wide range ∩ PDQL time — when set, UI time button should adopt this range. */
+  effectiveTimeInterval?: TimeInterval
 }
 
 function emptyQueue(sourceErrors: string[], availableSources: string[]): QueueSearchResult {
@@ -308,9 +312,20 @@ function entitiesFromGateway(events: Gw['schemas']['Event'][], extra: Gw['schema
         type: mention.type,
         value: mention.value,
         attributes: {},
-        sources: [],
+        sources: event.source_code
+          ? [
+              {
+                source_code: event.source_code,
+                source_entity_id: `${mention.type}:${mention.value}`,
+                fetched_at: event.fetched_at,
+              },
+            ]
+          : [],
       })
-      entities[mapped.id] = entities[mapped.id] ?? mapped
+      const prev = entities[mapped.id]
+      entities[mapped.id] = prev
+        ? { ...prev, source: prev.source ?? mapped.source }
+        : mapped
       entityIds.push(mapped.id)
     }
     const alert = mapGatewayEvent(event, entityIds)
@@ -366,6 +381,134 @@ async function resolveUuidFindingQueue(
   )
 }
 
+function gatewayEntityRefs(entities: PdqlSearchEntity[]): Gw['schemas']['EntityRef'][] {
+  const out: Gw['schemas']['EntityRef'][] = []
+  const seen = new Set<string>()
+  for (const entity of entities) {
+    // MaxPatrol eventWhere supports host / ip / account only.
+    const type =
+      entity.type === 'user' || entity.type === 'account'
+        ? 'account'
+        : entity.type === 'host' || entity.type === 'ip'
+          ? entity.type
+          : null
+    if (!type) continue
+    const key = `${type}\0${entity.value}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push({ type, value: entity.value })
+  }
+  return out
+}
+
+function finishEntityQueue(
+  entities: Record<string, Entity>,
+  sourceErrors: string[],
+  availableSources: string[],
+): QueueSearchResult {
+  const order = Object.values(entities)
+    .slice()
+    .sort((a, b) => a.kind.localeCompare(b.kind) || a.label.localeCompare(b.label))
+  return {
+    alerts: {},
+    correlations: {},
+    queueOrder: order.map((entity) => ({ kind: 'entity' as const, id: entity.id })),
+    entities,
+    contextEvents: {},
+    eventGroups: [],
+    sourceErrors: [...new Set(sourceErrors)],
+    availableSources,
+    mockSources: [],
+  }
+}
+
+async function searchEntitiesQueue(
+  ast: QueryAst,
+  timeInterval: TimeInterval,
+): Promise<QueueSearchResult> {
+  const sources = await capableSources('events')
+  const allowedSources = sources.defaults.length ? sources.defaults : sources.available
+  if (!allowedSources.length) {
+    return emptyQueue(['Нет доступных online-источников events'], sources.available)
+  }
+
+  const entityParts = pdqlToSearchParts(ast)
+  const eventParts = astToEventSearch(ast)
+  const gatewayEntities = gatewayEntityRefs(entityParts.entities)
+  if (gatewayEntities.length === 0 && !eventParts.filter) {
+    return emptyQueue(
+      ['Добавьте фильтр сущности (host / account / ip)'],
+      sources.available,
+    )
+  }
+
+  const body: EventsBody = {
+    time_range: resolve(timeInterval),
+    limit: PAGE_LIMIT,
+    sources: allowedSources,
+  }
+  if (eventParts.filter) body.filter = eventParts.filter
+  if (gatewayEntities.length) body.entities = gatewayEntities
+
+  const sourceErrors: string[] = []
+  const events: Gw['schemas']['Event'][] = []
+  const pageEntities: Gw['schemas']['Entity'][] = []
+  let cursor: string | undefined
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const { data, error, response } = await gatewayClient.POST('/api/v1/events/search', {
+      params: projectHeader(),
+      body: { ...body, cursor },
+    })
+    if (error || !data) throw unwrapError(error, response.status)
+    events.push(...(data.events ?? []))
+    pageEntities.push(...(data.entities ?? []))
+    for (const err of data.source_errors ?? []) {
+      sourceErrors.push(`${err.source}: ${err.message}`)
+    }
+    if (!data.next_cursor) break
+    cursor = data.next_cursor
+  }
+
+  const { entities } = entitiesFromGateway(events, pageEntities)
+  const wanted = entityParts.entities
+  const filtered: Record<string, Entity> = {}
+  for (const entity of Object.values(entities)) {
+    if (wanted.length === 0) {
+      filtered[entity.id] = entity
+      continue
+    }
+    const match = wanted.some((item) => {
+      const kind =
+        item.type === 'user' || item.type === 'account'
+          ? entity.kind === 'user' || entity.kind === 'account'
+          : entity.kind === item.type
+      return kind && entity.label.toLowerCase() === item.value.toLowerCase()
+    })
+    if (match) filtered[entity.id] = entity
+  }
+  // Always include the explicitly requested entities even if the page had no hits.
+  for (const item of wanted) {
+    if (item.type === 'process') continue
+    const type = item.type === 'user' ? 'account' : item.type
+    const mapped = mapGatewayEntity({
+      type,
+      value: item.value,
+      attributes: {},
+      sources: allowedSources.map((source_code) => ({
+        source_code,
+        source_entity_id: `${type}:${item.value}`,
+        fetched_at: new Date().toISOString(),
+      })),
+    })
+    const prev = filtered[mapped.id]
+    filtered[mapped.id] = prev
+      ? { ...prev, source: prev.source ?? mapped.source }
+      : mapped
+  }
+
+  return finishEntityQueue(filtered, sourceErrors, sources.available)
+}
+
 async function searchEventsQueue(
   ast: QueryAst,
   timeInterval: TimeInterval,
@@ -373,6 +516,7 @@ async function searchEventsQueue(
 ): Promise<QueueSearchResult> {
   const sources = await capableSources('events')
   const parts = astToEventSearch(ast, groupValues)
+  const entityRefs = gatewayEntityRefs(pdqlToSearchParts(ast).entities)
   const hasGroups = ast.groups.length > 0
   const allowedSources = sourcesForEventSearch(
     sources.defaults.length ? sources.defaults : sources.available,
@@ -422,6 +566,7 @@ async function searchEventsQueue(
   }
   if (parts.filter) body.filter = parts.filter
   if (parts.sort) body.sort = parts.sort
+  if (entityRefs.length) body.entities = entityRefs
   if (parts.group_by && parts.group_values) {
     body.group_by = parts.group_by
     body.group_values = parts.group_values
@@ -464,10 +609,26 @@ export async function searchQueue(
   queueSource: QueueSource = DEFAULT_QUEUE_SOURCE,
   groupValues?: (string | null)[],
 ): Promise<QueueSearchResult> {
-  if (queueSource === 'events') return searchEventsQueue(ast, timeInterval, groupValues)
+  const { interval: effective, rewritten } = timeIntervalFromAst(ast, timeInterval)
+  if (queueSource === 'events') {
+    const result = await searchEventsQueue(ast, effective, groupValues)
+    return rewritten ? { ...result, effectiveTimeInterval: effective } : result
+  }
+  if (queueSource === 'entities') {
+    const result = await searchEntitiesQueue(ast, effective)
+    return rewritten ? { ...result, effectiveTimeInterval: effective } : result
+  }
   const chips = astToFilterChips(ast)
   const query = pdqlToSearchParts(ast).query
-  return searchFindingsQueue(chips, timeInterval, query, queueSource, astToEventSearch(ast).sort)
+  // Findings have no PDQL filter on the wire — PDQL `time` ∩ wide → time_range → IM detectedAt.
+  const result = await searchFindingsQueue(
+    chips,
+    effective,
+    query,
+    queueSource,
+    astToEventSearch(ast).sort,
+  )
+  return rewritten ? { ...result, effectiveTimeInterval: effective } : result
 }
 
 function alertFromGatewayEvent(event: Gw['schemas']['Event']): AlertEvent {
@@ -519,7 +680,12 @@ function contextErrorMessagesForKey(
 
 export async function resolveFindingEvents(
   key: FindingResolveKey,
-): Promise<{ events: AlertEvent[]; errors: string[] }> {
+): Promise<{
+  events: AlertEvent[]
+  accounts: string[]
+  hosts: { value: string; roles: string[] }[]
+  errors: string[]
+}> {
   const { data, error, response } = await gatewayClient.POST('/api/v1/context/resolve', {
     params: projectHeader(),
     body: {
@@ -527,8 +693,17 @@ export async function resolveFindingEvents(
     },
   })
   if (error || !data) throw unwrapError(error, response.status)
+  const root = (data.findings ?? []).find(
+    (finding) =>
+      finding.ref.source_code === key.source_code &&
+      finding.ref.record_type === key.record_type &&
+      finding.ref.external_id === key.external_id,
+  )
+  const mentions = root?.entities ?? []
   return {
     events: pickFindingChildEvents((data.events ?? []).map(alertFromGatewayEvent), key),
+    accounts: pickFindingAccounts(mentions),
+    hosts: pickFindingHosts(mentions),
     errors: contextErrorMessages(data),
   }
 }

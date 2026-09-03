@@ -41,11 +41,11 @@ export function InvestigationsPage() {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex flex-wrap items-center gap-2 border-b border-border bg-surface-1 px-3 py-2">
-        <span className={clsx('text-xs text-fg-dim', loading && 'opacity-60')}>
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-surface-1 px-5 py-2">
+        <span className={clsx('shrink-0 text-xs text-fg-dim', loading && 'opacity-60')}>
           {rootIds.length} в списке
         </span>
-        <div className="ml-auto flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {filtersActive ? (
             <Button
               size="icon"
@@ -73,40 +73,17 @@ export function InvestigationsPage() {
       </div>
       <div className="min-h-0 flex-1">
         {!loading && rootIds.length === 0 ? (
-          <EmptyState filtersActive={filtersActive} onReset={resetFilters} />
+          <div className="flex h-full items-center justify-center px-4 text-center">
+            <div>
+              <div className="text-sm text-fg-muted">Нет расследований</div>
+              <div className="mt-1 text-xs text-fg-dim">
+                Выберите находки и начните разбор
+              </div>
+            </div>
+          </div>
         ) : (
           <InvestigationsTable />
         )}
-      </div>
-    </div>
-  )
-}
-
-function EmptyState({
-  filtersActive,
-  onReset,
-}: {
-  filtersActive: boolean
-  onReset: () => void
-}) {
-  if (filtersActive) {
-    return (
-      <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
-        <div className="text-sm text-fg">Ничего не найдено</div>
-        <div className="max-w-md text-xs text-fg-dim">
-          Измените поиск или фильтры, чтобы увидеть другие расследования.
-        </div>
-        <Button size="sm" onClick={onReset}>
-          Сбросить фильтры
-        </Button>
-      </div>
-    )
-  }
-  return (
-    <div className="flex h-full flex-col items-center justify-center gap-2 px-6 text-center">
-      <div className="text-sm text-fg">Нет расследований</div>
-      <div className="max-w-md text-xs text-fg-dim">
-        Откройте кейс из очереди: выберите события или находки и начните расследование.
       </div>
     </div>
   )

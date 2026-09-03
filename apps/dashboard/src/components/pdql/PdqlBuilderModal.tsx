@@ -1,35 +1,48 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { serialize } from '../../lib/pdql'
 import { usePdqlStore } from '../../store/pdqlStore'
+import { resolve, type TimeInterval } from '../time-interval'
 import { Button } from '../ui'
 import { PdqlBuilder } from './PdqlBuilder'
 
 export function PdqlBuilderModal({
   open,
   initialPdql,
+  timeInterval,
   onClose,
   onApply,
   onExecute,
 }: {
   open: boolean
   initialPdql: string
+  timeInterval: TimeInterval
   onClose: () => void
   onApply: (pdql: string) => void
   onExecute: (pdql: string) => void
 }) {
   const initFrom = usePdqlStore((s) => s.initFrom)
   const applyPdql = usePdqlStore((s) => s.applyPdql)
+  const keepDraftRef = useRef(false)
 
   useEffect(() => {
     if (!open) return
-    initFrom(initialPdql)
-  }, [open, initialPdql, initFrom])
+    if (keepDraftRef.current) {
+      keepDraftRef.current = false
+      return
+    }
+    initFrom(initialPdql, resolve(timeInterval).from)
+  }, [open, initialPdql, timeInterval, initFrom])
 
   if (!open) return null
 
   const commit = (): string | null => {
     if (!applyPdql()) return null
     return serialize(usePdqlStore.getState().query)
+  }
+
+  const closeAndKeepDraft = () => {
+    keepDraftRef.current = true
+    onClose()
   }
 
   return (
@@ -44,7 +57,7 @@ export function PdqlBuilderModal({
         }}
       >
         <div className="min-h-0 flex-1">
-          <PdqlBuilder />
+          <PdqlBuilder onClose={closeAndKeepDraft} />
         </div>
         <div className="flex items-center justify-end gap-2 border-t border-border px-3 py-2">
           <Button size="sm" variant="ghost" onClick={onClose}>

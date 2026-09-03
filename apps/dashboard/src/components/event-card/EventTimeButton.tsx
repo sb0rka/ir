@@ -1,5 +1,7 @@
 import { useState } from 'react'
 import { Clock } from 'lucide-react'
+import type { Severity } from '../../types'
+import { SeverityBadge } from '../ui'
 import {
   TimeIntervalPopover,
   activeTimeZone,
@@ -14,11 +16,13 @@ export function EventTimeButton({
   current,
   onChange,
   onExecute,
+  severity,
 }: {
   time: string
   current: TimeInterval
   onChange: (value: TimeInterval) => void
   onExecute: (value: TimeInterval) => void
+  severity?: Severity
 }) {
   const [open, setOpen] = useState(false)
   const [display, setDisplay] = useState<DisplayZone>('working')
@@ -26,7 +30,7 @@ export function EventTimeButton({
   const zone = activeTimeZone(display, workingTimeZone)
 
   return (
-    <div className="relative">
+    <div className="relative flex items-center justify-between gap-2">
       <button
         type="button"
         title="Задать окно времени вокруг события"
@@ -38,6 +42,7 @@ export function EventTimeButton({
         <Clock className="h-3 w-3 text-fg-dim" />
         {formatEventTime(time)}
       </button>
+      {severity ? <SeverityBadge severity={severity} /> : null}
       {open && (
         <TimeIntervalPopover
           value={intervalAroundInstant(time, current)}

@@ -780,6 +780,7 @@ type IncidentDetails struct {
 	Key            *string    `json:"key,omitempty"`
 	Recommendation *string    `json:"recommendation,omitempty"`
 	Removed        *bool      `json:"removed,omitempty"`
+	Type           *string    `json:"type,omitempty"`
 	Verdict        *string    `json:"verdict,omitempty"`
 }
 

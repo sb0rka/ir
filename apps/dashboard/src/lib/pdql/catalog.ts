@@ -1,4 +1,5 @@
 import type { EventFieldDef, FieldType } from './model'
+import { eventFieldLabelRu } from './fieldLabelsRu'
 import { KNOWN_EVENT_FIELDS } from './relatedFields'
 
 const FREQ_KEY = 'ir.pdql.fieldFreq'
@@ -52,12 +53,16 @@ function toFieldDef(name: string): EventFieldDef {
   return {
     name,
     type: fieldType(name),
-    description: name,
+    description: eventFieldLabelRu(name),
     enumValues: ENUM_VALUES[name],
   }
 }
 
-/** Local MaxPatrol-shaped catalog — Gateway has no event-fields path in the current contract. */
+/**
+ * Local MaxPatrol-shaped catalog with hardcoded RU titles.
+ * SIEM `GET /api/events/v2/taxonomy` has no localized names;
+ * `POST /api/events/v2/localization` returns 403 for Student role.
+ */
 export async function fetchEventFields(): Promise<EventFieldDef[]> {
   return [...KNOWN_EVENT_FIELDS].map(toFieldDef)
 }

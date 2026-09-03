@@ -1,13 +1,9 @@
 import { useEffect, useState } from 'react'
 import {
-  ArrowUpRight,
   Lightbulb,
   Play,
   Plus,
-  Sparkles,
-  UserPlus,
   X,
-  XCircle,
 } from 'lucide-react'
 import { emptyContextQueue, useAppStore } from '../store/appStore'
 import type { AlertEvent, CorrelationGroup } from '../types'
@@ -47,6 +43,7 @@ export function QueueDetailPanel({
     investigationId ? (s.contextQueue[investigationId] ?? emptyContextQueue) : null,
   )
   const inv = useAppStore((s) => (investigationId ? s.investigations[investigationId] : undefined))
+  const entities = useAppStore((s) => s.entities)
   const activeHypothesis = useAppStore((s) => {
     if (!investigationId) return null
     const id = s.activeHypothesisId[investigationId]
@@ -71,7 +68,8 @@ export function QueueDetailPanel({
   const alerts = queueAlerts ?? globalAlerts
   const alert = item.kind === 'alert' ? (queueAlerts?.[item.id] ?? globalAlerts[item.id]) : undefined
   const group = item.kind === 'correlation' ? correlations[item.id] : undefined
-  if (!alert && !group) return null
+  const entity = item.kind === 'entity' ? entities[item.id] : undefined
+  if (!alert && !group && !entity) return null
 
   const timeInterval = queue?.timeInterval ?? globalTime
   const eventKeys = inv ? contextEventKeys(inv.eventIds, contextEvents) : new Set<string>()
@@ -91,7 +89,7 @@ export function QueueDetailPanel({
     <>
     <ResizablePanelFrame storageKey="ir.detailPanel.width" defaultWidth={512} side="right">
     <Panel
-      title={alert ? 'Событие' : 'Корреляция'}
+      title={alert ? 'Событие' : group ? 'Корреляция' : 'Сущность'}
       className="w-full min-w-0 flex-1"
       actions={
         <button type="button" onClick={() => inspect(null)} title="Закрыть">
@@ -101,6 +99,15 @@ export function QueueDetailPanel({
     >
       <div className="flex min-h-full flex-col">
         <div className="flex-1 space-y-4 p-3">
+          {entity && (
+            <div className="space-y-2">
+              <div className="text-[10px] uppercase tracking-wider text-fg-dim">{entity.kind}</div>
+              <div className="break-all font-mono text-sm text-fg">{entity.label}</div>
+              {entity.source ? (
+                <div className="font-mono text-[11px] text-fg-muted">{entity.source}</div>
+              ) : null}
+            </div>
+          )}
           {alert && inContext && <Chip tone="confirmed">в контексте</Chip>}
           {alert && (
             <AlertDetails
@@ -137,7 +144,9 @@ export function QueueDetailPanel({
         </div>
 
         <div className="sticky bottom-0 space-y-2 border-t border-border bg-surface-1 p-3">
-          {investigationId ? (
+          {entity ? (
+            <div className="text-xs text-fg-dim">Сущность из поиска по entities</div>
+          ) : investigationId ? (
             <>
               {inContext ? (
                 <div className="text-xs text-fg-dim">Уже в расследовании</div>
@@ -191,14 +200,6 @@ export function QueueDetailPanel({
                 <Play className="h-3.5 w-3.5" />
                 Начать расследование
               </Button>
-              <div className="grid grid-cols-2 gap-1.5">
-                <DecoButton icon={<UserPlus className="h-3 w-3" />}>Назначить</DecoButton>
-                <DecoButton icon={<Sparkles className="h-3 w-3" />}>Обогатить</DecoButton>
-                <DecoButton icon={<ArrowUpRight className="h-3 w-3" />}>
-                  Эскалировать
-                </DecoButton>
-                <DecoButton icon={<XCircle className="h-3 w-3" />}>Закрыть</DecoButton>
-              </div>
             </>
           )}
         </div>
@@ -217,21 +218,6 @@ export function QueueDetailPanel({
       />
     )}
     </>
-  )
-}
-
-function DecoButton({
-  children,
-  icon,
-}: {
-  children: React.ReactNode
-  icon: React.ReactNode
-}) {
-  return (
-    <Button size="sm" variant="ghost" className="cursor-default justify-start" tabIndex={-1}>
-      {icon}
-      {children}
-    </Button>
   )
 }
 

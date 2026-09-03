@@ -25,6 +25,7 @@ export function matchesChips(
         return ents.some(
           (e) => e.kind === 'host' && vals.includes(e.label.toLowerCase()),
         )
+      case 'account':
       case 'user':
         return ents.some(
           (e) =>
@@ -90,6 +91,7 @@ export function pdqlFieldForFilterField(field: FilterField): string {
     case 'host':
       return 'event_src.host'
     case 'user':
+    case 'account':
       return 'subject.account.name'
     case 'process':
       return 'object.process.name'

@@ -61,3 +61,30 @@ describe('filterByFindingUuid', () => {
     expect(state.findingFilterWarnAt).toBeGreaterThan(before)
   })
 })
+
+describe('appendPdqlFilter entity fields', () => {
+  it('switches queue source to entities for bare host filters', () => {
+    useAppStore.setState({
+      queuePdql: 'select(time) | sort(time desc)',
+      queueSource: 'siem_correlation',
+    })
+
+    useAppStore.getState().appendPdqlFilter(null, 'host', 'aamelina')
+
+    const state = useAppStore.getState()
+    expect(state.queueSource).toBe('entities')
+    expect(state.queuePdql).toContain('host = "aamelina"')
+  })
+
+  it('keeps events source for non-entity event fields', () => {
+    useAppStore.setState({
+      queuePdql: 'select(time) | sort(time desc)',
+      queueSource: 'events',
+    })
+
+    useAppStore.getState().appendPdqlFilter(null, 'action', 'login')
+
+    expect(useAppStore.getState().queueSource).toBe('events')
+    expect(useAppStore.getState().queuePdql).toContain('action = "login"')
+  })
+})

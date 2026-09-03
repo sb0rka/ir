@@ -19,6 +19,7 @@ export const KNOWN_EVENT_FIELDS = new Set<string>([
   'correlation_type',
   'correlation_event_id',
   'incident.key',
+  'incident.type',
   'event_src.host',
   'event_src.ip',
   'event_src.hostname',
@@ -140,6 +141,10 @@ export function relatedFieldColumns(field: string): RelatedFieldColumn[] {
       { title: 'Субъект', fields: [`subject.account.${leaf}`] },
       { title: 'Объект', fields: [`object.account.${leaf}`] },
     ])
+  }
+
+  if (field === 'host' || field === 'account' || field === 'user' || field === 'ip' || field === 'process') {
+    return [{ title: 'Сущность', fields: [field === 'user' ? 'account' : field] }]
   }
 
   return [{ title: 'Поле', fields: [field] }]

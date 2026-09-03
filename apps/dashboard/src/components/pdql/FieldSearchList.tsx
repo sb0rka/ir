@@ -91,8 +91,10 @@ function FieldRow({
       )}
       style={{ transform: CSS.Translate.toString(transform) }}
     >
-      <span className="font-mono text-xs text-fg">{highlightMatch(field.name, query)}</span>
-      <span className="text-[11px] text-fg-dim">{highlightMatch(field.description, query)}</span>
+      <span className="text-xs text-fg">{highlightMatch(field.description, query)}</span>
+      {field.description !== field.name && (
+        <span className="font-mono text-[11px] text-fg-dim">{highlightMatch(field.name, query)}</span>
+      )}
     </button>
   )
 }

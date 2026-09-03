@@ -14,6 +14,7 @@ export interface paths {
         /**
          * Get source account userinfo
          * @description Reloads the selected project's current source credentials and returns the normalized account identity reported by the source.
+         *
          */
         get: operations["getSourceAccountUserinfo"];
         put?: never;
@@ -747,6 +748,7 @@ export interface components {
         IncidentDetails: {
             key?: string;
             external_key?: string;
+            type?: string;
             verdict?: string;
             damage?: string;
             recommendation?: string;
@@ -1458,7 +1460,6 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    /** @example pong */
                     "text/plain": string;
                 };
             };

@@ -2,8 +2,14 @@ import { isFindingFilterField, type FindingFilterField } from './append'
 import type { FilterChip } from '../../types'
 import type { Condition, QueryAst } from './model'
 import { formatCondition } from './serialize'
+import {
+  defaultWorkingTimeZone,
+  parseTimestamp,
+  resolve,
+  type TimeInterval,
+} from '../../components/time-interval/model'
 
-export type SearchEntityType = 'host' | 'user' | 'process' | 'ip'
+export type SearchEntityType = 'host' | 'user' | 'account' | 'process' | 'ip'
 
 export interface PdqlSearchEntity {
   type: SearchEntityType
@@ -16,6 +22,13 @@ export interface PdqlSearchParts {
 }
 
 const ENTITY_FIELDS: Record<string, SearchEntityType> = {
+  // Canonical entity chips (queue «Сущности» / involved hosts & accounts).
+  host: 'host',
+  account: 'account',
+  user: 'user',
+  ip: 'ip',
+  process: 'process',
+  // SIEM PDQL fields that map to the same entity types.
   'event_src.host': 'host',
   'src.host': 'host',
   'dst.host': 'host',
@@ -26,6 +39,11 @@ const ENTITY_FIELDS: Record<string, SearchEntityType> = {
   'object.account.name': 'user',
   'object.process.name': 'process',
   'subject.process.name': 'process',
+}
+
+/** Bare entity field names used as queue filters (not SIEM PDQL paths). */
+export function isEntityQueueField(field: string): boolean {
+  return field === 'host' || field === 'account' || field === 'user' || field === 'ip' || field === 'process'
 }
 
 function quote(value: string): string {
@@ -60,6 +78,17 @@ function isMappedEntity(condition: Condition): boolean {
   return condition.field in ENTITY_FIELDS
 }
 
+function isTimeBound(condition: Condition): boolean {
+  if (condition.field !== 'time' || condition.negated) return false
+  return (
+    condition.op === '=' ||
+    condition.op === '>' ||
+    condition.op === '>=' ||
+    condition.op === '<' ||
+    condition.op === '<='
+  )
+}
+
 function conditionValues(condition: Condition): string[] {
   if (condition.op === 'in') return condition.values.filter(Boolean)
   return condition.value ? [condition.value] : []
@@ -77,6 +106,8 @@ export function pdqlToSearchParts(ast: QueryAst): PdqlSearchParts {
       }
       return
     }
+    // Time bounds go to gateway time_range (findings) / SIEM filter (events), not title text search.
+    if (isTimeBound(condition)) return
     const predicate = formatPredicate(condition)
     if (queryBits.length === 0) {
       queryBits.push(predicate)
@@ -87,6 +118,107 @@ export function pdqlToSearchParts(ast: QueryAst): PdqlSearchParts {
   })
 
   return { entities, query: queryBits.join(' ') }
+}
+
+const SECOND_MS = 1000
+
+export type TimeIntervalFromAstResult = {
+  /** Effective range sent as gateway time_range (wide ∩ PDQL). */
+  interval: TimeInterval
+  /** True when PDQL time bounds narrowed the wide range. */
+  rewritten: boolean
+}
+
+function assertSingleTimeWindow(ast: QueryAst): void {
+  for (let index = 0; index < ast.filter.length; index++) {
+    const condition = ast.filter[index]!
+    if (condition.field !== 'time') continue
+    if (condition.negated) {
+      throw new Error('NOT time в PDQL не поддерживается для окна времени')
+    }
+    if (!isTimeBound(condition)) {
+      throw new Error(`Оператор time ${condition.op} не поддерживается для окна времени`)
+    }
+    if (index > 0 && (ast.joiners[index - 1] ?? 'and') === 'or') {
+      throw new Error(
+        'Несколько окон времени в PDQL не поддерживаются — используйте одно AND-окно (time >= … and time <= …)',
+      )
+    }
+    if (index < ast.filter.length - 1 && (ast.joiners[index] ?? 'and') === 'or') {
+      throw new Error(
+        'Несколько окон времени в PDQL не поддерживаются — используйте одно AND-окно (time >= … and time <= …)',
+      )
+    }
+  }
+}
+
+/**
+ * Intersect the UI wide-range time filter with PDQL `time` AND-bounds.
+ * Findings have no PDQL filter on the wire — only time_range → IM detectedAt.
+ * Complex OR time windows are rejected (gateway accepts a single range).
+ */
+export function timeIntervalFromAst(
+  ast: QueryAst,
+  fallback: TimeInterval,
+  timeZone = defaultWorkingTimeZone(),
+): TimeIntervalFromAstResult {
+  assertSingleTimeWindow(ast)
+
+  const fallbackRange = resolve(fallback)
+  let fromMs = Date.parse(fallbackRange.from)
+  let toMs = Date.parse(fallbackRange.to)
+  let touched = false
+
+  for (const condition of ast.filter) {
+    if (!isTimeBound(condition)) continue
+    const iso = parseTimestamp(condition.value.trim(), timeZone)
+    if (!iso) {
+      throw new Error(`Не удалось разобрать время в PDQL: ${condition.value}`)
+    }
+    const boundMs = Date.parse(iso)
+    if (!Number.isFinite(boundMs)) {
+      throw new Error(`Некорректное время в PDQL: ${condition.value}`)
+    }
+    touched = true
+    switch (condition.op) {
+      case '=':
+        // Gateway requires from < to — represent equality as a 1s window, then clamp.
+        fromMs = Math.max(fromMs, boundMs)
+        toMs = Math.min(toMs, boundMs + SECOND_MS)
+        break
+      case '>':
+        fromMs = Math.max(fromMs, boundMs + SECOND_MS)
+        break
+      case '>=':
+        fromMs = Math.max(fromMs, boundMs)
+        break
+      case '<':
+        toMs = Math.min(toMs, boundMs)
+        break
+      case '<=':
+        // Inclusive upper second: end 1s after the bound so gateway from < to holds
+        // even when wide.from == bound. Never expand past the UI wide-range end.
+        toMs = Math.min(toMs, boundMs + SECOND_MS)
+        break
+    }
+  }
+
+  if (!touched) return { interval: fallback, rewritten: false }
+
+  if (!Number.isFinite(fromMs) || !Number.isFinite(toMs) || fromMs >= toMs) {
+    throw new Error(
+      'Окно времени пустое: PDQL time отсёк весь интервал кнопки (нужно from < to). Расширьте окно или ослабьте условие time.',
+    )
+  }
+
+  const interval: TimeInterval = {
+    kind: 'range',
+    from: new Date(fromMs).toISOString(),
+    to: new Date(toMs).toISOString(),
+  }
+  const rewritten =
+    interval.from !== fallbackRange.from || interval.to !== fallbackRange.to
+  return { interval, rewritten }
 }
 
 export function astToFilterChips(ast: QueryAst): FilterChip[] {
@@ -240,7 +372,17 @@ export function astToEventSearch(
   ast: QueryAst,
   groupValues?: (string | null)[],
 ): EventSearchParts {
-  const filter = formatCondition(ast).trim()
+  // Entity predicates go in gateway `entities`, not MaxPatrol PDQL `filter`
+  // (bare `host = "…"` is invalid SIEM syntax and fails all sources).
+  const kept: Condition[] = []
+  const joiners: QueryAst['joiners'] = []
+  for (let index = 0; index < ast.filter.length; index++) {
+    const condition = ast.filter[index]!
+    if (isMappedEntity(condition)) continue
+    if (kept.length > 0) joiners.push(ast.joiners[index - 1] ?? 'and')
+    kept.push(condition)
+  }
+  const filter = formatCondition({ ...ast, filter: kept, joiners }).trim()
   const sort = ast.columns
     .filter((column) => column.sort && column.field && !column.aggregate)
     .slice()
@@ -255,6 +397,9 @@ export function astToEventSearch(
     parts.group_by = path.group_by
     parts.group_values = path.group_values
   }
-  parts.hasControls = Boolean(parts.filter || parts.sort || parts.group_by)
+  const entityParts = pdqlToSearchParts(ast)
+  parts.hasControls = Boolean(
+    parts.filter || parts.sort || parts.group_by || entityParts.entities.length > 0,
+  )
   return parts
 }

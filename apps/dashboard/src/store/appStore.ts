@@ -30,10 +30,11 @@ import {
   lookupEntity,
   searchQueue,
 } from '../api/search'
-import { appendCondition, alignGroupValues, astToFilterChips, defaultQuery, drillGroupValues, entityKindForField, findingUuidFromAst, findingUuidQuery, parseQueuePdql, serialize, type FindingFilterField } from '../lib/pdql'
+import { appendCondition, alignGroupValues, astToFilterChips, defaultQuery, drillGroupValues, entityKindForField, findingUuidFromAst, findingUuidQuery, isEntityQueueField, parseQueuePdql, serialize, type FindingFilterField } from '../lib/pdql'
 import { pdqlFieldForFilterField } from '../lib/filters'
 import { filterFingerprint } from '../lib/queryFingerprint'
 import { demoDayInterval, type TimeInterval } from '../components/time-interval'
+import { resolveInvestigationTableSearchColumn } from '../components/investigationTableColumns'
 import {
   addContext,
   countProposedAgentEdges,
@@ -181,6 +182,10 @@ interface AppState {
   queueOrder: QueueItem[]
   /** Client-side text filter for the global queue list (header search). */
   queueTextFilter: string
+  /** Which visible queue table column the header text filter applies to. */
+  queueTextFilterColumn: string
+  /** Which investigations table column the header text filter applies to. */
+  investigationTextFilterColumn: string
   entities: Record<string, Entity>
   contextEvents: Record<string, ContextEvent>
   graphNodes: Record<string, GraphNode>
@@ -199,6 +204,8 @@ interface AppState {
   addChip: (field: FilterField, value: string) => void
   setQueuePdql: (pdql: string) => void
   setQueueTextFilter: (q: string) => void
+  setQueueTextFilterColumn: (column: string) => void
+  setInvestigationTextFilterColumn: (column: string) => void
   setTimeInterval: (interval: TimeInterval) => void
   setQueueSource: (source: QueueSource) => void
   applyQueueHistory: (entry: QueryHistoryEntry) => void
@@ -208,6 +215,7 @@ interface AppState {
   clearGroupPathFrom: (investigationId: string | null, index: number) => void
   toggleAlertSelect: (id: string) => void
   clearAlertSelection: () => void
+  setAlertSelection: (ids: string[]) => void
   toggleCorrelationExpand: (id: string) => void
   inspectQueueItem: (item: QueueItem | null) => void
 
@@ -388,14 +396,18 @@ function applyBundle(
 
 function listQueryFromFilters(
   filters: InvestigationListFilter,
-  extra: { parentId?: string; cursor?: string } = {},
+  extra: { parentId?: string; cursor?: string; textColumn?: string } = {},
 ) {
+  const textColumn = resolveInvestigationTableSearchColumn(
+    extra.textColumn ?? 'title',
+  )
   return {
     parentId: extra.parentId,
     cursor: extra.cursor,
     status: filters.status === 'all' ? undefined : filters.status,
     severity: filters.severity === 'all' ? undefined : filters.severity,
-    q: filters.q,
+    // Server `q` is title search; other columns are filtered client-side.
+    q: textColumn === 'title' ? filters.q : undefined,
     limit: 100,
   }
 }
@@ -516,6 +528,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   correlations: {},
   queueOrder: [],
   queueTextFilter: '',
+  queueTextFilterColumn: 'title',
+  investigationTextFilterColumn: 'title',
   entities: {},
   contextEvents: {},
   graphNodes: {},
@@ -549,6 +563,17 @@ export const useAppStore = create<AppState>((set, get) => ({
     })
   },
   setQueueTextFilter: (queueTextFilter) => set({ queueTextFilter }),
+  setQueueTextFilterColumn: (queueTextFilterColumn) => set({ queueTextFilterColumn }),
+  setInvestigationTextFilterColumn: (column) => {
+    const previous = resolveInvestigationTableSearchColumn(get().investigationTextFilterColumn)
+    const next = resolveInvestigationTableSearchColumn(column)
+    set({ investigationTextFilterColumn: next })
+    if (previous === next) return
+    // Crossing title ↔ other changes whether server `q` applies.
+    if (previous === 'title' || next === 'title') {
+      void get().loadInvestigationList(true)
+    }
+  },
   setTimeInterval: (timeInterval) => set({ timeInterval }),
   setQueueSource: (queueSource) => set({ queueSource }),
   applyQueueHistory: (entry) =>
@@ -638,6 +663,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     })
   },
   clearAlertSelection: () => set({ selectedAlertIds: [] }),
+  setAlertSelection: (selectedAlertIds) => set({ selectedAlertIds }),
   inspectQueueItem: (item) => set({ inspectedQueueItem: item }),
   toggleCorrelationExpand: (id) => {
     const cur = get().expandedCorrelationIds
@@ -698,14 +724,16 @@ export const useAppStore = create<AppState>((set, get) => ({
         if (e.kind === 'ip') ips.add(e.label)
       }
       const canonical = serialize(parsed.ast)
+      const effectiveTime = result.effectiveTimeInterval ?? timeInterval
       set({
         chips,
         queuePdql: canonical,
         groupValues,
-        executedFingerprint: filterFingerprint(canonical, timeInterval, queueSource, groupValues),
+        timeInterval: effectiveTime,
+        executedFingerprint: filterFingerprint(canonical, effectiveTime, queueSource, groupValues),
         queryHistory: pushQueryHistory(get().queryHistory, {
           pdql: canonical,
-          timeInterval,
+          timeInterval: effectiveTime,
           queueSource,
           groupValues,
         }),
@@ -752,7 +780,12 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (!reset && !cursor) return
     set({ investigationsLoading: true, lastError: null })
     try {
-      const page = await listInvestigations(listQueryFromFilters(filters, { cursor }))
+      const page = await listInvestigations(
+        listQueryFromFilters(filters, {
+          cursor,
+          textColumn: get().investigationTextFilterColumn,
+        }),
+      )
       const ids = page.items.map((item) => item.id)
       set({
         investigations: mergeListed(get().investigations, page.items),
@@ -771,7 +804,11 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   setInvestigationFilter: async (patch) => {
-    set({ investigationFilters: { ...get().investigationFilters, ...patch } })
+    const previous = get().investigationFilters
+    set({ investigationFilters: { ...previous, ...patch } })
+    const onlyQ = Object.keys(patch).length === 1 && Object.prototype.hasOwnProperty.call(patch, 'q')
+    const textColumn = resolveInvestigationTableSearchColumn(get().investigationTextFilterColumn)
+    if (onlyQ && textColumn !== 'title') return
     await get().loadInvestigationList(true)
   },
 
@@ -788,7 +825,10 @@ export const useAppStore = create<AppState>((set, get) => ({
     })
     try {
       const page = await listInvestigations(
-        listQueryFromFilters(get().investigationFilters, { parentId: id }),
+        listQueryFromFilters(get().investigationFilters, {
+          parentId: id,
+          textColumn: get().investigationTextFilterColumn,
+        }),
       )
       set({
         investigations: mergeListed(get().investigations, page.items),
@@ -1150,6 +1190,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         if (e.kind === 'ip') ips.add(e.label)
       }
       const latest = get().contextQueue[investigationId] ?? emptyContextQueue
+      const effectiveTime = result.effectiveTimeInterval ?? timeInterval
       set({
         entities: mergeEntities(get().entities, result.entities),
         filterValueOptions: {
@@ -1167,19 +1208,20 @@ export const useAppStore = create<AppState>((set, get) => ({
             pdql: canonical,
             queueSource,
             groupValues,
+            timeInterval: effectiveTime,
             eventGroups: result.eventGroups,
             alerts: result.alerts,
             queueOrder: result.queueOrder,
             loading: false,
             executedFingerprint: filterFingerprint(
               canonical,
-              timeInterval,
+              effectiveTime,
               queueSource,
               groupValues,
             ),
             queryHistory: pushQueryHistory(latest.queryHistory, {
               pdql: canonical,
-              timeInterval,
+              timeInterval: effectiveTime,
               queueSource,
               groupValues,
             }),
@@ -1241,15 +1283,34 @@ export const useAppStore = create<AppState>((set, get) => ({
       get().drillGroupValue(investigationId, field, value)
       return
     }
+    const nextPdql = appendCondition(
+      investigationId
+        ? (get().contextQueue[investigationId] ?? emptyContextQueue).pdql
+        : get().queuePdql,
+      field,
+      '=',
+      value,
+    )
+    // Involved host/account filters belong on the entities queue, not SIEM PDQL events.
+    const switchToEntities = isEntityQueueField(field)
     if (!investigationId) {
-      set({ queuePdql: appendCondition(get().queuePdql, field, '=', value) })
+      set({
+        queuePdql: nextPdql,
+        ...(switchToEntities ? { queueSource: 'entities' as const, groupValues: [], eventGroups: [] } : {}),
+      })
       return
     }
     const cur = get().contextQueue[investigationId] ?? emptyContextQueue
     set({
       contextQueue: {
         ...get().contextQueue,
-        [investigationId]: { ...cur, pdql: appendCondition(cur.pdql, field, '=', value) },
+        [investigationId]: {
+          ...cur,
+          pdql: nextPdql,
+          ...(switchToEntities
+            ? { queueSource: 'entities' as const, groupValues: [], eventGroups: [] }
+            : {}),
+        },
       },
     })
   },

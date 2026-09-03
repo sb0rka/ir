@@ -24,7 +24,7 @@ export function PrimaryNav() {
             className={clsx(
               'inline-flex h-8 items-center gap-1.5 rounded px-2.5 text-xs',
               active
-                ? 'bg-surface-2 text-fg'
+                ? 'bg-surface-3 text-fg'
                 : 'text-fg-muted hover:bg-surface-2/60 hover:text-fg',
             )}
           >

@@ -46,6 +46,7 @@ export type IssueStatus = 'running' | 'completed' | 'error' | 'cancelled'
 export type FilterField =
   | 'host'
   | 'user'
+  | 'account'
   | 'process'
   | 'hash'
   | 'ip'
@@ -59,6 +60,8 @@ export interface Entity {
   kind: EntityKind
   label: string
   attributes: Record<string, string>
+  /** Gateway source code when known (e.g. pt-maxpatrol-siem). */
+  source?: string
   firstSeen?: string
   lastSeen?: string
 }
@@ -98,7 +101,7 @@ export interface CorrelationGroup {
 }
 
 export interface QueueItem {
-  kind: 'alert' | 'correlation'
+  kind: 'alert' | 'correlation' | 'entity'
   id: string
 }
 
@@ -217,8 +220,8 @@ export interface FilterChip {
   values: string[]
 }
 
-/** High-level queue search target: a finding kind or normalized events. */
-export type QueueSource = 'siem_incident' | 'siem_correlation' | 'nad_attack' | 'events'
+/** High-level queue search target: a finding kind, normalized events, or entities. */
+export type QueueSource = 'siem_incident' | 'siem_correlation' | 'nad_attack' | 'events' | 'entities'
 
 export const DEFAULT_QUEUE_SOURCE: QueueSource = 'siem_incident'
 
@@ -227,6 +230,7 @@ export const QUEUE_SOURCE_OPTIONS: { id: QueueSource; label: string }[] = [
   { id: 'siem_correlation', label: 'Корреляции' },
   { id: 'nad_attack', label: 'Атаки NAD' },
   { id: 'events', label: 'События' },
+  { id: 'entities', label: 'Сущности' },
 ]
 
 export interface QueryHistoryEntry {

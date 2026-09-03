@@ -4,6 +4,11 @@ import { useAppStore } from '../store/appStore'
 import type { Investigation } from '../types'
 import { Button, Chip, SeverityBadge } from './ui'
 import { clsx, formatTime, statusLabel, verdictLabel } from '../lib/utils'
+import { investigationMatchesText } from '../lib/investigationTextSearch'
+import {
+  INVESTIGATION_TABLE_SEARCH_COLUMNS,
+  resolveInvestigationTableSearchColumn,
+} from './investigationTableColumns'
 
 const COL_FIT = 'w-px whitespace-nowrap'
 
@@ -156,8 +161,16 @@ export function InvestigationsTable() {
   const loading = useAppStore((s) => s.investigationsLoading)
   const cursor = useAppStore((s) => s.investigationsNextCursor)
   const loadInvestigationList = useAppStore((s) => s.loadInvestigationList)
+  const textNeedle = useAppStore((s) => s.investigationFilters.q.trim().toLowerCase())
+  const searchColumn = useAppStore((s) =>
+    resolveInvestigationTableSearchColumn(s.investigationTextFilterColumn),
+  )
 
-  const rows = collectRows(rootIds, investigations, expanded, children, 0)
+  const rows = collectRows(rootIds, investigations, expanded, children, 0).filter((row) => {
+    const inv = investigations[row.id]
+    if (!inv) return false
+    return investigationMatchesText(inv, textNeedle, searchColumn)
+  })
 
   if (loading && rootIds.length === 0) {
     return (
@@ -175,10 +188,16 @@ export function InvestigationsTable() {
           <thead className="sticky top-0 z-10 bg-surface-1 text-[10px] uppercase tracking-wider text-fg-dim">
             <tr className="border-b border-border">
               <th className={clsx(COL_FIT, 'px-3 py-2')} />
-              <th className={clsx(COL_FIT, 'px-3 py-2')}>Обновлено</th>
-              <th className={clsx(COL_FIT, 'px-3 py-2')}>Важность</th>
-              <th className={clsx(COL_FIT, 'px-3 py-2')}>Статус</th>
-              <th className="px-3 py-2">Расследование</th>
+              {INVESTIGATION_TABLE_SEARCH_COLUMNS.map((column) => (
+                <th
+                  key={column.id}
+                  className={clsx(
+                    column.id === 'title' ? 'px-3 py-2' : clsx(COL_FIT, 'px-3 py-2'),
+                  )}
+                >
+                  {column.label}
+                </th>
+              ))}
               <th className={clsx(COL_FIT, 'px-3 py-2')} />
             </tr>
           </thead>

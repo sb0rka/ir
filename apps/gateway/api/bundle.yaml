@@ -1709,6 +1709,8 @@ components:
           type: string
         external_key:
           type: string
+        type:
+          type: string
         verdict:
           type: string
         damage:

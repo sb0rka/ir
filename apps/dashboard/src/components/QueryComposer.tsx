@@ -306,7 +306,7 @@ export function QueryComposer({
           {historyOpen && (
             <>
               <div className="fixed inset-0 z-20" onClick={() => setHistoryOpen(false)} />
-              <div className="absolute right-0 top-full z-30 mt-1 w-80 overflow-hidden rounded border border-border bg-surface-2 shadow-xl">
+              <div className="absolute left-0 top-full z-30 mt-1 w-80 max-w-[calc(100vw-2rem)] overflow-hidden rounded border border-border bg-surface-2 shadow-xl">
                 <button
                   type="button"
                   className="flex w-full flex-col items-start gap-0.5 px-3 py-2 text-left hover:bg-surface-3"
@@ -423,11 +423,12 @@ export function QueryComposer({
         </Button>
         <Button
           size="sm"
-          variant="ghost"
+          variant="default"
           title="Конструктор PDQL"
           onClick={() => setBuilderOpen(true)}
         >
           <Braces className="h-3.5 w-3.5" />
+          Конструктор
         </Button>
         <Button
           size="sm"
@@ -451,6 +452,7 @@ export function QueryComposer({
       <PdqlBuilderModal
         open={builderOpen}
         initialPdql={pdql}
+        timeInterval={timeInterval}
         onClose={() => setBuilderOpen(false)}
         onApply={(text) => {
           onPdqlChange(text)

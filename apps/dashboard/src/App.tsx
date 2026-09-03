@@ -22,6 +22,15 @@ import { LoginPage } from './components/LoginPage'
 import { ConfigurationModal } from './components/ConfigurationModal'
 import { InvestigationHeader } from './components/InvestigationHeader'
 import { HeaderSearch } from './components/HeaderSearch'
+import { parseQueuePdql, queueSelectFields } from './lib/pdql'
+import {
+  alertTableSearchColumns,
+  resolveAlertTableSearchColumn,
+} from './components/alertTableColumns'
+import {
+  INVESTIGATION_TABLE_SEARCH_COLUMNS,
+  resolveInvestigationTableSearchColumn,
+} from './components/investigationTableColumns'
 
 type SessionPhase = 'loading' | 'ready' | 'signed-out' | 'error'
 
@@ -159,11 +168,39 @@ function Dashboard({
   const setInvestigationFilter = useAppStore((state) => state.setInvestigationFilter)
   const queueTextFilter = useAppStore((state) => state.queueTextFilter)
   const setQueueTextFilter = useAppStore((state) => state.setQueueTextFilter)
+  const queueTextFilterColumn = useAppStore((state) => state.queueTextFilterColumn)
+  const setQueueTextFilterColumn = useAppStore((state) => state.setQueueTextFilterColumn)
+  const investigationTextFilterColumn = useAppStore(
+    (state) => state.investigationTextFilterColumn,
+  )
+  const setInvestigationTextFilterColumn = useAppStore(
+    (state) => state.setInvestigationTextFilterColumn,
+  )
+  const queuePdql = useAppStore((state) => state.queuePdql)
+  const queueSource = useAppStore((state) => state.queueSource)
   const bootstrapped = useRef(false)
   const [configurationOpen, setConfigurationOpen] = useState(false)
   const investigationOpen =
     activeTab !== 'queue' && activeTab !== 'investigations'
   const listSearchOpen = activeTab === 'queue' || activeTab === 'investigations'
+  const searchColumns =
+    activeTab === 'queue'
+      ? (() => {
+          const parsed = parseQueuePdql(queuePdql)
+          const selectFields = parsed.ok ? queueSelectFields(parsed.ast) : []
+          return alertTableSearchColumns(selectFields, {
+            showCategory: queueSource === 'siem_incident',
+          })
+        })()
+      : activeTab === 'investigations'
+        ? [...INVESTIGATION_TABLE_SEARCH_COLUMNS]
+        : undefined
+  const resolvedSearchColumn =
+    activeTab === 'queue' && searchColumns
+      ? resolveAlertTableSearchColumn(queueTextFilterColumn, searchColumns)
+      : activeTab === 'investigations'
+        ? resolveInvestigationTableSearchColumn(investigationTextFilterColumn)
+        : undefined
 
   const onListSearchChange = useCallback(
     (next: string) => {
@@ -176,6 +213,29 @@ function Dashboard({
     [activeTab, setInvestigationFilter, setQueueTextFilter],
   )
 
+  const onSearchColumnChange = useCallback(
+    (column: string) => {
+      if (activeTab === 'investigations') {
+        setInvestigationTextFilterColumn(column)
+        return
+      }
+      setQueueTextFilterColumn(column)
+    },
+    [activeTab, setInvestigationTextFilterColumn, setQueueTextFilterColumn],
+  )
+
+  useEffect(() => {
+    if (activeTab !== 'queue' || !searchColumns || !resolvedSearchColumn) return
+    if (resolvedSearchColumn === queueTextFilterColumn) return
+    setQueueTextFilterColumn(resolvedSearchColumn)
+  }, [
+    activeTab,
+    searchColumns,
+    queueTextFilterColumn,
+    resolvedSearchColumn,
+    setQueueTextFilterColumn,
+  ])
+
   useEffect(() => {
     if (bootstrapped.current) return
     bootstrapped.current = true
@@ -186,7 +246,7 @@ function Dashboard({
     <div className="flex h-full flex-col bg-surface-0 text-fg">
       <header className="flex items-center gap-4 border-b border-border px-4 py-2">
         <div className="flex min-w-0 flex-1 items-center gap-3">
-          <div className="ml-1.5 mr-6 shrink-0 translate-y-px leading-none">
+          <div className="ml-1.5 mr-6 shrink-0 -translate-y-px leading-none">
             <img
               src="https://static.sb0rka.ru/logo-light.png"
               alt="Sb0rka Incident Response"
@@ -209,9 +269,10 @@ function Dashboard({
                 activeTab === 'investigations' ? investigationFilters.q : queueTextFilter
               }
               onChange={onListSearchChange}
-              placeholder={
-                activeTab === 'investigations' ? 'Поиск по названию' : 'Поиск в очереди'
-              }
+              placeholder="Поиск"
+              columns={searchColumns}
+              column={resolvedSearchColumn}
+              onColumnChange={onSearchColumnChange}
             />
           ) : null}
         </div>
