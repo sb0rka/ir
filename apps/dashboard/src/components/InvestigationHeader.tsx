@@ -4,7 +4,7 @@ import {
 } from '../store/appStore'
 import { ContextQueueToolbar } from './ContextQueue'
 import { Button, Chip, SeverityBadge } from '../components/ui'
-import { clsx, formatTime, statusLabel } from '../lib/utils'
+import { clsx, eventOriginLabel, formatTime, matchesOriginFilter, statusLabel } from '../lib/utils'
 import { fieldForEntityKind } from '../lib/filters'
 import { Check, Inbox, Network, Table2, X } from 'lucide-react'
 
@@ -105,7 +105,7 @@ export function ContextTable({ investigationId }: { investigationId: string }) {
   const rows = inv.eventIds
     .map((id) => contextEvents[id])
     .filter(Boolean)
-    .filter((ev) => queue.originFilter === 'all' || ev.origin === queue.originFilter)
+    .filter((ev) => matchesOriginFilter(ev, queue.originFilter))
     .filter((ev) => {
       if (queue.reviewFilter === 'all') return true
       return (eventReviews[ev.id] ?? ev.review) === queue.reviewFilter
@@ -202,7 +202,7 @@ export function ContextTable({ investigationId }: { investigationId: string }) {
                     })}
                   </div>
                 </td>
-                <td className="px-3 py-2 text-xs text-fg-muted">{statusLabel[ev.origin]}</td>
+                <td className="px-3 py-2 text-xs text-fg-muted">{eventOriginLabel(ev)}</td>
                 <td className="px-3 py-2">
                   <Chip
                     tone={

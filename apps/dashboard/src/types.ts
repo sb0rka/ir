@@ -94,6 +94,8 @@ export interface ContextEvent {
   source: Source
   entityIds: string[]
   origin: EventOrigin
+  /** Investigation-event link flag (`is_seed`), not `attached_by`. */
+  isSeed: boolean
   review: ReviewState
   description: string
   sourceEventId?: string

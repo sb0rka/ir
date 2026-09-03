@@ -336,7 +336,7 @@ function applyBundle(
         selectedEntityIds: keepView?.selectedEntityIds ?? [],
         selectedEventId: keepView?.selectedEventId,
         selectedNodeId: keepView?.selectedNodeId,
-        seedEventIds: keepView?.seedEventIds ?? bundle.investigation.seedEventIds,
+        seedEventIds: bundle.investigation.seedEventIds,
         issueIds: keepView?.issueIds ?? bundle.investigation.issueIds,
         hypothesisIds:
           keepView?.hypothesisIds ??
@@ -1559,17 +1559,17 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   setActiveHypothesis: async (investigationId, hypothesisId) => {
     const current = get().activeHypothesisId[investigationId] ?? null
-    const next = current === hypothesisId ? null : hypothesisId
+    if (current === hypothesisId) return
     set({
-      activeHypothesisId: { ...get().activeHypothesisId, [investigationId]: next },
+      activeHypothesisId: { ...get().activeHypothesisId, [investigationId]: hypothesisId },
     })
-    if (!next) return
+    if (!hypothesisId) return
     try {
-      const graph = await getHypothesisGraph(investigationId, next)
+      const graph = await getHypothesisGraph(investigationId, hypothesisId)
       set({
         hypothesisMembership: {
           ...get().hypothesisMembership,
-          [next]: membershipFromGraph(graph),
+          [hypothesisId]: membershipFromGraph(graph),
         },
       })
     } catch (err) {

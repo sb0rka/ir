@@ -68,6 +68,21 @@ export const statusLabel: Record<string, string> = {
   analyst: 'аналитик',
 }
 
+export function matchesOriginFilter(
+  ev: { origin: string; isSeed?: boolean },
+  filter: string,
+): boolean {
+  if (filter === 'all') return true
+  if (filter === 'seed') return Boolean(ev.isSeed)
+  if (filter === 'analyst') return ev.origin === 'analyst' && !ev.isSeed
+  return ev.origin === filter
+}
+
+export function eventOriginLabel(ev: { origin: string; isSeed?: boolean }): string {
+  if (ev.isSeed) return statusLabel.seed
+  return statusLabel[ev.origin] ?? ev.origin
+}
+
 export const kindLabel: Record<string, string> = {
   host: 'хост',
   user: 'пользователь',

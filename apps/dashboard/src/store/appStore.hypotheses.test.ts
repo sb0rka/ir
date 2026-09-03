@@ -368,6 +368,30 @@ describe('hypothesis store', () => {
     expect(useAppStore.getState().activeHypothesisId['inv-1']).toBeUndefined()
   })
 
+  it('keeps the selected hypothesis when setActiveHypothesis is called with the same id', async () => {
+    getHypothesisGraph.mockResolvedValue({
+      hypothesis_id: 'h1',
+      investigation_id: 'inv-1',
+      nodes: [],
+      edges: [],
+    })
+
+    await useAppStore.getState().setActiveHypothesis('inv-1', 'h1')
+    expect(useAppStore.getState().activeHypothesisId['inv-1']).toBe('h1')
+    expect(getHypothesisGraph).toHaveBeenCalledTimes(1)
+
+    await useAppStore.getState().setActiveHypothesis('inv-1', 'h1')
+    expect(useAppStore.getState().activeHypothesisId['inv-1']).toBe('h1')
+    expect(getHypothesisGraph).toHaveBeenCalledTimes(1)
+  })
+
+  it('clears the selected hypothesis only when set to null', async () => {
+    useAppStore.setState({ activeHypothesisId: { 'inv-1': 'h1' } })
+
+    await useAppStore.getState().setActiveHypothesis('inv-1', null)
+    expect(useAppStore.getState().activeHypothesisId['inv-1']).toBeNull()
+  })
+
   it('highlights layers only when at least one bulb is on', () => {
     expect(useAppStore.getState().highlightedHypothesisIds['inv-1']).toBeUndefined()
     useAppStore.getState().toggleHypothesisHighlight('inv-1', 'h1')

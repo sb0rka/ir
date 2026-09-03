@@ -102,13 +102,6 @@ html.light {
     0 0 0 6px var(--text);
 }
 
-.graph-node.is-seed.is-highlighted,
-.graph-node.is-seed.is-selected {
-  box-shadow:
-    0 0 0 3px var(--bg),
-    0 0 0 6px var(--text);
-}
-
 .graph-node.is-selected {
   border-color: var(--accent) !important;
   box-shadow: 0 0 0 1px var(--accent);
@@ -116,4 +109,12 @@ html.light {
 
 .graph-node.is-in-hypothesis:not(.is-dimmed) {
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+.graph-node.is-seed.is-highlighted,
+.graph-node.is-seed.is-selected,
+.graph-node.is-seed.is-in-hypothesis:not(.is-dimmed) {
+  box-shadow:
+    0 0 0 3px var(--bg),
+    0 0 0 6px var(--text);
 }

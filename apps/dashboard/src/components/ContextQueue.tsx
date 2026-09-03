@@ -5,7 +5,7 @@ import { ContextQueryComposer } from './QueryComposer'
 import { AlertTable } from './AlertTable'
 import { EventGroupFilter } from './EventGroupFilter'
 import { Button } from './ui'
-import { clsx } from '../lib/utils'
+import { clsx, matchesOriginFilter } from '../lib/utils'
 import { filterFingerprint } from '../lib/queryFingerprint'
 import { Check, Plus, X } from 'lucide-react'
 
@@ -39,7 +39,7 @@ export function ContextQueueToolbar({ investigationId }: { investigationId: stri
   const visibleProposedIds = inv.eventIds.filter((id) => {
     const ev = contextEvents[id]
     if (!ev) return false
-    if (queue.originFilter !== 'all' && ev.origin !== queue.originFilter) return false
+    if (!matchesOriginFilter(ev, queue.originFilter)) return false
     const review = eventReviews[id] ?? ev.review
     if (queue.reviewFilter !== 'all' && review !== queue.reviewFilter) return false
     return review === 'proposed'

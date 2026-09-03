@@ -88,4 +88,13 @@ describe('buildVisibleGraph hypothesis layers', () => {
     expect(nodes.every((n) => n.data.dimmed === false)).toBe(true)
     expect(edges.map((e) => e.id)).toEqual(['e-in'])
   })
+
+  it('passes isSeed onto alert nodes', () => {
+    const { nodes } = buildVisibleGraph({
+      ...base,
+      alerts: [alert('n-evt', { isSeed: true }), alert('n-noise')],
+    })
+    expect(nodes.find((n) => n.id === 'n-evt')?.data.isSeed).toBe(true)
+    expect(nodes.find((n) => n.id === 'n-noise')?.data.isSeed).toBeFalsy()
+  })
 })
