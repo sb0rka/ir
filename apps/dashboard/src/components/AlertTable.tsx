@@ -498,9 +498,15 @@ export function AlertTable({ investigationId }: { investigationId?: string } = {
   const setContextQueue = useAppStore((s) => s.setContextQueue)
   const toggleAlertSelect = useAppStore((s) => s.toggleAlertSelect)
   const setAlertSelection = useAppStore((s) => s.setAlertSelection)
-  const queueTextFilter = useAppStore((s) => (investigationId ? '' : s.queueTextFilter))
+  const queueTextFilter = useAppStore((s) =>
+    investigationId
+      ? (s.contextQueue[investigationId] ?? emptyContextQueue).textFilter
+      : s.queueTextFilter,
+  )
   const queueTextFilterColumn = useAppStore((s) =>
-    investigationId ? 'title' : s.queueTextFilterColumn,
+    investigationId
+      ? (s.contextQueue[investigationId] ?? emptyContextQueue).textFilterColumn
+      : s.queueTextFilterColumn,
   )
 
   const entities = useAppStore((s) => s.entities)

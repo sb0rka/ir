@@ -214,8 +214,7 @@ function CorrelationSubevents({
   const refFrom = event.findingRef?.time_range.from
   const refTo = event.findingRef?.time_range.to
   const rawUuid = raw.uuid ?? ''
-  const fallbackFrom = resolve(timeInterval).from
-  const fallbackTo = resolve(timeInterval).to
+  const fallbackRange = useMemo(() => resolve(timeInterval), [timeInterval])
   const findingKind = raw.finding_kind ?? ''
   const shouldLoad =
     findingKind === 'siem_incident' ||
@@ -246,7 +245,7 @@ function CorrelationSubevents({
               }
             : undefined,
       },
-      { from: fallbackFrom, to: fallbackTo },
+      fallbackRange,
     )
   }, [
     shouldLoad,
@@ -261,8 +260,7 @@ function CorrelationSubevents({
     refId,
     refFrom,
     refTo,
-    fallbackFrom,
-    fallbackTo,
+    fallbackRange,
   ])
 
   const [visibleEventCount, setVisibleEventCount] = useState(SUBEVENT_PAGE)
@@ -329,11 +327,12 @@ function CorrelationSubevents({
   const loadSections = useCallback(
     (
       sections: SectionId[],
-      options: { attempt?: number; revealChain?: boolean } = {},
+      options: { attempt?: number; revealChain?: boolean; force?: boolean } = {},
     ) => {
       if (!key || sections.length === 0) return
       const attempt = options.attempt ?? 0
       const revealChain = options.revealChain ?? false
+      const force = options.force ?? false
       const incident = key.record_type === 'siem_incident'
       const gen = ++loadGen.current
       const wanted = new Set(sections)
@@ -342,7 +341,7 @@ function CorrelationSubevents({
       if (wanted.has('hosts') && incident) setHosts({ status: 'loading' })
       if (wanted.has('events')) setEvents({ status: 'loading' })
 
-      void resolveFindingEvents(key)
+      void resolveFindingEvents(key, { force })
         .then((result) => {
           if (loadGen.current !== gen) return
           const usersEmpty = !wanted.has('users') || result.accounts.length === 0
@@ -353,7 +352,7 @@ function CorrelationSubevents({
           if (softFail && attempt < 1) {
             window.setTimeout(() => {
               if (loadGen.current !== gen) return
-              loadSections(sections, { attempt: attempt + 1, revealChain })
+              loadSections(sections, { attempt: attempt + 1, revealChain, force: true })
             }, 800)
             return
           }
@@ -382,7 +381,7 @@ function CorrelationSubevents({
           if (attempt < 1) {
             window.setTimeout(() => {
               if (loadGen.current !== gen) return
-              loadSections(sections, { attempt: attempt + 1, revealChain })
+              loadSections(sections, { attempt: attempt + 1, revealChain, force: true })
             }, 800)
             return
           }
@@ -421,15 +420,15 @@ function CorrelationSubevents({
   }, [key, loadSections])
 
   const retryUsers = useCallback(() => {
-    loadSections(['users'], { revealChain: true })
+    loadSections(['users'], { revealChain: true, force: true })
   }, [loadSections])
 
   const retryHosts = useCallback(() => {
-    loadSections(['hosts'])
+    loadSections(['hosts'], { force: true })
   }, [loadSections])
 
   const retryEvents = useCallback(() => {
-    loadSections(['events'])
+    loadSections(['events'], { force: true })
   }, [loadSections])
 
   if (!shouldLoad || !key) return null

@@ -5,7 +5,7 @@ import { PrimaryNav } from './components/PrimaryNav'
 import { QueuePage } from './pages/QueuePage'
 import { InvestigationsPage } from './pages/InvestigationsPage'
 import { InvestigationPage } from './pages/InvestigationPage'
-import { useAppStore } from './store/appStore'
+import { emptyContextQueue, useAppStore } from './store/appStore'
 import { Button, ErrorBanner } from './components/ui'
 import { ThemeToggle } from './components/theme-toggle'
 import {
@@ -178,29 +178,58 @@ function Dashboard({
   )
   const queuePdql = useAppStore((state) => state.queuePdql)
   const queueSource = useAppStore((state) => state.queueSource)
+  const setContextQueue = useAppStore((state) => state.setContextQueue)
+  const contextQueue = useAppStore((state) =>
+    state.activeTab !== 'queue' && state.activeTab !== 'investigations'
+      ? (state.contextQueue[state.activeTab] ?? emptyContextQueue)
+      : null,
+  )
+  const investigationView = useAppStore((state) =>
+    state.activeTab !== 'queue' && state.activeTab !== 'investigations'
+      ? (state.investigations[state.activeTab]?.view ?? null)
+      : null,
+  )
   const bootstrapped = useRef(false)
   const [configurationOpen, setConfigurationOpen] = useState(false)
   const investigationOpen =
     activeTab !== 'queue' && activeTab !== 'investigations'
-  const listSearchOpen = activeTab === 'queue' || activeTab === 'investigations'
+  const contextQueueSearchOpen = investigationOpen && investigationView === 'queue'
+  const listSearchOpen =
+    activeTab === 'queue' || activeTab === 'investigations' || contextQueueSearchOpen
+  const contextQueuePdql = contextQueue?.pdql
+  const contextQueueSource = contextQueue?.queueSource
+  const alertSearchOpen = activeTab === 'queue' || contextQueueSearchOpen
+  const alertSearchColumns = alertSearchOpen
+    ? (() => {
+        const pdql = contextQueueSearchOpen ? (contextQueuePdql ?? queuePdql) : queuePdql
+        const source = contextQueueSearchOpen
+          ? (contextQueueSource ?? queueSource)
+          : queueSource
+        const parsed = parseQueuePdql(pdql)
+        const selectFields = parsed.ok ? queueSelectFields(parsed.ast) : []
+        return alertTableSearchColumns(selectFields, {
+          showCategory: source === 'siem_incident',
+        })
+      })()
+    : undefined
   const searchColumns =
-    activeTab === 'queue'
-      ? (() => {
-          const parsed = parseQueuePdql(queuePdql)
-          const selectFields = parsed.ok ? queueSelectFields(parsed.ast) : []
-          return alertTableSearchColumns(selectFields, {
-            showCategory: queueSource === 'siem_incident',
-          })
-        })()
-      : activeTab === 'investigations'
-        ? [...INVESTIGATION_TABLE_SEARCH_COLUMNS]
-        : undefined
-  const resolvedSearchColumn =
-    activeTab === 'queue' && searchColumns
-      ? resolveAlertTableSearchColumn(queueTextFilterColumn, searchColumns)
-      : activeTab === 'investigations'
-        ? resolveInvestigationTableSearchColumn(investigationTextFilterColumn)
-        : undefined
+    alertSearchColumns ??
+    (activeTab === 'investigations' ? [...INVESTIGATION_TABLE_SEARCH_COLUMNS] : undefined)
+  const listSearchValue = contextQueueSearchOpen
+    ? (contextQueue?.textFilter ?? '')
+    : activeTab === 'investigations'
+      ? investigationFilters.q
+      : queueTextFilter
+  const listSearchColumn = contextQueueSearchOpen
+    ? (contextQueue?.textFilterColumn ?? 'title')
+    : activeTab === 'queue'
+      ? queueTextFilterColumn
+      : investigationTextFilterColumn
+  const resolvedSearchColumn = alertSearchColumns
+    ? resolveAlertTableSearchColumn(listSearchColumn, alertSearchColumns)
+    : activeTab === 'investigations'
+      ? resolveInvestigationTableSearchColumn(investigationTextFilterColumn)
+      : undefined
 
   const onListSearchChange = useCallback(
     (next: string) => {
@@ -208,9 +237,13 @@ function Dashboard({
         void setInvestigationFilter({ q: next })
         return
       }
+      if (activeTab !== 'queue' && activeTab !== 'investigations') {
+        setContextQueue(activeTab, { textFilter: next })
+        return
+      }
       setQueueTextFilter(next)
     },
-    [activeTab, setInvestigationFilter, setQueueTextFilter],
+    [activeTab, setContextQueue, setInvestigationFilter, setQueueTextFilter],
   )
 
   const onSearchColumnChange = useCallback(
@@ -219,20 +252,33 @@ function Dashboard({
         setInvestigationTextFilterColumn(column)
         return
       }
+      if (activeTab !== 'queue' && activeTab !== 'investigations') {
+        setContextQueue(activeTab, { textFilterColumn: column })
+        return
+      }
       setQueueTextFilterColumn(column)
     },
-    [activeTab, setInvestigationTextFilterColumn, setQueueTextFilterColumn],
+    [activeTab, setContextQueue, setInvestigationTextFilterColumn, setQueueTextFilterColumn],
   )
 
   useEffect(() => {
-    if (activeTab !== 'queue' || !searchColumns || !resolvedSearchColumn) return
+    if (!alertSearchColumns || !resolvedSearchColumn) return
+    if (contextQueueSearchOpen) {
+      if (resolvedSearchColumn === contextQueue?.textFilterColumn) return
+      setContextQueue(activeTab, { textFilterColumn: resolvedSearchColumn })
+      return
+    }
+    if (activeTab !== 'queue') return
     if (resolvedSearchColumn === queueTextFilterColumn) return
     setQueueTextFilterColumn(resolvedSearchColumn)
   }, [
     activeTab,
-    searchColumns,
+    alertSearchColumns,
+    contextQueue?.textFilterColumn,
+    contextQueueSearchOpen,
     queueTextFilterColumn,
     resolvedSearchColumn,
+    setContextQueue,
     setQueueTextFilterColumn,
   ])
 
@@ -265,9 +311,7 @@ function Dashboard({
           {listSearchOpen ? (
             <HeaderSearch
               key={activeTab}
-              value={
-                activeTab === 'investigations' ? investigationFilters.q : queueTextFilter
-              }
+              value={listSearchValue}
               onChange={onListSearchChange}
               placeholder="Поиск"
               columns={searchColumns}

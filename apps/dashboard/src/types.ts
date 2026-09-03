@@ -247,6 +247,24 @@ export interface EventGroupItem {
   count: number
 }
 
+/** Cached queue table results for one QueueSource (session memory). */
+export interface QueueSourceResultSnapshot {
+  alerts: Record<string, AlertEvent>
+  correlations: Record<string, CorrelationGroup>
+  queueOrder: QueueItem[]
+  eventGroups: EventGroupItem[]
+  executedFingerprint: string | null
+  mockSources: string[]
+}
+
+/** Context-queue subset of a source snapshot (no correlations / mockSources). */
+export interface ContextSourceResultSnapshot {
+  alerts: Record<string, AlertEvent>
+  queueOrder: QueueItem[]
+  eventGroups: EventGroupItem[]
+  executedFingerprint: string | null
+}
+
 /** Per-investigation state of the context event queue (search + filters). */
 export interface ContextQueueState {
   /** Last executed entity chips used to filter the table. */
@@ -264,9 +282,15 @@ export interface ContextQueueState {
   hideAdded: boolean
   originFilter: EventOrigin | 'all'
   reviewFilter: ReviewState | 'all'
+  /** Client-side text filter for the context queue AlertTable. */
+  textFilter: string
+  /** Which alert table column textFilter applies to. */
+  textFilterColumn: string
   alerts: Record<string, AlertEvent>
   queueOrder: QueueItem[]
   loading: boolean
+  /** Last executed results per source while switching QueueSourceToggle. */
+  sourceResults: Partial<Record<QueueSource, ContextSourceResultSnapshot>>
 }
 
 export interface SavedView {

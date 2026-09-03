@@ -13,6 +13,12 @@ import { getProjectId, resolveTimeRange } from './env'
 import { gatewayClient } from './clients'
 import { unwrapError } from './error'
 import { mapGatewayEntity, mapGatewayEvent, mapGatewayFinding } from './adapters'
+import {
+  findingResolveCache,
+  findingResolveCacheKey,
+  isFindingResolveSoftFail,
+  type FindingResolveResult,
+} from './findingResolveCache'
 import { pickFindingAccounts, pickFindingChildEvents, pickFindingHosts, type FindingResolveKey } from '../lib/correlationSubevents'
 import { matchesChips } from '../lib/filters'
 import {
@@ -678,34 +684,45 @@ function contextErrorMessagesForKey(
   return [...new Set(out)]
 }
 
+export type { FindingResolveResult }
+export { clearFindingResolveCache } from './findingResolveCache'
+
 export async function resolveFindingEvents(
   key: FindingResolveKey,
-): Promise<{
-  events: AlertEvent[]
-  accounts: string[]
-  hosts: { value: string; roles: string[] }[]
-  errors: string[]
-}> {
-  const { data, error, response } = await gatewayClient.POST('/api/v1/context/resolve', {
-    params: projectHeader(),
-    body: {
-      findings: [findingRefBody(key)],
+  options: { force?: boolean } = {},
+): Promise<FindingResolveResult> {
+  const projectId = getProjectId()
+  if (!projectId) throw new Error('Проект не выбран')
+  const cacheKey = findingResolveCacheKey(projectId, key)
+  return findingResolveCache.getOrLoad(
+    cacheKey,
+    async () => {
+      const { data, error, response } = await gatewayClient.POST('/api/v1/context/resolve', {
+        params: projectHeader(),
+        body: {
+          findings: [findingRefBody(key)],
+        },
+      })
+      if (error || !data) throw unwrapError(error, response.status)
+      const root = (data.findings ?? []).find(
+        (finding) =>
+          finding.ref.source_code === key.source_code &&
+          finding.ref.record_type === key.record_type &&
+          finding.ref.external_id === key.external_id,
+      )
+      const mentions = root?.entities ?? []
+      return {
+        events: pickFindingChildEvents((data.events ?? []).map(alertFromGatewayEvent), key),
+        accounts: pickFindingAccounts(mentions),
+        hosts: pickFindingHosts(mentions),
+        errors: contextErrorMessages(data),
+      }
     },
-  })
-  if (error || !data) throw unwrapError(error, response.status)
-  const root = (data.findings ?? []).find(
-    (finding) =>
-      finding.ref.source_code === key.source_code &&
-      finding.ref.record_type === key.record_type &&
-      finding.ref.external_id === key.external_id,
+    {
+      force: options.force,
+      shouldCache: (result) => !isFindingResolveSoftFail(result),
+    },
   )
-  const mentions = root?.entities ?? []
-  return {
-    events: pickFindingChildEvents((data.events ?? []).map(alertFromGatewayEvent), key),
-    accounts: pickFindingAccounts(mentions),
-    hosts: pickFindingHosts(mentions),
-    errors: contextErrorMessages(data),
-  }
 }
 
 export async function lookupEntity(type: string, value: string): Promise<string> {

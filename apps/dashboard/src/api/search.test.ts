@@ -3,11 +3,13 @@ import { parse } from '../lib/pdql/parse'
 import { findingUuidQuery } from '../lib/pdql'
 import { demoDayInterval } from '../components/time-interval/model'
 import type { components as Gw } from '@ir/contract/gateway'
-import { searchQueue } from './search'
+import { clearFindingResolveCache, resolveFindingEvents, searchQueue } from './search'
+import type { FindingResolveKey } from '../lib/correlationSubevents'
 
-const { gatewayGet, gatewayPost } = vi.hoisted(() => ({
+const { gatewayGet, gatewayPost, projectIdRef } = vi.hoisted(() => ({
   gatewayGet: vi.fn(),
   gatewayPost: vi.fn(),
+  projectIdRef: { current: 'project-1' as string | null },
 }))
 
 vi.mock('./clients', () => ({
@@ -19,7 +21,7 @@ vi.mock('./clients', () => ({
 
 vi.mock('./env', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./env')>()
-  return { ...actual, getProjectId: () => 'project-1' }
+  return { ...actual, getProjectId: () => projectIdRef.current }
 })
 
 type GwEvent = Gw['schemas']['Event']
@@ -88,6 +90,8 @@ function emptyResolve(events: GwEvent[] = []) {
 }
 
 beforeEach(() => {
+  projectIdRef.current = 'project-1'
+  clearFindingResolveCache()
   gatewayGet.mockReset()
   gatewayPost.mockReset()
   gatewayGet.mockResolvedValue({
@@ -315,5 +319,102 @@ describe('searchQueue findings sort', () => {
       'pt-maxpatrol-siem/siem_correlation/old',
       'pt-maxpatrol-siem/siem_correlation/new',
     ])
+  })
+})
+
+describe('resolveFindingEvents session cache', () => {
+  const key: FindingResolveKey = {
+    source_code: 'pt-maxpatrol-siem',
+    record_type: 'siem_incident',
+    external_id: 'inc-1',
+    time_range: { from: '2025-10-23T00:00:00.000Z', to: '2025-10-23T23:59:59.000Z' },
+  }
+
+  function resolveOk() {
+    return {
+      data: {
+        findings: [
+          {
+            ...gwFinding('inc-1', '2025-10-23T12:00:00.000Z'),
+            entities: [
+              { type: 'account', value: 'alice', roles: ['mentions'] },
+              { type: 'host', value: 'host-1', roles: ['src'] },
+            ],
+          },
+        ],
+        sessions: [],
+        events: [gwEvent('child-1')],
+        entities: [],
+        relations: [],
+        resolutions: [],
+        source_errors: [],
+      },
+      error: undefined,
+      response: { status: 200 },
+    }
+  }
+
+  function resolveSoftFail() {
+    return {
+      data: {
+        findings: [{ ...gwFinding('inc-1', '2025-10-23T12:00:00.000Z'), entities: [] }],
+        sessions: [],
+        events: [],
+        entities: [],
+        relations: [],
+        resolutions: [],
+        source_errors: [{ source: 'pt-maxpatrol-siem', message: 'timeout' }],
+      },
+      error: undefined,
+      response: { status: 200 },
+    }
+  }
+
+  it('reuses a successful response for the same key', async () => {
+    gatewayPost.mockResolvedValue(resolveOk())
+    const first = await resolveFindingEvents(key)
+    const second = await resolveFindingEvents(key)
+    expect(gatewayPost).toHaveBeenCalledTimes(1)
+    expect(second).toEqual(first)
+    expect(first.accounts).toEqual(['alice'])
+    expect(first.hosts).toEqual([{ value: 'host-1', roles: ['src'] }])
+  })
+
+  it('refetches when force is set', async () => {
+    gatewayPost.mockResolvedValue(resolveOk())
+    await resolveFindingEvents(key)
+    await resolveFindingEvents(key, { force: true })
+    expect(gatewayPost).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not cache thrown errors', async () => {
+    gatewayPost
+      .mockResolvedValueOnce({
+        data: undefined,
+        error: { message: 'boom' },
+        response: { status: 500 },
+      })
+      .mockResolvedValueOnce(resolveOk())
+    await expect(resolveFindingEvents(key)).rejects.toThrow()
+    await expect(resolveFindingEvents(key)).resolves.toMatchObject({ accounts: ['alice'] })
+    expect(gatewayPost).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not cache soft-fail empty responses', async () => {
+    gatewayPost.mockResolvedValueOnce(resolveSoftFail()).mockResolvedValueOnce(resolveOk())
+    const soft = await resolveFindingEvents(key)
+    expect(soft.errors.length).toBeGreaterThan(0)
+    expect(soft.events).toEqual([])
+    const ok = await resolveFindingEvents(key)
+    expect(gatewayPost).toHaveBeenCalledTimes(2)
+    expect(ok.accounts).toEqual(['alice'])
+  })
+
+  it('isolates cache entries by project id', async () => {
+    gatewayPost.mockResolvedValue(resolveOk())
+    await resolveFindingEvents(key)
+    projectIdRef.current = 'project-2'
+    await resolveFindingEvents(key)
+    expect(gatewayPost).toHaveBeenCalledTimes(2)
   })
 })

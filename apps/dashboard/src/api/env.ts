@@ -1,3 +1,5 @@
+import { clearFindingResolveCache } from './findingResolveCache'
+
 const PROJECT_ID_KEY = 'ir.projectId'
 
 function stripSlash(value: string): string {
@@ -30,6 +32,7 @@ export function getProjectId(): string | null {
 }
 
 export function setProjectId(projectId: string | null): void {
+  const changed = projectId !== activeProjectId
   activeProjectId = projectId
   try {
     if (projectId) localStorage.setItem(PROJECT_ID_KEY, projectId)
@@ -37,6 +40,7 @@ export function setProjectId(projectId: string | null): void {
   } catch {
     /* Storage is an optimization; the authenticated shell still owns the live value. */
   }
+  if (changed) clearFindingResolveCache()
 }
 
 export const TIME_PRESET_CUSTOM = 'custom'

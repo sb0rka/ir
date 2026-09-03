@@ -442,7 +442,7 @@ export function QueryComposer({
           ) : (
             <Play className="h-3.5 w-3.5" />
           )}
-          {stale ? 'Выполнить · фильтр изменён' : 'Выполнить'}
+          {stale ? 'Выполнить · фильтр изменен' : 'Выполнить'}
         </Button>
       </div>
       {(editError || parseError) && (

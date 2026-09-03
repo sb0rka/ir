@@ -5,6 +5,7 @@ import {
   type AlertEvent,
   type ContextEvent,
   type ContextQueueState,
+  type ContextSourceResultSnapshot,
   type CorrelationGroup,
   type Entity,
   type EventGroupItem,
@@ -18,6 +19,7 @@ import {
   type Issue,
   type QueueItem,
   type QueueSource,
+  type QueueSourceResultSnapshot,
   type QueryHistoryEntry,
   type ReviewState,
 } from '../types'
@@ -113,9 +115,128 @@ export const emptyContextQueue: ContextQueueState = {
   hideAdded: false,
   originFilter: 'all',
   reviewFilter: 'all',
+  textFilter: '',
+  textFilterColumn: 'title',
   alerts: {},
   queueOrder: [],
   loading: false,
+  sourceResults: {},
+}
+
+function snapshotGlobalQueue(state: {
+  alerts: Record<string, AlertEvent>
+  correlations: Record<string, CorrelationGroup>
+  queueOrder: QueueItem[]
+  eventGroups: EventGroupItem[]
+  executedFingerprint: string | null
+  mockSources: string[]
+}): QueueSourceResultSnapshot {
+  return {
+    alerts: state.alerts,
+    correlations: state.correlations,
+    queueOrder: state.queueOrder,
+    eventGroups: state.eventGroups,
+    executedFingerprint: state.executedFingerprint,
+    mockSources: state.mockSources,
+  }
+}
+
+function snapshotContextQueue(state: ContextQueueState): ContextSourceResultSnapshot {
+  return {
+    alerts: state.alerts,
+    queueOrder: state.queueOrder,
+    eventGroups: state.eventGroups,
+    executedFingerprint: state.executedFingerprint,
+  }
+}
+
+/** Save current source results and restore the target source cache (or empty). */
+function swapGlobalQueueSource(
+  state: {
+    queueSource: QueueSource
+    queueSourceCache: Partial<Record<QueueSource, QueueSourceResultSnapshot>>
+    alerts: Record<string, AlertEvent>
+    correlations: Record<string, CorrelationGroup>
+    queueOrder: QueueItem[]
+    eventGroups: EventGroupItem[]
+    executedFingerprint: string | null
+    mockSources: string[]
+  },
+  nextSource: QueueSource,
+): {
+  queueSource: QueueSource
+  queueSourceCache: Partial<Record<QueueSource, QueueSourceResultSnapshot>>
+  alerts: Record<string, AlertEvent>
+  correlations: Record<string, CorrelationGroup>
+  queueOrder: QueueItem[]
+  eventGroups: EventGroupItem[]
+  executedFingerprint: string | null
+  mockSources: string[]
+  inspectedQueueItem: null
+  selectedAlertIds: string[]
+  expandedCorrelationIds: string[]
+  queueLoading: false
+} {
+  if (state.queueSource === nextSource) {
+    return {
+      queueSource: nextSource,
+      queueSourceCache: state.queueSourceCache,
+      alerts: state.alerts,
+      correlations: state.correlations,
+      queueOrder: state.queueOrder,
+      eventGroups: state.eventGroups,
+      executedFingerprint: state.executedFingerprint,
+      mockSources: state.mockSources,
+      inspectedQueueItem: null,
+      selectedAlertIds: [],
+      expandedCorrelationIds: [],
+      queueLoading: false,
+    }
+  }
+  const queueSourceCache = {
+    ...state.queueSourceCache,
+    [state.queueSource]: snapshotGlobalQueue(state),
+  }
+  const hit = queueSourceCache[nextSource]
+  return {
+    queueSource: nextSource,
+    queueSourceCache,
+    alerts: hit?.alerts ?? {},
+    correlations: hit?.correlations ?? {},
+    queueOrder: hit?.queueOrder ?? [],
+    eventGroups: hit?.eventGroups ?? [],
+    // Source is part of the filter: keep cached rows, but force the stale execute CTA.
+    executedFingerprint: null,
+    mockSources: hit?.mockSources ?? [],
+    inspectedQueueItem: null,
+    selectedAlertIds: [],
+    expandedCorrelationIds: [],
+    queueLoading: false,
+  }
+}
+
+function swapContextQueueSource(
+  cur: ContextQueueState,
+  nextSource: QueueSource,
+): ContextQueueState {
+  if (cur.queueSource === nextSource) return { ...cur, queueSource: nextSource }
+  const sourceResults = {
+    ...(cur.sourceResults ?? {}),
+    [cur.queueSource]: snapshotContextQueue(cur),
+  }
+  const hit = sourceResults[nextSource]
+  return {
+    ...cur,
+    queueSource: nextSource,
+    sourceResults,
+    alerts: hit?.alerts ?? {},
+    queueOrder: hit?.queueOrder ?? [],
+    eventGroups: hit?.eventGroups ?? [],
+    // Source is part of the filter: keep cached rows, but force the stale execute CTA.
+    executedFingerprint: null,
+    selectedIds: [],
+    loading: false,
+  }
 }
 
 function pushQueryHistory(
@@ -142,6 +263,8 @@ interface AppState {
   timeInterval: TimeInterval
   queuePdql: string
   queueSource: QueueSource
+  /** Last executed table results per QueueSource for tab switches without refetch. */
+  queueSourceCache: Partial<Record<QueueSource, QueueSourceResultSnapshot>>
   groupValues: (string | null)[]
   eventGroups: EventGroupItem[]
   executedFingerprint: string | null
@@ -532,6 +655,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   timeInterval: DEFAULT_TIME_INTERVAL,
   queuePdql: DEFAULT_QUEUE_PDQL,
   queueSource: DEFAULT_QUEUE_SOURCE,
+  queueSourceCache: {},
   groupValues: [],
   eventGroups: [],
   executedFingerprint: null,
@@ -620,14 +744,20 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
   setTimeInterval: (timeInterval) => set({ timeInterval }),
-  setQueueSource: (queueSource) => set({ queueSource }),
-  applyQueueHistory: (entry) =>
+  setQueueSource: (queueSource) => {
+    const state = get()
+    if (state.queueSource === queueSource) return
+    set(swapGlobalQueueSource(state, queueSource))
+  },
+  applyQueueHistory: (entry) => {
+    const nextSource = entry.queueSource ?? DEFAULT_QUEUE_SOURCE
     set({
+      ...swapGlobalQueueSource(get(), nextSource),
       queuePdql: entry.pdql,
       timeInterval: entry.timeInterval,
-      queueSource: entry.queueSource ?? DEFAULT_QUEUE_SOURCE,
       groupValues: entry.groupValues ?? [],
-    }),
+    })
+  },
   drillGroupValue: (investigationId, field, value) => {
     if (!investigationId) {
       const parsed = parseQueuePdql(get().queuePdql)
@@ -771,12 +901,21 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
       const canonical = serialize(parsed.ast)
       const effectiveTime = result.effectiveTimeInterval ?? timeInterval
+      const executedFingerprint = filterFingerprint(canonical, effectiveTime, queueSource, groupValues)
+      const snapshot: QueueSourceResultSnapshot = {
+        alerts: result.alerts,
+        correlations: result.correlations,
+        queueOrder: result.queueOrder,
+        eventGroups: result.eventGroups,
+        executedFingerprint,
+        mockSources: result.mockSources,
+      }
       set({
         chips,
         queuePdql: canonical,
         groupValues,
         timeInterval: effectiveTime,
-        executedFingerprint: filterFingerprint(canonical, effectiveTime, queueSource, groupValues),
+        executedFingerprint,
         queryHistory: pushQueryHistory(get().queryHistory, {
           pdql: canonical,
           timeInterval: effectiveTime,
@@ -787,6 +926,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         correlations: result.correlations,
         queueOrder: result.queueOrder,
         eventGroups: result.eventGroups,
+        queueSourceCache: { ...get().queueSourceCache, [queueSource]: snapshot },
         entities: mergeEntities(get().entities, result.entities),
         contextEvents: { ...get().contextEvents, ...result.contextEvents },
         expandedCorrelationIds: result.queueOrder
@@ -1176,7 +1316,12 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   setContextQueue: (investigationId, patch) => {
     const cur = get().contextQueue[investigationId] ?? emptyContextQueue
-    const next = { ...cur, ...patch }
+    let next: ContextQueueState
+    if (patch.queueSource != null && patch.queueSource !== cur.queueSource) {
+      next = { ...swapContextQueueSource(cur, patch.queueSource), ...patch }
+    } else {
+      next = { ...cur, ...patch }
+    }
     if (patch.pdql != null && patch.groupValues == null) {
       const parsed = parseQueuePdql(next.pdql)
       if (parsed.ok) next.groupValues = alignGroupValues(parsed.ast, next.groupValues)
@@ -1238,6 +1383,18 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
       const latest = get().contextQueue[investigationId] ?? emptyContextQueue
       const effectiveTime = result.effectiveTimeInterval ?? timeInterval
+      const executedFingerprint = filterFingerprint(
+        canonical,
+        effectiveTime,
+        queueSource,
+        groupValues,
+      )
+      const sourceSnapshot = {
+        alerts: result.alerts,
+        queueOrder: result.queueOrder,
+        eventGroups: result.eventGroups,
+        executedFingerprint,
+      }
       set({
         entities: mergeEntities(get().entities, result.entities),
         filterValueOptions: {
@@ -1260,12 +1417,8 @@ export const useAppStore = create<AppState>((set, get) => ({
             alerts: result.alerts,
             queueOrder: result.queueOrder,
             loading: false,
-            executedFingerprint: filterFingerprint(
-              canonical,
-              effectiveTime,
-              queueSource,
-              groupValues,
-            ),
+            executedFingerprint,
+            sourceResults: { ...(latest.sourceResults ?? {}), [queueSource]: sourceSnapshot },
             queryHistory: pushQueryHistory(latest.queryHistory, {
               pdql: canonical,
               timeInterval: effectiveTime,
@@ -1341,22 +1494,39 @@ export const useAppStore = create<AppState>((set, get) => ({
     // Involved host/account filters belong on the entities queue, not SIEM PDQL events.
     const switchToEntities = isEntityQueueField(field)
     if (!investigationId) {
-      set({
-        queuePdql: nextPdql,
-        ...(switchToEntities ? { queueSource: 'entities' as const, groupValues: [], eventGroups: [] } : {}),
-      })
+      if (switchToEntities) {
+        set({
+          ...swapGlobalQueueSource(get(), 'entities'),
+          queuePdql: nextPdql,
+          groupValues: [],
+          eventGroups: [],
+        })
+        return
+      }
+      set({ queuePdql: nextPdql })
       return
     }
     const cur = get().contextQueue[investigationId] ?? emptyContextQueue
+    if (switchToEntities) {
+      set({
+        contextQueue: {
+          ...get().contextQueue,
+          [investigationId]: {
+            ...swapContextQueueSource(cur, 'entities'),
+            pdql: nextPdql,
+            groupValues: [],
+            eventGroups: [],
+          },
+        },
+      })
+      return
+    }
     set({
       contextQueue: {
         ...get().contextQueue,
         [investigationId]: {
           ...cur,
           pdql: nextPdql,
-          ...(switchToEntities
-            ? { queueSource: 'entities' as const, groupValues: [], eventGroups: [] }
-            : {}),
         },
       },
     })
@@ -1367,7 +1537,12 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (!value) return
     const pdql = findingUuidQuery(value, recordType)
     if (!investigationId) {
-      set({ queuePdql: pdql, queueSource: 'events', groupValues: [], eventGroups: [] })
+      set({
+        ...swapGlobalQueueSource(get(), 'events'),
+        queuePdql: pdql,
+        groupValues: [],
+        eventGroups: [],
+      })
       return
     }
     const cur = get().contextQueue[investigationId] ?? emptyContextQueue
@@ -1375,9 +1550,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       contextQueue: {
         ...get().contextQueue,
         [investigationId]: {
-          ...cur,
+          ...swapContextQueueSource(cur, 'events'),
           pdql,
-          queueSource: 'events',
           groupValues: [],
           eventGroups: [],
         },
