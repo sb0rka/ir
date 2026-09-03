@@ -16,7 +16,7 @@ const STATUS_OPTIONS = [
 }>
 
 const SEVERITY_OPTIONS = [
-  { value: 'all', label: 'Любая важность' },
+  { value: 'all', label: 'Любая крит.' },
   { value: 'critical', label: 'Критическая' },
   { value: 'high', label: 'Высокая' },
   { value: 'medium', label: 'Средняя' },
@@ -64,7 +64,7 @@ export function InvestigationsPage() {
             onChange={(status) => void setInvestigationFilter({ status })}
           />
           <Select
-            aria-label="Важность"
+            aria-label="Крит."
             value={filters.severity}
             options={SEVERITY_OPTIONS}
             onChange={(severity) => void setInvestigationFilter({ severity })}

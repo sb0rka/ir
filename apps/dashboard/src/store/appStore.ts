@@ -487,14 +487,18 @@ async function restoreWorkspaceTabs(
     }),
   )
 
-  const kept = openIds.filter((id) => !gone.has(id))
+  const investigations = mergeListed(get().investigations, fetched)
+  const kept = openIds.filter((id) => {
+    if (gone.has(id)) return false
+    return investigations[id]?.status !== 'closed'
+  })
   const tabs: TabId[] = [...PINNED_TABS, ...kept]
   const activeTab = tabs.includes(saved.activeTab)
     ? saved.activeTab
     : (kept[kept.length - 1] ?? 'investigations')
 
   set({
-    investigations: mergeListed(get().investigations, fetched),
+    investigations,
     tabs,
     activeTab,
   })
@@ -1092,6 +1096,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const inv = get().investigations[id]
     if (!inv || inv.version == null) {
       get().updateInvestigation(id, patch)
+      if (patch.status === 'closed') get().closeTab(id)
       return true
     }
     try {
@@ -1117,6 +1122,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         ...(patch.title != null ? { title: patch.title } : {}),
         ...(patch.severity != null ? { severity: patch.severity } : {}),
       })
+      if (updated.status === 'closed') get().closeTab(id)
       return true
     } catch (err) {
       if (isNotImplemented(err)) {

@@ -1,5 +1,11 @@
 /** Searchable columns of the investigations list table — single source for headers + search. */
-export type InvestigationTableColumnId = 'updatedAt' | 'severity' | 'status' | 'title'
+export type InvestigationTableColumnId =
+  | 'severity'
+  | 'status'
+  | 'title'
+  | 'verdict'
+  | 'createdAt'
+  | 'updatedAt'
 
 export type InvestigationTableColumn = {
   id: InvestigationTableColumnId
@@ -7,10 +13,12 @@ export type InvestigationTableColumn = {
 }
 
 export const INVESTIGATION_TABLE_SEARCH_COLUMNS: ReadonlyArray<InvestigationTableColumn> = [
-  { id: 'updatedAt', label: 'Обновлено' },
-  { id: 'severity', label: 'Важность' },
+  { id: 'severity', label: 'Крит.' },
   { id: 'status', label: 'Статус' },
-  { id: 'title', label: 'Расследование' },
+  { id: 'title', label: 'Название' },
+  { id: 'verdict', label: 'Вердикт' },
+  { id: 'createdAt', label: 'Создано' },
+  { id: 'updatedAt', label: 'Обновлено' },
 ]
 
 export const DEFAULT_INVESTIGATION_TABLE_SEARCH_COLUMN: InvestigationTableColumnId = 'title'

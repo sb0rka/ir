@@ -262,15 +262,33 @@ function AlertRow({
   const inspected = useAppStore((s) => isInspected(s.inspectedQueueItem, 'alert', alert.id))
   const categoryCode = alert.raw?.['incident.type'] ?? ''
   const categoryLabel = incidentTypeLabelRu(categoryCode)
+  const isIncident =
+    showCategory || alert.findingRef?.record_type === 'siem_incident'
+  const subtitle =
+    isIncident && alert.description && alert.description !== alert.title
+      ? alert.description
+      : isIncident
+        ? ''
+        : alert.rule
 
   return (
     <tr
       className={clsx(
-        'cursor-pointer border-b border-border/60 hover:bg-surface-2/60',
-        inContext && 'bg-surface-0/40',
-        selected && 'bg-surface-2',
-        inspected && 'bg-surface-3/70',
-        nested && !inspected && 'bg-surface-0/40',
+        'cursor-pointer border-b border-border/60',
+        inContext
+          ? clsx(
+              inspected
+                ? 'bg-confirmed/25 hover:bg-confirmed/30'
+                : selected
+                  ? 'bg-confirmed/20 hover:bg-confirmed/25'
+                  : 'bg-confirmed/10 hover:bg-confirmed/15',
+            )
+          : clsx(
+              'hover:bg-surface-2/60',
+              selected && 'bg-surface-2',
+              inspected && 'bg-surface-3/70',
+              nested && !inspected && 'bg-surface-0/40',
+            ),
       )}
       onClick={() => inspect({ kind: 'alert', id: alert.id })}
     >
@@ -293,20 +311,17 @@ function AlertRow({
         <span className="block truncate">{formatTime(alert.time)}</span>
       </td>
       <td className={clsx(COL_TITLE, 'px-3 py-2')}>
-        <div className="flex min-w-0 items-center gap-2">
-          <div
-            className={clsx('min-w-0 flex-1 truncate text-sm', inContext && 'text-fg-muted')}
-            title={alert.title}
-          >
-            {alert.title}
+        <div
+          className={clsx('min-w-0 truncate text-sm', inContext && 'text-fg-muted')}
+          title={alert.title}
+        >
+          {alert.title}
+        </div>
+        {subtitle ? (
+          <div className="truncate text-xs text-fg-dim" title={subtitle}>
+            {subtitle}
           </div>
-          {inContext && (
-            <Chip tone="confirmed">в контексте</Chip>
-          )}
-        </div>
-        <div className="truncate text-xs text-fg-dim" title={alert.rule}>
-          {alert.rule}
-        </div>
+        ) : null}
       </td>
       {showCategory && (
         <td className="max-w-0 overflow-hidden px-3 py-2 align-top" title={categoryLabel || categoryCode}>

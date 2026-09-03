@@ -41,7 +41,7 @@ type InvestigationView = 'table' | 'graph' | 'queue'
 
 const VIEWS: { id: InvestigationView; title: string; icon: typeof Table2 }[] = [
   { id: 'table', title: 'Таблица', icon: Table2 },
-  { id: 'graph', title: 'Граф + таймлайн', icon: Network },
+  { id: 'graph', title: 'Граф и таймлайн', icon: Network },
   { id: 'queue', title: 'Очередь', icon: Inbox },
 ]
 

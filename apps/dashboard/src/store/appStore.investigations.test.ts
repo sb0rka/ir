@@ -221,6 +221,8 @@ describe('investigation catalog', () => {
 
   it('persistInvestigation closes a case with a verdict', async () => {
     useAppStore.setState({
+      tabs: ['queue', 'investigations', 'inv-1'],
+      activeTab: 'inv-1',
       investigations: { 'inv-1': investigation({ version: 1 }) },
     })
     vi.spyOn(irApi, 'patchInvestigation').mockResolvedValue({
@@ -261,11 +263,14 @@ describe('investigation catalog', () => {
         verdict_reason: 'c2 confirmed',
       }),
     )
-    const inv = useAppStore.getState().investigations['inv-1']
+    const state = useAppStore.getState()
+    const inv = state.investigations['inv-1']
     expect(inv?.status).toBe('closed')
     expect(inv?.verdict).toBe('incident')
     expect(inv?.verdictReason).toBe('c2 confirmed')
     expect(inv?.version).toBe(2)
+    expect(state.tabs).toEqual(['queue', 'investigations'])
+    expect(state.activeTab).toBe('investigations')
   })
 
   it('persistInvestigation reopens a closed case', async () => {

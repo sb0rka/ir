@@ -123,10 +123,12 @@ describe('correlationMatchesQueueText', () => {
 describe('investigation table search columns', () => {
   it('matches table headers', () => {
     expect(INVESTIGATION_TABLE_SEARCH_COLUMNS.map((c) => c.label)).toEqual([
-      'Обновлено',
-      'Важность',
+      'Крит.',
       'Статус',
-      'Расследование',
+      'Название',
+      'Вердикт',
+      'Создано',
+      'Обновлено',
     ])
   })
 
