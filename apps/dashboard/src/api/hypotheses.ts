@@ -133,7 +133,7 @@ export async function addHypothesisContext(
   return throwIfError(
     await irClient.POST('/investigations/{investigation_id}/hypotheses/{hypothesis_id}/context', {
       params: hypothesisPath(investigationId, hypothesisId),
-      body: { findings, sessions: [], events, entities: [] },
+      body: { findings, sessions: [], events, entities: [], seed: false },
     }),
   )
 }
