@@ -1,0 +1,65 @@
+name: Investigations integration
+
+on:
+  pull_request:
+    paths:
+      - 'apps/investigations/**'
+      - 'db/migrations/investigations/**'
+      - 'packages/contract/**'
+      - '.github/workflows/investigations_integration.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'apps/investigations/**'
+      - 'db/migrations/investigations/**'
+      - 'packages/contract/**'
+      - '.github/workflows/investigations_integration.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: investigations-integration-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_PASSWORD: integration-tests-only
+          POSTGRES_DB: ir_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres -d ir_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      POSTGRES_HOST: localhost
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: postgres
+      POSTGRES_DB: ir_test
+      POSTGRES_PASSWORD: integration-tests-only
+      DB_ADMIN_PASSWORD: integration-tests-only
+      DB_INV_SCHEMA_NAME: inv
+      INVESTIGATIONS_TEST_DATABASE_URI: 'postgres://postgres:integration-tests-only@localhost:5432/ir_test?sslmode=disable&search_path=inv'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.work
+          cache-dependency-path: apps/investigations/go.sum
+
+      - name: Prepare database
+        run: ./db/migrate.sh db/migrations/investigations/*.sql
+
+      - name: Test database and HTTP/MCP integration
+        working-directory: apps/investigations
+        run: go test -count=1 ./internal/store/psql ./internal/server
