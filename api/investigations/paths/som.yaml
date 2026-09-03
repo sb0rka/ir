@@ -144,6 +144,18 @@ paths:
         required: true
         description: Daemon environment id returned by runSomIssue.
         schema: { type: string, format: uuid }
+      - name: investigation_id
+        in: query
+        required: false
+        description: >-
+          When set with som_issue_id, the response includes how many agent
+          graph nodes and edges this issue already wrote into the investigation.
+        schema: { type: string, format: uuid }
+      - name: som_issue_id
+        in: query
+        required: false
+        description: SOM issue UUID whose agent writes should be counted.
+        schema: { type: string, format: uuid }
     get:
       tags: [som]
       summary: Status of a SOM agent environment
@@ -152,6 +164,8 @@ paths:
         `POST /api/environments/summaries` (not `GET /api/environments/{id}`,
         which omits run flags). Maps `latest_process_status` into a coarse
         status for the IR UI to poll until the coding-agent process finishes.
+        Optional investigation_id + som_issue_id return factual write counts
+        so a completed run with zero graph changes is visible.
       operationId: getSomEnvironment
       responses:
         '200':
@@ -322,7 +336,8 @@ components:
       type: object
       description: >-
         Coarse agent-run status derived from the daemon environment summary
-        (`latest_process_status`).
+        (`latest_process_status`), optionally enriched with factual graph
+        writes for the SOM issue.
       required: [local_environment_id, status]
       properties:
         local_environment_id:
@@ -342,3 +357,22 @@ components:
         is_errored:
           type: boolean
           description: True while status is failed.
+        agent_results:
+          $ref: '#/components/schemas/SomEnvironmentAgentResults'
+
+    SomEnvironmentAgentResults:
+      type: object
+      description: >-
+        Counts of investigation graph facts written by the SOM issue. Present
+        only when investigation_id and som_issue_id were supplied on the
+        status request.
+      required: [nodes, edges]
+      properties:
+        nodes:
+          type: integer
+          minimum: 0
+          description: Graph nodes tagged with this som_issue_id.
+        edges:
+          type: integer
+          minimum: 0
+          description: Proposed agent edges whose origin_ref is this som_issue_id.

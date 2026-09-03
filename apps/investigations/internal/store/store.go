@@ -4,6 +4,7 @@ package store
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/sb0rka/ir/apps/investigations/internal/domain/model"
 )
@@ -61,9 +62,11 @@ type Database interface {
 	InvestigationEvents(ctx context.Context, projectID, investigationID string, filter model.EventFilter) ([]model.EventSummary, error)
 	GetEvent(ctx context.Context, projectID, eventID string) (model.Event, error)
 	DetachEvent(ctx context.Context, projectID, investigationID, eventID string) error
+	InvestigationTimelineBounds(ctx context.Context, projectID, investigationID string) (from, to *time.Time, err error)
 
 	InvestigationEntities(ctx context.Context, projectID, investigationID string, filter model.EntityFilter) ([]model.Entity, error)
 	GetEntityCard(ctx context.Context, projectID, entityID string) (model.EntityCard, error)
+	FindAttachedEntityBySource(ctx context.Context, projectID, investigationID, sourceCode, sourceEntityID string) (entityID string, err error)
 	CreateEntity(ctx context.Context, entity model.EntityNew) (model.Entity, error)
 	DetachEntity(ctx context.Context, projectID, investigationID, entityID string) error
 
@@ -79,6 +82,7 @@ type Database interface {
 	AddGraphEdgeEvidence(ctx context.Context, projectID, investigationID, edgeID string, eventIDs []string) ([]model.EvidenceEvent, error)
 	DeleteGraphEdgeEvidence(ctx context.Context, projectID, investigationID, edgeID, eventID string) error
 	ReviewGraphEdges(ctx context.Context, request model.EdgeReviewRequest) (model.EdgeReviewResult, error)
+	AgentResultCounts(ctx context.Context, projectID, investigationID, somIssueID string) (nodes, edges int, err error)
 
 	Reference(ctx context.Context) (model.Reference, error)
 }

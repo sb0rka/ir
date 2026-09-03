@@ -391,6 +391,8 @@ export interface components {
             event_id?: string | null;
             /** @description Who put this node on the graph. */
             origin: components["schemas"]["Origin"];
+            /** @description Why the agent put this event or entity on the graph. */
+            why?: string | null;
             /** @description SOM issues linked to this node. */
             som_issue_ids: string[];
             /** @description Text to draw on the node — the entity's display name or a short summary of the event. */

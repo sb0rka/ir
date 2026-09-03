@@ -471,7 +471,7 @@ func importSelectionTx(ctx context.Context, tx pgx.Tx, request model.ImportReque
 		eventNodes := make(map[string]model.GraphNode, len(eventIDs))
 		entityNodes := make(map[string]model.GraphNode, len(entityIDs))
 		for snapshotID, eventID := range eventIDs {
-			node, inserted, err := upsertNodeTx(ctx, tx, request.InvestigationID, "event", nil, &eventID, "analyst", nil)
+			node, inserted, err := upsertNodeTx(ctx, tx, request.InvestigationID, "event", nil, &eventID, "analyst", nil, nil)
 			if err != nil {
 				return stats, err
 			}
@@ -482,7 +482,7 @@ func importSelectionTx(ctx context.Context, tx pgx.Tx, request model.ImportReque
 			}
 		}
 		for snapshotID, entityID := range entityIDs {
-			node, inserted, err := upsertNodeTx(ctx, tx, request.InvestigationID, "entity", &entityID, nil, "analyst", nil)
+			node, inserted, err := upsertNodeTx(ctx, tx, request.InvestigationID, "entity", &entityID, nil, "analyst", nil, nil)
 			if err != nil {
 				return stats, err
 			}
@@ -559,13 +559,13 @@ func importSelectionTx(ctx context.Context, tx pgx.Tx, request model.ImportReque
 				return stats, store.ErrUnknownReference
 			}
 			eventID := eventIDs[*spec.SnapshotEventID]
-			node, inserted, err = upsertNodeTx(ctx, tx, request.InvestigationID, "event", nil, &eventID, "agent", request.SomIssueIDs)
+			node, inserted, err = upsertNodeTx(ctx, tx, request.InvestigationID, "event", nil, &eventID, "agent", &spec.Why, request.SomIssueIDs)
 		} else if spec.SnapshotEntityID != nil {
 			if _, supplied := entityInput[*spec.SnapshotEntityID]; !supplied {
 				return stats, store.ErrUnknownReference
 			}
 			entityID := entityIDs[*spec.SnapshotEntityID]
-			node, inserted, err = upsertNodeTx(ctx, tx, request.InvestigationID, "entity", &entityID, nil, "agent", request.SomIssueIDs)
+			node, inserted, err = upsertNodeTx(ctx, tx, request.InvestigationID, "entity", &entityID, nil, "agent", &spec.Why, request.SomIssueIDs)
 		} else if spec.EventID != nil {
 			eventID := strings.TrimSpace(*spec.EventID)
 			err = tx.QueryRow(ctx, `SELECT e.id::text
@@ -578,7 +578,7 @@ func importSelectionTx(ctx context.Context, tx pgx.Tx, request model.ImportReque
 				return stats, store.ErrUnknownReference
 			}
 			if err == nil {
-				node, inserted, err = upsertNodeTx(ctx, tx, request.InvestigationID, "event", nil, &eventID, "agent", request.SomIssueIDs)
+				node, inserted, err = upsertNodeTx(ctx, tx, request.InvestigationID, "event", nil, &eventID, "agent", &spec.Why, request.SomIssueIDs)
 			}
 		} else if spec.EntityID != nil {
 			entityID := strings.TrimSpace(*spec.EntityID)
@@ -592,7 +592,7 @@ func importSelectionTx(ctx context.Context, tx pgx.Tx, request model.ImportReque
 				return stats, store.ErrUnknownReference
 			}
 			if err == nil {
-				node, inserted, err = upsertNodeTx(ctx, tx, request.InvestigationID, "entity", &entityID, nil, "agent", request.SomIssueIDs)
+				node, inserted, err = upsertNodeTx(ctx, tx, request.InvestigationID, "entity", &entityID, nil, "agent", &spec.Why, request.SomIssueIDs)
 			}
 		} else {
 			node, err = graphNodeByIDTx(ctx, tx, request.ProjectID, request.InvestigationID, *spec.NodeID)
@@ -675,7 +675,7 @@ func linkSourceSubeventEdgesTx(ctx context.Context, tx pgx.Tx, request model.Imp
 		if err != nil {
 			return 0, 0, nil, fmt.Errorf("resolve source subevent parent: %w", mapConstraint(err))
 		}
-		childNode, inserted, err := upsertNodeTx(ctx, tx, request.InvestigationID, "event", nil, &childEventID, "rule", nil)
+		childNode, inserted, err := upsertNodeTx(ctx, tx, request.InvestigationID, "event", nil, &childEventID, "rule", nil, nil)
 		if err != nil {
 			return 0, 0, nil, err
 		}
@@ -683,7 +683,7 @@ func linkSourceSubeventEdgesTx(ctx context.Context, tx pgx.Tx, request model.Imp
 			insertedNodes++
 		}
 		refs.addNode(childNode.ID)
-		parentNode, inserted, err := upsertNodeTx(ctx, tx, request.InvestigationID, "event", nil, &parentEventID, "rule", nil)
+		parentNode, inserted, err := upsertNodeTx(ctx, tx, request.InvestigationID, "event", nil, &parentEventID, "rule", nil, nil)
 		if err != nil {
 			return 0, 0, nil, err
 		}
@@ -894,9 +894,9 @@ func ensureRelationTypeTx(ctx context.Context, tx pgx.Tx, code, sourceKind, targ
 	return nil
 }
 
-func upsertNodeTx(ctx context.Context, tx pgx.Tx, investigationID, nodeType string, entityID, eventID *string, origin string, somIssueIDs []string) (model.GraphNode, bool, error) {
+func upsertNodeTx(ctx context.Context, tx pgx.Tx, investigationID, nodeType string, entityID, eventID *string, origin string, why *string, somIssueIDs []string) (model.GraphNode, bool, error) {
 	var nodeID string
-	err := tx.QueryRow(ctx, `INSERT INTO graph_nodes (investigation_id,node_type,entity_id,event_id,origin) VALUES ($1::uuid,$2,$3::uuid,$4::uuid,$5) ON CONFLICT DO NOTHING RETURNING id::text`, investigationID, nodeType, entityID, eventID, origin).Scan(&nodeID)
+	err := tx.QueryRow(ctx, `INSERT INTO graph_nodes (investigation_id,node_type,entity_id,event_id,origin,why) VALUES ($1::uuid,$2,$3::uuid,$4::uuid,$5,$6) ON CONFLICT DO NOTHING RETURNING id::text`, investigationID, nodeType, entityID, eventID, origin, why).Scan(&nodeID)
 	inserted := err == nil
 	if errors.Is(err, pgx.ErrNoRows) {
 		err = tx.QueryRow(ctx, `SELECT id::text FROM graph_nodes WHERE investigation_id=$1::uuid AND (($2::uuid IS NOT NULL AND entity_id=$2::uuid) OR ($3::uuid IS NOT NULL AND event_id=$3::uuid))`, investigationID, entityID, eventID).Scan(&nodeID)

@@ -222,7 +222,7 @@ func convertGraphNode(node model.GraphNode) (graph.GraphNode, error) {
 	if err != nil {
 		return graph.GraphNode{}, err
 	}
-	out := graph.GraphNode{Id: id, InvestigationId: investigationID, NodeType: graph.NodeType(node.NodeType), Origin: graph.Origin(node.Origin), SomIssueIds: []uuid.UUID{}, Label: node.Label, TypeCode: node.TypeCode, CanonicalKey: node.CanonicalKey, OccurredAt: node.OccurredAt}
+	out := graph.GraphNode{Id: id, InvestigationId: investigationID, NodeType: graph.NodeType(node.NodeType), Origin: graph.Origin(node.Origin), Why: node.Why, SomIssueIds: []uuid.UUID{}, Label: node.Label, TypeCode: node.TypeCode, CanonicalKey: node.CanonicalKey, OccurredAt: node.OccurredAt}
 	if node.EntityID != nil {
 		id, err := dbUUID(*node.EntityID)
 		if err != nil {

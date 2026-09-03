@@ -465,7 +465,7 @@ func (d *DB) CreateHypothesisNode(ctx context.Context, projectID, investigationI
 	if _, err := writableHypothesisTx(ctx, tx, projectID, investigationID, hypothesisID, false); err != nil {
 		return model.GraphNode{}, err
 	}
-	node, _, err := upsertNodeTx(ctx, tx, investigationID, nodeType, entityID, eventID, origin, somIssueIDs)
+	node, _, err := upsertNodeTx(ctx, tx, investigationID, nodeType, entityID, eventID, origin, nil, somIssueIDs)
 	if err != nil {
 		return model.GraphNode{}, err
 	}

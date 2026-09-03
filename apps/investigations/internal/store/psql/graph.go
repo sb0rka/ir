@@ -14,11 +14,11 @@ import (
 	"github.com/sb0rka/ir/apps/investigations/internal/store"
 )
 
-const graphNodeSelect = `SELECT n.id::text,n.investigation_id::text,n.node_type,n.entity_id::text,n.event_id::text,n.origin,COALESCE((SELECT array_agg(som_issue_id::text ORDER BY som_issue_id) FROM graph_node_som_issues WHERE graph_node_id=n.id),'{}'),COALESCE(ev.title,en.display_name,en.canonical_key),en.type_code,en.canonical_key,ev.occurred_at,n.created_at FROM graph_nodes n JOIN investigations i ON i.id=n.investigation_id AND i.is_deleted=false LEFT JOIN events ev ON ev.id=n.event_id LEFT JOIN entities en ON en.id=n.entity_id`
+const graphNodeSelect = `SELECT n.id::text,n.investigation_id::text,n.node_type,n.entity_id::text,n.event_id::text,n.origin,n.why,COALESCE((SELECT array_agg(som_issue_id::text ORDER BY som_issue_id) FROM graph_node_som_issues WHERE graph_node_id=n.id),'{}'),COALESCE(ev.title,en.display_name,en.canonical_key),en.type_code,en.canonical_key,ev.occurred_at,n.created_at FROM graph_nodes n JOIN investigations i ON i.id=n.investigation_id AND i.is_deleted=false LEFT JOIN events ev ON ev.id=n.event_id LEFT JOIN entities en ON en.id=n.entity_id`
 
 func scanGraphNode(row pgx.Row) (model.GraphNode, error) {
 	var n model.GraphNode
-	err := row.Scan(&n.ID, &n.InvestigationID, &n.NodeType, &n.EntityID, &n.EventID, &n.Origin, &n.SomIssueIDs, &n.Label, &n.TypeCode, &n.CanonicalKey, &n.OccurredAt, &n.CreatedAt)
+	err := row.Scan(&n.ID, &n.InvestigationID, &n.NodeType, &n.EntityID, &n.EventID, &n.Origin, &n.Why, &n.SomIssueIDs, &n.Label, &n.TypeCode, &n.CanonicalKey, &n.OccurredAt, &n.CreatedAt)
 	return n, err
 }
 
@@ -46,7 +46,7 @@ func (d *DB) CreateNode(ctx context.Context, projectID, investigationID, nodeTyp
 	if !exists {
 		return model.GraphNode{}, store.ErrInvestigationNotFound
 	}
-	n, _, err := upsertNodeTx(ctx, tx, investigationID, nodeType, entityID, eventID, origin, somIssueIDs)
+	n, _, err := upsertNodeTx(ctx, tx, investigationID, nodeType, entityID, eventID, origin, nil, somIssueIDs)
 	if err != nil {
 		return model.GraphNode{}, err
 	}
@@ -634,4 +634,29 @@ func (d *DB) ReviewGraphEdges(ctx context.Context, request model.EdgeReviewReque
 		return model.EdgeReviewResult{}, fmt.Errorf("commit graph edge review: %w", err)
 	}
 	return result, nil
+}
+
+func (d *DB) AgentResultCounts(ctx context.Context, projectID, investigationID, somIssueID string) (int, int, error) {
+	exists, err := d.InvestigationExists(ctx, projectID, investigationID)
+	if err != nil {
+		return 0, 0, err
+	}
+	if !exists {
+		return 0, 0, store.ErrInvestigationNotFound
+	}
+	var nodes, edges int
+	err = d.Pgx().QueryRow(ctx, `
+		SELECT
+		  (SELECT count(*)::int FROM graph_nodes n
+		     JOIN investigations i ON i.id=n.investigation_id AND i.is_deleted=false
+		     JOIN graph_node_som_issues g ON g.graph_node_id=n.id
+		    WHERE n.investigation_id=$1::uuid AND i.project_id=$2 AND g.som_issue_id=$3::uuid),
+		  (SELECT count(*)::int FROM edges e
+		     JOIN investigations i ON i.id=e.investigation_id AND i.is_deleted=false
+		    WHERE e.investigation_id=$1::uuid AND i.project_id=$2 AND e.origin='agent' AND e.origin_ref=$3)`,
+		investigationID, projectID, somIssueID).Scan(&nodes, &edges)
+	if err != nil {
+		return 0, 0, fmt.Errorf("agent result counts: %w", mapConstraint(err))
+	}
+	return nodes, edges, nil
 }

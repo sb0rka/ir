@@ -8,6 +8,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -113,4 +114,40 @@ func dbUUID(value string) (uuid.UUID, error) {
 			"storage returned a malformed identifier")
 	}
 	return parsed, nil
+}
+
+// looksLikeBareUUID detects a value that is only an IR UUID with no source
+// prefix. Agents sometimes put investigation entity_id into source_entity_id.
+func looksLikeBareUUID(value string) bool {
+	_, err := uuid.Parse(strings.TrimSpace(value))
+	return err == nil
+}
+
+// collapseAccountBackslashes turns doubled Windows-account separators into one.
+// Agents often JSON-escape once too many and send dkrylova\\administrator.
+func collapseAccountBackslashes(value string) string {
+	for strings.Contains(value, `\\`) {
+		value = strings.ReplaceAll(value, `\\`, `\`)
+	}
+	return value
+}
+
+func normalizeEntityValue(typeCode, value string) string {
+	value = strings.TrimSpace(value)
+	if strings.EqualFold(strings.TrimSpace(typeCode), "account") {
+		return collapseAccountBackslashes(value)
+	}
+	return value
+}
+
+func normalizeSourceEntityID(sourceEntityID string) string {
+	sourceEntityID = strings.TrimSpace(sourceEntityID)
+	kind, value, ok := strings.Cut(sourceEntityID, ":")
+	if !ok {
+		return sourceEntityID
+	}
+	if strings.EqualFold(strings.TrimSpace(kind), "account") {
+		return strings.TrimSpace(kind) + ":" + collapseAccountBackslashes(value)
+	}
+	return sourceEntityID
 }

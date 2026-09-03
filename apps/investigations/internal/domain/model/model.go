@@ -229,6 +229,7 @@ type GatewaySelection struct {
 
 type AgentNode struct {
 	Ref              string
+	Why              string
 	SnapshotEventID  *string
 	SnapshotEntityID *string
 	EventID          *string
@@ -431,6 +432,7 @@ type GraphNode struct {
 	EntityID        *string
 	EventID         *string
 	Origin          string
+	Why             *string
 	SomIssueIDs     []string
 	Label           *string
 	TypeCode        *string

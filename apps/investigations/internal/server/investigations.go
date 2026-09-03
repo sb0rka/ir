@@ -14,6 +14,7 @@ import (
 	"github.com/sb0rka/ir/apps/investigations/internal/store"
 	"github.com/sb0rka/ir/apps/investigations/internal/transport/httperr"
 	"github.com/sb0rka/ir/apps/investigations/internal/transport/socctx"
+	gatewaycontract "github.com/sb0rka/ir/packages/contract/gateway"
 	"github.com/sb0rka/ir/packages/contract/investigations"
 )
 
@@ -182,88 +183,200 @@ func (s *Server) AddAgentResults(ctx context.Context, request investigations.Add
 	if _, err := s.db.GetInvestigation(ctx, scope.ProjectID, request.InvestigationId.String()); err != nil {
 		return nil, storeError(err)
 	}
-	gatewayRequest := gatewayclient.ResolveContextRequest{}
-	eventRefs := make(map[string]string, len(request.Body.Events))
-	entityRefs := make(map[string]string, len(request.Body.Entities))
-	for _, event := range request.Body.Events {
-		ref := strings.TrimSpace(event.Ref)
-		if ref == "" {
-			return nil, validationError("event ref is required")
-		}
-		if _, duplicate := eventRefs[ref]; duplicate {
-			return nil, validationError("event refs must be unique")
-		}
-		sourceKey := sourceRecordKey(event.SourceCode, event.SourceEventId)
-		eventRefs[ref] = sourceKey
-		gatewayRequest.Events = appendOptionalSlice(gatewayRequest.Events, gatewayclient.EventSourceRef{SourceCode: event.SourceCode, SourceEventId: event.SourceEventId})
-	}
-	for _, entity := range request.Body.Entities {
-		ref := strings.TrimSpace(entity.Ref)
-		if ref == "" {
-			return nil, validationError("entity ref is required")
-		}
-		if _, duplicate := entityRefs[ref]; duplicate {
-			return nil, validationError("entity refs must be unique")
-		}
-		sourceKey := sourceRecordKey(entity.SourceCode, entity.SourceEntityId)
-		entityRefs[ref] = sourceKey
-		gatewayRequest.Entities = appendOptionalSlice(gatewayRequest.Entities, gatewayclient.EntitySourceRef{SourceCode: entity.SourceCode, SourceEntityId: entity.SourceEntityId})
-	}
-	resolved := resolvedGatewayContext{EventsBySource: map[string]string{}, EntitiesBySource: map[string]string{}}
-	if len(optionalSlice(gatewayRequest.Events)) > 0 || len(optionalSlice(gatewayRequest.Entities)) > 0 {
-		resolved, err = s.resolveGatewayContext(ctx, scope, gatewayRequest)
-		if err != nil {
-			return nil, err
-		}
-	}
-	input := model.ImportRequest{ProjectID: scope.ProjectID, InvestigationID: request.InvestigationId.String(), Origin: "agent", Selection: resolved.Selection, Warnings: resolved.Warnings}
-	for _, id := range request.Body.SomIssueIds {
-		input.SomIssueIDs = append(input.SomIssueIDs, id.String())
-	}
-	nodes, err := agentNodesFromBatch(request.Body.Nodes, eventRefs, entityRefs, resolved)
+	stats, err := s.importAgentBatch(ctx, scope, request.InvestigationId.String(), nil, *request.Body)
 	if err != nil {
 		return nil, err
-	}
-	input.Nodes = nodes
-	for _, edge := range request.Body.Edges {
-		input.Edges = append(input.Edges, model.AgentEdge{SourceRef: edge.SourceRef, TargetRef: edge.TargetRef, RelationCode: edge.RelationCode, Why: edge.Why, Confidence: edge.Confidence, EvidenceEventRefs: edge.EvidenceEventRefs})
-	}
-	stats, err := s.db.ImportContext(ctx, input)
-	if err != nil {
-		return nil, storeError(err)
 	}
 	return investigations.AddAgentResults201JSONResponse(importResult(stats)), nil
 }
 
-func agentNodesFromBatch(
+func (s *Server) importAgentBatch(
+	ctx context.Context,
+	scope socctx.Scope,
+	investigationID string,
+	hypothesisID *string,
+	batch investigations.AgentResultBatch,
+) (model.ImportStats, error) {
+	gatewayRequest := gatewayclient.ResolveContextRequest{}
+	eventRefs := make(map[string]string, len(batch.Events))
+	entityRefs := make(map[string]string, len(batch.Entities))
+	eventSources := make(map[string]gatewayclient.EventSourceRef, len(batch.Events))
+	entitySources := make(map[string]gatewayclient.EntitySourceRef, len(batch.Entities))
+	for _, event := range batch.Events {
+		ref := strings.TrimSpace(event.Ref)
+		if ref == "" {
+			return model.ImportStats{}, validationError("event ref is required")
+		}
+		if _, duplicate := eventRefs[ref]; duplicate {
+			return model.ImportStats{}, validationError("event refs must be unique")
+		}
+		sourceEventID := strings.TrimSpace(event.SourceEventId)
+		sourceKey := sourceRecordKey(event.SourceCode, sourceEventID)
+		eventRefs[ref] = sourceKey
+		source := gatewayclient.EventSourceRef{SourceCode: event.SourceCode, SourceEventId: sourceEventID}
+		eventSources[ref] = source
+		gatewayRequest.Events = appendOptionalSlice(gatewayRequest.Events, source)
+	}
+	for _, entity := range batch.Entities {
+		ref := strings.TrimSpace(entity.Ref)
+		if ref == "" {
+			return model.ImportStats{}, validationError("entity ref is required")
+		}
+		if _, duplicate := entityRefs[ref]; duplicate {
+			return model.ImportStats{}, validationError("entity refs must be unique")
+		}
+		sourceEntityID := normalizeSourceEntityID(entity.SourceEntityId)
+		if looksLikeBareUUID(sourceEntityID) {
+			return model.ImportStats{}, validationError(ref + ": source_entity_id looks like an IR UUID; put it into nodes[].entity_id instead")
+		}
+		sourceKey := sourceRecordKey(entity.SourceCode, sourceEntityID)
+		entityRefs[ref] = sourceKey
+		source := gatewayclient.EntitySourceRef{SourceCode: entity.SourceCode, SourceEntityId: sourceEntityID}
+		entitySources[ref] = source
+		gatewayRequest.Entities = appendOptionalSlice(gatewayRequest.Entities, source)
+	}
+	resolved := resolvedGatewayContext{EventsBySource: map[string]string{}, EntitiesBySource: map[string]string{}}
+	var err error
+	if len(optionalSlice(gatewayRequest.Events)) > 0 || len(optionalSlice(gatewayRequest.Entities)) > 0 {
+		resolved, err = s.resolveGatewayContext(ctx, scope, gatewayRequest)
+		if err != nil {
+			return model.ImportStats{}, err
+		}
+	}
+	return s.commitAgentBatch(ctx, scope, investigationID, hypothesisID, batch, eventRefs, entityRefs, eventSources, entitySources, resolved)
+}
+
+// commitAgentBatch persists a batch against an already-resolved Gateway selection.
+// Missing source records skip their nodes/edges with warnings instead of failing the whole write.
+func (s *Server) commitAgentBatch(
+	ctx context.Context,
+	scope socctx.Scope,
+	investigationID string,
+	hypothesisID *string,
+	batch investigations.AgentResultBatch,
+	eventRefs, entityRefs map[string]string,
+	eventSources map[string]gatewayclient.EventSourceRef,
+	entitySources map[string]gatewayclient.EntitySourceRef,
+	resolved resolvedGatewayContext,
+) (model.ImportStats, error) {
+	input := model.ImportRequest{
+		ProjectID: scope.ProjectID, InvestigationID: investigationID,
+		Origin: "agent", Selection: resolved.Selection,
+	}
+	if hypothesisID != nil {
+		input.HypothesisID = hypothesisID
+		input.RequireActiveHypothesis = true
+	}
+	for _, id := range batch.SomIssueIds {
+		input.SomIssueIDs = append(input.SomIssueIDs, id.String())
+	}
+	nodes, skipped, err := s.agentNodesFromBatch(ctx, scope, investigationID, batch.Nodes, eventRefs, entityRefs, eventSources, entitySources, &resolved)
+	if err != nil {
+		return model.ImportStats{}, err
+	}
+	input.Warnings = append([]string{}, resolved.Warnings...)
+	if len(nodes) == 0 && len(batch.Nodes) > 0 {
+		return model.ImportStats{}, validationError("Gateway did not return any selected events/entities for graph nodes")
+	}
+	input.Nodes = nodes
+	for _, edge := range batch.Edges {
+		if edgeReferencesSkipped(edge, skipped) {
+			input.Warnings = append(input.Warnings,
+				"skipped edge "+edge.SourceRef+"→"+edge.TargetRef+" ("+edge.RelationCode+"): referenced a node Gateway did not return")
+			continue
+		}
+		input.Edges = append(input.Edges, model.AgentEdge{
+			SourceRef: edge.SourceRef, TargetRef: edge.TargetRef, RelationCode: edge.RelationCode,
+			Why: edge.Why, Confidence: edge.Confidence, EvidenceEventRefs: edge.EvidenceEventRefs,
+		})
+	}
+	stats, err := s.db.ImportContext(ctx, input)
+	if err != nil {
+		if hypothesisID != nil {
+			return model.ImportStats{}, hypothesisStoreError(err)
+		}
+		return model.ImportStats{}, storeError(err)
+	}
+	stats.Warnings = append(append([]string{}, input.Warnings...), stats.Warnings...)
+	return stats, nil
+}
+
+func edgeReferencesSkipped(edge investigations.AgentEdge, skipped map[string]struct{}) bool {
+	if _, ok := skipped[strings.TrimSpace(edge.SourceRef)]; ok {
+		return true
+	}
+	if _, ok := skipped[strings.TrimSpace(edge.TargetRef)]; ok {
+		return true
+	}
+	for _, ref := range edge.EvidenceEventRefs {
+		if _, ok := skipped[strings.TrimSpace(ref)]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *Server) agentNodesFromBatch(
+	ctx context.Context,
+	scope socctx.Scope,
+	investigationID string,
 	nodes []investigations.AgentNode,
 	eventRefs, entityRefs map[string]string,
-	resolved resolvedGatewayContext,
-) ([]model.AgentNode, error) {
+	eventSources map[string]gatewayclient.EventSourceRef,
+	entitySources map[string]gatewayclient.EntitySourceRef,
+	resolved *resolvedGatewayContext,
+) ([]model.AgentNode, map[string]struct{}, error) {
 	out := make([]model.AgentNode, 0, len(nodes))
+	skipped := map[string]struct{}{}
 	for _, node := range nodes {
-		converted := model.AgentNode{Ref: strings.TrimSpace(node.Ref)}
+		converted := model.AgentNode{Ref: strings.TrimSpace(node.Ref), Why: strings.TrimSpace(node.Why)}
+		if converted.Why == "" {
+			return nil, nil, validationError("node " + converted.Ref + ": why is required")
+		}
 		if node.EventRef != nil {
-			sourceKey, ok := eventRefs[strings.TrimSpace(*node.EventRef)]
+			eventRef := strings.TrimSpace(*node.EventRef)
+			sourceKey, ok := eventRefs[eventRef]
 			if !ok {
-				return nil, validationError("node event_ref is not present in events")
+				return nil, nil, validationError("node " + converted.Ref + ": event_ref " + eventRef + " is not present in events")
 			}
 			value, ok := resolved.EventsBySource[sourceKey]
 			if !ok || value == "" {
-				return nil, validationError("Gateway did not return selected event for node event_ref")
+				source := eventSources[eventRef]
+				skipped[converted.Ref] = struct{}{}
+				resolved.Warnings = append(resolved.Warnings,
+					"node "+converted.Ref+": Gateway did not return selected event "+
+						source.SourceEventId+" from "+source.SourceCode+
+						"; skipped (use nodes[].event_id if it already exists in IR)")
+				continue
 			}
 			converted.SnapshotEventID = &value
 		}
 		if node.EntityRef != nil {
-			sourceKey, ok := entityRefs[strings.TrimSpace(*node.EntityRef)]
+			entityRef := strings.TrimSpace(*node.EntityRef)
+			sourceKey, ok := entityRefs[entityRef]
 			if !ok {
-				return nil, validationError("node entity_ref is not present in entities")
+				return nil, nil, validationError("node " + converted.Ref + ": entity_ref " + entityRef + " is not present in entities")
 			}
 			value, ok := resolved.EntitiesBySource[sourceKey]
 			if !ok || value == "" {
-				return nil, validationError("Gateway did not return selected entity for node entity_ref")
+				source := entitySources[entityRef]
+				attachedID, err := s.db.FindAttachedEntityBySource(ctx, scope.ProjectID, investigationID, source.SourceCode, source.SourceEntityId)
+				if err == nil && attachedID != "" {
+					converted.EntityID = &attachedID
+					resolved.Warnings = append(resolved.Warnings,
+						"node "+converted.Ref+": Gateway did not return "+source.SourceEntityId+
+							" from "+source.SourceCode+"; reused attached IR entity "+attachedID)
+				} else {
+					skipped[converted.Ref] = struct{}{}
+					resolved.Warnings = append(resolved.Warnings,
+						"node "+converted.Ref+": Gateway did not return selected entity "+
+							source.SourceEntityId+" from "+source.SourceCode+
+							"; skipped (use nodes[].entity_id if it already exists in IR)")
+					continue
+				}
+			} else {
+				converted.SnapshotEntityID = &value
 			}
-			converted.SnapshotEntityID = &value
 		}
 		if node.EventId != nil {
 			value := node.EventId.String()
@@ -279,7 +392,7 @@ func agentNodesFromBatch(
 		}
 		out = append(out, converted)
 	}
-	return out, nil
+	return out, skipped, nil
 }
 
 type resolvedGatewayContext struct {
@@ -489,6 +602,123 @@ func convertGatewayContext(input gatewayclient.ResolveContextResponse, request g
 	}
 	assignGatewayObjectOwnership(&out.Selection)
 	return out, nil
+}
+
+// selectionFromSearchEvents builds an import selection directly from Gateway search
+// pages so import_entity_events does not re-resolve every event by UUID.
+func selectionFromSearchEvents(events []gatewaycontract.Event, pageEntities []gatewaycontract.Entity) resolvedGatewayContext {
+	out := resolvedGatewayContext{
+		EventsBySource:   map[string]string{},
+		EntitiesBySource: map[string]string{},
+	}
+	entityIndex := map[string]int{}
+
+	upsertEntity := func(typeCode, value string, direct bool, provenance model.GatewayProvenance) string {
+		typeCode = strings.TrimSpace(typeCode)
+		value = normalizeEntityValue(typeCode, value)
+		snapshotID := entityKey(typeCode, value)
+		if idx, ok := entityIndex[snapshotID]; ok {
+			item := &out.Selection.Entities[idx]
+			if direct {
+				item.Direct = true
+			}
+			for _, existing := range item.Provenance {
+				if existing.Source == provenance.Source && existing.ExternalID == provenance.ExternalID {
+					return snapshotID
+				}
+			}
+			item.Provenance = append(item.Provenance, provenance)
+			key := sourceRecordKey(provenance.Source, provenance.ExternalID)
+			out.EntitiesBySource[key] = snapshotID
+			return snapshotID
+		}
+		item := model.GatewayEntity{
+			SnapshotID: snapshotID,
+			Direct:     direct,
+			TypeCode:   typeCode,
+			Value:      value,
+			Attributes: map[string]any{},
+			Provenance: []model.GatewayProvenance{provenance},
+		}
+		entityIndex[snapshotID] = len(out.Selection.Entities)
+		out.Selection.Entities = append(out.Selection.Entities, item)
+		out.EntitiesBySource[sourceRecordKey(provenance.Source, provenance.ExternalID)] = snapshotID
+		return snapshotID
+	}
+
+	for _, entity := range pageEntities {
+		typeCode := strings.TrimSpace(entity.Type)
+		value := normalizeEntityValue(typeCode, entity.Value)
+		attrs := entity.Attributes
+		if attrs == nil {
+			attrs = map[string]any{}
+		}
+		snapshotID := entityKey(typeCode, value)
+		item := model.GatewayEntity{
+			SnapshotID: snapshotID, Direct: true, TypeCode: typeCode, Value: value, Attributes: attrs,
+		}
+		for _, source := range entity.Sources {
+			prov := model.GatewayProvenance{
+				Source: source.SourceCode, ExternalID: normalizeSourceEntityID(source.SourceEntityId),
+				SourceURL: source.SourceRef, FetchedAt: source.FetchedAt,
+			}
+			item.Provenance = append(item.Provenance, prov)
+			out.EntitiesBySource[sourceRecordKey(prov.Source, prov.ExternalID)] = snapshotID
+		}
+		if len(item.Provenance) == 0 {
+			continue
+		}
+		if idx, ok := entityIndex[snapshotID]; ok {
+			existing := &out.Selection.Entities[idx]
+			existing.Direct = true
+			if len(existing.Attributes) == 0 {
+				existing.Attributes = attrs
+			}
+			for _, prov := range item.Provenance {
+				dup := false
+				for _, have := range existing.Provenance {
+					if have.Source == prov.Source && have.ExternalID == prov.ExternalID {
+						dup = true
+						break
+					}
+				}
+				if !dup {
+					existing.Provenance = append(existing.Provenance, prov)
+				}
+			}
+			continue
+		}
+		entityIndex[snapshotID] = len(out.Selection.Entities)
+		out.Selection.Entities = append(out.Selection.Entities, item)
+	}
+
+	for _, event := range events {
+		snapshotID := sourceRecordKey(event.SourceCode, event.SourceEventId)
+		item := model.GatewayEvent{
+			SnapshotID: snapshotID, Direct: true, Title: event.Title, EventType: event.Type,
+			Severity: string(event.Severity), OccurredAt: event.OccurredAt, Attributes: event.Attributes,
+			Provenance: model.GatewayProvenance{
+				Source: event.SourceCode, ExternalID: event.SourceEventId,
+				SourceURL: event.SourceRef, FetchedAt: event.FetchedAt,
+			},
+		}
+		for _, mention := range event.Entities {
+			value := normalizeEntityValue(mention.Type, mention.Value)
+			sourceEntityID := normalizeSourceEntityID(mention.Type + ":" + value)
+			entSnap := upsertEntity(mention.Type, value, false, model.GatewayProvenance{
+				Source: event.SourceCode, ExternalID: sourceEntityID, FetchedAt: event.FetchedAt,
+			})
+			mentionItem := model.GatewayEventEntity{SnapshotID: entSnap}
+			for _, role := range mention.Roles {
+				mentionItem.Roles = append(mentionItem.Roles, string(role))
+			}
+			item.Entities = append(item.Entities, mentionItem)
+		}
+		out.Selection.Events = append(out.Selection.Events, item)
+		out.EventsBySource[snapshotID] = snapshotID
+	}
+	assignGatewayObjectOwnership(&out.Selection)
+	return out
 }
 
 // assignGatewayObjectOwnership keeps detach ownership bounded to context that
@@ -776,64 +1006,9 @@ func (s *Server) AddHypothesisAgentResults(ctx context.Context, request investig
 		return nil, hypothesisStoreError(&store.ConflictError{IDs: []string{hypothesisID}})
 	}
 
-	gatewayRequest := gatewayclient.ResolveContextRequest{}
-	eventRefs := make(map[string]string, len(request.Body.Events))
-	entityRefs := make(map[string]string, len(request.Body.Entities))
-	for _, event := range request.Body.Events {
-		ref := strings.TrimSpace(event.Ref)
-		if ref == "" {
-			return nil, validationError("event ref is required")
-		}
-		if _, duplicate := eventRefs[ref]; duplicate {
-			return nil, validationError("event refs must be unique")
-		}
-		sourceKey := sourceRecordKey(event.SourceCode, event.SourceEventId)
-		eventRefs[ref] = sourceKey
-		gatewayRequest.Events = appendOptionalSlice(gatewayRequest.Events,
-			gatewayclient.EventSourceRef{SourceCode: event.SourceCode, SourceEventId: event.SourceEventId})
-	}
-	for _, entity := range request.Body.Entities {
-		ref := strings.TrimSpace(entity.Ref)
-		if ref == "" {
-			return nil, validationError("entity ref is required")
-		}
-		if _, duplicate := entityRefs[ref]; duplicate {
-			return nil, validationError("entity refs must be unique")
-		}
-		sourceKey := sourceRecordKey(entity.SourceCode, entity.SourceEntityId)
-		entityRefs[ref] = sourceKey
-		gatewayRequest.Entities = appendOptionalSlice(gatewayRequest.Entities,
-			gatewayclient.EntitySourceRef{SourceCode: entity.SourceCode, SourceEntityId: entity.SourceEntityId})
-	}
-	resolved := resolvedGatewayContext{EventsBySource: map[string]string{}, EntitiesBySource: map[string]string{}}
-	if len(optionalSlice(gatewayRequest.Events)) > 0 || len(optionalSlice(gatewayRequest.Entities)) > 0 {
-		resolved, err = s.resolveGatewayContext(ctx, scope, gatewayRequest)
-		if err != nil {
-			return nil, err
-		}
-	}
-	input := model.ImportRequest{
-		ProjectID: scope.ProjectID, InvestigationID: investigationID,
-		HypothesisID: &hypothesisID, RequireActiveHypothesis: true,
-		Origin: "agent", Selection: resolved.Selection, Warnings: resolved.Warnings,
-	}
-	for _, id := range request.Body.SomIssueIds {
-		input.SomIssueIDs = append(input.SomIssueIDs, id.String())
-	}
-	nodes, err := agentNodesFromBatch(request.Body.Nodes, eventRefs, entityRefs, resolved)
+	stats, err := s.importAgentBatch(ctx, scope, investigationID, &hypothesisID, *request.Body)
 	if err != nil {
 		return nil, err
-	}
-	input.Nodes = nodes
-	for _, edge := range request.Body.Edges {
-		input.Edges = append(input.Edges, model.AgentEdge{
-			SourceRef: edge.SourceRef, TargetRef: edge.TargetRef, RelationCode: edge.RelationCode,
-			Why: edge.Why, Confidence: edge.Confidence, EvidenceEventRefs: edge.EvidenceEventRefs,
-		})
-	}
-	stats, err := s.db.ImportContext(ctx, input)
-	if err != nil {
-		return nil, hypothesisStoreError(err)
 	}
 	return investigations.AddHypothesisAgentResults201JSONResponse(importResult(stats)), nil
 }
