@@ -524,6 +524,7 @@ func (s *Server) importEntityEventsTool(
 	}
 	var (
 		foundEvents  []gatewaycontract.Event
+		pageEntities []gatewaycontract.Entity
 		sourceStates []gatewaycontract.SourceState
 		sourceErrors []gatewaycontract.SourceError
 		nextCursor   *string
@@ -544,6 +545,7 @@ func (s *Server) importEntityEventsTool(
 		}
 		sourceStates = append(sourceStates, page.SourceStates...)
 		sourceErrors = append(sourceErrors, page.SourceErrors...)
+		pageEntities = append(pageEntities, page.Entities...)
 		for _, event := range page.Events {
 			foundEvents = append(foundEvents, event)
 			if len(foundEvents) >= limit {
@@ -589,20 +591,72 @@ func (s *Server) importEntityEventsTool(
 
 	batch, err := buildEntityEventsBatch(args.SomIssueIds, resolvedEntity, foundEvents, includeParticipants)
 	if err != nil {
-		return mcpFailure(err)
+		return mcpImportFailure(summary, err)
 	}
 	var hypothesisID *string
 	if args.HypothesisID != nil {
 		value := args.HypothesisID.String()
 		hypothesisID = &value
 	}
-	stats, err := s.importAgentBatch(ctx, scope, investigationID.String(), hypothesisID, batch)
+
+	eventRefs := make(map[string]string, len(batch.Events))
+	entityRefs := make(map[string]string, len(batch.Entities))
+	eventSources := make(map[string]gatewayclient.EventSourceRef, len(batch.Events))
+	entitySources := make(map[string]gatewayclient.EntitySourceRef, len(batch.Entities))
+	for _, event := range batch.Events {
+		ref := strings.TrimSpace(event.Ref)
+		sourceKey := sourceRecordKey(event.SourceCode, event.SourceEventId)
+		eventRefs[ref] = sourceKey
+		eventSources[ref] = gatewayclient.EventSourceRef{SourceCode: event.SourceCode, SourceEventId: event.SourceEventId}
+	}
+	for _, entity := range batch.Entities {
+		ref := strings.TrimSpace(entity.Ref)
+		sourceEntityID := normalizeSourceEntityID(entity.SourceEntityId)
+		sourceKey := sourceRecordKey(entity.SourceCode, sourceEntityID)
+		entityRefs[ref] = sourceKey
+		entitySources[ref] = gatewayclient.EntitySourceRef{SourceCode: entity.SourceCode, SourceEntityId: sourceEntityID}
+	}
+
+	// Persist search hits directly — re-resolving each UUID through Gateway
+	// times out before a full page of SIEM events can be re-fetched.
+	resolved := selectionFromSearchEvents(foundEvents, pageEntities)
+	if resolvedEntity.Type != "" && resolvedEntity.Value != "" {
+		markSearchEntityDirect(&resolved, resolvedEntity.Type, resolvedEntity.Value)
+	}
+	stats, err := s.commitAgentBatch(ctx, scope, investigationID.String(), hypothesisID, batch, eventRefs, entityRefs, eventSources, entitySources, resolved)
 	if err != nil {
-		return mcpFailure(err)
+		return mcpImportFailure(summary, err)
 	}
 	result := importResult(stats)
 	summary.EventsImported = result.Events
 	return nil, importEntityEventsResult{ContextImportResult: result, Summary: summary}, nil
+}
+
+func markSearchEntityDirect(resolved *resolvedGatewayContext, typeCode, value string) {
+	snapshotID := entityKey(typeCode, normalizeEntityValue(typeCode, value))
+	for i := range resolved.Selection.Entities {
+		if resolved.Selection.Entities[i].SnapshotID == snapshotID {
+			resolved.Selection.Entities[i].Direct = true
+			return
+		}
+	}
+}
+
+func mcpImportFailure(summary importEntityEventsSummary, err error) (*mcp.CallToolResult, any, error) {
+	message := "internal server error"
+	var domain *httperr.Error
+	if errors.As(err, &domain) {
+		message = domain.Message
+	} else if err != nil && strings.HasPrefix(err.Error(), "invalid arguments") {
+		message = err.Error()
+	} else if err != nil {
+		message = err.Error()
+	}
+	summary.EventsImported = 0
+	return &mcp.CallToolResult{
+		Content: []mcp.Content{&mcp.TextContent{Text: message}},
+		IsError: true,
+	}, importEntityEventsResult{Summary: summary}, nil
 }
 
 type resolvedImportEntity struct {

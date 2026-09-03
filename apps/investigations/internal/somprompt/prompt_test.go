@@ -47,6 +47,9 @@ func TestBuildExpandsURLsAndHeaders(t *testing.T) {
 		"event_ref`/`entity_ref",
 		`dkrylova\administrator`,
 		"nothing was written",
+		"events_found",
+		"events_imported",
+		"imported < found",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("missing %q", want)

@@ -7,9 +7,9 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/sb0rka/ir/apps/gateway/internal/capability"
@@ -223,29 +223,73 @@ func (provider *Provider) ResolveContext(ctx context.Context, access capability.
 	if provider == nil || provider.client == nil {
 		return capability.ContextPage{}, sourceRequestError("source_unavailable", "MaxPatrol client is not configured")
 	}
-	// Legacy raw refs carry no time range. The exact UUID/entity predicates keep
-	// this bounded logically; the window is capped at Unix epoch through now.
+	// Exact UUID predicates keep the lookup bounded; keep a wide window only as a
+	// vendor API requirement. Fetch in parallel so a page of events fits inside
+	// Gateway request timeouts.
 	timeRange := TimeRange{From: time.Unix(0, 0).UTC(), To: provider.client.now().UTC().Add(time.Second)}
 	fetchedAt := provider.client.now().UTC()
 	page := capability.ContextPage{}
-	missing := make([]string, 0)
-	for _, externalID := range dedupeStrings(request.EventIDs) {
-		record, err := provider.client.getExactEvent(ctx, Access{Cookie: access.Cookie}, "event detail", timeRange, externalID)
-		if err != nil {
-			if isNotFound(err) {
-				missing = append(missing, externalID)
-				continue
-			}
-			return page, translateError(err)
-		}
-		event, entities, relations, mappingErr := domainEventFromRecord(record, fetchedAt, "")
-		if mappingErr != nil {
-			return page, translateError(mappingErr)
-		}
-		page.Events = append(page.Events, event)
-		page.Entities = append(page.Entities, entities...)
-		page.Relations = append(page.Relations, relations...)
+
+	type eventResult struct {
+		id       string
+		event    domain.Event
+		entities []domain.Entity
+		rels     []domain.Relation
+		err      error
 	}
+	eventIDs := dedupeStrings(request.EventIDs)
+	eventResults := make([]eventResult, len(eventIDs))
+	workers := 8
+	if len(eventIDs) < workers {
+		workers = len(eventIDs)
+	}
+	if workers < 1 {
+		workers = 1
+	}
+	jobs := make(chan int)
+	var wg sync.WaitGroup
+	for range workers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for index := range jobs {
+				id := eventIDs[index]
+				record, err := provider.client.getExactEvent(ctx, Access{Cookie: access.Cookie}, "event detail", timeRange, id)
+				if err != nil {
+					eventResults[index] = eventResult{id: id, err: err}
+					continue
+				}
+				event, entities, relations, mappingErr := domainEventFromRecord(record, fetchedAt, "")
+				if mappingErr != nil {
+					eventResults[index] = eventResult{id: id, err: mappingErr}
+					continue
+				}
+				eventResults[index] = eventResult{id: id, event: event, entities: entities, rels: relations}
+			}
+		}()
+	}
+	for index := range eventIDs {
+		jobs <- index
+	}
+	close(jobs)
+	wg.Wait()
+
+	var hardErr error
+	for _, result := range eventResults {
+		if result.err != nil {
+			if !isNotFound(result.err) && hardErr == nil {
+				hardErr = result.err
+			}
+			continue
+		}
+		page.Events = append(page.Events, result.event)
+		page.Entities = append(page.Entities, result.entities...)
+		page.Relations = append(page.Relations, result.rels...)
+	}
+	if hardErr != nil && len(page.Events) == 0 && len(request.EntityIDs) == 0 {
+		return page, translateError(hardErr)
+	}
+
 	for _, sourceEntityID := range dedupeStrings(request.EntityIDs) {
 		entity, parseErr := sourceEntityRef(sourceEntityID)
 		if parseErr != nil {
@@ -271,16 +315,13 @@ func (provider *Provider) ResolveContext(ctx context.Context, access capability.
 			}
 		}
 		if !found {
-			missing = append(missing, sourceEntityID)
 			continue
 		}
 		page.Entities = append(page.Entities, result.Entities...)
 		page.Relations = append(page.Relations, result.Relations...)
 	}
-	if len(missing) > 0 {
-		sort.Strings(missing)
-		return page, fmt.Errorf("%w: MaxPatrol raw records are missing", domain.ErrNotFound)
-	}
+	// Partial pages are useful: callers warn on missing IDs instead of discarding
+	// every successfully resolved event when one UUID is absent or timed out.
 	return page, nil
 }
 

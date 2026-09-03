@@ -312,6 +312,44 @@ func TestMCPAgentResultsImportsGatewaySelections(t *testing.T) {
 	}
 }
 
+func TestMCPAgentResultsPartialResolveSkipsMissing(t *testing.T) {
+	t.Parallel()
+	gateway := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"findings":[],"sessions":[],"relations":[],"resolutions":[],
+			"source_errors":[{"source":"mock","code":"source_timeout","message":"timed out","retryable":true}],
+			"events":[{"source_code":"mock","source_event_id":"event-ok","type":"auth","title":"ok","severity":"low","occurred_at":"2026-08-31T10:00:00Z","entities":[],"attributes":{},"fetched_at":"2026-08-31T10:01:00Z"}],
+			"entities":[{"type":"account","value":"user","attributes":{},"sources":[{"source_code":"mock","source_entity_id":"account:user","fetched_at":"2026-08-31T10:01:00Z"}]}]
+		}`))
+	}))
+	defer gateway.Close()
+	db := &mcpRecordingDB{}
+	server := &Server{db: db, gateway: gatewayclient.New(gatewayclient.Config{BaseURL: gateway.URL})}
+	request := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(
+		`{"jsonrpc":"2.0","id":13,"method":"tools/call","params":{"name":"add_investigation_agent_results","arguments":{"investigation_id":"11111111-1111-1111-1111-111111111111","som_issue_ids":["22222222-2222-2222-2222-222222222222"],"events":[{"ref":"e-ok","source_code":"mock","source_event_id":"event-ok"},{"ref":"e-miss","source_code":"mock","source_event_id":"event-missing"}],"entities":[{"ref":"a0","source_code":"mock","source_entity_id":"account:user"}],"nodes":[{"ref":"n-ok","event_ref":"e-ok"},{"ref":"n-miss","event_ref":"e-miss"},{"ref":"n-ent","entity_ref":"a0"}],"edges":[{"source_ref":"n-ok","target_ref":"n-ent","relation_code":"actor","why":"ok edge","evidence_event_refs":["n-ok"]},{"source_ref":"n-miss","target_ref":"n-ent","relation_code":"actor","why":"missing edge","evidence_event_refs":["n-miss"]}]}}}`))
+	request.Header.Set("Accept", "application/json, text/event-stream")
+	request.Header.Set("Content-Type", "application/json")
+	ctx := socctx.WithScope(request.Context(), socctx.Scope{ProjectID: "abcdef1234"})
+	ctx = socctx.WithBearer(ctx, "user-access-jwt")
+	recorder := httptest.NewRecorder()
+	server.MCPHandler().ServeHTTP(recorder, request.WithContext(ctx))
+	body := recorder.Body.String()
+	if recorder.Code != http.StatusOK || strings.Contains(body, `"isError":true`) {
+		t.Fatalf("partial resolve must succeed: status=%d body=%s", recorder.Code, body)
+	}
+	if len(db.request.Nodes) != 2 {
+		t.Fatalf("expected ok event + entity nodes only: %#v", db.request.Nodes)
+	}
+	if len(db.request.Edges) != 1 {
+		t.Fatalf("expected only edge for returned event: %#v", db.request.Edges)
+	}
+	joined := strings.Join(db.request.Warnings, "\n")
+	if !strings.Contains(joined, "event-missing") || !strings.Contains(joined, "skipped") {
+		t.Fatalf("expected skip warning for missing event: %#v", db.request.Warnings)
+	}
+}
+
 func mcpPost(t *testing.T, handler http.Handler, body string) *httptest.ResponseRecorder {
 	t.Helper()
 	request := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(body))
@@ -341,6 +379,7 @@ func TestMCPRejectsUUIDSourceEntityID(t *testing.T) {
 
 func TestMCPImportEntityEventsByEntityID(t *testing.T) {
 	t.Parallel()
+	resolveCalls := 0
 	gateway := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
@@ -351,11 +390,8 @@ func TestMCPImportEntityEventsByEntityID(t *testing.T) {
 				"relations":[],"source_states":[{"source":"pt-maxpatrol-siem","status":"ok"}],"source_errors":[]
 			}`))
 		case "/api/v1/context/resolve":
-			_, _ = w.Write([]byte(`{
-				"findings":[],"sessions":[],"relations":[],"resolutions":[],"source_errors":[],
-				"events":[{"source_code":"pt-maxpatrol-siem","source_event_id":"06b54c00-6c1b-11f1-8044-d00d762d3dd7","type":"auth","title":"Logon","severity":"medium","occurred_at":"2025-10-23T10:00:00Z","entities":[{"type":"account","value":"dkrylova\\administrator","roles":["actor"]}],"attributes":{},"fetched_at":"2025-10-23T10:01:00Z"}],
-				"entities":[]
-			}`))
+			resolveCalls++
+			t.Fatalf("import_entity_events must not re-resolve search hits via /context/resolve")
 		default:
 			t.Fatalf("unexpected path %s", r.URL.Path)
 		}
@@ -395,11 +431,17 @@ func TestMCPImportEntityEventsByEntityID(t *testing.T) {
 	if !strings.Contains(body, `"events_found":1`) || !strings.Contains(body, `"events_imported":1`) {
 		t.Fatalf("summary missing: %s", body)
 	}
+	if resolveCalls != 0 {
+		t.Fatalf("unexpected resolve calls: %d", resolveCalls)
+	}
 	if len(db.request.Nodes) < 2 || len(db.request.Edges) < 1 {
 		t.Fatalf("expected entity+event nodes and role edge: %#v", db.request)
 	}
 	if db.request.Nodes[0].EntityID == nil || *db.request.Nodes[0].EntityID != "b71336ed-25f7-42fa-840a-688ceb087c74" {
 		t.Fatalf("expected attached entity_id locator: %#v", db.request.Nodes[0])
+	}
+	if len(db.request.Selection.Events) != 1 {
+		t.Fatalf("expected search event persisted without resolve: %#v", db.request.Selection.Events)
 	}
 }
 
