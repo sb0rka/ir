@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"regexp"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -17,6 +19,8 @@ import (
 	"github.com/sb0rka/ir/packages/common"
 	"github.com/sb0rka/ir/packages/contract/som"
 )
+
+var issueUUIDPattern = regexp.MustCompile(`(?i)\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b`)
 
 const somAccessTokenSecretName = "DEMO_SOM_ACCESS_TOKEN"
 
@@ -193,14 +197,16 @@ func (s *Server) RunSomIssue(ctx context.Context, request som.RunSomIssueRequest
 	if issue.Description != nil {
 		description = *issue.Description
 	}
-	prompt := somprompt.Build(issue.Title, description, somprompt.Context{
+	promptContext := somprompt.Context{
 		ProjectID:             scope.ProjectID,
 		InvestigationID:       investigationID,
 		HypothesisID:          hypothesisID,
 		HypothesisStatement:   hypothesisStatement,
 		HypothesisDescription: hypothesisDescription,
 		SomIssueID:            issue.ID,
-	})
+	}
+	s.fillResolvedIssueRefs(ctx, scope.ProjectID, investigationID, issue.Title+"\n"+description, &promptContext)
+	prompt := somprompt.Build(issue.Title, description, promptContext)
 	name := runName(issue)
 	exec := somclient.ResolveExecutorConfig(request.Body.Variant, request.Body.ModelId)
 
@@ -422,12 +428,24 @@ func (s *Server) GetSomEnvironment(ctx context.Context, request som.GetSomEnviro
 	status := mapDaemonEnvironmentStatus(env.IsRunning, env.IsErrored)
 	isRunning := env.IsRunning
 	isErrored := env.IsErrored
-	return som.GetSomEnvironment200JSONResponse(som.SomEnvironmentStatus{
+	out := som.SomEnvironmentStatus{
 		LocalEnvironmentId: request.LocalEnvironmentId,
 		Status:             status,
 		IsRunning:          &isRunning,
 		IsErrored:          &isErrored,
-	}), nil
+	}
+	if request.Params.InvestigationId != nil && request.Params.SomIssueId != nil {
+		scope, scopeErr := s.scope(ctx)
+		if scopeErr != nil {
+			return nil, scopeErr
+		}
+		nodes, edges, countErr := s.db.AgentResultCounts(ctx, scope.ProjectID, request.Params.InvestigationId.String(), request.Params.SomIssueId.String())
+		if countErr != nil {
+			return nil, storeError(countErr)
+		}
+		out.AgentResults = &som.SomEnvironmentAgentResults{Nodes: nodes, Edges: edges}
+	}
+	return som.GetSomEnvironment200JSONResponse(out), nil
 }
 
 // mapDaemonEnvironmentStatus: errored wins over running; idle+ok → completed.
@@ -439,4 +457,63 @@ func mapDaemonEnvironmentStatus(isRunning, isErrored bool) som.SomEnvironmentSta
 		return som.Running
 	}
 	return som.Completed
+}
+
+func (s *Server) fillResolvedIssueRefs(ctx context.Context, projectID, investigationID, text string, promptContext *somprompt.Context) {
+	seen := map[string]struct{}{}
+	for _, match := range issueUUIDPattern.FindAllString(text, -1) {
+		id := strings.ToLower(match)
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		if card, err := s.db.GetEntityCard(ctx, projectID, id); err == nil {
+			attached := false
+			for _, occurrence := range card.Occurrences {
+				if occurrence.InvestigationID == investigationID {
+					attached = true
+					break
+				}
+			}
+			if attached {
+				value := card.Entity.CanonicalKey
+				if card.Entity.DisplayName != nil && strings.TrimSpace(*card.Entity.DisplayName) != "" {
+					value = *card.Entity.DisplayName
+				}
+				sources := make([]string, 0, len(card.Entity.Sources))
+				for _, source := range card.Entity.Sources {
+					sources = append(sources, source.SourceCode+":"+source.SourceEntityID)
+				}
+				promptContext.ResolvedEntities = append(promptContext.ResolvedEntities, somprompt.ResolvedEntity{
+					EntityID: card.Entity.ID,
+					Type:     card.Entity.TypeCode,
+					Value:    normalizeEntityValue(card.Entity.TypeCode, value),
+					Sources:  sources,
+				})
+				continue
+			}
+		}
+		if event, err := s.db.GetEvent(ctx, projectID, id); err == nil {
+			for _, attachedID := range event.InvestigationIDs {
+				if attachedID == investigationID {
+					promptContext.ResolvedEvents = append(promptContext.ResolvedEvents, somprompt.ResolvedEvent{
+						EventID: event.ID, SourceCode: event.SourceCode, SourceEventID: event.SourceEventID, OccurredAt: event.OccurredAt,
+					})
+					break
+				}
+			}
+			if len(promptContext.ResolvedEvents) > 0 && promptContext.ResolvedEvents[len(promptContext.ResolvedEvents)-1].EventID == event.ID {
+				continue
+			}
+		}
+		promptContext.UnknownUUIDs = append(promptContext.UnknownUUIDs, id)
+	}
+	from, to, err := s.db.InvestigationTimelineBounds(ctx, projectID, investigationID)
+	if err != nil || from == nil || to == nil || from.IsZero() || to.IsZero() {
+		return
+	}
+	start := from.Add(-24 * time.Hour)
+	end := to.Add(24 * time.Hour)
+	promptContext.TimelineFrom = &start
+	promptContext.TimelineTo = &end
 }

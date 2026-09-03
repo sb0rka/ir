@@ -304,6 +304,11 @@ func CanonicalValue(kind, value string) string {
 	case "domain", "host", "hostname":
 		return strings.TrimSuffix(strings.ToLower(value), ".")
 	case "account", "email", "file_hash", "hash", "md5", "sha1", "sha256":
+		if strings.EqualFold(strings.TrimSpace(kind), "account") {
+			for strings.Contains(value, `\\`) {
+				value = strings.ReplaceAll(value, `\\`, `\`)
+			}
+		}
 		return strings.ToLower(value)
 	default:
 		return value

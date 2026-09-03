@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 
@@ -103,8 +104,20 @@ type SomBoard struct {
 	WorkspaceId openapi_types.UUID `json:"workspace_id"`
 }
 
-// SomEnvironmentStatus Coarse agent-run status derived from the daemon environment summary (`latest_process_status`).
+// SomEnvironmentAgentResults Counts of investigation graph facts written by the SOM issue. Present only when investigation_id and som_issue_id were supplied on the status request.
+type SomEnvironmentAgentResults struct {
+	// Edges Proposed agent edges whose origin_ref is this som_issue_id.
+	Edges int `json:"edges"`
+
+	// Nodes Graph nodes tagged with this som_issue_id.
+	Nodes int `json:"nodes"`
+}
+
+// SomEnvironmentStatus Coarse agent-run status derived from the daemon environment summary (`latest_process_status`), optionally enriched with factual graph writes for the SOM issue.
 type SomEnvironmentStatus struct {
+	// AgentResults Counts of investigation graph facts written by the SOM issue. Present only when investigation_id and som_issue_id were supplied on the status request.
+	AgentResults *SomEnvironmentAgentResults `json:"agent_results,omitempty"`
+
 	// IsErrored True while status is failed.
 	IsErrored *bool `json:"is_errored,omitempty"`
 
@@ -245,6 +258,12 @@ type ListSomIssuesParams struct {
 
 // GetSomEnvironmentParams defines parameters for GetSomEnvironment.
 type GetSomEnvironmentParams struct {
+	// InvestigationId When set with som_issue_id, the response includes how many agent graph nodes and edges this issue already wrote into the investigation.
+	InvestigationId *openapi_types.UUID `form:"investigation_id,omitempty" json:"investigation_id,omitempty"`
+
+	// SomIssueId SOM issue UUID whose agent writes should be counted.
+	SomIssueId *openapi_types.UUID `form:"som_issue_id,omitempty" json:"som_issue_id,omitempty"`
+
 	// XProjectID Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets.
 	XProjectID ProjectId `json:"X-Project-ID"`
 }
@@ -369,6 +388,32 @@ func (siw *ServerInterfaceWrapper) GetSomEnvironment(w http.ResponseWriter, r *h
 
 	// Parameter object where we will unmarshal all parameters from the context
 	var params GetSomEnvironmentParams
+
+	// ------------- Optional query parameter "investigation_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "investigation_id", r.URL.Query(), &params.InvestigationId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "investigation_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "investigation_id", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "som_issue_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "som_issue_id", r.URL.Query(), &params.SomIssueId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "som_issue_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "som_issue_id", Err: err})
+		}
+		return
+	}
 
 	headers := r.Header
 

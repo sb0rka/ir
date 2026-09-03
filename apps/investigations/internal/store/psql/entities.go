@@ -196,3 +196,22 @@ func (d *DB) DetachEntity(ctx context.Context, projectID, investigationID, entit
 	}
 	return tx.Commit(ctx)
 }
+
+func (d *DB) FindAttachedEntityBySource(ctx context.Context, projectID, investigationID, sourceCode, sourceEntityID string) (string, error) {
+	var entityID string
+	err := d.Pgx().QueryRow(ctx, `
+		SELECT e.id::text
+		  FROM entity_sources es
+		  JOIN entities e ON e.id=es.entity_id AND e.project_id=es.project_id
+		  JOIN investigation_entities ie ON ie.entity_id=e.id AND ie.project_id=e.project_id
+		 WHERE es.project_id=$1 AND es.source_code=$2 AND es.source_entity_id=$3
+		   AND ie.investigation_id=$4::uuid
+		 LIMIT 1`, projectID, sourceCode, sourceEntityID, investigationID).Scan(&entityID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", store.ErrRecordNotFound
+	}
+	if err != nil {
+		return "", fmt.Errorf("find attached entity by source: %w", mapConstraint(err))
+	}
+	return entityID, nil
+}

@@ -1102,7 +1102,12 @@ export interface paths {
     };
     "/som/environments/{local_environment_id}": {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description When set with som_issue_id, the response includes how many agent graph nodes and edges this issue already wrote into the investigation. */
+                investigation_id?: string;
+                /** @description SOM issue UUID whose agent writes should be counted. */
+                som_issue_id?: string;
+            };
             header: {
                 /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
                 "X-Project-ID": components["parameters"]["ProjectId"];
@@ -1115,7 +1120,7 @@ export interface paths {
         };
         /**
          * Status of a SOM agent environment
-         * @description Opens a relay session to the configured daemon host and reads `POST /api/environments/summaries` (not `GET /api/environments/{id}`, which omits run flags). Maps `latest_process_status` into a coarse status for the IR UI to poll until the coding-agent process finishes.
+         * @description Opens a relay session to the configured daemon host and reads `POST /api/environments/summaries` (not `GET /api/environments/{id}`, which omits run flags). Maps `latest_process_status` into a coarse status for the IR UI to poll until the coding-agent process finishes. Optional investigation_id + som_issue_id return factual write counts so a completed run with zero graph changes is visible.
          */
         get: operations["getSomEnvironment"];
         put?: never;
@@ -2170,7 +2175,7 @@ export interface components {
              */
             repo_id?: string;
         };
-        /** @description Coarse agent-run status derived from the daemon environment summary (`latest_process_status`). */
+        /** @description Coarse agent-run status derived from the daemon environment summary (`latest_process_status`), optionally enriched with factual graph writes for the SOM issue. */
         SomEnvironmentStatus: {
             /**
              * Format: uuid
@@ -2186,6 +2191,14 @@ export interface components {
             is_running?: boolean;
             /** @description True while status is failed. */
             is_errored?: boolean;
+            agent_results?: components["schemas"]["SomEnvironmentAgentResults"];
+        };
+        /** @description Counts of investigation graph facts written by the SOM issue. Present only when investigation_id and som_issue_id were supplied on the status request. */
+        SomEnvironmentAgentResults: {
+            /** @description Graph nodes tagged with this som_issue_id. */
+            nodes: number;
+            /** @description Proposed agent edges whose origin_ref is this som_issue_id. */
+            edges: number;
         };
     };
     responses: {
@@ -4275,7 +4288,12 @@ export interface operations {
     };
     getSomEnvironment: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description When set with som_issue_id, the response includes how many agent graph nodes and edges this issue already wrote into the investigation. */
+                investigation_id?: string;
+                /** @description SOM issue UUID whose agent writes should be counted. */
+                som_issue_id?: string;
+            };
             header: {
                 /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
                 "X-Project-ID": components["parameters"]["ProjectId"];

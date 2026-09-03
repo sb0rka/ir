@@ -3,6 +3,7 @@ package somprompt
 import (
 	"strings"
 	"testing"
+	"time"
 )
 
 func sampleContext() Context {
@@ -31,23 +32,27 @@ func TestBuildExpandsURLsAndHeaders(t *testing.T) {
 	}
 	for _, want := range []string{
 		"The `investigation` MCP server is configured",
-		"Hard rules:",
-		"Never pass IR UUIDs into gateway entity filters",
-		"Do not search NAD for Windows accounts",
-		"Truncated/partial ≠ absent",
-		"add_investigation_agent_results",
-		"event_ref`/`entity_ref",
 		"list_investigation_events",
 		"get_investigation_graph",
+		"add_investigation_agent_results",
+		"import_entity_events",
 		"get_investigation_reference",
 		"gateway_list_sources",
+		"gateway_resolve_context",
+		"gateway_*",
+		"next_cursor",
+		"source_states",
+		"source_errors",
 		"investigation_id 496f2041-7949-4816-8d07-734de89d121f",
+		"event_ref`/`entity_ref",
+		`dkrylova\administrator`,
+		"nothing was written",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("missing %q", want)
 		}
 	}
-	for _, forbidden := range []string{"gateway_base_url", "ACCESS_KEY", "http://gateway:8091", "curl", "Bearer eyJ"} {
+	for _, forbidden := range []string{"gateway_base_url", "ACCESS_KEY", "http://gateway:8091", "curl", "Bearer eyJ", `Windows accounts need \\`} {
 		if strings.Contains(got, forbidden) {
 			t.Errorf("prompt leaks forbidden direct-service instruction %q", forbidden)
 		}
@@ -87,12 +92,42 @@ func TestBuildScopesGraphAndResultsToHypothesis(t *testing.T) {
 		"hypothesis_statement: The account was reused after phishing",
 		"hypothesis_description: Check authentication and process evidence",
 		"`list_investigation_events`",
-		"without hypothesis_id",
-		"hypothesis_id 22222222-2222-2222-2222-222222222222",
-		"`add_investigation_agent_results` with investigation_id 496f2041-7949-4816-8d07-734de89d121f, hypothesis_id 22222222-2222-2222-2222-222222222222",
+		"`get_investigation_graph` without hypothesis_id",
+		"with hypothesis_id 22222222-2222-2222-2222-222222222222",
+		"`add_investigation_agent_results` only for leftover edges, with investigation_id 496f2041-7949-4816-8d07-734de89d121f, hypothesis_id 22222222-2222-2222-2222-222222222222",
 		"Only listed nodes/edges gain hypothesis membership",
 		"supporting and contradicting evidence",
 		"do not turn correlation into causation",
+		"import_entity_events",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %q", want)
+		}
+	}
+}
+
+func TestBuildIncludesResolvedReferences(t *testing.T) {
+	t.Parallel()
+
+	from := time.Date(2025, 10, 22, 0, 0, 0, 0, time.UTC)
+	to := time.Date(2025, 10, 24, 0, 0, 0, 0, time.UTC)
+	ctx := sampleContext()
+	ctx.ResolvedEntities = []ResolvedEntity{{
+		EntityID: "b71336ed-25f7-42fa-840a-688ceb087c74",
+		Type:     "account",
+		Value:    `dkrylova\administrator`,
+		Sources:  []string{"pt-maxpatrol-siem:account:dkrylova\\administrator"},
+	}}
+	ctx.UnknownUUIDs = []string{"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"}
+	ctx.TimelineFrom = &from
+	ctx.TimelineTo = &to
+	got := Build("Find events", "Use entity b71336ed-25f7-42fa-840a-688ceb087c74", ctx)
+	for _, want := range []string{
+		"Resolved IR references:",
+		"entity_id b71336ed-25f7-42fa-840a-688ceb087c74",
+		"import_entity_events with entity.entity_id=b71336ed-25f7-42fa-840a-688ceb087c74",
+		"unknown UUID aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+		"suggested time_range: 2025-10-22T00:00:00Z .. 2025-10-24T00:00:00Z",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("missing %q", want)

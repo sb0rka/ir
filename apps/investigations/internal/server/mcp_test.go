@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/sb0rka/ir/apps/investigations/internal/domain/model"
 	"github.com/sb0rka/ir/apps/investigations/internal/gatewayclient"
@@ -16,7 +17,11 @@ import (
 
 type mcpRecordingDB struct {
 	store.Database
-	request model.ImportRequest
+	request      model.ImportRequest
+	entityCard   model.EntityCard
+	entityCardOK bool
+	timelineFrom *time.Time
+	timelineTo   *time.Time
 }
 
 func (db *mcpRecordingDB) GetInvestigation(_ context.Context, projectID, investigationID string) (model.Investigation, error) {
@@ -25,13 +30,31 @@ func (db *mcpRecordingDB) GetInvestigation(_ context.Context, projectID, investi
 
 func (db *mcpRecordingDB) ImportContext(_ context.Context, request model.ImportRequest) (model.ImportStats, error) {
 	db.request = request
-	return model.ImportStats{Nodes: len(request.Nodes), Edges: len(request.Edges)}, nil
+	return model.ImportStats{
+		Events: len(request.Selection.Events), Entities: len(request.Selection.Entities),
+		Nodes: len(request.Nodes), Edges: len(request.Edges),
+	}, nil
 }
 
 func (db *mcpRecordingDB) Reference(context.Context) (model.Reference, error) {
 	return model.Reference{RelationTypes: []model.RelationType{{
 		Code: "mentions", Title: "Mentions", SourceKind: "event", TargetKind: "entity", Directed: true,
 	}}}, nil
+}
+
+func (db *mcpRecordingDB) GetEntityCard(context.Context, string, string) (model.EntityCard, error) {
+	if !db.entityCardOK {
+		return model.EntityCard{}, store.ErrRecordNotFound
+	}
+	return db.entityCard, nil
+}
+
+func (db *mcpRecordingDB) InvestigationTimelineBounds(context.Context, string, string) (*time.Time, *time.Time, error) {
+	return db.timelineFrom, db.timelineTo, nil
+}
+
+func (db *mcpRecordingDB) FindAttachedEntityBySource(context.Context, string, string, string, string) (string, error) {
+	return "", store.ErrRecordNotFound
 }
 
 func TestMCPInitializeAndListTools(t *testing.T) {
@@ -45,7 +68,7 @@ func TestMCPInitializeAndListTools(t *testing.T) {
 
 	listed := mcpPost(t, handler, `{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}`)
 	for _, name := range []string{
-		"get_investigation_graph", "list_investigation_events", "add_investigation_agent_results", "get_investigation_reference",
+		"get_investigation_graph", "list_investigation_events", "add_investigation_agent_results", "import_entity_events", "get_investigation_reference",
 		"gateway_list_sources", "gateway_search_events", "gateway_aggregate_events",
 		"gateway_lookup_entity", "gateway_resolve_context", "gateway_search_findings", "gateway_get_finding",
 		"gateway_search_sessions", "gateway_get_session", "gateway_search_endpoints",
@@ -67,13 +90,18 @@ func TestMCPInitializeAndListTools(t *testing.T) {
 		"never IR entity_id",
 		"pt-maxpatrol-siem, not NAD",
 		"never an IR entity UUID",
+		"import_entity_events",
+		"single backslash",
 	} {
 		if !strings.Contains(listed.Body.String(), hint) {
 			t.Fatalf("tools/list must describe agent/gateway identity rules (%q): %s", hint, listed.Body.String())
 		}
 	}
-	if count := strings.Count(listed.Body.String(), `"hypothesis_id"`); count != 2 {
-		t.Fatalf("tools/list must expose optional hypothesis scope only for graph and agent results: count=%d body=%s", count, listed.Body.String())
+	if strings.Contains(listed.Body.String(), `Windows accounts need \\\\`) {
+		t.Fatalf("tools/list must not encourage double-escaping backslashes: %s", listed.Body.String())
+	}
+	if count := strings.Count(listed.Body.String(), `"hypothesis_id"`); count != 3 {
+		t.Fatalf("tools/list must expose optional hypothesis scope for graph, agent results, and import_entity_events: count=%d body=%s", count, listed.Body.String())
 	}
 	if !strings.Contains(listed.Body.String(), `"format":"uuid"`) || strings.Contains(listed.Body.String(), `"minItems":16`) {
 		t.Fatalf("tools/list must expose UUIDs as strings: %s", listed.Body.String())
@@ -292,4 +320,133 @@ func mcpPost(t *testing.T, handler http.Handler, body string) *httptest.Response
 	recorder := httptest.NewRecorder()
 	handler.ServeHTTP(recorder, request)
 	return recorder
+}
+
+func TestMCPRejectsUUIDSourceEntityID(t *testing.T) {
+	t.Parallel()
+	server := &Server{db: &mcpRecordingDB{}, gateway: nil}
+	request := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(
+		`{"jsonrpc":"2.0","id":30,"method":"tools/call","params":{"name":"add_investigation_agent_results","arguments":{"investigation_id":"11111111-1111-1111-1111-111111111111","som_issue_ids":["22222222-2222-2222-2222-222222222222"],"events":[],"entities":[{"ref":"bad","source_code":"mock","source_entity_id":"b71336ed-25f7-42fa-840a-688ceb087c74"}],"nodes":[{"ref":"n","entity_ref":"bad"}],"edges":[]}}}`))
+	request.Header.Set("Accept", "application/json, text/event-stream")
+	request.Header.Set("Content-Type", "application/json")
+	ctx := socctx.WithScope(request.Context(), socctx.Scope{ProjectID: "abcdef1234"})
+	recorder := httptest.NewRecorder()
+	server.MCPHandler().ServeHTTP(recorder, request.WithContext(ctx))
+	body := recorder.Body.String()
+	if recorder.Code != http.StatusOK || !strings.Contains(body, `"isError":true`) ||
+		!strings.Contains(body, "looks like an IR UUID") || !strings.Contains(body, "nodes[].entity_id") {
+		t.Fatalf("expected UUID source_entity_id rejection: status=%d body=%s", recorder.Code, body)
+	}
+}
+
+func TestMCPImportEntityEventsByEntityID(t *testing.T) {
+	t.Parallel()
+	gateway := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/api/v1/events/search":
+			_, _ = w.Write([]byte(`{
+				"events":[{"source_code":"pt-maxpatrol-siem","source_event_id":"06b54c00-6c1b-11f1-8044-d00d762d3dd7","type":"auth","title":"Logon","severity":"medium","occurred_at":"2025-10-23T10:00:00Z","entities":[{"type":"account","value":"dkrylova\\administrator","roles":["actor"]}],"attributes":{"raw":true},"fetched_at":"2025-10-23T10:01:00Z"}],
+				"entities":[{"type":"account","value":"dkrylova\\administrator","attributes":{},"sources":[{"source_code":"pt-maxpatrol-siem","source_entity_id":"account:dkrylova\\administrator","fetched_at":"2025-10-23T10:01:00Z"}]}],
+				"relations":[],"source_states":[{"source":"pt-maxpatrol-siem","status":"ok"}],"source_errors":[]
+			}`))
+		case "/api/v1/context/resolve":
+			_, _ = w.Write([]byte(`{
+				"findings":[],"sessions":[],"relations":[],"resolutions":[],"source_errors":[],
+				"events":[{"source_code":"pt-maxpatrol-siem","source_event_id":"06b54c00-6c1b-11f1-8044-d00d762d3dd7","type":"auth","title":"Logon","severity":"medium","occurred_at":"2025-10-23T10:00:00Z","entities":[{"type":"account","value":"dkrylova\\administrator","roles":["actor"]}],"attributes":{},"fetched_at":"2025-10-23T10:01:00Z"}],
+				"entities":[]
+			}`))
+		default:
+			t.Fatalf("unexpected path %s", r.URL.Path)
+		}
+	}))
+	defer gateway.Close()
+
+	from := time.Date(2025, 10, 22, 0, 0, 0, 0, time.UTC)
+	to := time.Date(2025, 10, 24, 0, 0, 0, 0, time.UTC)
+	db := &mcpRecordingDB{
+		entityCardOK: true,
+		entityCard: model.EntityCard{
+			Entity: model.Entity{
+				ID: "b71336ed-25f7-42fa-840a-688ceb087c74", TypeCode: "account",
+				CanonicalKey: `dkrylova\administrator`,
+				Sources: []model.EntitySource{{
+					SourceCode: "pt-maxpatrol-siem", SourceEntityID: `account:dkrylova\administrator`,
+				}},
+			},
+			Occurrences: []model.EntityOccurrence{{InvestigationID: "11111111-1111-1111-1111-111111111111"}},
+		},
+		timelineFrom: &from,
+		timelineTo:   &to,
+	}
+	server := &Server{db: db, gateway: gatewayclient.New(gatewayclient.Config{BaseURL: gateway.URL})}
+	request := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(
+		`{"jsonrpc":"2.0","id":31,"method":"tools/call","params":{"name":"import_entity_events","arguments":{"investigation_id":"11111111-1111-1111-1111-111111111111","som_issue_ids":["22222222-2222-2222-2222-222222222222"],"entity":{"entity_id":"b71336ed-25f7-42fa-840a-688ceb087c74"},"limit":10}}}`))
+	request.Header.Set("Accept", "application/json, text/event-stream")
+	request.Header.Set("Content-Type", "application/json")
+	ctx := socctx.WithScope(request.Context(), socctx.Scope{ProjectID: "abcdef1234"})
+	ctx = socctx.WithBearer(ctx, "user-access-jwt")
+	recorder := httptest.NewRecorder()
+	server.MCPHandler().ServeHTTP(recorder, request.WithContext(ctx))
+	body := recorder.Body.String()
+	if recorder.Code != http.StatusOK || strings.Contains(body, `"isError":true`) {
+		t.Fatalf("import_entity_events: status=%d body=%s", recorder.Code, body)
+	}
+	if !strings.Contains(body, `"events_found":1`) || !strings.Contains(body, `"events_imported":1`) {
+		t.Fatalf("summary missing: %s", body)
+	}
+	if len(db.request.Nodes) < 2 || len(db.request.Edges) < 1 {
+		t.Fatalf("expected entity+event nodes and role edge: %#v", db.request)
+	}
+	if db.request.Nodes[0].EntityID == nil || *db.request.Nodes[0].EntityID != "b71336ed-25f7-42fa-840a-688ceb087c74" {
+		t.Fatalf("expected attached entity_id locator: %#v", db.request.Nodes[0])
+	}
+}
+
+func TestMCPImportEntityEventsEmptySearch(t *testing.T) {
+	t.Parallel()
+	gateway := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"events":[],"entities":[],"relations":[],"source_states":[],"source_errors":[]}`))
+	}))
+	defer gateway.Close()
+	db := &mcpRecordingDB{entityCardOK: true, entityCard: model.EntityCard{
+		Entity:      model.Entity{ID: "b71336ed-25f7-42fa-840a-688ceb087c74", TypeCode: "account", CanonicalKey: `dkrylova\administrator`},
+		Occurrences: []model.EntityOccurrence{{InvestigationID: "11111111-1111-1111-1111-111111111111"}},
+	}}
+	server := &Server{db: db, gateway: gatewayclient.New(gatewayclient.Config{BaseURL: gateway.URL})}
+	request := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(
+		`{"jsonrpc":"2.0","id":32,"method":"tools/call","params":{"name":"import_entity_events","arguments":{"investigation_id":"11111111-1111-1111-1111-111111111111","som_issue_ids":["22222222-2222-2222-2222-222222222222"],"entity":{"entity_id":"b71336ed-25f7-42fa-840a-688ceb087c74"},"time_range":{"from":"2025-10-22T00:00:00Z","to":"2025-10-24T00:00:00Z"}}}}`))
+	request.Header.Set("Accept", "application/json, text/event-stream")
+	request.Header.Set("Content-Type", "application/json")
+	ctx := socctx.WithScope(request.Context(), socctx.Scope{ProjectID: "abcdef1234"})
+	ctx = socctx.WithBearer(ctx, "user-access-jwt")
+	recorder := httptest.NewRecorder()
+	server.MCPHandler().ServeHTTP(recorder, request.WithContext(ctx))
+	body := recorder.Body.String()
+	if recorder.Code != http.StatusOK || strings.Contains(body, `"isError":true`) {
+		t.Fatalf("empty import: status=%d body=%s", recorder.Code, body)
+	}
+	if !strings.Contains(body, `"events_found":0`) || !strings.Contains(body, `"events_imported":0`) {
+		t.Fatalf("expected zero summary: %s", body)
+	}
+	if len(db.request.Nodes) != 0 {
+		t.Fatalf("empty search must not write: %#v", db.request)
+	}
+}
+
+func TestNormalizeAccountBackslash(t *testing.T) {
+	t.Parallel()
+	if got := normalizeEntityValue("account", `dkrylova\\administrator`); got != `dkrylova\administrator` {
+		t.Fatalf("normalizeEntityValue: %q", got)
+	}
+	if got := normalizeSourceEntityID(`account:dkrylova\\administrator`); got != `account:dkrylova\administrator` {
+		t.Fatalf("normalizeSourceEntityID: %q", got)
+	}
+	if !looksLikeBareUUID("b71336ed-25f7-42fa-840a-688ceb087c74") {
+		t.Fatal("expected bare UUID detection")
+	}
+	if looksLikeBareUUID(`account:dkrylova\administrator`) {
+		t.Fatal("prefixed source id must not look like bare UUID")
+	}
 }

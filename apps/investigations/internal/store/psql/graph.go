@@ -635,3 +635,28 @@ func (d *DB) ReviewGraphEdges(ctx context.Context, request model.EdgeReviewReque
 	}
 	return result, nil
 }
+
+func (d *DB) AgentResultCounts(ctx context.Context, projectID, investigationID, somIssueID string) (int, int, error) {
+	exists, err := d.InvestigationExists(ctx, projectID, investigationID)
+	if err != nil {
+		return 0, 0, err
+	}
+	if !exists {
+		return 0, 0, store.ErrInvestigationNotFound
+	}
+	var nodes, edges int
+	err = d.Pgx().QueryRow(ctx, `
+		SELECT
+		  (SELECT count(*)::int FROM graph_nodes n
+		     JOIN investigations i ON i.id=n.investigation_id AND i.is_deleted=false
+		     JOIN graph_node_som_issues g ON g.graph_node_id=n.id
+		    WHERE n.investigation_id=$1::uuid AND i.project_id=$2 AND g.som_issue_id=$3::uuid),
+		  (SELECT count(*)::int FROM edges e
+		     JOIN investigations i ON i.id=e.investigation_id AND i.is_deleted=false
+		    WHERE e.investigation_id=$1::uuid AND i.project_id=$2 AND e.origin='agent' AND e.origin_ref=$3)`,
+		investigationID, projectID, somIssueID).Scan(&nodes, &edges)
+	if err != nil {
+		return 0, 0, fmt.Errorf("agent result counts: %w", mapConstraint(err))
+	}
+	return nodes, edges, nil
+}

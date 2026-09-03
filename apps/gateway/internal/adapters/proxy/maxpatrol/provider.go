@@ -443,7 +443,7 @@ func sourceEntityRef(sourceID string) (domain.EntityRef, error) {
 	if !ok || strings.TrimSpace(kind) == "" || strings.TrimSpace(value) == "" {
 		return domain.EntityRef{}, sourceRequestError("invalid_source_ref", "MaxPatrol entity source ID is invalid")
 	}
-	return domain.EntityRef{Type: kind, Value: value}, nil
+	return domain.EntityRef{Type: kind, Value: domain.CanonicalValue(kind, value)}, nil
 }
 
 func dedupeStrings(values []string) []string {

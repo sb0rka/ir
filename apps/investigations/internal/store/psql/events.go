@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 
@@ -157,4 +158,24 @@ func (d *DB) DetachEvent(ctx context.Context, projectID, investigationID, eventI
 		return store.ErrRecordNotFound
 	}
 	return tx.Commit(ctx)
+}
+
+func (d *DB) InvestigationTimelineBounds(ctx context.Context, projectID, investigationID string) (*time.Time, *time.Time, error) {
+	exists, err := d.InvestigationExists(ctx, projectID, investigationID)
+	if err != nil {
+		return nil, nil, err
+	}
+	if !exists {
+		return nil, nil, store.ErrInvestigationNotFound
+	}
+	var from, to *time.Time
+	err = d.Pgx().QueryRow(ctx, `
+		SELECT min(e.occurred_at), max(e.occurred_at)
+		  FROM investigation_events ie
+		  JOIN events e ON e.id=ie.event_id AND e.project_id=ie.project_id
+		 WHERE ie.investigation_id=$1::uuid AND ie.project_id=$2`, investigationID, projectID).Scan(&from, &to)
+	if err != nil {
+		return nil, nil, fmt.Errorf("investigation timeline bounds: %w", mapConstraint(err))
+	}
+	return from, to, nil
 }

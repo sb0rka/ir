@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"reflect"
 	"strings"
@@ -14,7 +15,9 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	openapi_types "github.com/oapi-codegen/runtime/types"
 
+	"github.com/sb0rka/ir/apps/investigations/internal/domain/model"
 	"github.com/sb0rka/ir/apps/investigations/internal/gatewayclient"
+	"github.com/sb0rka/ir/apps/investigations/internal/store"
 	"github.com/sb0rka/ir/apps/investigations/internal/transport/httperr"
 	"github.com/sb0rka/ir/apps/investigations/internal/transport/socctx"
 	"github.com/sb0rka/ir/packages/contract/events"
@@ -47,7 +50,7 @@ type mcpAgentEventSelection struct {
 type mcpAgentEntitySelection struct {
 	Ref            string `json:"ref" jsonschema:"Batch-local id referenced by nodes[].entity_ref"`
 	SourceCode     string `json:"source_code" jsonschema:"Gateway source_code copied from MCP results"`
-	SourceEntityId string `json:"source_entity_id" jsonschema:"Gateway source_entity_id copied from MCP results. JSON-escape backslashes (Windows accounts need \\\\)"`
+	SourceEntityId string `json:"source_entity_id" jsonschema:"Gateway source_entity_id copied from MCP results (e.g. account:dkrylova\\administrator). Value must contain a single backslash; doubled backslashes are tolerated"`
 }
 
 type mcpAgentNode struct {
@@ -127,14 +130,22 @@ func (s *Server) MCPHandler() http.Handler {
 	mcp.AddTool[addAgentResultsArgs, any](server, mcpTool[addAgentResultsArgs](
 		"add_investigation_agent_results",
 		"Atomically add graph nodes and proposed evidence-backed edges, optionally scoped to an active hypothesis. "+
-			"To import Gateway evidence: put events[{ref,source_code,source_event_id}] and entities[{ref,source_code,source_entity_id}], "+
+			"Prefer import_entity_events when the task is to find events for one entity and put them on the graph. "+
+			"To import Gateway evidence manually: put events[{ref,source_code,source_event_id}] and entities[{ref,source_code,source_entity_id}], "+
 			"then nodes use event_ref/entity_ref equal to those batch-local refs (never URNs or {source_code,...} objects). "+
-			"Already-attached evidence uses event_id/entity_id/node_id instead. "+
+			"Already-attached evidence uses event_id/entity_id/node_id instead. Never put an IR UUID into source_entity_id/source_event_id. "+
 			"Example: events:[{ref:\"e0\",source_code:\"mock\",source_event_id:\"evt-1\"}], "+
 			"entities:[{ref:\"a0\",source_code:\"mock\",source_entity_id:\"ent-1\"}], "+
 			"nodes:[{ref:\"n-event\",event_ref:\"e0\"},{ref:\"n-entity\",entity_ref:\"a0\"}], "+
 			"edges:[{source_ref:\"n-event\",target_ref:\"n-entity\",relation_code:\"actor\",why:\"…\",evidence_event_refs:[\"n-event\"]}].",
 	), s.addInvestigationAgentResultsTool)
+	mcp.AddTool[importEntityEventsArgs, any](server, mcpTool[importEntityEventsArgs](
+		"import_entity_events",
+		"Find Gateway events for one entity and import them onto the investigation graph with proposed role edges. "+
+			"Pass entity.entity_id when the issue/graph already has an IR UUID, or entity.type+entity.value otherwise. "+
+			"Never put an IR UUID into type/value. Prefer this over manually assembling add_investigation_agent_results for the common enrich-entity workflow. "+
+			"Example: entity:{entity_id:\"b71336ed-25f7-42fa-840a-688ceb087c74\"}, time_range optional, limit defaults to 50.",
+	), s.importEntityEventsTool)
 	mcp.AddTool[struct{}, any](server, mcpTool[struct{}](
 		"get_investigation_reference",
 		"Read IR entity and relation dictionaries. Check relation endpoint kinds and direction before submitting edges.",
@@ -341,31 +352,40 @@ func mcpFailure(err error) (*mcp.CallToolResult, any, error) {
 // generated OpenAPI structs leave undescribed.
 type mcpEntityRef struct {
 	Type  string `json:"type" jsonschema:"Canonical kind from graph/timeline/Gateway results: account, host, ip, domain, … — never an IR entity UUID"`
-	Value string `json:"value" jsonschema:"Entity value such as dkrylova\\\\administrator — never an investigation entity_id"`
+	Value string `json:"value" jsonschema:"Entity value such as dkrylova\\administrator — never an investigation entity_id. Value must contain a single backslash; doubled backslashes are tolerated"`
 }
 
 type mcpSearchEventsArgs struct {
-	Sources     *[]string                    `json:"sources,omitempty" jsonschema:"Codes from gateway_list_sources. Match capability: accounts/process/auth → SIEM (pt-maxpatrol-siem); network sessions → NAD"`
-	TimeRange   gatewaycontract.TimeRange    `json:"time_range" jsonschema:"Required occurrence-time interval"`
-	Entities    *[]mcpEntityRef              `json:"entities,omitempty" jsonschema:"Prefer this to find events for an account/host/ip. Never pass IR entity UUIDs here"`
-	Filter      *string                      `json:"filter,omitempty" jsonschema:"Optional SIEM predicate. Prefer entities[] when filtering by identity"`
-	Columns     *[]string                    `json:"columns,omitempty" jsonschema:"Optional allowlisted SIEM fields to expose"`
-	Sort        *[]gatewaycontract.EventSort `json:"sort,omitempty" jsonschema:"Optional SIEM sort rules"`
-	GroupBy     *[]string                    `json:"group_by,omitempty" jsonschema:"Optional SIEM group_by fields when drilling into an aggregation"`
-	GroupValues *[]*string                   `json:"group_values,omitempty" jsonschema:"Group values aligned with group_by"`
-	Limit       *int                         `json:"limit,omitempty" jsonschema:"Max merged events per page (1-100)"`
-	Cursor      *string                      `json:"cursor,omitempty" jsonschema:"Opaque next_cursor from the previous page with the same filters"`
+	Sources           *[]string                    `json:"sources,omitempty" jsonschema:"Codes from gateway_list_sources. Match capability: accounts/process/auth → SIEM (pt-maxpatrol-siem); network sessions → NAD"`
+	TimeRange         gatewaycontract.TimeRange    `json:"time_range" jsonschema:"Required occurrence-time interval"`
+	Entities          *[]mcpEntityRef              `json:"entities,omitempty" jsonschema:"Prefer this to find events for an account/host/ip. Never pass IR entity UUIDs here"`
+	Filter            *string                      `json:"filter,omitempty" jsonschema:"Optional SIEM predicate. Prefer entities[] when filtering by identity"`
+	Columns           *[]string                    `json:"columns,omitempty" jsonschema:"Optional allowlisted SIEM fields to expose"`
+	Sort              *[]gatewaycontract.EventSort `json:"sort,omitempty" jsonschema:"Optional SIEM sort rules"`
+	GroupBy           *[]string                    `json:"group_by,omitempty" jsonschema:"Optional SIEM group_by fields when drilling into an aggregation"`
+	GroupValues       *[]*string                   `json:"group_values,omitempty" jsonschema:"Group values aligned with group_by"`
+	Limit             *int                         `json:"limit,omitempty" jsonschema:"Max merged events per page (1-100). Defaults to 20 when omitted"`
+	Cursor            *string                      `json:"cursor,omitempty" jsonschema:"Opaque next_cursor from the previous page with the same filters"`
+	IncludeAttributes *bool                        `json:"include_attributes,omitempty" jsonschema:"When true, keep event.attributes in the response. Default false to keep pages small"`
 }
 
 func (a mcpSearchEventsArgs) toContract() gatewaycontract.SearchEventsRequest {
+	limit := a.Limit
+	if limit == nil {
+		defaultLimit := 20
+		limit = &defaultLimit
+	}
 	out := gatewaycontract.SearchEventsRequest{
 		Sources: a.Sources, TimeRange: a.TimeRange, Filter: a.Filter, Columns: a.Columns,
-		Sort: a.Sort, GroupBy: a.GroupBy, GroupValues: a.GroupValues, Limit: a.Limit, Cursor: a.Cursor,
+		Sort: a.Sort, GroupBy: a.GroupBy, GroupValues: a.GroupValues, Limit: limit, Cursor: a.Cursor,
 	}
 	if a.Entities != nil {
 		entities := make([]gatewaycontract.EntityRef, len(*a.Entities))
 		for i, entity := range *a.Entities {
-			entities[i] = gatewaycontract.EntityRef{Type: entity.Type, Value: entity.Value}
+			entities[i] = gatewaycontract.EntityRef{
+				Type:  entity.Type,
+				Value: normalizeEntityValue(entity.Type, entity.Value),
+			}
 		}
 		out.Entities = &entities
 	}
@@ -380,10 +400,434 @@ type mcpLookupEntityArgs struct {
 
 func (a mcpLookupEntityArgs) toContract() gatewaycontract.LookupEntityRequest {
 	return gatewaycontract.LookupEntityRequest{
-		Entity:    gatewaycontract.EntityRef{Type: a.Entity.Type, Value: a.Entity.Value},
+		Entity: gatewaycontract.EntityRef{
+			Type:  a.Entity.Type,
+			Value: normalizeEntityValue(a.Entity.Type, a.Entity.Value),
+		},
 		Sources:   a.Sources,
 		TimeRange: a.TimeRange,
 	}
+}
+
+type importEntitySelector struct {
+	EntityID *openapi_types.UUID `json:"entity_id,omitempty" jsonschema:"IR entity UUID already known from the issue or investigation — preferred"`
+	Type     *string             `json:"type,omitempty" jsonschema:"Canonical entity kind when entity_id is unknown — never an IR UUID"`
+	Value    *string             `json:"value,omitempty" jsonschema:"Entity value such as dkrylova\\administrator when entity_id is unknown"`
+}
+
+type importEntityEventsArgs struct {
+	InvestigationID     openapi_types.UUID         `json:"investigation_id" jsonschema:"Investigation UUID"`
+	HypothesisID        *openapi_types.UUID        `json:"hypothesis_id,omitempty" jsonschema:"Optional active hypothesis UUID"`
+	SomIssueIds         []openapi_types.UUID       `json:"som_issue_ids" jsonschema:"SOM issue UUIDs that produced these results"`
+	Entity              importEntitySelector       `json:"entity" jsonschema:"Exactly one of entity_id or type+value"`
+	TimeRange           *gatewaycontract.TimeRange `json:"time_range,omitempty" jsonschema:"Optional search window; defaults to investigation timeline ±24h or last 30 days"`
+	Sources             *[]string                  `json:"sources,omitempty" jsonschema:"Optional source codes; defaults by entity capability (SIEM for account/host/process)"`
+	Limit               *int                       `json:"limit,omitempty" jsonschema:"Max events to import (1-100, default 50)"`
+	IncludeParticipants *bool                      `json:"include_participants,omitempty" jsonschema:"When true, also import other entities mentioned on the events. Default false"`
+}
+
+type importEntityEventsSummary struct {
+	Entity         importEntityEventsEntitySummary `json:"entity"`
+	EventsFound    int                             `json:"events_found"`
+	EventsImported int                             `json:"events_imported"`
+	Truncated      bool                            `json:"truncated"`
+	NextCursor     *string                         `json:"next_cursor,omitempty"`
+	SourceStates   []gatewaycontract.SourceState   `json:"source_states,omitempty"`
+	SourceErrors   []gatewaycontract.SourceError   `json:"source_errors,omitempty"`
+}
+
+type importEntityEventsEntitySummary struct {
+	EntityID *string `json:"entity_id,omitempty"`
+	Type     string  `json:"type"`
+	Value    string  `json:"value"`
+}
+
+type importEntityEventsResult struct {
+	investigations.ContextImportResult
+	Summary importEntityEventsSummary `json:"summary"`
+}
+
+func (s *Server) importEntityEventsTool(
+	ctx context.Context,
+	_ *mcp.CallToolRequest,
+	args importEntityEventsArgs,
+) (*mcp.CallToolResult, any, error) {
+	investigationID, err := requireMCPInvestigation(args.InvestigationID)
+	if err != nil {
+		return mcpFailure(err)
+	}
+	if err := requireMCPHypothesis(args.HypothesisID); err != nil {
+		return mcpFailure(err)
+	}
+	if len(args.SomIssueIds) == 0 {
+		return mcpFailure(errors.New("invalid arguments: expected at least one SOM issue"))
+	}
+	for _, id := range args.SomIssueIds {
+		if id == uuid.Nil {
+			return mcpFailure(errors.New("invalid arguments: som_issue_ids must contain non-zero UUIDs"))
+		}
+	}
+	limit := 50
+	if args.Limit != nil {
+		limit = *args.Limit
+	}
+	if limit < 1 || limit > 100 {
+		return mcpFailure(errors.New("invalid arguments: limit must be between 1 and 100"))
+	}
+	includeParticipants := args.IncludeParticipants != nil && *args.IncludeParticipants
+
+	scope, err := s.scope(ctx)
+	if err != nil {
+		return mcpFailure(err)
+	}
+	bearer, ok := socctx.BearerFromContext(ctx)
+	if !ok {
+		return mcpFailure(httperr.ErrUnauthorized)
+	}
+	if _, err := s.db.GetInvestigation(ctx, scope.ProjectID, investigationID.String()); err != nil {
+		return mcpFailure(err)
+	}
+	if args.HypothesisID != nil {
+		hypothesis, err := s.db.GetHypothesis(ctx, scope.ProjectID, investigationID.String(), args.HypothesisID.String())
+		if err != nil {
+			return mcpFailure(err)
+		}
+		if hypothesis.Status != "active" {
+			return mcpFailure(hypothesisStoreError(&store.ConflictError{IDs: []string{args.HypothesisID.String()}}))
+		}
+	}
+
+	resolvedEntity, err := s.resolveImportEntity(ctx, scope.ProjectID, investigationID.String(), args.Entity)
+	if err != nil {
+		return mcpFailure(err)
+	}
+	timeRange, err := s.resolveImportTimeRange(ctx, scope.ProjectID, investigationID.String(), args.TimeRange)
+	if err != nil {
+		return mcpFailure(err)
+	}
+	sources := args.Sources
+	if sources == nil {
+		defaultSources := defaultSourcesForEntityType(resolvedEntity.Type)
+		if len(defaultSources) > 0 {
+			sources = &defaultSources
+		}
+	}
+
+	searchReq := gatewaycontract.SearchEventsRequest{
+		Sources:   sources,
+		TimeRange: timeRange,
+		Entities: &[]gatewaycontract.EntityRef{{
+			Type:  resolvedEntity.Type,
+			Value: resolvedEntity.Value,
+		}},
+		Limit: &limit,
+	}
+	var (
+		foundEvents  []gatewaycontract.Event
+		sourceStates []gatewaycontract.SourceState
+		sourceErrors []gatewaycontract.SourceError
+		nextCursor   *string
+		truncated    bool
+	)
+	for {
+		raw, err := s.gateway.SearchEvents(ctx, scope.ProjectID, bearer, searchReq)
+		if err != nil {
+			var upstream *gatewayclient.HTTPError
+			if errors.As(err, &upstream) {
+				return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: upstream.Message}}, IsError: true}, nil, nil
+			}
+			return mcpFailure(httperr.New(http.StatusBadGateway, httperr.CodeSourceUnavailable, "Gateway is unavailable"))
+		}
+		var page gatewaycontract.SearchEventsResponse
+		if err := json.Unmarshal(raw, &page); err != nil {
+			return mcpFailure(err)
+		}
+		sourceStates = append(sourceStates, page.SourceStates...)
+		sourceErrors = append(sourceErrors, page.SourceErrors...)
+		for _, event := range page.Events {
+			foundEvents = append(foundEvents, event)
+			if len(foundEvents) >= limit {
+				break
+			}
+		}
+		if len(foundEvents) >= limit {
+			truncated = page.NextCursor != nil || len(page.Events) > 0
+			nextCursor = page.NextCursor
+			break
+		}
+		if page.NextCursor == nil || *page.NextCursor == "" {
+			nextCursor = nil
+			break
+		}
+		searchReq.Cursor = page.NextCursor
+	}
+	if len(foundEvents) > limit {
+		foundEvents = foundEvents[:limit]
+		truncated = true
+	}
+
+	summary := importEntityEventsSummary{
+		Entity: importEntityEventsEntitySummary{
+			Type:  resolvedEntity.Type,
+			Value: resolvedEntity.Value,
+		},
+		EventsFound:  len(foundEvents),
+		Truncated:    truncated,
+		NextCursor:   nextCursor,
+		SourceStates: sourceStates,
+		SourceErrors: sourceErrors,
+	}
+	if resolvedEntity.EntityID != "" {
+		id := resolvedEntity.EntityID
+		summary.Entity.EntityID = &id
+	}
+
+	if len(foundEvents) == 0 {
+		empty := investigations.ContextImportResult{Warnings: []string{}}
+		return nil, importEntityEventsResult{ContextImportResult: empty, Summary: summary}, nil
+	}
+
+	batch, err := buildEntityEventsBatch(args.SomIssueIds, resolvedEntity, foundEvents, includeParticipants)
+	if err != nil {
+		return mcpFailure(err)
+	}
+	var hypothesisID *string
+	if args.HypothesisID != nil {
+		value := args.HypothesisID.String()
+		hypothesisID = &value
+	}
+	stats, err := s.importAgentBatch(ctx, scope, investigationID.String(), hypothesisID, batch)
+	if err != nil {
+		return mcpFailure(err)
+	}
+	result := importResult(stats)
+	summary.EventsImported = result.Events
+	return nil, importEntityEventsResult{ContextImportResult: result, Summary: summary}, nil
+}
+
+type resolvedImportEntity struct {
+	EntityID string
+	Type     string
+	Value    string
+	Sources  []model.EntitySource
+	Attached bool
+}
+
+func (s *Server) resolveImportEntity(ctx context.Context, projectID, investigationID string, selector importEntitySelector) (resolvedImportEntity, error) {
+	hasID := selector.EntityID != nil && *selector.EntityID != uuid.Nil
+	hasTypeValue := selector.Type != nil && strings.TrimSpace(*selector.Type) != "" &&
+		selector.Value != nil && strings.TrimSpace(*selector.Value) != ""
+	if hasID == hasTypeValue {
+		return resolvedImportEntity{}, errors.New("invalid arguments: entity requires exactly one of entity_id or type+value")
+	}
+	if hasID {
+		card, err := s.db.GetEntityCard(ctx, projectID, selector.EntityID.String())
+		if err != nil {
+			return resolvedImportEntity{}, storeError(err)
+		}
+		attached := false
+		for _, occurrence := range card.Occurrences {
+			if occurrence.InvestigationID == investigationID {
+				attached = true
+				break
+			}
+		}
+		if !attached {
+			return resolvedImportEntity{}, httperr.ErrNotFound
+		}
+		value := card.Entity.CanonicalKey
+		if card.Entity.DisplayName != nil && strings.TrimSpace(*card.Entity.DisplayName) != "" {
+			value = *card.Entity.DisplayName
+		}
+		return resolvedImportEntity{
+			EntityID: card.Entity.ID,
+			Type:     card.Entity.TypeCode,
+			Value:    normalizeEntityValue(card.Entity.TypeCode, value),
+			Sources:  card.Entity.Sources,
+			Attached: true,
+		}, nil
+	}
+	typeCode := strings.TrimSpace(*selector.Type)
+	value := normalizeEntityValue(typeCode, *selector.Value)
+	if looksLikeBareUUID(value) {
+		return resolvedImportEntity{}, errors.New("invalid arguments: entity.value must not be an IR UUID; use entity.entity_id")
+	}
+	return resolvedImportEntity{Type: typeCode, Value: value}, nil
+}
+
+func (s *Server) resolveImportTimeRange(
+	ctx context.Context,
+	projectID, investigationID string,
+	override *gatewaycontract.TimeRange,
+) (gatewaycontract.TimeRange, error) {
+	if override != nil {
+		if override.From.IsZero() || !override.From.Before(override.To) {
+			return gatewaycontract.TimeRange{}, errors.New("invalid arguments: time_range.from must be earlier than time_range.to")
+		}
+		return *override, nil
+	}
+	from, to, err := s.db.InvestigationTimelineBounds(ctx, projectID, investigationID)
+	if err != nil {
+		return gatewaycontract.TimeRange{}, storeError(err)
+	}
+	if from != nil && to != nil && !from.IsZero() && !to.IsZero() {
+		return gatewaycontract.TimeRange{
+			From: from.Add(-24 * time.Hour),
+			To:   to.Add(24 * time.Hour),
+		}, nil
+	}
+	now := time.Now().UTC()
+	return gatewaycontract.TimeRange{From: now.Add(-30 * 24 * time.Hour), To: now}, nil
+}
+
+func defaultSourcesForEntityType(typeCode string) []string {
+	switch strings.ToLower(strings.TrimSpace(typeCode)) {
+	case "account", "host", "hostname", "process", "hash", "file_hash", "md5", "sha1", "sha256":
+		return []string{"pt-maxpatrol-siem"}
+	case "ip", "domain":
+		return nil
+	default:
+		return []string{"pt-maxpatrol-siem"}
+	}
+}
+
+func buildEntityEventsBatch(
+	somIssueIDs []openapi_types.UUID,
+	entity resolvedImportEntity,
+	events []gatewaycontract.Event,
+	includeParticipants bool,
+) (investigations.AgentResultBatch, error) {
+	batch := investigations.AgentResultBatch{
+		SomIssueIds: somIssueIDs,
+		Events:      make([]investigations.AgentEventSelection, 0, len(events)),
+		Entities:    nil,
+		Nodes:       nil,
+		Edges:       nil,
+	}
+	entityNodeRef := "n-entity"
+	entitySelectionRef := "a0"
+	confidence := float32(1)
+
+	if entity.Attached && entity.EntityID != "" {
+		entityUUID, err := uuid.Parse(entity.EntityID)
+		if err != nil {
+			return investigations.AgentResultBatch{}, err
+		}
+		id := openapi_types.UUID(entityUUID)
+		batch.Nodes = append(batch.Nodes, investigations.AgentNode{Ref: entityNodeRef, EntityId: &id})
+	} else {
+		sourceCode, sourceEntityID := pickEntitySource(entity, events)
+		if sourceCode == "" || sourceEntityID == "" {
+			return investigations.AgentResultBatch{}, errors.New("invalid arguments: could not determine source_entity_id for the target entity")
+		}
+		batch.Entities = append(batch.Entities, investigations.AgentEntitySelection{
+			Ref: entitySelectionRef, SourceCode: sourceCode, SourceEntityId: normalizeSourceEntityID(sourceEntityID),
+		})
+		ref := entitySelectionRef
+		batch.Nodes = append(batch.Nodes, investigations.AgentNode{Ref: entityNodeRef, EntityRef: &ref})
+	}
+
+	seenEvents := map[string]struct{}{}
+	participantRefs := map[string]string{} // type\x00value -> entity selection ref
+	for i, event := range events {
+		key := event.SourceCode + "\x00" + event.SourceEventId
+		if _, ok := seenEvents[key]; ok {
+			continue
+		}
+		seenEvents[key] = struct{}{}
+		eventRef := fmt.Sprintf("e%d", i)
+		nodeRef := fmt.Sprintf("n-event-%d", i)
+		batch.Events = append(batch.Events, investigations.AgentEventSelection{
+			Ref: eventRef, SourceCode: event.SourceCode, SourceEventId: event.SourceEventId,
+		})
+		batch.Nodes = append(batch.Nodes, investigations.AgentNode{Ref: nodeRef, EventRef: &eventRef})
+
+		matched := false
+		for _, mention := range event.Entities {
+			mentionValue := normalizeEntityValue(mention.Type, mention.Value)
+			isTarget := strings.EqualFold(mention.Type, entity.Type) &&
+				strings.EqualFold(mentionValue, entity.Value)
+			if isTarget {
+				matched = true
+				roles := mention.Roles
+				if len(roles) == 0 {
+					roles = []gatewaycontract.EntityMentionRoles{gatewaycontract.Mentions}
+				}
+				for _, role := range roles {
+					batch.Edges = append(batch.Edges, investigations.AgentEdge{
+						SourceRef: nodeRef, TargetRef: entityNodeRef, RelationCode: string(role),
+						Why: fmt.Sprintf("role %s of %s observed in %s event %s at %s",
+							role, entity.Value, event.SourceCode, event.SourceEventId, event.OccurredAt.UTC().Format(time.RFC3339)),
+						Confidence:        &confidence,
+						EvidenceEventRefs: []string{nodeRef},
+					})
+				}
+				continue
+			}
+			if !includeParticipants {
+				continue
+			}
+			partKey := strings.ToLower(mention.Type) + "\x00" + mentionValue
+			partRef, ok := participantRefs[partKey]
+			if !ok {
+				partRef = fmt.Sprintf("a%d", len(participantRefs)+1)
+				participantRefs[partKey] = partRef
+				sourceEntityID := mention.Type + ":" + mentionValue
+				batch.Entities = append(batch.Entities, investigations.AgentEntitySelection{
+					Ref: partRef, SourceCode: event.SourceCode, SourceEntityId: normalizeSourceEntityID(sourceEntityID),
+				})
+				partNode := "n-" + partRef
+				batch.Nodes = append(batch.Nodes, investigations.AgentNode{Ref: partNode, EntityRef: &partRef})
+				participantRefs[partKey+"\x00node"] = partNode
+			}
+			partNode := participantRefs[partKey+"\x00node"]
+			roles := mention.Roles
+			if len(roles) == 0 {
+				roles = []gatewaycontract.EntityMentionRoles{gatewaycontract.Mentions}
+			}
+			for _, role := range roles {
+				batch.Edges = append(batch.Edges, investigations.AgentEdge{
+					SourceRef: nodeRef, TargetRef: partNode, RelationCode: string(role),
+					Why: fmt.Sprintf("role %s of %s observed in %s event %s at %s",
+						role, mentionValue, event.SourceCode, event.SourceEventId, event.OccurredAt.UTC().Format(time.RFC3339)),
+					Confidence:        &confidence,
+					EvidenceEventRefs: []string{nodeRef},
+				})
+			}
+		}
+		if !matched {
+			// Still connect the target entity with a generic mentions edge so the
+			// search hit is not left as an isolated event node.
+			batch.Edges = append(batch.Edges, investigations.AgentEdge{
+				SourceRef: nodeRef, TargetRef: entityNodeRef, RelationCode: string(gatewaycontract.Mentions),
+				Why: fmt.Sprintf("entity %s matched search for event %s from %s at %s",
+					entity.Value, event.SourceEventId, event.SourceCode, event.OccurredAt.UTC().Format(time.RFC3339)),
+				Confidence:        &confidence,
+				EvidenceEventRefs: []string{nodeRef},
+			})
+		}
+	}
+	return batch, nil
+}
+
+func pickEntitySource(entity resolvedImportEntity, events []gatewaycontract.Event) (sourceCode, sourceEntityID string) {
+	for _, source := range entity.Sources {
+		if strings.TrimSpace(source.SourceCode) != "" && strings.TrimSpace(source.SourceEntityID) != "" {
+			return source.SourceCode, source.SourceEntityID
+		}
+	}
+	for _, event := range events {
+		for _, mention := range event.Entities {
+			if strings.EqualFold(mention.Type, entity.Type) &&
+				strings.EqualFold(normalizeEntityValue(mention.Type, mention.Value), entity.Value) {
+				return event.SourceCode, mention.Type + ":" + normalizeEntityValue(mention.Type, mention.Value)
+			}
+		}
+	}
+	if entity.Type != "" && entity.Value != "" && len(events) > 0 {
+		return events[0].SourceCode, entity.Type + ":" + entity.Value
+	}
+	return "", ""
 }
 
 func addGatewayTools(server *mcp.Server, s *Server) {
@@ -395,11 +839,20 @@ func addGatewayTools(server *mcp.Server, s *Server) {
 	mcp.AddTool(server, mcpTool[mcpSearchEventsArgs](
 		"gateway_search_events",
 		"Search normalized events across project-allowed sources. "+
-			"Filter identities with entities:[{type,value}] (e.g. account + dkrylova\\\\administrator) — never IR entity_id UUIDs. "+
+			"Filter identities with entities:[{type,value}] (e.g. account + dkrylova\\administrator) — never IR entity_id UUIDs. "+
 			"Pick sources by capability (accounts/process/auth → pt-maxpatrol-siem, not NAD). "+
-			"Empty page with truncated source_states is not proof of absence: follow next_cursor or narrow time_range/filters and retry.",
+			"Default limit is 20; attributes are omitted unless include_attributes=true. "+
+			"Empty page with truncated source_states is not proof of absence: follow next_cursor or narrow time_range/filters and retry. "+
+			"To verify one known source_event_id use gateway_resolve_context, not a search filter.",
 	), gatewayHandler(s, func(ctx context.Context, args mcpSearchEventsArgs, scope socctx.Scope, bearer string) (json.RawMessage, error) {
-		return s.gateway.SearchEvents(ctx, scope.ProjectID, bearer, args.toContract())
+		raw, err := s.gateway.SearchEvents(ctx, scope.ProjectID, bearer, args.toContract())
+		if err != nil {
+			return nil, err
+		}
+		if args.IncludeAttributes != nil && *args.IncludeAttributes {
+			return raw, nil
+		}
+		return slimSearchEventsResponse(raw)
 	}))
 	mcp.AddTool(server, mcpTool[gatewaycontract.AggregateEventsRequest](
 		"gateway_aggregate_events", "Group and count events using source-supported fields.",
@@ -409,14 +862,14 @@ func addGatewayTools(server *mcp.Server, s *Server) {
 	mcp.AddTool(server, mcpTool[mcpLookupEntityArgs](
 		"gateway_lookup_entity",
 		"Enrich one entity through project-allowed sources. "+
-			"Pass entity.type + entity.value from graph/timeline/Gateway results (e.g. type=account, value=dkrylova\\\\administrator). "+
+			"Pass entity.type + entity.value from graph/timeline/Gateway results (e.g. type=account, value=dkrylova\\administrator). "+
 			"Never pass an investigation entity_id UUID as value. Prefer SIEM sources for accounts; NAD is for network identities.",
 	), gatewayHandler(s, func(ctx context.Context, args mcpLookupEntityArgs, scope socctx.Scope, bearer string) (json.RawMessage, error) {
 		return s.gateway.LookupEntity(ctx, scope.ProjectID, bearer, args.toContract())
 	}))
 	mcp.AddTool(server, mcpTool[gatewaycontract.ResolveContextRequest](
 		"gateway_resolve_context",
-		"Resolve selected finding, session, event, or entity references into normalized context. Read-only: persist only explicitly selected events and entities through add_investigation_agent_results. Use source_code/source_*_id refs — not IR UUIDs.",
+		"Resolve selected finding, session, event, or entity references into normalized context. Read-only: persist only explicitly selected events and entities through add_investigation_agent_results or import_entity_events. Use source_code/source_*_id refs — not IR UUIDs. Prefer this to verify one known source_event_id.",
 	), gatewayHandler(s, func(ctx context.Context, args gatewaycontract.ResolveContextRequest, scope socctx.Scope, bearer string) (json.RawMessage, error) {
 		value, err := s.gateway.ResolveContext(ctx, scope.ProjectID, bearer, args)
 		if err != nil {
@@ -457,6 +910,17 @@ func addGatewayTools(server *mcp.Server, s *Server) {
 	), gatewayHandler(s, func(ctx context.Context, args gatewaycontract.SearchEndpointsRequest, scope socctx.Scope, bearer string) (json.RawMessage, error) {
 		return s.gateway.SearchEndpoints(ctx, scope.ProjectID, bearer, args)
 	}))
+}
+
+func slimSearchEventsResponse(raw json.RawMessage) (json.RawMessage, error) {
+	var page gatewaycontract.SearchEventsResponse
+	if err := json.Unmarshal(raw, &page); err != nil {
+		return nil, err
+	}
+	for i := range page.Events {
+		page.Events[i].Attributes = nil
+	}
+	return json.Marshal(page)
 }
 
 func gatewayHandler[T any](s *Server, call func(context.Context, T, socctx.Scope, string) (json.RawMessage, error)) func(context.Context, *mcp.CallToolRequest, T) (*mcp.CallToolResult, any, error) {
