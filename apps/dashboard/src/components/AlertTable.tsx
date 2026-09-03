@@ -416,6 +416,7 @@ export function AlertTable({ investigationId }: { investigationId?: string } = {
   const contextEvents = useAppStore((s) => s.contextEvents)
   const setContextQueue = useAppStore((s) => s.setContextQueue)
   const toggleAlertSelect = useAppStore((s) => s.toggleAlertSelect)
+  const queueTextFilter = useAppStore((s) => (investigationId ? '' : s.queueTextFilter))
 
   const alerts = queue?.alerts ?? globalAlerts
   const queueOrder = queue?.queueOrder ?? globalOrder
@@ -436,14 +437,27 @@ export function AlertTable({ investigationId }: { investigationId?: string } = {
   const inContextOf = (alert: AlertEvent) =>
     Boolean(investigationId && alertIsInContext(alert, findingKeys, eventKeys))
 
+  const textNeedle = queueTextFilter.trim().toLowerCase()
+  const matchesText = (haystack: string) =>
+    !textNeedle || haystack.toLowerCase().includes(textNeedle)
+
   const rows = queueOrder.filter((item) => {
     if (item.kind === 'correlation') {
       if (investigationId) return false
-      return Boolean(correlations[item.id])
+      const group = correlations[item.id]
+      if (!group) return false
+      return matchesText([group.title, group.reason].filter(Boolean).join(' '))
     }
     const alert = alerts[item.id]
     if (!alert) return false
     if (investigationId && queue?.hideAdded && inContextOf(alert)) return false
+    if (
+      !matchesText(
+        [alert.title, alert.rule, alert.description].filter(Boolean).join(' '),
+      )
+    ) {
+      return false
+    }
     return true
   })
 

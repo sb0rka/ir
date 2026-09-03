@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { LogOut, Settings2 } from 'lucide-react'
 import { TabBar } from './components/TabBar'
+import { PrimaryNav } from './components/PrimaryNav'
 import { QueuePage } from './pages/QueuePage'
 import { InvestigationsPage } from './pages/InvestigationsPage'
 import { InvestigationPage } from './pages/InvestigationPage'
@@ -20,6 +21,7 @@ import { listProjects, type Project } from './api/platform'
 import { LoginPage } from './components/LoginPage'
 import { ConfigurationModal } from './components/ConfigurationModal'
 import { InvestigationHeader } from './components/InvestigationHeader'
+import { HeaderSearch } from './components/HeaderSearch'
 
 type SessionPhase = 'loading' | 'ready' | 'signed-out' | 'error'
 
@@ -153,10 +155,26 @@ function Dashboard({
   const somHint = useAppStore((state) => state.somHint)
   const clearError = useAppStore((state) => state.clearError)
   const bootstrap = useAppStore((state) => state.bootstrap)
+  const investigationFilters = useAppStore((state) => state.investigationFilters)
+  const setInvestigationFilter = useAppStore((state) => state.setInvestigationFilter)
+  const queueTextFilter = useAppStore((state) => state.queueTextFilter)
+  const setQueueTextFilter = useAppStore((state) => state.setQueueTextFilter)
   const bootstrapped = useRef(false)
   const [configurationOpen, setConfigurationOpen] = useState(false)
   const investigationOpen =
     activeTab !== 'queue' && activeTab !== 'investigations'
+  const listSearchOpen = activeTab === 'queue' || activeTab === 'investigations'
+
+  const onListSearchChange = useCallback(
+    (next: string) => {
+      if (activeTab === 'investigations') {
+        void setInvestigationFilter({ q: next })
+        return
+      }
+      setQueueTextFilter(next)
+    },
+    [activeTab, setInvestigationFilter, setQueueTextFilter],
+  )
 
   useEffect(() => {
     if (bootstrapped.current) return
@@ -167,8 +185,8 @@ function Dashboard({
   return (
     <div className="flex h-full flex-col bg-surface-0 text-fg">
       <header className="flex items-center gap-4 border-b border-border px-4 py-2">
-        <div className="flex min-w-0 flex-1 items-baseline gap-4">
-          <div className="ml-1.5 shrink-0 translate-y-px leading-none">
+        <div className="flex min-w-0 flex-1 items-center gap-3">
+          <div className="ml-1.5 mr-6 shrink-0 translate-y-px leading-none">
             <img
               src="https://static.sb0rka.ru/logo-light.png"
               alt="Sb0rka Incident Response"
@@ -180,8 +198,21 @@ function Dashboard({
               className="hidden h-3.5 w-auto dark:block"
             />
           </div>
+          <PrimaryNav />
           {investigationOpen ? (
             <InvestigationHeader investigationId={activeTab} />
+          ) : null}
+          {listSearchOpen ? (
+            <HeaderSearch
+              key={activeTab}
+              value={
+                activeTab === 'investigations' ? investigationFilters.q : queueTextFilter
+              }
+              onChange={onListSearchChange}
+              placeholder={
+                activeTab === 'investigations' ? 'Поиск по названию' : 'Поиск в очереди'
+              }
+            />
           ) : null}
         </div>
         <div className="flex shrink-0 items-center gap-1">

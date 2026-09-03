@@ -179,6 +179,8 @@ interface AppState {
   alerts: Record<string, AlertEvent>
   correlations: Record<string, CorrelationGroup>
   queueOrder: QueueItem[]
+  /** Client-side text filter for the global queue list (header search). */
+  queueTextFilter: string
   entities: Record<string, Entity>
   contextEvents: Record<string, ContextEvent>
   graphNodes: Record<string, GraphNode>
@@ -196,6 +198,7 @@ interface AppState {
 
   addChip: (field: FilterField, value: string) => void
   setQueuePdql: (pdql: string) => void
+  setQueueTextFilter: (q: string) => void
   setTimeInterval: (interval: TimeInterval) => void
   setQueueSource: (source: QueueSource) => void
   applyQueueHistory: (entry: QueryHistoryEntry) => void
@@ -512,6 +515,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   alerts: {},
   correlations: {},
   queueOrder: [],
+  queueTextFilter: '',
   entities: {},
   contextEvents: {},
   graphNodes: {},
@@ -544,6 +548,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       groupValues: parsed.ok ? alignGroupValues(parsed.ast, get().groupValues) : get().groupValues,
     })
   },
+  setQueueTextFilter: (queueTextFilter) => set({ queueTextFilter }),
   setTimeInterval: (timeInterval) => set({ timeInterval }),
   setQueueSource: (queueSource) => set({ queueSource }),
   applyQueueHistory: (entry) =>

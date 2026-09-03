@@ -30,7 +30,7 @@ export function InvestigationHeader({ investigationId }: { investigationId: stri
           {verdictLabel[inv.verdict] ?? inv.verdict}
         </span>
       ) : null}
-      <h1 className="min-w-0 truncate text-sm font-semibold">{inv.title}</h1>
+      <h1 className="min-w-0 truncate text-xs font-medium">{inv.title}</h1>
       {running && (
         <span className="inline-flex shrink-0 items-center gap-1.5 text-xs text-proposed">
           <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-proposed" />
