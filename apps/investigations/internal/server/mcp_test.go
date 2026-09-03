@@ -59,6 +59,16 @@ func TestMCPInitializeAndListTools(t *testing.T) {
 			t.Fatalf("tools/list schema missing %s: %s", field, listed.Body.String())
 		}
 	}
+	for _, hint := range []string{
+		"Batch-local events[].ref",
+		"Batch-local entities[].ref",
+		"not a URN",
+		"exactly one locator",
+	} {
+		if !strings.Contains(listed.Body.String(), hint) {
+			t.Fatalf("tools/list must describe agent result locators (%q): %s", hint, listed.Body.String())
+		}
+	}
 	if count := strings.Count(listed.Body.String(), `"hypothesis_id"`); count != 2 {
 		t.Fatalf("tools/list must expose optional hypothesis scope only for graph and agent results: count=%d body=%s", count, listed.Body.String())
 	}

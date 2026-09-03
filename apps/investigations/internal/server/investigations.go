@@ -220,38 +220,11 @@ func (s *Server) AddAgentResults(ctx context.Context, request investigations.Add
 	for _, id := range request.Body.SomIssueIds {
 		input.SomIssueIDs = append(input.SomIssueIDs, id.String())
 	}
-	for _, node := range request.Body.Nodes {
-		converted := model.AgentNode{Ref: strings.TrimSpace(node.Ref)}
-		if node.EventRef != nil {
-			sourceKey, ok := eventRefs[strings.TrimSpace(*node.EventRef)]
-			if !ok {
-				return nil, validationError("node event_ref is not present in events")
-			}
-			v := resolved.EventsBySource[sourceKey]
-			converted.SnapshotEventID = &v
-		}
-		if node.EntityRef != nil {
-			sourceKey, ok := entityRefs[strings.TrimSpace(*node.EntityRef)]
-			if !ok {
-				return nil, validationError("node entity_ref is not present in entities")
-			}
-			v := resolved.EntitiesBySource[sourceKey]
-			converted.SnapshotEntityID = &v
-		}
-		if node.EventId != nil {
-			v := node.EventId.String()
-			converted.EventID = &v
-		}
-		if node.EntityId != nil {
-			v := node.EntityId.String()
-			converted.EntityID = &v
-		}
-		if node.NodeId != nil {
-			v := node.NodeId.String()
-			converted.NodeID = &v
-		}
-		input.Nodes = append(input.Nodes, converted)
+	nodes, err := agentNodesFromBatch(request.Body.Nodes, eventRefs, entityRefs, resolved)
+	if err != nil {
+		return nil, err
 	}
+	input.Nodes = nodes
 	for _, edge := range request.Body.Edges {
 		input.Edges = append(input.Edges, model.AgentEdge{SourceRef: edge.SourceRef, TargetRef: edge.TargetRef, RelationCode: edge.RelationCode, Why: edge.Why, Confidence: edge.Confidence, EvidenceEventRefs: edge.EvidenceEventRefs})
 	}
@@ -260,6 +233,53 @@ func (s *Server) AddAgentResults(ctx context.Context, request investigations.Add
 		return nil, storeError(err)
 	}
 	return investigations.AddAgentResults201JSONResponse(importResult(stats)), nil
+}
+
+func agentNodesFromBatch(
+	nodes []investigations.AgentNode,
+	eventRefs, entityRefs map[string]string,
+	resolved resolvedGatewayContext,
+) ([]model.AgentNode, error) {
+	out := make([]model.AgentNode, 0, len(nodes))
+	for _, node := range nodes {
+		converted := model.AgentNode{Ref: strings.TrimSpace(node.Ref)}
+		if node.EventRef != nil {
+			sourceKey, ok := eventRefs[strings.TrimSpace(*node.EventRef)]
+			if !ok {
+				return nil, validationError("node event_ref is not present in events")
+			}
+			value, ok := resolved.EventsBySource[sourceKey]
+			if !ok || value == "" {
+				return nil, validationError("Gateway did not return selected event for node event_ref")
+			}
+			converted.SnapshotEventID = &value
+		}
+		if node.EntityRef != nil {
+			sourceKey, ok := entityRefs[strings.TrimSpace(*node.EntityRef)]
+			if !ok {
+				return nil, validationError("node entity_ref is not present in entities")
+			}
+			value, ok := resolved.EntitiesBySource[sourceKey]
+			if !ok || value == "" {
+				return nil, validationError("Gateway did not return selected entity for node entity_ref")
+			}
+			converted.SnapshotEntityID = &value
+		}
+		if node.EventId != nil {
+			value := node.EventId.String()
+			converted.EventID = &value
+		}
+		if node.EntityId != nil {
+			value := node.EntityId.String()
+			converted.EntityID = &value
+		}
+		if node.NodeId != nil {
+			value := node.NodeId.String()
+			converted.NodeID = &value
+		}
+		out = append(out, converted)
+	}
+	return out, nil
 }
 
 type resolvedGatewayContext struct {
@@ -800,38 +820,11 @@ func (s *Server) AddHypothesisAgentResults(ctx context.Context, request investig
 	for _, id := range request.Body.SomIssueIds {
 		input.SomIssueIDs = append(input.SomIssueIDs, id.String())
 	}
-	for _, node := range request.Body.Nodes {
-		converted := model.AgentNode{Ref: strings.TrimSpace(node.Ref)}
-		if node.EventRef != nil {
-			sourceKey, ok := eventRefs[strings.TrimSpace(*node.EventRef)]
-			if !ok {
-				return nil, validationError("node event_ref is not present in events")
-			}
-			value := resolved.EventsBySource[sourceKey]
-			converted.SnapshotEventID = &value
-		}
-		if node.EntityRef != nil {
-			sourceKey, ok := entityRefs[strings.TrimSpace(*node.EntityRef)]
-			if !ok {
-				return nil, validationError("node entity_ref is not present in entities")
-			}
-			value := resolved.EntitiesBySource[sourceKey]
-			converted.SnapshotEntityID = &value
-		}
-		if node.EventId != nil {
-			value := node.EventId.String()
-			converted.EventID = &value
-		}
-		if node.EntityId != nil {
-			value := node.EntityId.String()
-			converted.EntityID = &value
-		}
-		if node.NodeId != nil {
-			value := node.NodeId.String()
-			converted.NodeID = &value
-		}
-		input.Nodes = append(input.Nodes, converted)
+	nodes, err := agentNodesFromBatch(request.Body.Nodes, eventRefs, entityRefs, resolved)
+	if err != nil {
+		return nil, err
 	}
+	input.Nodes = nodes
 	for _, edge := range request.Body.Edges {
 		input.Edges = append(input.Edges, model.AgentEdge{
 			SourceRef: edge.SourceRef, TargetRef: edge.TargetRef, RelationCode: edge.RelationCode,

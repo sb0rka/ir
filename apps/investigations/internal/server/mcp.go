@@ -35,10 +35,80 @@ type listEventsArgs struct {
 	Cursor          *events.Cursor     `json:"cursor,omitempty" jsonschema:"Cursor returned by the previous page"`
 }
 
+// MCP-facing AgentResultBatch fields carry descriptions that generated OpenAPI
+// structs omit — without them agents confuse event_ref/entity_ref with URNs or
+// source objects.
+type mcpAgentEventSelection struct {
+	Ref           string `json:"ref" jsonschema:"Batch-local id referenced by nodes[].event_ref"`
+	SourceCode    string `json:"source_code" jsonschema:"Gateway source_code copied from MCP results"`
+	SourceEventId string `json:"source_event_id" jsonschema:"Gateway source_event_id copied from MCP results"`
+}
+
+type mcpAgentEntitySelection struct {
+	Ref            string `json:"ref" jsonschema:"Batch-local id referenced by nodes[].entity_ref"`
+	SourceCode     string `json:"source_code" jsonschema:"Gateway source_code copied from MCP results"`
+	SourceEntityId string `json:"source_entity_id" jsonschema:"Gateway source_entity_id copied from MCP results. JSON-escape backslashes (Windows accounts need \\\\)"`
+}
+
+type mcpAgentNode struct {
+	Ref       string              `json:"ref" jsonschema:"Batch-local node id used by edges source_ref/target_ref and evidence_event_refs"`
+	EventRef  *string             `json:"event_ref,omitempty" jsonschema:"Batch-local events[].ref from this same request — not a URN and not a source object"`
+	EntityRef *string             `json:"entity_ref,omitempty" jsonschema:"Batch-local entities[].ref from this same request — not a URN and not a source object"`
+	EventId   *openapi_types.UUID `json:"event_id,omitempty" jsonschema:"UUID of an event already attached to this investigation"`
+	EntityId  *openapi_types.UUID `json:"entity_id,omitempty" jsonschema:"UUID of an entity already attached to this investigation"`
+	NodeId    *openapi_types.UUID `json:"node_id,omitempty" jsonschema:"UUID of an existing graph node"`
+}
+
+type mcpAgentEdge struct {
+	SourceRef         string   `json:"source_ref" jsonschema:"Batch-local nodes[].ref of the edge source"`
+	TargetRef         string   `json:"target_ref" jsonschema:"Batch-local nodes[].ref of the edge target"`
+	RelationCode      string   `json:"relation_code" jsonschema:"Relation code from get_investigation_reference matching source/target kinds"`
+	Why               string   `json:"why" jsonschema:"Concise evidence-based rationale; stored as proposed for analyst review"`
+	Confidence        *float32 `json:"confidence,omitempty" jsonschema:"Optional confidence from 0 to 1"`
+	EvidenceEventRefs []string `json:"evidence_event_refs" jsonschema:"Batch-local nodes[].ref values of event nodes from this same batch"`
+}
+
 type addAgentResultsArgs struct {
-	InvestigationID openapi_types.UUID  `json:"investigation_id" jsonschema:"Investigation UUID"`
-	HypothesisID    *openapi_types.UUID `json:"hypothesis_id,omitempty" jsonschema:"Optional active hypothesis UUID; when set, add explicit results to its graph projection"`
-	investigations.AgentResultBatch
+	InvestigationID openapi_types.UUID        `json:"investigation_id" jsonschema:"Investigation UUID"`
+	HypothesisID    *openapi_types.UUID       `json:"hypothesis_id,omitempty" jsonschema:"Optional active hypothesis UUID; when set, add explicit results to its graph projection"`
+	SomIssueIds     []openapi_types.UUID      `json:"som_issue_ids" jsonschema:"SOM issue UUIDs that produced these results"`
+	Events          []mcpAgentEventSelection  `json:"events" jsonschema:"Gateway events to import; empty when nodes use event_id or node_id only"`
+	Entities        []mcpAgentEntitySelection `json:"entities" jsonschema:"Gateway entities to import; empty when nodes use entity_id or node_id only"`
+	Nodes           []mcpAgentNode            `json:"nodes" jsonschema:"Each node needs ref plus exactly one locator: event_ref, entity_ref, event_id, entity_id, or node_id"`
+	Edges           []mcpAgentEdge            `json:"edges" jsonschema:"Proposed evidence-backed edges between nodes in this batch"`
+}
+
+func (args addAgentResultsArgs) toBatch() investigations.AgentResultBatch {
+	batch := investigations.AgentResultBatch{
+		SomIssueIds: args.SomIssueIds,
+		Events:      make([]investigations.AgentEventSelection, len(args.Events)),
+		Entities:    make([]investigations.AgentEntitySelection, len(args.Entities)),
+		Nodes:       make([]investigations.AgentNode, len(args.Nodes)),
+		Edges:       make([]investigations.AgentEdge, len(args.Edges)),
+	}
+	for i, event := range args.Events {
+		batch.Events[i] = investigations.AgentEventSelection{
+			Ref: event.Ref, SourceCode: event.SourceCode, SourceEventId: event.SourceEventId,
+		}
+	}
+	for i, entity := range args.Entities {
+		batch.Entities[i] = investigations.AgentEntitySelection{
+			Ref: entity.Ref, SourceCode: entity.SourceCode, SourceEntityId: entity.SourceEntityId,
+		}
+	}
+	for i, node := range args.Nodes {
+		batch.Nodes[i] = investigations.AgentNode{
+			Ref: node.Ref, EventRef: node.EventRef, EntityRef: node.EntityRef,
+			EventId: node.EventId, EntityId: node.EntityId, NodeId: node.NodeId,
+		}
+	}
+	for i, edge := range args.Edges {
+		batch.Edges[i] = investigations.AgentEdge{
+			SourceRef: edge.SourceRef, TargetRef: edge.TargetRef, RelationCode: edge.RelationCode,
+			Why: edge.Why, Confidence: edge.Confidence, EvidenceEventRefs: edge.EvidenceEventRefs,
+		}
+	}
+	return batch
 }
 
 func (s *Server) MCPHandler() http.Handler {
@@ -56,7 +126,14 @@ func (s *Server) MCPHandler() http.Handler {
 	), s.listInvestigationEventsTool)
 	mcp.AddTool[addAgentResultsArgs, any](server, mcpTool[addAgentResultsArgs](
 		"add_investigation_agent_results",
-		"Atomically add graph nodes and proposed evidence-backed edges, optionally scoped to an active hypothesis.",
+		"Atomically add graph nodes and proposed evidence-backed edges, optionally scoped to an active hypothesis. "+
+			"To import Gateway evidence: put events[{ref,source_code,source_event_id}] and entities[{ref,source_code,source_entity_id}], "+
+			"then nodes use event_ref/entity_ref equal to those batch-local refs (never URNs or {source_code,...} objects). "+
+			"Already-attached evidence uses event_id/entity_id/node_id instead. "+
+			"Example: events:[{ref:\"e0\",source_code:\"mock\",source_event_id:\"evt-1\"}], "+
+			"entities:[{ref:\"a0\",source_code:\"mock\",source_entity_id:\"ent-1\"}], "+
+			"nodes:[{ref:\"n-event\",event_ref:\"e0\"},{ref:\"n-entity\",entity_ref:\"a0\"}], "+
+			"edges:[{source_ref:\"n-event\",target_ref:\"n-entity\",relation_code:\"actor\",why:\"…\",evidence_event_refs:[\"n-event\"]}].",
 	), s.addInvestigationAgentResultsTool)
 	mcp.AddTool[struct{}, any](server, mcpTool[struct{}](
 		"get_investigation_reference",
@@ -178,7 +255,7 @@ func (s *Server) addInvestigationAgentResultsTool(
 		}
 	}
 
-	body := investigations.AddAgentResultsJSONRequestBody(args.AgentResultBatch)
+	body := investigations.AddAgentResultsJSONRequestBody(args.toBatch())
 	for _, edge := range args.Edges {
 		if edge.Confidence != nil && (*edge.Confidence < 0 || *edge.Confidence > 1) {
 			return mcpFailure(errors.New("invalid arguments: edge confidence must be between 0 and 1"))
