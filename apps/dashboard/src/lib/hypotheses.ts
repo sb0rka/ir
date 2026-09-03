@@ -112,8 +112,18 @@ export function mergeVisibleLayerIds(
   return next
 }
 
-export function toggleLayerId(current: readonly string[], id: string, solo: boolean): string[] {
-  if (solo) return [id]
+export function toggleLayerId(
+  current: readonly string[],
+  id: string,
+  solo: boolean,
+  fallbackIds?: readonly string[],
+): string[] {
+  if (solo) {
+    if (fallbackIds && current.length === 1 && current[0] === id) {
+      return [...fallbackIds]
+    }
+    return [id]
+  }
   return current.includes(id) ? current.filter((item) => item !== id) : [...current, id]
 }
 

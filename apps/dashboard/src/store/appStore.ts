@@ -1540,12 +1540,12 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   toggleHypothesisVisible: (investigationId, itemId, solo = false) => {
     const inv = get().investigations[investigationId]
-    const current =
-      get().visibleHypothesisIds[investigationId] ?? layerItemIds(inv?.hypothesisIds ?? [])
+    const allIds = layerItemIds(inv?.hypothesisIds ?? [])
+    const current = get().visibleHypothesisIds[investigationId] ?? allIds
     set({
       visibleHypothesisIds: {
         ...get().visibleHypothesisIds,
-        [investigationId]: toggleLayerId(current, itemId, solo),
+        [investigationId]: toggleLayerId(current, itemId, solo, allIds),
       },
     })
   },

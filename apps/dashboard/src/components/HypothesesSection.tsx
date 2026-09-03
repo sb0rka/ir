@@ -11,7 +11,7 @@ import {
 import { useAppStore } from '../store/appStore'
 import { Button, Chip } from './ui'
 import { clsx } from '../lib/utils'
-import { ChevronDown, ChevronRight, Eye, EyeOff, Highlighter, Plus } from 'lucide-react'
+import { ChevronDown, ChevronRight, Eye, EyeOff, Focus, Highlighter, Plus } from 'lucide-react'
 
 type StatusFilter = 'all' | 'open' | 'resolved'
 
@@ -154,6 +154,7 @@ export function HypothesesSection({ investigationId }: { investigationId: string
         selected={investigationSelected}
         visible={visibleIds.includes(INVESTIGATION_LAYER_ID)}
         highlighted={highlightedIds.includes(INVESTIGATION_LAYER_ID)}
+        isSolo={visibleIds.length === 1 && visibleIds[0] === INVESTIGATION_LAYER_ID}
         onSelect={() => void setActive(investigationId, null)}
         onToggleVisible={(solo) =>
           toggleVisible(investigationId, INVESTIGATION_LAYER_ID, solo)
@@ -161,6 +162,7 @@ export function HypothesesSection({ investigationId }: { investigationId: string
         onToggleHighlight={(solo) =>
           toggleHighlight(investigationId, INVESTIGATION_LAYER_ID, solo)
         }
+        onToggleSolo={() => toggleVisible(investigationId, INVESTIGATION_LAYER_ID, true)}
         title={inv.title}
         meta={
           <>
@@ -179,6 +181,7 @@ export function HypothesesSection({ investigationId }: { investigationId: string
           nodeCount={membership[item.id]?.nodeIds.length}
           visible={visibleIds.includes(item.id)}
           highlighted={highlightedIds.includes(item.id)}
+          isSolo={visibleIds.length === 1 && visibleIds[0] === item.id}
           resolving={resolveId === item.id}
           deleting={deleteId === item.id}
           reason={reason}
@@ -187,6 +190,7 @@ export function HypothesesSection({ investigationId }: { investigationId: string
           onToggleExpand={() => setExpandedId((id) => (id === item.id ? null : item.id))}
           onToggleVisible={(solo) => toggleVisible(investigationId, item.id, solo)}
           onToggleHighlight={(solo) => toggleHighlight(investigationId, item.id, solo)}
+          onToggleSolo={() => toggleVisible(investigationId, item.id, true)}
           onActivate={() => void patchHypothesis(investigationId, item.id, { status: 'active' })}
           onReopen={() => void patchHypothesis(investigationId, item.id, { status: 'active' })}
           onAskResolve={() => {
@@ -239,18 +243,22 @@ function LayerCard({
   selected,
   visible,
   highlighted,
+  isSolo,
   onSelect,
   onToggleVisible,
   onToggleHighlight,
+  onToggleSolo,
   title,
   meta,
 }: {
   selected: boolean
   visible: boolean
   highlighted: boolean
+  isSolo: boolean
   onSelect: () => void
   onToggleVisible: (solo: boolean) => void
   onToggleHighlight: (solo: boolean) => void
+  onToggleSolo: () => void
   title: string
   meta: ReactNode
 }) {
@@ -276,8 +284,10 @@ function LayerCard({
         <LayerToggles
           visible={visible}
           highlighted={highlighted}
+          isSolo={isSolo}
           onToggleVisible={onToggleVisible}
           onToggleHighlight={onToggleHighlight}
+          onToggleSolo={onToggleSolo}
         />
       </div>
     </div>
@@ -287,13 +297,17 @@ function LayerCard({
 function LayerToggles({
   visible,
   highlighted,
+  isSolo,
   onToggleVisible,
   onToggleHighlight,
+  onToggleSolo,
 }: {
   visible: boolean
   highlighted: boolean
+  isSolo?: boolean
   onToggleVisible: (solo: boolean) => void
   onToggleHighlight: (solo: boolean) => void
+  onToggleSolo?: () => void
 }) {
   return (
     <div className="mt-0.5 flex shrink-0 items-center gap-0.5">
@@ -315,6 +329,22 @@ function LayerToggles({
       >
         {visible ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
       </button>
+      {onToggleSolo && (
+        <button
+          type="button"
+          className={clsx(
+            'rounded p-0.5',
+            isSolo ? 'bg-accent/20 text-accent ring-1 ring-accent/40' : 'text-fg-dim hover:text-fg',
+          )}
+          title={isSolo ? 'Отключить соло (показать все слои)' : 'Показать только этот слой (соло)'}
+          onClick={(e) => {
+            e.stopPropagation()
+            onToggleSolo()
+          }}
+        >
+          <Focus className="h-3.5 w-3.5" />
+        </button>
+      )}
       <button
         type="button"
         className={clsx(
@@ -344,6 +374,7 @@ function HypothesisCard({
   nodeCount,
   visible,
   highlighted,
+  isSolo,
   resolving,
   deleting,
   reason,
@@ -352,6 +383,7 @@ function HypothesisCard({
   onToggleExpand,
   onToggleVisible,
   onToggleHighlight,
+  onToggleSolo,
   onActivate,
   onReopen,
   onAskResolve,
@@ -367,6 +399,7 @@ function HypothesisCard({
   nodeCount?: number
   visible: boolean
   highlighted: boolean
+  isSolo: boolean
   resolving: boolean
   deleting: boolean
   reason: string
@@ -375,6 +408,7 @@ function HypothesisCard({
   onToggleExpand: () => void
   onToggleVisible: (solo: boolean) => void
   onToggleHighlight: (solo: boolean) => void
+  onToggleSolo: () => void
   onActivate: () => void
   onReopen: () => void
   onAskResolve: () => void
@@ -422,8 +456,10 @@ function HypothesisCard({
         <LayerToggles
           visible={visible}
           highlighted={highlighted}
+          isSolo={isSolo}
           onToggleVisible={onToggleVisible}
           onToggleHighlight={onToggleHighlight}
+          onToggleSolo={onToggleSolo}
         />
       </div>
 

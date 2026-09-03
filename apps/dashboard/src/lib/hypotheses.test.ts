@@ -151,5 +151,7 @@ describe('layer id lists', () => {
     expect(toggleLayerId(['a', 'b'], 'a', false)).toEqual(['b'])
     expect(toggleLayerId(['a'], 'b', false)).toEqual(['a', 'b'])
     expect(toggleLayerId(['a', 'b'], 'b', true)).toEqual(['b'])
+    expect(toggleLayerId(['b'], 'b', true, ['a', 'b'])).toEqual(['a', 'b'])
+    expect(toggleLayerId(['b'], 'b', true)).toEqual(['b'])
   })
 })

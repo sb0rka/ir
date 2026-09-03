@@ -380,6 +380,16 @@ describe('hypothesis store', () => {
     expect(useAppStore.getState().activeHypothesisId['inv-1']).toBeUndefined()
   })
 
+  it('exits solo visibility back to all layers', () => {
+    useAppStore.setState({
+      investigations: { 'inv-1': investigation({ hypothesisIds: ['h1'] }) },
+    })
+    useAppStore.getState().toggleHypothesisVisible('inv-1', 'h1', true)
+    expect(useAppStore.getState().visibleHypothesisIds['inv-1']).toEqual(['h1'])
+    useAppStore.getState().toggleHypothesisVisible('inv-1', 'h1', true)
+    expect(useAppStore.getState().visibleHypothesisIds['inv-1']).toEqual(['__investigation__', 'h1'])
+  })
+
   it('keeps the selected hypothesis when setActiveHypothesis is called with the same id', async () => {
     getHypothesisGraph.mockResolvedValue({
       hypothesis_id: 'h1',
