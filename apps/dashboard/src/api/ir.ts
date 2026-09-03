@@ -78,6 +78,15 @@ export interface InvestigationListPage {
   nextCursor: string | null
 }
 
+export async function getInvestigation(investigationId: string): Promise<Investigation> {
+  const inv = await throwIfError(
+    await irClient.GET('/investigations/{investigation_id}', {
+      params: { ...projectParams(), path: { investigation_id: investigationId } },
+    }),
+  )
+  return mapIrInvestigation(inv)
+}
+
 export async function listInvestigations(
   query: ListInvestigationsQuery = {},
 ): Promise<InvestigationListPage> {
@@ -144,13 +153,18 @@ export async function resolveSomCatalog(): Promise<SomCatalog> {
   return { workspaceId: workspace.id, boardId: board.id, issues: listed.issues }
 }
 
-export async function resolveWorkspaceId(): Promise<string> {
-  try {
-    const catalog = await resolveSomCatalog()
-    return catalog.workspaceId
-  } catch {
-    return FALLBACK_WORKSPACE
+/** Workspace for create without calling SOM — catalog loads only when the agent panel opens. */
+export function resolveWorkspaceId(): string {
+  const projectId = getProjectId()
+  if (!projectId) return FALLBACK_WORKSPACE
+  const workspace = getSomSelectors(projectId).workspace
+  if (
+    workspace &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(workspace)
+  ) {
+    return workspace
   }
+  return FALLBACK_WORKSPACE
 }
 
 export async function createInvestigation(input: {
@@ -160,7 +174,7 @@ export async function createInvestigation(input: {
   parentId?: string
   workspaceId?: string
 }): Promise<Investigation> {
-  const workspaceId = input.workspaceId ?? (await resolveWorkspaceId())
+  const workspaceId = input.workspaceId ?? resolveWorkspaceId()
   const created = await throwIfError(
     await irClient.POST('/investigations', {
       params: { ...projectParams() },

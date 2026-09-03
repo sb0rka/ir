@@ -24,7 +24,7 @@ import {
 import { uid } from '../lib/utils'
 import { defaultFilterValueOptions, issueTemplates } from '../lib/catalog'
 import { parseGatewayEventId, saveLayout } from '../api/adapters'
-import { errorMessage, isConflict, isNotImplemented, isUnauthorized } from '../api/error'
+import { errorMessage, isApiError, isConflict, isNotImplemented, isUnauthorized } from '../api/error'
 import {
   analyzeArtifact,
   lookupEntity,
@@ -35,12 +35,14 @@ import { pdqlFieldForFilterField } from '../lib/filters'
 import { filterFingerprint } from '../lib/queryFingerprint'
 import { demoDayInterval, type TimeInterval } from '../components/time-interval'
 import { resolveInvestigationTableSearchColumn } from '../components/investigationTableColumns'
+import { readWorkspaceTabs, writeWorkspaceTabs } from '../api/workspace-tabs'
 import {
   addContext,
   countProposedAgentEdges,
   createEntity,
   createInvestigation,
   getEntityCard,
+  getInvestigation,
   getSomEnvironment,
   listInvestigations,
   loadInvestigationBundle,
@@ -459,6 +461,45 @@ function prependId(ids: string[], id: string): string[] {
   return [id, ...ids.filter((item) => item !== id)]
 }
 
+function isMissingInvestigation(err: unknown): boolean {
+  return isApiError(err) && (err.code === 'not_found' || err.status === 404)
+}
+
+async function restoreWorkspaceTabs(
+  get: () => AppState,
+  set: (partial: Partial<AppState>) => void,
+): Promise<void> {
+  const saved = readWorkspaceTabs()
+  if (!saved) return
+
+  const openIds = [...new Set(saved.openIds.filter((id) => !isPinnedTab(id)))]
+  const missing = openIds.filter((id) => !get().investigations[id])
+  const fetched: Investigation[] = []
+  const gone = new Set<string>()
+
+  await Promise.all(
+    missing.map(async (id) => {
+      try {
+        fetched.push(await getInvestigation(id))
+      } catch (err) {
+        if (isMissingInvestigation(err)) gone.add(id)
+      }
+    }),
+  )
+
+  const kept = openIds.filter((id) => !gone.has(id))
+  const tabs: TabId[] = [...PINNED_TABS, ...kept]
+  const activeTab = tabs.includes(saved.activeTab)
+    ? saved.activeTab
+    : (kept[kept.length - 1] ?? 'investigations')
+
+  set({
+    investigations: mergeListed(get().investigations, fetched),
+    tabs,
+    activeTab,
+  })
+}
+
 function collectSubtreeIds(
   rootId: string,
   investigations: Record<string, Investigation>,
@@ -698,6 +739,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   bootstrap: async () => {
     await get().loadInvestigationList(true)
+    await restoreWorkspaceTabs(get, set)
     await get().loadQueue()
   },
 
@@ -947,7 +989,6 @@ export const useAppStore = create<AppState>((set, get) => ({
           },
         },
       })
-      void get().loadSomCatalog()
       return created.id
     } catch (err) {
       set({ investigationLoading: false, lastError: errorMessage(err) })
@@ -2025,6 +2066,11 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 }))
+
+useAppStore.subscribe((state, prev) => {
+  if (state.tabs === prev.tabs && state.activeTab === prev.activeTab) return
+  writeWorkspaceTabs(state.tabs, state.activeTab)
+})
 
 export { savedViews, issueTemplates, filterFieldLabels } from '../lib/catalog'
 

@@ -89,7 +89,16 @@ export function QueueDetailPanel({
     <>
     <ResizablePanelFrame storageKey="ir.detailPanel.width" defaultWidth={512} side="right">
     <Panel
-      title={alert ? 'Событие' : group ? 'Корреляция' : 'Сущность'}
+      title={
+        <span className="inline-flex items-center gap-2">
+          {alert ? 'Событие' : group ? 'Корреляция' : 'Сущность'}
+          {alert && inContext ? (
+            <span className="normal-case tracking-normal">
+              <Chip tone="confirmed">в контексте</Chip>
+            </span>
+          ) : null}
+        </span>
+      }
       className="w-full min-w-0 flex-1"
       actions={
         <button type="button" onClick={() => inspect(null)} title="Закрыть">
@@ -108,7 +117,6 @@ export function QueueDetailPanel({
               ) : null}
             </div>
           )}
-          {alert && inContext && <Chip tone="confirmed">в контексте</Chip>}
           {alert && (
             <AlertDetails
               alert={alert}

@@ -6,6 +6,7 @@ import {
 } from './appStore'
 import * as irApi from '../api/ir'
 import * as searchApi from '../api/search'
+import * as workspaceTabs from '../api/workspace-tabs'
 
 function investigation(overrides: Partial<Investigation> = {}): Investigation {
   return {
@@ -62,6 +63,36 @@ afterEach(() => {
 describe('investigation catalog', () => {
   beforeEach(() => {
     useAppStore.setState({ ...snapshot, investigations: {}, investigationChildren: {} })
+  })
+
+  it('bootstrap restores open workspace tabs from localStorage', async () => {
+    const root = investigation({ id: 'inv-1', title: 'Persisted' })
+    vi.spyOn(irApi, 'listInvestigations').mockResolvedValue({
+      items: [root],
+      nextCursor: null,
+    })
+    vi.spyOn(searchApi, 'searchQueue').mockResolvedValue({
+      alerts: {},
+      correlations: {},
+      queueOrder: [],
+      entities: {},
+      contextEvents: {},
+      eventGroups: [],
+      sourceErrors: [],
+      availableSources: [],
+      mockSources: [],
+    })
+    vi.spyOn(workspaceTabs, 'readWorkspaceTabs').mockReturnValue({
+      openIds: ['inv-1'],
+      activeTab: 'inv-1',
+    })
+
+    await useAppStore.getState().bootstrap()
+
+    const state = useAppStore.getState()
+    expect(state.tabs).toEqual(['queue', 'investigations', 'inv-1'])
+    expect(state.activeTab).toBe('inv-1')
+    expect(state.investigations['inv-1']?.title).toBe('Persisted')
   })
 
   it('bootstrap lists roots without opening workspace tabs', async () => {
