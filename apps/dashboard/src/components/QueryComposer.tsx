@@ -24,6 +24,7 @@ import {
   type QueryHistoryEntry,
   type QueueSource,
 } from '../types'
+import { AlertSelectionActions } from './AlertSelectionActions'
 import { PdqlBuilderModal } from './pdql/PdqlBuilderModal'
 import { FieldSearchList } from './pdql/FieldSearchList'
 import {
@@ -90,6 +91,7 @@ export function QueryComposer({
   executedFingerprint,
   history,
   extra,
+  headerEnd,
   executing,
   queueSource,
   groupValues = [],
@@ -107,6 +109,7 @@ export function QueryComposer({
   executedFingerprint: string | null
   history: QueryHistoryEntry[]
   extra?: React.ReactNode
+  headerEnd?: React.ReactNode
   executing?: boolean
   queueSource?: QueueSource
   groupValues?: (string | null)[]
@@ -205,6 +208,7 @@ export function QueryComposer({
         {queueSource && onQueueSourceChange && (
           <QueueSourceToggle value={queueSource} onChange={onQueueSourceChange} />
         )}
+        {headerEnd}
       </div>
       <div className="flex flex-wrap items-center gap-2">
         {filters.map((chip) => (
@@ -489,6 +493,7 @@ export function GlobalQueryComposer() {
       history={history}
       executing={executing}
       findingFilterWarnAt={findingFilterWarnAt}
+      headerEnd={<AlertSelectionActions />}
       onPdqlChange={setQueuePdql}
       onTimeChange={setTimeInterval}
       onQueueSourceChange={setQueueSource}
@@ -523,6 +528,7 @@ export function ContextQueryComposer({
       history={queue.queryHistory}
       executing={queue.loading}
       extra={extra}
+      headerEnd={<AlertSelectionActions investigationId={investigationId} />}
       findingFilterWarnAt={queue.findingFilterWarnAt}
       onPdqlChange={(pdql) => setContextQueue(investigationId, { pdql })}
       onTimeChange={(timeInterval) => setContextQueue(investigationId, { timeInterval })}

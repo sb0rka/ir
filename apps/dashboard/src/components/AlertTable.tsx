@@ -1,13 +1,10 @@
-import { useState } from 'react'
 import { useAppStore, emptyContextQueue } from '../store/appStore'
 import type { AlertEvent, CorrelationGroup, QueueItem } from '../types'
 import { Button, Chip, SeverityBadge } from './ui'
-import { StartInvestigationModal } from './StartInvestigationModal'
 import { clsx, formatTime } from '../lib/utils'
-import { titlesForQueueIds } from '../lib/investigationTitle'
 import { hasGroupValueSelection, parseQueuePdql, queueSelectFields } from '../lib/pdql'
 import { alertIsInContext, contextEventKeys } from '../lib/queueContext'
-import { ChevronDown, ChevronRight, Layers, Loader2, Play, Plus } from 'lucide-react'
+import { ChevronDown, ChevronRight, Layers, Plus } from 'lucide-react'
 
 const COL_FIT = 'w-px whitespace-nowrap'
 const COL_TITLE = 'min-w-0 w-full'
@@ -275,9 +272,6 @@ function CorrelationRow({
 
 export function AlertTable({ investigationId }: { investigationId?: string } = {}) {
   const globalSelected = useAppStore((s) => s.selectedAlertIds)
-  const start = useAppStore((s) => s.startInvestigation)
-  const starting = useAppStore((s) => s.investigationLoading)
-  const clear = useAppStore((s) => s.clearAlertSelection)
   const globalAlerts = useAppStore((s) => s.alerts)
   const correlations = useAppStore((s) => s.correlations)
   const globalOrder = useAppStore((s) => s.queueOrder)
@@ -291,9 +285,7 @@ export function AlertTable({ investigationId }: { investigationId?: string } = {
   const inv = useAppStore((s) => (investigationId ? s.investigations[investigationId] : undefined))
   const contextEvents = useAppStore((s) => s.contextEvents)
   const setContextQueue = useAppStore((s) => s.setContextQueue)
-  const addEventsToContext = useAppStore((s) => s.addEventsToContext)
   const toggleAlertSelect = useAppStore((s) => s.toggleAlertSelect)
-  const [naming, setNaming] = useState(false)
 
   const alerts = queue?.alerts ?? globalAlerts
   const queueOrder = queue?.queueOrder ?? globalOrder
@@ -354,78 +346,34 @@ export function AlertTable({ investigationId }: { investigationId?: string } = {
     })
   }
 
-  const addSelected = () => {
-    if (!investigationId) return
-    const ids = selected.filter((id) => {
-      const alert = alerts[id]
-      return alert && !inContextOf(alert)
-    })
-    if (ids.length === 0) return
-    void addEventsToContext(investigationId, ids)
-  }
-
-  const clearSelection = () => {
-    if (investigationId) setContextQueue(investigationId, { selectedIds: [] })
-    else clear()
-  }
-
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="flex items-center justify-between border-b border-border px-4 py-2">
-        <div className="flex items-center gap-3 text-sm">
-          <span className="text-fg-muted">
-            Срабатываний: <span className="text-fg">{rows.length}</span>
-            {loading && <span className="ml-2 text-fg-dim">загрузка…</span>}
-          </span>
-          <span className="text-fg-muted">
-            critical/high: <span className="text-high">{criticalCount}</span>
-          </span>
-          {investigationId && !queue?.hideAdded && (
-            <span className="text-fg-muted">
-              в контексте: <span className="text-fg">{inContextCount}</span>
-            </span>
-          )}
-        </div>
-        {selected.length > 0 && (
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-fg-muted">Выбрано: {selected.length}</span>
-            {investigationId ? (
-              <Button
-                size="sm"
-                variant="primary"
-                onClick={addSelected}
-              >
-                <Plus className="h-3 w-3" />
-                Добавить в расследование
-              </Button>
-            ) : (
-              <Button
-                size="sm"
-                disabled={starting}
-                onClick={() => setNaming(true)}
-              >
-                {starting ? (
-                  <Loader2 className="h-3 w-3 animate-spin" />
-                ) : (
-                  <Play className="h-3 w-3" />
-                )}
-                Начать расследование
-              </Button>
-            )}
-            <Button size="sm" variant="ghost" onClick={clearSelection}>
-              Сбросить
-            </Button>
-          </div>
-        )}
-      </div>
       <div className="flex-1 overflow-auto">
         <table className="w-full min-w-[880px] border-collapse text-left">
           <thead className="sticky top-0 z-10 bg-surface-1 text-[11px] uppercase tracking-wider text-fg-dim">
             <tr className="border-b border-border">
               <th className={clsx(COL_FIT, 'px-3 py-2')} />
-              <th className={clsx(COL_FIT, 'px-3 py-2')}>Крит.</th>
+              <th className={clsx(COL_FIT, 'px-3 py-2')}>
+                <span className="inline-flex items-center gap-1.5">
+                  Крит.
+                  <span className="text-high">{criticalCount}</span>
+                </span>
+              </th>
               <th className={clsx(COL_FIT, 'px-3 py-2')}>Время</th>
-              <th className={clsx(COL_TITLE, 'px-3 py-2')}>Срабатывание</th>
+              <th className={clsx(COL_TITLE, 'px-3 py-2')}>
+                <span className="inline-flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+                  Срабатывание
+                  <span className="text-fg">{rows.length}</span>
+                  {loading && (
+                    <span className="normal-case tracking-normal text-fg-dim">загрузка…</span>
+                  )}
+                  {investigationId && !queue?.hideAdded && (
+                    <span className="normal-case tracking-normal text-fg-muted">
+                      в контексте <span className="text-fg">{inContextCount}</span>
+                    </span>
+                  )}
+                </span>
+              </th>
               {selectFields.map((field) => (
                 <th key={field} className={clsx(COL_FIT, 'px-3 py-2 font-mono normal-case tracking-normal')}>
                   {field}
@@ -484,17 +432,6 @@ export function AlertTable({ investigationId }: { investigationId?: string } = {
           </tbody>
         </table>
       </div>
-      {naming && !investigationId && (
-        <StartInvestigationModal
-          eventTitles={titlesForQueueIds(selected, alerts, correlations)}
-          busy={starting}
-          onClose={() => setNaming(false)}
-          onConfirm={async (title) => {
-            const createdId = await start(selected, title)
-            if (createdId) setNaming(false)
-          }}
-        />
-      )}
     </div>
   )
 }
