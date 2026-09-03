@@ -6,17 +6,7 @@ import { ContextQueueToolbar } from './ContextQueue'
 import { Button, Chip, SeverityBadge } from '../components/ui'
 import { clsx, formatTime, statusLabel } from '../lib/utils'
 import { fieldForEntityKind } from '../lib/filters'
-import {
-  Bot,
-  Check,
-  GitBranch,
-  Inbox,
-  Lightbulb,
-  Network,
-  PanelRight,
-  Table2,
-  X,
-} from 'lucide-react'
+import { Check, Inbox, Network, Table2, X } from 'lucide-react'
 
 export function InvestigationHeader({ investigationId }: { investigationId: string }) {
   const inv = useAppStore((s) => s.investigations[investigationId])
@@ -25,28 +15,15 @@ export function InvestigationHeader({ investigationId }: { investigationId: stri
   )
   const issues = useAppStore((s) => s.issues)
   const update = useAppStore((s) => s.updateInvestigation)
-  const openAgentPanel = useAppStore((s) => s.openAgentPanel)
-  const createChild = useAppStore((s) => s.createChildInvestigation)
-  const setAgentPanelOpen = useAppStore((s) => s.setAgentPanelOpen)
-  const agentPanelOpen = useAppStore((s) => s.agentPanelOpen)
-  const setSidebarSection = useAppStore((s) => s.setSidebarSection)
-  const setHypothesisDraftOpen = useAppStore((s) => s.setHypothesisDraftOpen)
-  const setDetailPanelOpen = useAppStore((s) => s.setDetailPanelOpen)
-  const detailPanelOpen = useAppStore((s) => s.detailPanelOpen)
   const setActiveTab = useAppStore((s) => s.setActiveTab)
-  const edgeReviews = useAppStore((s) => s.edgeReviews)
-  const graphEdges = useAppStore((s) => s.graphEdges)
 
   if (!inv) return null
 
   const running = inv.issueIds.some((id) => issues[id]?.status === 'running')
-  const proposedCount = inv.edgeIds.filter(
-    (id) => (edgeReviews[id] ?? graphEdges[id]?.review) === 'proposed',
-  ).length
 
   return (
     <div className="border-b border-border bg-surface-1 px-4 py-3">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="text-sm font-semibold">{inv.title}</h1>
@@ -107,61 +84,6 @@ export function InvestigationHeader({ investigationId }: { investigationId: stri
               Очередь
             </button>
           </div>
-
-          <Button size="sm" onClick={() => void openAgentPanel()}>
-            <Bot className="h-3.5 w-3.5" />
-            Насыщение контекста
-          </Button>
-
-          <Button
-            size="sm"
-            variant="ghost"
-            disabled={inv.selectedEntityIds.length === 0}
-            onClick={() => {
-              setSidebarSection('hypotheses')
-              setHypothesisDraftOpen(true)
-            }}
-            title="Создать гипотезу из выбранных сущностей"
-          >
-            <Lightbulb className="h-3.5 w-3.5" />
-            Гипотеза ({inv.selectedEntityIds.length})
-          </Button>
-
-          <Button
-            size="sm"
-            variant="ghost"
-            disabled={inv.selectedEntityIds.length === 0}
-            onClick={() => createChild(investigationId, inv.selectedEntityIds)}
-            title="Создать дочернее расследование из выбранных сущностей"
-          >
-            <GitBranch className="h-3.5 w-3.5" />
-            Дочернее ({inv.selectedEntityIds.length})
-          </Button>
-
-          <Button
-            size="sm"
-            variant={detailPanelOpen ? 'default' : 'ghost'}
-            onClick={() => setDetailPanelOpen(!detailPanelOpen)}
-            title="Панель деталей выбранной сущности или события"
-          >
-            <PanelRight className="h-3.5 w-3.5" />
-            Детали
-          </Button>
-
-          <Button
-            size="sm"
-            variant={agentPanelOpen ? 'default' : 'ghost'}
-            onClick={() => setAgentPanelOpen(!agentPanelOpen)}
-            title="Задачи и предложенные связи ИИ-агента"
-          >
-            <Bot className="h-3.5 w-3.5" />
-            Агент
-            {proposedCount > 0 && (
-              <span className="rounded bg-proposed/20 px-1 font-mono text-[10px] text-proposed">
-                {proposedCount}
-              </span>
-            )}
-          </Button>
         </div>
       </div>
     </div>
