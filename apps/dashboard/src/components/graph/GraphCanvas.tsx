@@ -283,10 +283,6 @@ export function GraphCanvas({ fitToken }: { fitToken: FitToken }) {
           {session ? '' : 'Расследование не выбрано'}
         </div>
       )}
-      <div className="pointer-events-none absolute bottom-3 left-3 rounded-md border border-[var(--border)] bg-[var(--bg-panel)]/90 px-2 py-1 text-[10px] text-[var(--text-dim)]">
-        Узлы можно перетаскивать · правый клик по сущности — развернуть или
-        свернуть связанные
-      </div>
     </div>
   )
 }

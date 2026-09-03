@@ -181,9 +181,6 @@ export function ContextQueuePage({ investigationId }: { investigationId: string 
           <AlertTable investigationId={investigationId} />
         </div>
       </div>
-      <div className="border-t border-border px-4 py-1.5 text-[11px] text-fg-dim">
-        Очередь расследования · тот же поиск, что глобальная · строки в контексте выделены
-      </div>
     </div>
   )
 }

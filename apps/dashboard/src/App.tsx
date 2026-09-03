@@ -19,6 +19,7 @@ import { getProjectId, setProjectId } from './api/env'
 import { listProjects, type Project } from './api/platform'
 import { LoginPage } from './components/LoginPage'
 import { ConfigurationModal } from './components/ConfigurationModal'
+import { InvestigationHeader } from './components/InvestigationHeader'
 
 type SessionPhase = 'loading' | 'ready' | 'signed-out' | 'error'
 
@@ -154,6 +155,8 @@ function Dashboard({
   const bootstrap = useAppStore((state) => state.bootstrap)
   const bootstrapped = useRef(false)
   const [configurationOpen, setConfigurationOpen] = useState(false)
+  const investigationOpen =
+    activeTab !== 'queue' && activeTab !== 'investigations'
 
   useEffect(() => {
     if (bootstrapped.current) return
@@ -163,22 +166,25 @@ function Dashboard({
 
   return (
     <div className="flex h-full flex-col bg-surface-0 text-fg">
-      <header className="flex items-center justify-between gap-4 border-b border-border px-4 py-2">
-        <div className="flex min-w-0 items-center gap-3">
-          <div className="ml-1 shrink-0">
+      <header className="flex items-center gap-4 border-b border-border px-4 py-2">
+        <div className="flex min-w-0 flex-1 items-baseline gap-4">
+          <div className="ml-1.5 shrink-0 translate-y-px leading-none">
             <img
               src="https://static.sb0rka.ru/logo-light.png"
               alt="Sb0rka Incident Response"
-              className="h-4 w-auto dark:hidden"
+              className="block h-3.5 w-auto dark:hidden"
             />
             <img
               src="https://static.sb0rka.ru/logo-dark.png"
               alt=""
-              className="hidden h-4 w-auto dark:block"
+              className="hidden h-3.5 w-auto dark:block"
             />
           </div>
+          {investigationOpen ? (
+            <InvestigationHeader investigationId={activeTab} />
+          ) : null}
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex shrink-0 items-center gap-1">
           <span className="hidden max-w-48 truncate px-2 font-mono text-[11px] text-fg-dim sm:block">
             {subject.user?.username ?? subject.subject_id}
           </span>

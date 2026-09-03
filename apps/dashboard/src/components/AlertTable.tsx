@@ -616,7 +616,7 @@ export function AlertTable({ investigationId }: { investigationId?: string } = {
                       <span className="shrink-0 normal-case tracking-normal text-fg-dim">загрузка…</span>
                     )}
                     {investigationId && !queue?.hideAdded && (
-                      <span className="shrink-0 normal-case tracking-normal text-fg-muted">
+                      <span className="shrink-0 text-fg-muted">
                         в контексте <span className="text-fg">{inContextCount}</span>
                       </span>
                     )}
