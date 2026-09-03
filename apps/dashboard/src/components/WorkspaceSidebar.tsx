@@ -1,9 +1,10 @@
-import { useRef, useState, type ReactNode } from 'react'
+import { type ReactNode } from 'react'
 import { Bot, Lightbulb, X } from 'lucide-react'
 import { useAppStore, type SidebarSectionId } from '../store/appStore'
 import { clsx } from '../lib/utils'
 import { AgentSection } from './AgentPanel'
 import { HypothesesSection } from './HypothesesSection'
+import { ResizablePanelFrame } from './ResizablePanelFrame'
 import { Panel } from './ui'
 
 interface SidebarSectionDef {
@@ -51,51 +52,6 @@ export function WorkspaceSidebar({ investigationId }: { investigationId: string 
     hypotheses: hypothesesBadge,
   }
 
-  const [width, setWidth] = useState(() => {
-    try {
-      const saved = localStorage.getItem('ir.agentPanel.width')
-      if (saved) {
-        const parsed = Number(saved)
-        if (parsed >= 280 && parsed <= 900) return parsed
-      }
-    } catch {
-      /* ignore */
-    }
-    return 384
-  })
-
-  const isDraggingRef = useRef(false)
-  const dragStartRef = useRef({ startX: 0, startWidth: 384 })
-
-  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    e.preventDefault()
-    e.currentTarget.setPointerCapture(e.pointerId)
-    isDraggingRef.current = true
-    dragStartRef.current = { startX: e.clientX, startWidth: width }
-  }
-
-  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!isDraggingRef.current) return
-    const delta = e.clientX - dragStartRef.current.startX
-    const maxW = Math.min(900, window.innerWidth - 360)
-    setWidth(Math.min(Math.max(280, dragStartRef.current.startWidth + delta), Math.max(280, maxW)))
-  }
-
-  const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!isDraggingRef.current) return
-    isDraggingRef.current = false
-    try {
-      e.currentTarget.releasePointerCapture(e.pointerId)
-    } catch {
-      /* ignore */
-    }
-    try {
-      localStorage.setItem('ir.agentPanel.width', String(width))
-    } catch {
-      /* ignore */
-    }
-  }
-
   const active = SECTIONS.find((section) => section.id === sectionId)
 
   return (
@@ -130,7 +86,7 @@ export function WorkspaceSidebar({ investigationId }: { investigationId: string 
       </nav>
 
       {active && (
-        <div className="relative flex h-full shrink-0 flex-col" style={{ width }}>
+        <ResizablePanelFrame storageKey="ir.agentPanel.width" defaultWidth={384} side="left">
           <Panel
             title={active.title}
             side="left"
@@ -143,17 +99,7 @@ export function WorkspaceSidebar({ investigationId }: { investigationId: string 
           >
             {active.render(investigationId)}
           </Panel>
-          <div
-            className="group absolute top-0 -right-1 z-20 flex h-full w-2 cursor-col-resize touch-none select-none items-center justify-center"
-            onPointerDown={handlePointerDown}
-            onPointerMove={handlePointerMove}
-            onPointerUp={handlePointerUp}
-            onPointerCancel={handlePointerUp}
-            title="Потяните, чтобы изменить ширину"
-          >
-            <div className="h-8 w-1 rounded-full bg-border-strong/60 transition-colors group-hover:bg-proposed group-active:bg-proposed" />
-          </div>
-        </div>
+        </ResizablePanelFrame>
       )}
     </div>
   )

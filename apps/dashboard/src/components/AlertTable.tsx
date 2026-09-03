@@ -1,13 +1,127 @@
+import { useLayoutEffect, useRef, useState } from 'react'
 import { useAppStore, emptyContextQueue } from '../store/appStore'
 import type { AlertEvent, CorrelationGroup, QueueItem } from '../types'
 import { Button, Chip, SeverityBadge } from './ui'
 import { clsx, formatTime } from '../lib/utils'
 import { hasGroupValueSelection, parseQueuePdql, queueSelectFields } from '../lib/pdql'
 import { alertIsInContext, contextEventKeys } from '../lib/queueContext'
-import { ChevronDown, ChevronRight, Layers, Plus } from 'lucide-react'
+import { ChevronDown, ChevronRight, Layers, MoveHorizontal, Plus } from 'lucide-react'
 
-const COL_FIT = 'w-px whitespace-nowrap'
-const COL_TITLE = 'min-w-0 w-full'
+const COL_FIT = 'max-w-0 overflow-hidden whitespace-nowrap'
+const COL_TITLE = 'min-w-0 max-w-0 overflow-hidden'
+const TABLE_CLASS = 'border-collapse table-fixed text-left'
+
+const COL_WIDTHS_STORAGE_KEY = 'ir.alertTable.colWidths'
+const MIN_COL_WIDTH = 48
+const MIN_TITLE_WIDTH = 120
+
+const DEFAULT_COL_WIDTHS: Record<string, number> = {
+  select: 40,
+  severity: 96,
+  time: 148,
+  title: 360,
+  source: 160,
+  actions: 48,
+}
+
+function fieldColKey(field: string) {
+  return `field:${field}`
+}
+
+function alertTableColKeys(selectFields: string[], hasActions: boolean): string[] {
+  return [
+    'select',
+    'severity',
+    'time',
+    'title',
+    ...selectFields.map(fieldColKey),
+    'source',
+    ...(hasActions ? ['actions'] : []),
+  ]
+}
+
+function defaultWidthForCol(key: string): number {
+  if (key.startsWith('field:')) return 144
+  return DEFAULT_COL_WIDTHS[key] ?? 120
+}
+
+function minWidthForCol(key: string): number {
+  if (key === 'title') return MIN_TITLE_WIDTH
+  if (key === 'select' || key === 'actions') return 36
+  return MIN_COL_WIDTH
+}
+
+function loadStoredColWidths(): Record<string, number> {
+  try {
+    const raw = localStorage.getItem(COL_WIDTHS_STORAGE_KEY)
+    if (!raw) return {}
+    const parsed = JSON.parse(raw) as Record<string, unknown>
+    const out: Record<string, number> = {}
+    for (const [key, value] of Object.entries(parsed)) {
+      if (typeof value === 'number' && Number.isFinite(value) && value >= 24) {
+        out[key] = value
+      }
+    }
+    return out
+  } catch {
+    return {}
+  }
+}
+
+function ColumnResizeHandle({
+  leftWidth,
+  rightWidth,
+  leftMin,
+  rightMin,
+  onWidthsChange,
+  onWidthsCommit,
+}: {
+  leftWidth: number
+  rightWidth: number
+  leftMin: number
+  rightMin: number
+  onWidthsChange: (left: number, right: number) => void
+  onWidthsCommit: (left: number, right: number) => void
+}) {
+  return (
+    <div
+      role="separator"
+      aria-orientation="vertical"
+      aria-label="Изменить ширину колонки"
+      title="Потяните, чтобы изменить ширину"
+      className="group/resize absolute top-0 right-0 z-20 flex h-full w-2 translate-x-1/2 cursor-col-resize touch-none select-none items-center justify-center"
+      onPointerDown={(e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        const startX = e.clientX
+        const startLeft = leftWidth
+        const startRight = rightWidth
+        let latestLeft = startLeft
+        let latestRight = startRight
+
+        const onMove = (ev: PointerEvent) => {
+          const rawDelta = Math.round(ev.clientX - startX)
+          const delta = Math.max(leftMin - startLeft, Math.min(startRight - rightMin, rawDelta))
+          latestLeft = startLeft + delta
+          latestRight = startRight - delta
+          onWidthsChange(latestLeft, latestRight)
+        }
+        const onUp = () => {
+          onWidthsCommit(latestLeft, latestRight)
+          window.removeEventListener('pointermove', onMove)
+          window.removeEventListener('pointerup', onUp)
+          window.removeEventListener('pointercancel', onUp)
+        }
+
+        window.addEventListener('pointermove', onMove)
+        window.addEventListener('pointerup', onUp)
+        window.addEventListener('pointercancel', onUp)
+      }}
+    >
+      <div className="h-full w-px bg-transparent transition-colors group-hover/resize:bg-border-strong group-active/resize:bg-fg/50" />
+    </div>
+  )
+}
 
 function isInspected(item: QueueItem | null, kind: QueueItem['kind'], id: string) {
   return item?.kind === kind && item.id === id
@@ -53,12 +167,12 @@ function SelectFieldCell({
   const appendPdqlFilter = useAppStore((s) => s.appendPdqlFilter)
   const display = formatQueueFieldValue(field, value)
   return (
-    <td className={clsx(COL_FIT, 'max-w-[16rem] px-3 py-2')}>
+    <td className={clsx(COL_FIT, 'px-3 py-2')}>
       {value ? (
         <button
           type="button"
           title={display}
-          className="block max-w-[16rem] truncate text-left font-mono text-xs text-fg hover:underline"
+          className="block w-full truncate text-left font-mono text-xs text-fg hover:underline"
           onClick={(ev) => {
             ev.stopPropagation()
             appendPdqlFilter(investigationId ?? null, field, value)
@@ -116,19 +230,28 @@ function AlertRow({
         />
       </td>
       <td className={clsx(COL_FIT, 'px-3 py-2')}>
-        <SeverityBadge severity={alert.severity} />
+        <div className="truncate">
+          <SeverityBadge severity={alert.severity} />
+        </div>
       </td>
-      <td className={clsx(COL_FIT, 'px-3 py-2 font-mono text-xs text-fg-muted')}>
-        {formatTime(alert.time)}
+      <td className={clsx(COL_FIT, 'px-3 py-2 font-mono text-xs text-fg-muted')} title={formatTime(alert.time)}>
+        <span className="block truncate">{formatTime(alert.time)}</span>
       </td>
       <td className={clsx(COL_TITLE, 'px-3 py-2')}>
         <div className="flex min-w-0 items-center gap-2">
-          <div className={clsx('min-w-0 text-sm', inContext && 'text-fg-muted')}>{alert.title}</div>
+          <div
+            className={clsx('min-w-0 flex-1 truncate text-sm', inContext && 'text-fg-muted')}
+            title={alert.title}
+          >
+            {alert.title}
+          </div>
           {inContext && (
             <Chip tone="confirmed">в контексте</Chip>
           )}
         </div>
-        <div className="text-xs text-fg-dim">{alert.rule}</div>
+        <div className="truncate text-xs text-fg-dim" title={alert.rule}>
+          {alert.rule}
+        </div>
       </td>
       {selectFields.map((field) => (
         <SelectFieldCell
@@ -138,8 +261,8 @@ function AlertRow({
           investigationId={investigationId}
         />
       ))}
-      <td className={clsx(COL_FIT, 'px-3 py-2')}>
-        <span className="rounded border border-border px-1.5 py-0.5 font-mono text-[11px]">
+      <td className={clsx(COL_FIT, 'px-3 py-2')} title={alert.source}>
+        <span className="block truncate font-mono text-[11px] text-fg-muted">
           {alert.source}
         </span>
       </td>
@@ -202,10 +325,12 @@ function CorrelationRow({
           />
         </td>
         <td className={clsx(COL_FIT, 'px-3 py-2.5')}>
-          <SeverityBadge severity={group.severity} />
+          <div className="truncate">
+            <SeverityBadge severity={group.severity} />
+          </div>
         </td>
-        <td className={clsx(COL_FIT, 'px-3 py-2.5 font-mono text-xs text-fg-muted')}>
-          {formatTime(group.time)}
+        <td className={clsx(COL_FIT, 'px-3 py-2.5 font-mono text-xs text-fg-muted')} title={formatTime(group.time)}>
+          <span className="block truncate">{formatTime(group.time)}</span>
         </td>
         <td className={clsx(COL_TITLE, 'px-3 py-2.5')}>
           <div className="flex min-w-0 items-start gap-2 text-left">
@@ -224,15 +349,19 @@ function CorrelationRow({
                 <ChevronRight className="h-4 w-4" />
               )}
             </button>
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2 text-sm font-medium">
-                <Layers className="h-3.5 w-3.5 text-proposed" />
-                {group.title}
+            <div className="min-w-0 flex-1 overflow-hidden">
+              <div className="flex min-w-0 items-center gap-2 text-sm font-medium">
+                <Layers className="h-3.5 w-3.5 shrink-0 text-proposed" />
+                <span className="min-w-0 truncate" title={group.title}>
+                  {group.title}
+                </span>
                 <Chip>
                   {eventCount} соб. / {sourceCount} ист.
                 </Chip>
               </div>
-              <div className="mt-0.5 text-xs text-fg-dim">{group.reason}</div>
+              <div className="mt-0.5 truncate text-xs text-fg-dim" title={group.reason}>
+                {group.reason}
+              </div>
             </div>
           </div>
         </td>
@@ -240,11 +369,12 @@ function CorrelationRow({
           <td key={field} className={clsx(COL_FIT, 'px-3 py-2.5')} />
         ))}
         <td className={clsx(COL_FIT, 'px-3 py-2.5')}>
-          <div className="flex flex-wrap gap-1">
+          <div className="flex min-w-0 gap-1 overflow-hidden">
             {Object.entries(group.sourceCounts).map(([src, n]) => (
               <span
                 key={src}
-                className="rounded border border-border px-1.5 py-0.5 font-mono text-[11px]"
+                title={`${src}:${n}`}
+                className="truncate font-mono text-[11px] text-fg-muted"
               >
                 {src}:{n}
               </span>
@@ -346,43 +476,202 @@ export function AlertTable({ investigationId }: { investigationId?: string } = {
     })
   }
 
+  const headerWrapRef = useRef<HTMLDivElement>(null)
+  const bodyWrapRef = useRef<HTMLDivElement>(null)
+  const syncingScroll = useRef(false)
+  const [colWidths, setColWidths] = useState<Record<string, number>>(loadStoredColWidths)
+  const [viewportWidth, setViewportWidth] = useState(0)
+
+  const colKeys = alertTableColKeys(selectFields, Boolean(investigationId))
+  const storedWidths = colKeys.map((key) => colWidths[key] ?? defaultWidthForCol(key))
+  const titleIndex = colKeys.indexOf('title')
+  const storedSum = storedWidths.reduce((sum, width) => sum + width, 0)
+  // Fill leftover space into title so the last columns aren't cut off by an empty gap.
+  const tableWidth = Math.max(storedSum, viewportWidth)
+  const titleExtra = Math.max(0, tableWidth - storedSum)
+  const resolvedWidths = storedWidths.map((width, index) =>
+    index === titleIndex ? width + titleExtra : width,
+  )
+
+  const applyPairWidths = (
+    leftKey: string,
+    rightKey: string,
+    left: number,
+    right: number,
+    persist: boolean,
+  ) => {
+    setColWidths((prev) => {
+      const updated = { ...prev }
+      for (const key of colKeys) {
+        updated[key] = updated[key] ?? defaultWidthForCol(key)
+      }
+      updated[leftKey] = left
+      updated[rightKey] = right
+      if (persist) {
+        try {
+          localStorage.setItem(COL_WIDTHS_STORAGE_KEY, JSON.stringify(updated))
+        } catch {
+          /* ignore */
+        }
+      }
+      return updated
+    })
+  }
+
+  const resetColumnWidths = () => {
+    const next: Record<string, number> = {}
+    for (const key of colKeys) {
+      next[key] = defaultWidthForCol(key)
+    }
+    setColWidths(next)
+    try {
+      localStorage.setItem(COL_WIDTHS_STORAGE_KEY, JSON.stringify(next))
+    } catch {
+      /* ignore */
+    }
+  }
+
+  const syncScrollLeft = (source: 'header' | 'body') => {
+    const header = headerWrapRef.current
+    const body = bodyWrapRef.current
+    if (!header || !body || syncingScroll.current) return
+    syncingScroll.current = true
+    if (source === 'body') header.scrollLeft = body.scrollLeft
+    else body.scrollLeft = header.scrollLeft
+    syncingScroll.current = false
+  }
+
+  useLayoutEffect(() => {
+    const body = bodyWrapRef.current
+    if (!body) return
+    const update = () => {
+      setViewportWidth(body.clientWidth)
+      syncScrollLeft('body')
+    }
+    update()
+    const ro = new ResizeObserver(update)
+    ro.observe(body)
+    return () => ro.disconnect()
+  }, [])
+
+  const colGroup = (
+    <colgroup>
+      {colKeys.map((key, index) => (
+        <col key={key} style={{ width: resolvedWidths[index] }} />
+      ))}
+    </colgroup>
+  )
+
+  const tableStyle = { width: tableWidth }
+
+  const renderResizeHandle = (leftKey: string, index: number) => {
+    const rightKey = colKeys[index + 1]
+    if (!rightKey) return null
+    // Drag against stored widths (title without the fill extra) so pair math stays stable.
+    const leftWidth = storedWidths[index]
+    const rightWidth = storedWidths[index + 1]
+    return (
+      <ColumnResizeHandle
+        leftWidth={leftWidth}
+        rightWidth={rightWidth}
+        leftMin={minWidthForCol(leftKey)}
+        rightMin={minWidthForCol(rightKey)}
+        onWidthsChange={(left, right) => applyPairWidths(leftKey, rightKey, left, right, false)}
+        onWidthsCommit={(left, right) => applyPairWidths(leftKey, rightKey, left, right, true)}
+      />
+    )
+  }
+
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="flex-1 overflow-auto">
-        <table className="w-full min-w-[880px] border-collapse text-left">
-          <thead className="sticky top-0 z-10 bg-surface-1 text-[11px] uppercase tracking-wider text-fg-dim">
-            <tr className="border-b border-border">
-              <th className={clsx(COL_FIT, 'px-3 py-2')} />
-              <th className={clsx(COL_FIT, 'px-3 py-2')}>
-                <span className="inline-flex items-center gap-1.5">
-                  Крит.
-                  <span className="text-high">{criticalCount}</span>
-                </span>
-              </th>
-              <th className={clsx(COL_FIT, 'px-3 py-2')}>Время</th>
-              <th className={clsx(COL_TITLE, 'px-3 py-2')}>
-                <span className="inline-flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
-                  Срабатывание
-                  <span className="text-fg">{rows.length}</span>
-                  {loading && (
-                    <span className="normal-case tracking-normal text-fg-dim">загрузка…</span>
-                  )}
-                  {investigationId && !queue?.hideAdded && (
-                    <span className="normal-case tracking-normal text-fg-muted">
-                      в контексте <span className="text-fg">{inContextCount}</span>
-                    </span>
-                  )}
-                </span>
-              </th>
-              {selectFields.map((field) => (
-                <th key={field} className={clsx(COL_FIT, 'px-3 py-2 font-mono normal-case tracking-normal')}>
-                  {field}
+      <div className="relative flex shrink-0 border-b border-border bg-surface-1">
+        <div
+          ref={headerWrapRef}
+          className="min-w-0 flex-1 overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          onScroll={() => syncScrollLeft('header')}
+        >
+          <table className={TABLE_CLASS} style={tableStyle}>
+            {colGroup}
+            <thead className="text-[11px] uppercase tracking-wider text-fg-dim">
+              <tr>
+                <th className={clsx(COL_FIT, 'relative px-3 py-2')}>
+                  {renderResizeHandle('select', 0)}
                 </th>
-              ))}
-              <th className={clsx(COL_FIT, 'px-3 py-2')}>Источник</th>
-              {investigationId && <th className={clsx(COL_FIT, 'px-3 py-2')} />}
-            </tr>
-          </thead>
+                <th className={clsx(COL_FIT, 'relative px-3 py-2')} title="Крит.">
+                  <span className="flex min-w-0 items-center gap-1.5 overflow-hidden">
+                    <span className="truncate">Крит.</span>
+                    <span className="shrink-0 text-high">{criticalCount}</span>
+                  </span>
+                  {renderResizeHandle('severity', 1)}
+                </th>
+                <th className={clsx(COL_FIT, 'relative px-3 py-2')} title="Время">
+                  <span className="block truncate">Время</span>
+                  {renderResizeHandle('time', 2)}
+                </th>
+                <th className={clsx(COL_TITLE, 'relative px-3 py-2')} title="Срабатывание">
+                  <span className="flex min-w-0 items-center gap-1.5 overflow-hidden whitespace-nowrap">
+                    <span className="truncate">Срабатывание</span>
+                    <span className="shrink-0 text-fg">{rows.length}</span>
+                    {loading && (
+                      <span className="shrink-0 normal-case tracking-normal text-fg-dim">загрузка…</span>
+                    )}
+                    {investigationId && !queue?.hideAdded && (
+                      <span className="shrink-0 normal-case tracking-normal text-fg-muted">
+                        в контексте <span className="text-fg">{inContextCount}</span>
+                      </span>
+                    )}
+                  </span>
+                  {renderResizeHandle('title', 3)}
+                </th>
+                {selectFields.map((field, fieldIndex) => {
+                  const key = fieldColKey(field)
+                  const index = 4 + fieldIndex
+                  return (
+                    <th
+                      key={field}
+                      className={clsx(
+                        COL_FIT,
+                        'relative px-3 py-2 font-mono normal-case tracking-normal',
+                      )}
+                      title={field}
+                    >
+                      <span className="block truncate">{field}</span>
+                      {renderResizeHandle(key, index)}
+                    </th>
+                  )
+                })}
+                <th className={clsx(COL_FIT, 'relative px-3 py-2')} title="Источник">
+                  <span className="block truncate">Источник</span>
+                  {renderResizeHandle('source', 4 + selectFields.length)}
+                </th>
+                {investigationId && (
+                  <th className={clsx(COL_FIT, 'relative px-3 py-2')} />
+                )}
+              </tr>
+            </thead>
+          </table>
+        </div>
+        {/* Match body vertical scrollbar width so header/body columns stay aligned. */}
+        <div className="w-2 shrink-0" aria-hidden />
+        <div className="absolute top-1/2 right-2 z-30 -translate-y-1/2">
+          <Button
+            size="icon"
+            variant="ghost"
+            title="Сбросить ширину колонок"
+            aria-label="Сбросить ширину колонок"
+            onClick={resetColumnWidths}
+          >
+            <MoveHorizontal className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+      </div>
+      <div
+        ref={bodyWrapRef}
+        className="min-h-0 flex-1 overflow-auto"
+        onScroll={() => syncScrollLeft('body')}
+      >
+        <table className={TABLE_CLASS} style={tableStyle}>
+          {colGroup}
           <tbody>
             {rows.map((item) =>
               item.kind === 'correlation' ? (

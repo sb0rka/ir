@@ -59,6 +59,20 @@ export function InvestigationsPage() {
             </button>
           ) : null}
         </label>
+        <span className={clsx('ml-auto text-xs text-fg-dim', loading && 'opacity-60')}>
+          {rootIds.length} в списке
+        </span>
+        {filtersActive ? (
+          <Button
+            size="icon"
+            variant="ghost"
+            title="Сбросить"
+            aria-label="Сбросить"
+            onClick={resetFilters}
+          >
+            <X className="h-3.5 w-3.5" />
+          </Button>
+        ) : null}
         <select
           aria-label="Статус"
           className={SELECT_CLASS}
@@ -90,14 +104,6 @@ export function InvestigationsPage() {
           <option value="medium">Средняя</option>
           <option value="low">Низкая</option>
         </select>
-        {filtersActive ? (
-          <Button size="sm" variant="ghost" onClick={resetFilters}>
-            Сбросить
-          </Button>
-        ) : null}
-        <span className={clsx('ml-auto text-xs text-fg-dim', loading && 'opacity-60')}>
-          {rootIds.length} в списке
-        </span>
       </div>
       <div className="min-h-0 flex-1">
         {!loading && rootIds.length === 0 ? (

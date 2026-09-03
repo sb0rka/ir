@@ -66,7 +66,7 @@ export function AlertSelectionActions({ investigationId }: { investigationId?: s
             Добавить в расследование
           </Button>
         ) : (
-          <Button size="sm" disabled={starting} onClick={() => setNaming(true)}>
+          <Button size="sm" variant="primary" disabled={starting} onClick={() => setNaming(true)}>
             {starting ? (
               <Loader2 className="h-3 w-3 animate-spin" />
             ) : (

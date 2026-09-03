@@ -12,6 +12,7 @@ import {
 import { emptyContextQueue, useAppStore } from '../store/appStore'
 import type { AlertEvent, CorrelationGroup } from '../types'
 import { Button, Chip, Panel, SeverityBadge } from './ui'
+import { ResizablePanelFrame } from './ResizablePanelFrame'
 import { StartInvestigationModal } from './StartInvestigationModal'
 import { isHypothesisWritable } from '../lib/hypotheses'
 import { titlesForQueueIds } from '../lib/investigationTitle'
@@ -88,9 +89,10 @@ export function QueueDetailPanel({
 
   return (
     <>
+    <ResizablePanelFrame storageKey="ir.detailPanel.width" defaultWidth={512} side="right">
     <Panel
       title={alert ? 'Событие' : 'Корреляция'}
-      className="w-[32rem] shrink-0"
+      className="w-full min-w-0 flex-1"
       actions={
         <button type="button" onClick={() => inspect(null)} title="Закрыть">
           <X className="h-3.5 w-3.5 text-fg-dim" />
@@ -202,6 +204,7 @@ export function QueueDetailPanel({
         </div>
       </div>
     </Panel>
+    </ResizablePanelFrame>
     {naming && (
       <StartInvestigationModal
         eventTitles={titlesForQueueIds([item.id], alerts, correlations)}

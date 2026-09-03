@@ -80,6 +80,7 @@ export function Button({
   className,
   type = 'button',
   title,
+  'aria-label': ariaLabel,
   tabIndex,
 }: {
   children: React.ReactNode
@@ -90,6 +91,7 @@ export function Button({
   className?: string
   type?: 'button' | 'submit'
   title?: string
+  'aria-label'?: string
   tabIndex?: number
 }) {
   const variants = {
@@ -108,6 +110,7 @@ export function Button({
       type={type}
       disabled={disabled}
       title={title}
+      aria-label={ariaLabel}
       tabIndex={tabIndex}
       onClick={onClick}
       className={clsx(

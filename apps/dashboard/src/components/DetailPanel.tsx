@@ -2,6 +2,7 @@ import { useAppStore, emptyContextQueue } from '../store/appStore'
 import { Button, Chip, Panel } from './ui'
 import { formatTime, kindLabel, statusLabel } from '../lib/utils'
 import { EventCard } from './event-card'
+import { ResizablePanelFrame } from './ResizablePanelFrame'
 import {
   Binary,
   Box,
@@ -12,6 +13,9 @@ import {
   Sparkles,
   X,
 } from 'lucide-react'
+
+const DETAIL_WIDTH_KEY = 'ir.detailPanel.width'
+const DETAIL_DEFAULT_WIDTH = 512
 
 export function DetailPanel({ investigationId }: { investigationId: string }) {
   const inv = useAppStore((s) => s.investigations[investigationId])
@@ -72,32 +76,43 @@ export function DetailPanel({ investigationId }: { investigationId: string }) {
 
   if (!entity && !event) {
     return (
-      <Panel
-        title="Детали"
-        className="w-[32rem] shrink-0"
-        actions={
-          <button type="button" onClick={() => setDetailPanelOpen(false)}>
-            <X className="h-3.5 w-3.5 text-fg-dim" />
-          </button>
-        }
+      <ResizablePanelFrame
+        storageKey={DETAIL_WIDTH_KEY}
+        defaultWidth={DETAIL_DEFAULT_WIDTH}
+        side="right"
       >
-        <div className="flex flex-col items-center gap-2 px-4 py-10 text-center">
-          <Search className="h-5 w-5 text-fg-dim" />
-          <div className="text-sm text-fg-muted">Здесь появятся детали</div>
-          <div className="text-xs text-fg-dim">
-            Кликните по узлу на графе, маркеру на таймлайне или строке в таблице
+        <Panel
+          title="Детали"
+          className="w-full min-w-0 flex-1"
+          actions={
+            <button type="button" onClick={() => setDetailPanelOpen(false)}>
+              <X className="h-3.5 w-3.5 text-fg-dim" />
+            </button>
+          }
+        >
+          <div className="flex flex-col items-center gap-2 px-4 py-10 text-center">
+            <Search className="h-5 w-5 text-fg-dim" />
+            <div className="text-sm text-fg-muted">Здесь появятся детали</div>
+            <div className="text-xs text-fg-dim">
+              Кликните по узлу на графе, маркеру на таймлайне или строке в таблице
+            </div>
           </div>
-        </div>
-      </Panel>
+        </Panel>
+      </ResizablePanelFrame>
     )
   }
 
   const results = entity ? (actionResults[entity.id] ?? []) : []
 
   return (
+    <ResizablePanelFrame
+      storageKey={DETAIL_WIDTH_KEY}
+      defaultWidth={DETAIL_DEFAULT_WIDTH}
+      side="right"
+    >
     <Panel
       title={entity ? `Сущность · ${kindLabel[entity.kind]}` : 'Событие'}
-      className="w-[32rem] shrink-0"
+      className="w-full min-w-0 flex-1"
       actions={
         <button type="button" onClick={() => setDetailPanelOpen(false)}>
           <X className="h-3.5 w-3.5 text-fg-dim" />
@@ -359,5 +374,6 @@ export function DetailPanel({ investigationId }: { investigationId: string }) {
         )}
       </div>
     </Panel>
+    </ResizablePanelFrame>
   )
 }
