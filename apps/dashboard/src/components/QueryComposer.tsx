@@ -1,6 +1,6 @@
 import { DndContext, PointerSensor, useSensor, useSensors } from '@dnd-kit/core'
 import { useEffect, useState } from 'react'
-import { Braces, Check, History, Loader2, Pencil, Play, Plus, Search } from 'lucide-react'
+import { Braces, Check, Eye, EyeOff, History, Loader2, Pencil, Play, Plus, Search } from 'lucide-react'
 import {
   addFieldToPdql,
   findingUuidFromAst,
@@ -21,6 +21,7 @@ import { usePdqlStore } from '../store/pdqlStore'
 import {
   DEFAULT_QUEUE_SOURCE,
   QUEUE_SOURCE_OPTIONS,
+  type AddedFilter,
   type QueryHistoryEntry,
   type QueueSource,
 } from '../types'
@@ -79,6 +80,97 @@ function QueueSourceToggle({
           )}
         >
           {option.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+const ADDED_FILTER_OPTIONS: Array<{
+  id: AddedFilter
+  title: string
+  icon: 'eye-off' | 'none' | 'eye'
+}> = [
+  { id: 'hide_added', title: 'Скрыть добавленные', icon: 'eye-off' },
+  { id: 'all', title: 'Показать все', icon: 'none' },
+  { id: 'only_added', title: 'Скрыть не добавленные', icon: 'eye' },
+]
+
+/** 3-position slider in QueueSourceToggle chrome: hide added / all / only added. */
+function AddedFilterToggle({
+  value,
+  onChange,
+}: {
+  value: AddedFilter
+  onChange: (value: AddedFilter) => void
+}) {
+  const index = Math.max(
+    0,
+    ADDED_FILTER_OPTIONS.findIndex((option) => option.id === value),
+  )
+  const active = ADDED_FILTER_OPTIONS[index] ?? ADDED_FILTER_OPTIONS[1]
+
+  const moveBy = (delta: number) => {
+    const next = Math.min(
+      ADDED_FILTER_OPTIONS.length - 1,
+      Math.max(0, index + delta),
+    )
+    const option = ADDED_FILTER_OPTIONS[next]
+    if (option) onChange(option.id)
+  }
+
+  return (
+    <div
+      role="slider"
+      tabIndex={0}
+      title={active.title}
+      aria-label="Фильтр по добавленным в расследование"
+      aria-valuemin={0}
+      aria-valuemax={2}
+      aria-valuenow={index}
+      aria-valuetext={active.title}
+      className="relative inline-flex min-h-9 w-36 overflow-hidden rounded border border-border bg-surface-0 outline-none focus-visible:ring-1 focus-visible:ring-fg/30"
+      onKeyDown={(e) => {
+        if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') {
+          e.preventDefault()
+          moveBy(-1)
+        } else if (e.key === 'ArrowRight' || e.key === 'ArrowUp') {
+          e.preventDefault()
+          moveBy(1)
+        } else if (e.key === 'Home') {
+          e.preventDefault()
+          onChange('hide_added')
+        } else if (e.key === 'End') {
+          e.preventDefault()
+          onChange('only_added')
+        }
+      }}
+    >
+      <span
+        aria-hidden
+        className="pointer-events-none absolute inset-y-0 w-1/3 bg-surface-3 transition-[left] duration-200 ease-out"
+        style={{ left: `${(index * 100) / 3}%` }}
+      />
+      {ADDED_FILTER_OPTIONS.map((option) => (
+        <button
+          key={option.id}
+          type="button"
+          tabIndex={-1}
+          title={option.title}
+          aria-label={option.title}
+          onClick={() => onChange(option.id)}
+          className={clsx(
+            'relative z-10 flex flex-1 items-center justify-center px-2.5 py-1.5 transition-colors',
+            value === option.id ? 'text-fg' : 'text-fg-muted hover:text-fg',
+          )}
+        >
+          {option.icon === 'eye-off' ? (
+            <EyeOff className="h-3.5 w-3.5" />
+          ) : option.icon === 'eye' ? (
+            <Eye className="h-3.5 w-3.5" />
+          ) : (
+            <span className="block h-1 w-1 rounded-full bg-current opacity-60" />
+          )}
         </button>
       ))}
     </div>
@@ -530,7 +622,15 @@ export function ContextQueryComposer({
       history={queue.queryHistory}
       executing={queue.loading}
       extra={extra}
-      headerEnd={<AlertSelectionActions investigationId={investigationId} />}
+      headerEnd={
+        <>
+          <AddedFilterToggle
+            value={queue.addedFilter}
+            onChange={(addedFilter) => setContextQueue(investigationId, { addedFilter })}
+          />
+          <AlertSelectionActions investigationId={investigationId} />
+        </>
+      }
       findingFilterWarnAt={queue.findingFilterWarnAt}
       onPdqlChange={(pdql) => setContextQueue(investigationId, { pdql })}
       onTimeChange={(timeInterval) => setContextQueue(investigationId, { timeInterval })}

@@ -265,6 +265,9 @@ export interface ContextSourceResultSnapshot {
   executedFingerprint: string | null
 }
 
+/** Filter context-queue rows by membership in the investigation. */
+export type AddedFilter = 'all' | 'hide_added' | 'only_added'
+
 /** Per-investigation state of the context event queue (search + filters). */
 export interface ContextQueueState {
   /** Last executed entity chips used to filter the table. */
@@ -279,7 +282,8 @@ export interface ContextQueueState {
   /** Bumped when a finding resolve chip blocks adding another filter. */
   findingFilterWarnAt: number
   selectedIds: string[]
-  hideAdded: boolean
+  /** Filter rows by whether they are already in the investigation context. */
+  addedFilter: AddedFilter
   originFilter: EventOrigin | 'all'
   reviewFilter: ReviewState | 'all'
   /** Client-side text filter for the context queue AlertTable. */

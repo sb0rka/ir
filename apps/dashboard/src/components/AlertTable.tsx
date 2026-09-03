@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useAppStore, emptyContextQueue } from '../store/appStore'
 import type { AlertEvent, CorrelationGroup, Entity, QueueItem } from '../types'
-import { Button, Chip, SeverityBadge } from './ui'
+import { Chip, SeverityBadge } from './ui'
 import { clsx, formatTime, kindLabel } from '../lib/utils'
 import { hasGroupValueSelection, incidentTypeLabelRu, parseQueuePdql, queueSelectFields } from '../lib/pdql'
 import { alertIsInContext, contextEventKeys } from '../lib/queueContext'
@@ -15,7 +15,7 @@ import {
   resolveAlertTableSearchColumn,
   type AlertTableColumnId,
 } from './alertTableColumns'
-import { ChevronDown, ChevronRight, Layers, Plus } from 'lucide-react'
+import { ChevronDown, ChevronRight, Layers } from 'lucide-react'
 
 const COL_FIT = 'max-w-0 overflow-hidden whitespace-nowrap'
 const COL_TITLE = 'min-w-0 max-w-0 overflow-hidden'
@@ -32,7 +32,6 @@ const DEFAULT_COL_WIDTHS: Record<string, number> = {
   title: 360,
   category: 280,
   source: 160,
-  actions: 48,
 }
 
 function fieldColKey(field: string) {
@@ -41,7 +40,6 @@ function fieldColKey(field: string) {
 
 function alertTableColKeys(
   selectFields: string[],
-  hasActions: boolean,
   showCategory: boolean,
 ): string[] {
   return [
@@ -52,7 +50,6 @@ function alertTableColKeys(
     ...(showCategory ? ['category'] : []),
     ...selectFields.map(fieldColKey),
     'source',
-    ...(hasActions ? ['actions'] : []),
   ]
 }
 
@@ -63,7 +60,7 @@ function defaultWidthForCol(key: string): number {
 
 function minWidthForCol(key: string): number {
   if (key === 'title') return MIN_TITLE_WIDTH
-  if (key === 'select' || key === 'actions') return 36
+  if (key === 'select') return 36
   return MIN_COL_WIDTH
 }
 
@@ -258,7 +255,6 @@ function AlertRow({
   onToggle: () => void
 }) {
   const inspect = useAppStore((s) => s.inspectQueueItem)
-  const addEventsToContext = useAppStore((s) => s.addEventsToContext)
   const inspected = useAppStore((s) => isInspected(s.inspectedQueueItem, 'alert', alert.id))
   const categoryCode = alert.raw?.['incident.type'] ?? ''
   const categoryLabel = incidentTypeLabelRu(categoryCode)
@@ -343,23 +339,6 @@ function AlertRow({
           {alert.source}
         </span>
       </td>
-      {investigationId && (
-        <td className={clsx(COL_FIT, 'px-3 py-2')}>
-          {!inContext && (
-            <Button
-              size="sm"
-              variant="ghost"
-              title="Добавить в расследование"
-              onClick={(e) => {
-                e.stopPropagation()
-                void addEventsToContext(investigationId, [alert.id])
-              }}
-            >
-              <Plus className="h-3 w-3" />
-            </Button>
-          )}
-        </td>
-      )}
     </tr>
   )
 }
@@ -553,7 +532,11 @@ export function AlertTable({ investigationId }: { investigationId?: string } = {
     }
     const alert = alerts[item.id]
     if (!alert) return false
-    if (investigationId && queue?.hideAdded && inContextOf(alert)) return false
+    if (investigationId && queue) {
+      const inCtx = inContextOf(alert)
+      if (queue.addedFilter === 'hide_added' && inCtx) return false
+      if (queue.addedFilter === 'only_added' && !inCtx) return false
+    }
     if (!alertMatchesQueueText(alert, textNeedle, searchColumn)) return false
     return true
   })
@@ -628,7 +611,7 @@ export function AlertTable({ investigationId }: { investigationId?: string } = {
   const [colWidths, setColWidths] = useState<Record<string, number>>(loadStoredColWidths)
   const [viewportWidth, setViewportWidth] = useState(0)
 
-  const colKeys = alertTableColKeys(selectFields, Boolean(investigationId), showCategory)
+  const colKeys = alertTableColKeys(selectFields, showCategory)
   const storedWidths = colKeys.map((key) => colWidths[key] ?? defaultWidthForCol(key))
   const titleIndex = colKeys.indexOf('title')
   const storedSum = storedWidths.reduce((sum, width) => sum + width, 0)
@@ -780,7 +763,7 @@ export function AlertTable({ investigationId }: { investigationId?: string } = {
                     {loading && (
                       <span className="shrink-0 normal-case tracking-normal text-fg-dim">загрузка…</span>
                     )}
-                    {investigationId && !queue?.hideAdded && (
+                    {investigationId && queue?.addedFilter !== 'hide_added' && (
                       <span className="shrink-0 text-fg-muted">
                         в контексте <span className="text-fg">{inContextCount}</span>
                       </span>
@@ -821,9 +804,6 @@ export function AlertTable({ investigationId }: { investigationId?: string } = {
                   <span className="block truncate">{alertTableColumnLabel('source')}</span>
                   {renderResizeHandle('source', 4 + (showCategory ? 1 : 0) + selectFields.length)}
                 </th>
-                {investigationId && (
-                  <th className={clsx(COL_FIT, 'relative px-3 py-2')} />
-                )}
               </tr>
             </thead>
           </table>

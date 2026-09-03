@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { issueTemplates, useAppStore } from '../store/appStore'
+import { useAppStore } from '../store/appStore'
 import { Button, Chip } from './ui'
 import { clsx, formatTime, statusLabel } from '../lib/utils'
 import {
@@ -10,7 +10,6 @@ import {
   Loader2,
   MessageSquare,
   Play,
-  Plus,
   Square,
   XCircle,
 } from 'lucide-react'
@@ -315,9 +314,6 @@ export function AgentSection({ investigationId }: { investigationId: string }) {
   const inv = useAppStore((s) => s.investigations[investigationId])
   const catalog = useAppStore((s) => s.somCatalog)
   const loadSomCatalog = useAppStore((s) => s.loadSomCatalog)
-  const createIssue = useAppStore((s) => s.createIssue)
-
-  const [showCreate, setShowCreate] = useState(false)
 
   useEffect(() => {
     void loadSomCatalog()
@@ -331,43 +327,7 @@ export function AgentSection({ investigationId }: { investigationId: string }) {
 
   return (
     <div className="space-y-3 p-3">
-      <div className="flex justify-end">
-        <Button size="sm" variant="ghost" onClick={() => setShowCreate((v) => !v)}>
-          <Plus className="h-3.5 w-3.5" />
-        </Button>
-      </div>
-
       <ProposedLinksSection investigationId={investigationId} />
-
-      {showCreate && (
-        <div className="rounded border border-border bg-surface-2 p-2">
-          <div className="mb-2 text-[10px] uppercase tracking-wider text-fg-dim">
-            Новый issue
-          </div>
-          <div className="space-y-1">
-            {issueTemplates.map((tpl) => (
-              <button
-                key={tpl.id}
-                type="button"
-                className="block w-full rounded px-2 py-1.5 text-left text-xs hover:bg-surface-3"
-                onClick={() => {
-                  createIssue(
-                    investigationId,
-                    tpl.id,
-                    inv.selectedEntityIds.slice(0, 2).length
-                      ? inv.selectedEntityIds.slice(0, 2)
-                      : inv.entityIds.slice(0, 1),
-                  )
-                  setShowCreate(false)
-                }}
-              >
-                <div className="font-medium text-fg">{tpl.title}</div>
-                <div className="text-fg-dim">{tpl.description}</div>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
 
       {issueTree.map((rootNode) => (
         <SomIssueTreeItem

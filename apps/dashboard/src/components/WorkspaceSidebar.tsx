@@ -255,10 +255,7 @@ export function WorkspaceSidebar({ investigationId }: { investigationId: string 
             )}
           >
             {expanded ? (
-              <>
-                <ChevronsLeft className="h-4 w-4 shrink-0" />
-                <span className="text-xs">Свернуть</span>
-              </>
+              <ChevronsLeft className="h-4 w-4 shrink-0" />
             ) : (
               <ChevronsRight className="h-4 w-4" />
             )}

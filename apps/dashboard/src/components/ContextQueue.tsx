@@ -136,8 +136,6 @@ export function ContextQueueToolbar({ investigationId }: { investigationId: stri
  */
 export function ContextQueuePage({ investigationId }: { investigationId: string }) {
   const inv = useAppStore((s) => s.investigations[investigationId])
-  const queue = useAppStore((s) => s.contextQueue[investigationId]) ?? emptyContextQueue
-  const setContextQueue = useAppStore((s) => s.setContextQueue)
   const executeContextQuery = useAppStore((s) => s.executeContextQuery)
 
   useEffect(() => {
@@ -157,24 +155,7 @@ export function ContextQueuePage({ investigationId }: { investigationId: string 
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <ContextQueryComposer
-        investigationId={investigationId}
-        extra={
-          <button
-            type="button"
-            className={clsx(
-              'rounded border px-2 py-1.5 text-xs',
-              queue.hideAdded
-                ? 'border-fg/30 bg-surface-3 text-fg'
-                : 'border-border text-fg-muted hover:text-fg',
-            )}
-            onClick={() => setContextQueue(investigationId, { hideAdded: !queue.hideAdded })}
-            title="Показывать только события вне контекста"
-          >
-            скрыть добавленные
-          </button>
-        }
-      />
+      <ContextQueryComposer investigationId={investigationId} />
       <div className="flex min-h-0 flex-1">
         <EventGroupFilter investigationId={investigationId} />
         <div className="min-h-0 min-w-0 flex-1">

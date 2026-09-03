@@ -112,7 +112,7 @@ export const emptyContextQueue: ContextQueueState = {
   queryHistory: [],
   findingFilterWarnAt: 0,
   selectedIds: [],
-  hideAdded: false,
+  addedFilter: 'all',
   originFilter: 'all',
   reviewFilter: 'all',
   textFilter: '',
