@@ -188,6 +188,7 @@ async function searchFindingsQueue(
   timeInterval: TimeInterval,
   query: string | undefined,
   kind: FindingKind,
+  sort?: QueueSort,
 ): Promise<QueueSearchResult> {
   const sources = await capableSources('findings')
   const sourceErrors: string[] = []
@@ -214,7 +215,7 @@ async function searchFindingsQueue(
     for (const entity of mapped.entities) entities[entity.id] = entity
     alertList.push(mapped.alert)
   }
-  return finishQueue(alertList, entities, chips, query, sourceErrors, sources.available)
+  return finishQueue(alertList, entities, chips, query, sourceErrors, sources.available, sort)
 }
 
 function sourcesForEventSearch(allowed: string[], hasControls: boolean): string[] {
@@ -466,7 +467,7 @@ export async function searchQueue(
   if (queueSource === 'events') return searchEventsQueue(ast, timeInterval, groupValues)
   const chips = astToFilterChips(ast)
   const query = pdqlToSearchParts(ast).query
-  return searchFindingsQueue(chips, timeInterval, query, queueSource)
+  return searchFindingsQueue(chips, timeInterval, query, queueSource, astToEventSearch(ast).sort)
 }
 
 function alertFromGatewayEvent(event: Gw['schemas']['Event']): AlertEvent {

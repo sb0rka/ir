@@ -23,6 +23,7 @@ vi.mock('./env', async (importOriginal) => {
 })
 
 type GwEvent = Gw['schemas']['Event']
+type GwFinding = Gw['schemas']['Finding']
 
 function mustParse(text: string) {
   const result = parse(text)
@@ -45,6 +46,27 @@ function gwEvent(
     occurred_at: occurredAt,
     entities: [],
     attributes: attrs,
+    fetched_at: '2025-10-23T12:00:00.000Z',
+  }
+}
+
+function gwFinding(
+  id: string,
+  occurredAt: string,
+  kind: GwFinding['kind'] = 'siem_incident',
+): GwFinding {
+  return {
+    ref: {
+      source_code: 'pt-maxpatrol-siem',
+      record_type: kind,
+      external_id: id,
+      time_range: { from: '2025-10-23T00:00:00.000Z', to: '2025-10-23T23:59:59.000Z' },
+    },
+    kind,
+    title: id,
+    severity: 'high',
+    occurred_at: occurredAt,
+    entities: [],
     fetched_at: '2025-10-23T12:00:00.000Z',
   }
 }
@@ -232,5 +254,66 @@ describe('searchQueue uuid resolve', () => {
 
     expect(gatewayPost.mock.calls.map((call) => call[0])).toEqual(['/api/v1/context/resolve'])
     expect(result.queueOrder).toEqual([])
+  })
+})
+
+describe('searchQueue findings sort', () => {
+  function mockFindings(kind: GwFinding['kind']) {
+    gatewayPost.mockImplementation(async (path: string) => {
+      if (path === '/api/v1/findings/search') {
+        return {
+          data: {
+            findings: [
+              gwFinding('old', '2025-10-23T10:00:00.000Z', kind),
+              gwFinding('new', '2025-10-23T18:00:00.000Z', kind),
+            ],
+            source_states: [],
+            source_errors: [],
+          },
+          error: undefined,
+          response: { status: 200 },
+        }
+      }
+      throw new Error(`unexpected ${path}`)
+    })
+  }
+
+  it('sorts incidents by time asc from the query', async () => {
+    mockFindings('siem_incident')
+    const result = await searchQueue(
+      mustParse('select(time) | sort(time asc)'),
+      demoDayInterval('UTC'),
+      'siem_incident',
+    )
+    expect(result.queueOrder.map((item) => item.id)).toEqual([
+      'pt-maxpatrol-siem/siem_incident/old',
+      'pt-maxpatrol-siem/siem_incident/new',
+    ])
+  })
+
+  it('keeps default time desc for incidents', async () => {
+    mockFindings('siem_incident')
+    const result = await searchQueue(
+      mustParse('select(time) | sort(time desc)'),
+      demoDayInterval('UTC'),
+      'siem_incident',
+    )
+    expect(result.queueOrder.map((item) => item.id)).toEqual([
+      'pt-maxpatrol-siem/siem_incident/new',
+      'pt-maxpatrol-siem/siem_incident/old',
+    ])
+  })
+
+  it('sorts correlations by time asc from the query', async () => {
+    mockFindings('siem_correlation')
+    const result = await searchQueue(
+      mustParse('select(time) | sort(time asc)'),
+      demoDayInterval('UTC'),
+      'siem_correlation',
+    )
+    expect(result.queueOrder.map((item) => item.id)).toEqual([
+      'pt-maxpatrol-siem/siem_correlation/old',
+      'pt-maxpatrol-siem/siem_correlation/new',
+    ])
   })
 })
