@@ -94,7 +94,7 @@ export function Button({
 }) {
   const variants = {
     default: 'border-border bg-surface-2 text-fg hover:bg-surface-3',
-    primary: 'border-fg/30 bg-fg text-surface-0 hover:bg-surface-1',
+    primary: 'border-fg/30 bg-fg/90 text-surface-0 hover:bg-fg',
     ghost: 'border-transparent bg-transparent text-fg-muted hover:bg-surface-2 hover:text-fg',
     danger: 'border-critical/40 bg-critical/10 text-critical hover:bg-critical/20',
   }
