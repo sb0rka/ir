@@ -14,7 +14,7 @@ import (
 	"github.com/sb0rka/ir/apps/investigations/internal/store"
 )
 
-const hypothesisSelect = `SELECT h.id::text,h.project_id,h.investigation_id::text,h.statement,h.description,h.status,h.reason,h.origin,h.version,h.created_at,h.updated_at,h.resolved_at FROM hypotheses h`
+const hypothesisSelect = `SELECT h.id::text,h.project_id,h.investigation_id::text,h.statement,h.description,h.status,h.reason,h.origin,h.version,h.created_at,h.updated_at,h.resolved_at FROM hypotheses h JOIN investigations i ON i.id=h.investigation_id AND i.project_id=h.project_id AND i.is_deleted=false AND h.is_deleted=false`
 
 func scanHypothesis(row pgx.Row) (model.Hypothesis, error) {
 	var h model.Hypothesis
@@ -192,13 +192,16 @@ func (d *DB) UpdateHypothesis(ctx context.Context, patch model.HypothesisPatch) 
 		resolvedAt = nil
 	}
 
-	_, err = tx.Exec(ctx, `UPDATE hypotheses SET
+	tag, err := tx.Exec(ctx, `UPDATE hypotheses SET
 		statement=$1,description=$2,status=$3,reason=$4,resolved_at=$5,version=version+1
-		WHERE id=$6::uuid AND investigation_id=$7::uuid AND project_id=$8`,
+		WHERE id=$6::uuid AND investigation_id=$7::uuid AND project_id=$8 AND is_deleted=false`,
 		statement, description, status, reason, resolvedAt,
 		patch.HypothesisID, patch.InvestigationID, patch.ProjectID)
 	if err != nil {
 		return model.Hypothesis{}, fmt.Errorf("update hypothesis: %w", mapConstraint(err))
+	}
+	if tag.RowsAffected() == 0 {
+		return model.Hypothesis{}, store.ErrRecordNotFound
 	}
 	out, err := hypothesisByIDTx(ctx, tx, patch.ProjectID, patch.InvestigationID, patch.HypothesisID, false)
 	if err != nil {
@@ -238,25 +241,17 @@ func trimOptional(value *string) *string {
 }
 
 func (d *DB) DeleteHypothesis(ctx context.Context, projectID, investigationID, hypothesisID string) error {
-	tx, err := d.Pgx().Begin(ctx)
-	if err != nil {
-		return fmt.Errorf("begin hypothesis delete: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-	if _, err := hypothesisByIDTx(ctx, tx, projectID, investigationID, hypothesisID, true); err != nil {
-		return err
-	}
-	tag, err := tx.Exec(ctx, `DELETE FROM hypotheses
-		WHERE id=$1::uuid AND investigation_id=$2::uuid AND project_id=$3`,
+	tag, err := d.Pgx().Exec(ctx, `UPDATE hypotheses h SET is_deleted=true
+		FROM investigations i
+		WHERE h.id=$1::uuid AND h.investigation_id=$2::uuid AND h.project_id=$3
+		  AND h.is_deleted=false AND i.id=h.investigation_id
+		  AND i.project_id=h.project_id AND i.is_deleted=false`,
 		hypothesisID, investigationID, projectID)
 	if err != nil {
-		return fmt.Errorf("delete hypothesis: %w", mapConstraint(err))
+		return fmt.Errorf("soft-delete hypothesis: %w", mapConstraint(err))
 	}
 	if tag.RowsAffected() == 0 {
 		return store.ErrRecordNotFound
-	}
-	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("commit hypothesis delete: %w", err)
 	}
 	return nil
 }

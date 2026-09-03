@@ -77,7 +77,10 @@ func (d *DB) GetSession(ctx context.Context, projectID, sessionID string) (model
 	if err != nil {
 		return model.NetworkSession{}, fmt.Errorf("get session: %w", mapConstraint(err))
 	}
-	rows, err := d.Pgx().Query(ctx, `SELECT investigation_id::text FROM investigation_sessions WHERE session_id=$1::uuid AND project_id=$2 ORDER BY investigation_id`, sessionID, projectID)
+	rows, err := d.Pgx().Query(ctx, `SELECT m.investigation_id::text
+		FROM investigation_sessions m JOIN investigations i
+		  ON i.id=m.investigation_id AND i.project_id=m.project_id AND i.is_deleted=false
+		WHERE m.session_id=$1::uuid AND m.project_id=$2 ORDER BY m.investigation_id`, sessionID, projectID)
 	if err != nil {
 		return model.NetworkSession{}, fmt.Errorf("list session investigations: %w", mapConstraint(err))
 	}

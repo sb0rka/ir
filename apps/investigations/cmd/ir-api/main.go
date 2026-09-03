@@ -75,7 +75,6 @@ func run() error {
 		}),
 		secrets,
 		gatewayclient.New(gatewayclient.Config{BaseURL: cfg.Gateway.BaseURL}),
-		cfg.Prompt,
 	)
 	handler := transport.NewHandler(transport.Dependencies{
 		Cfg:    cfg.Server,

@@ -79,10 +79,6 @@ function collectTimes(values: Array<string | undefined>): number[] {
   return times
 }
 
-// TODO: IR Origin is analyst|rule|agent — opening events and later
-// addContext both attach as analyst, so a later manual add currently
-// looks like seed. Replace with a real seed mark once the API
-// distinguishes investigation-opening events.
 function isSeedEvent(
   origin: string | undefined,
   ids: Array<string | undefined>,
@@ -90,7 +86,7 @@ function isSeedEvent(
 ): boolean {
   const seed = new Set(seedEventIds)
   if (ids.some((id) => id && seed.has(id))) return true
-  return origin === 'seed' || origin === 'analyst'
+  return origin === 'seed'
 }
 
 function graphOrigin(origin: string | undefined): EdgeOrigin {

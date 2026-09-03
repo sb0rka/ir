@@ -56,14 +56,17 @@ func (e ErrorResponseErrorCode) Valid() bool {
 
 // Defines values for InvestigationStatus.
 const (
-	Closed InvestigationStatus = "closed"
-	Open   InvestigationStatus = "open"
+	Closed     InvestigationStatus = "closed"
+	InProgress InvestigationStatus = "in_progress"
+	Open       InvestigationStatus = "open"
 )
 
 // Valid indicates whether the value is a known member of the InvestigationStatus enum.
 func (e InvestigationStatus) Valid() bool {
 	switch e {
 	case Closed:
+		return true
+	case InProgress:
 		return true
 	case Open:
 		return true
@@ -189,10 +192,16 @@ type AgentEventSelection struct {
 	SourceEventId string `json:"source_event_id"`
 }
 
-// AgentNode A unique local ref and exactly one target: an event/entity selection from this batch, or an existing node in this investigation.
+// AgentNode A unique local ref and exactly one target: an event/entity selection from this batch, an event/entity already attached to this investigation, or an existing node in this investigation.
 type AgentNode struct {
+	// EntityId Entity UUID already attached to this investigation.
+	EntityId *openapi_types.UUID `json:"entity_id,omitempty"`
+
 	// EntityRef Local ref of an entity selection from this batch.
 	EntityRef *string `json:"entity_ref,omitempty"`
+
+	// EventId Event UUID already attached to this investigation.
+	EventId *openapi_types.UUID `json:"event_id,omitempty"`
 
 	// EventRef Local ref of an event selection from this batch.
 	EventRef *string             `json:"event_ref,omitempty"`
@@ -227,6 +236,9 @@ type ContextSelection struct {
 	Entities []EntitySourceRef `json:"entities"`
 	Events   []EventSourceRef  `json:"events"`
 	Findings []SourceObjectRef `json:"findings"`
+
+	// Seed Marks directly selected events as the seed evidence that opened the investigation. Derived events are never marked as seed.
+	Seed     *bool             `json:"seed,omitempty"`
 	Sessions []SourceObjectRef `json:"sessions"`
 }
 

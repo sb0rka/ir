@@ -332,6 +332,23 @@ func TestHypothesisFilterValidation(t *testing.T) {
 	}
 }
 
+func TestDeleteHypothesisMapsMissingToNotFound(t *testing.T) {
+	fake := &hypothesisFakeDB{err: store.ErrRecordNotFound}
+	s := &Server{db: fake}
+	ctx := socctx.WithScope(context.Background(), socctx.Scope{ProjectID: "aabbccddee"})
+
+	_, err := s.DeleteHypothesis(ctx, hypotheses.DeleteHypothesisRequestObject{
+		InvestigationId: uuid.New(), HypothesisId: uuid.New(),
+	})
+	var domain *httperr.Error
+	if !errorsAs(err, &domain) || domain.Status != http.StatusNotFound {
+		t.Fatalf("delete error=%v", err)
+	}
+	if len(fake.calls) != 1 || fake.calls[0] != "delete" {
+		t.Fatalf("calls=%v", fake.calls)
+	}
+}
+
 func stringPointerForServer(value string) *string { return &value }
 
 func uuidPointer(value string) *uuid.UUID {

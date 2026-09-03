@@ -260,8 +260,9 @@ paths:
       tags: [investigations]
       summary: Delete an investigation
       description: >-
-        Deletes the investigation subtree, its graph data and its links to
-        shared events and entities. Project event and entity records remain.
+        Soft-deletes the investigation subtree and all of its hypotheses.
+        Deleted records and their graph data remain stored but are no longer
+        available through the API. Project event and entity records remain.
       operationId: deleteInvestigation
       responses:
         '204':
@@ -463,6 +464,12 @@ components:
         all four arrays is required; the server validates that aggregate rule.
       required: [findings, sessions, events, entities]
       properties:
+        seed:
+          type: boolean
+          default: false
+          description: >-
+            Marks directly selected events as the seed evidence that opened the
+            investigation. Derived events are never marked as seed.
         findings:
           type: array
           maxItems: 100
@@ -532,7 +539,8 @@ components:
       type: object
       description: >-
         A unique local ref and exactly one target: an event/entity selection
-        from this batch, or an existing node in this investigation.
+        from this batch, an event/entity already attached to this investigation,
+        or an existing node in this investigation.
       required: [ref]
       properties:
         ref: { type: string, minLength: 1, maxLength: 128 }
@@ -546,6 +554,14 @@ components:
           minLength: 1
           maxLength: 128
           description: Local ref of an entity selection from this batch.
+        event_id:
+          type: string
+          format: uuid
+          description: Event UUID already attached to this investigation.
+        entity_id:
+          type: string
+          format: uuid
+          description: Entity UUID already attached to this investigation.
         node_id: { type: string, format: uuid }
 
     AgentEdge:
@@ -656,7 +672,7 @@ components:
       description: >-
         Whether work is still going on. Says nothing about the outcome — that is
         the verdict.
-      enum: [open, closed]
+      enum: [open, in_progress, closed]
 
     Verdict:
       type: string

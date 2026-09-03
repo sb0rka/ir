@@ -32,6 +32,8 @@ type Database interface {
 	CreateInvestigation(ctx context.Context, inv model.InvestigationNew) (model.Investigation, error)
 	ListInvestigations(ctx context.Context, projectID string, filter model.InvestigationFilter) ([]model.Investigation, error)
 	GetInvestigation(ctx context.Context, projectID, investigationID string) (model.Investigation, error)
+	UpdateInvestigation(ctx context.Context, patch model.InvestigationPatch) (model.Investigation, error)
+	DeleteInvestigation(ctx context.Context, projectID, investigationID string) error
 	InvestigationExists(ctx context.Context, projectID, investigationID string) (bool, error)
 	ImportContext(ctx context.Context, request model.ImportRequest) (model.ImportStats, error)
 

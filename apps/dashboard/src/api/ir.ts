@@ -144,6 +144,7 @@ export async function addContext(
   input: {
     events?: EventSourceRef[]
     findings?: SourceObjectRef[]
+    seed?: boolean
   },
 ): Promise<Ir['schemas']['ContextImportResult'] | undefined> {
   const events = input.events ?? []
@@ -152,7 +153,7 @@ export async function addContext(
   return throwIfError(
     await irClient.POST('/investigations/{investigation_id}/context', {
       params: { ...projectParams(), path: { investigation_id: investigationId } },
-      body: { findings, sessions: [], events, entities: [] },
+      body: { findings, sessions: [], events, entities: [], seed: input.seed ?? false },
     }),
   )
 }
@@ -211,6 +212,7 @@ export async function loadInvestigationBundle(
   return {
     investigation: mapIrInvestigation(inv, {
       ...extras,
+      seedEventIds: eventsPage.filter((event) => event.is_seed).map((event) => event.id),
       eventIds: Object.keys(events),
       entityIds: Object.keys(entities),
       nodeIds: Object.keys(nodes),

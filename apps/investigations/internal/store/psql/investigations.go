@@ -18,7 +18,7 @@ const investigationSelect = `
 	       i.origin, i.origin_ref, i.version, i.created_at, i.updated_at, i.closed_at,
 	       COALESCE((SELECT array_agg(w.workspace_id::text ORDER BY w.workspace_id)
 	                   FROM investigation_som_workspaces w WHERE w.investigation_id=i.id), '{}'),
-	       (SELECT count(*)::int FROM investigations c WHERE c.parent_id=i.id),
+	       (SELECT count(*)::int FROM investigations c WHERE c.parent_id=i.id AND c.is_deleted=false),
 	       (SELECT count(*)::int FROM investigation_findings f WHERE f.investigation_id=i.id),
 	       (SELECT count(*)::int FROM investigation_sessions s WHERE s.investigation_id=i.id),
 	       (SELECT count(*)::int FROM investigation_events ie WHERE ie.investigation_id=i.id),
@@ -37,7 +37,7 @@ func scanInvestigation(row pgx.Row) (model.Investigation, error) {
 }
 
 func investigationTx(ctx context.Context, tx pgx.Tx, projectID, investigationID string) (model.Investigation, error) {
-	out, err := scanInvestigation(tx.QueryRow(ctx, investigationSelect+` WHERE i.id=$1::uuid AND i.project_id=$2`, investigationID, projectID))
+	out, err := scanInvestigation(tx.QueryRow(ctx, investigationSelect+` WHERE i.id=$1::uuid AND i.project_id=$2 AND i.is_deleted=false`, investigationID, projectID))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return model.Investigation{}, store.ErrInvestigationNotFound
 	}
@@ -53,6 +53,15 @@ func (d *DB) CreateInvestigation(ctx context.Context, inv model.InvestigationNew
 		return model.Investigation{}, fmt.Errorf("begin investigation: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	if inv.ParentID != nil {
+		exists, err := investigationExistsTx(ctx, tx, inv.ProjectID, *inv.ParentID)
+		if err != nil {
+			return model.Investigation{}, err
+		}
+		if !exists {
+			return model.Investigation{}, store.ErrParentNotFound
+		}
+	}
 
 	var id string
 	err = tx.QueryRow(ctx, `
@@ -82,12 +91,112 @@ func (d *DB) CreateInvestigation(ctx context.Context, inv model.InvestigationNew
 }
 
 func (d *DB) GetInvestigation(ctx context.Context, projectID, investigationID string) (model.Investigation, error) {
-	out, err := scanInvestigation(d.Pgx().QueryRow(ctx, investigationSelect+` WHERE i.id=$1::uuid AND i.project_id=$2`, investigationID, projectID))
+	out, err := scanInvestigation(d.Pgx().QueryRow(ctx, investigationSelect+` WHERE i.id=$1::uuid AND i.project_id=$2 AND i.is_deleted=false`, investigationID, projectID))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return model.Investigation{}, store.ErrInvestigationNotFound
 	}
 	if err != nil {
 		return model.Investigation{}, fmt.Errorf("get investigation: %w", err)
+	}
+	return out, nil
+}
+
+func (d *DB) UpdateInvestigation(ctx context.Context, patch model.InvestigationPatch) (model.Investigation, error) {
+	tx, err := d.Pgx().Begin(ctx)
+	if err != nil {
+		return model.Investigation{}, fmt.Errorf("begin investigation update: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	current, err := investigationTx(ctx, tx, patch.ProjectID, patch.InvestigationID)
+	if err != nil {
+		return model.Investigation{}, err
+	}
+	if current.Version != patch.Version {
+		return model.Investigation{}, store.ErrConflict
+	}
+
+	status := current.Status
+	if patch.Status != nil {
+		status = *patch.Status
+	}
+	verdict := current.Verdict
+	verdictReason := current.VerdictReason
+	confidence := current.Confidence
+	if current.Status == "closed" && status != "closed" {
+		verdict, verdictReason, confidence = nil, nil, nil
+	} else {
+		if patch.Verdict != nil {
+			verdict = patch.Verdict
+		}
+		if patch.VerdictReason != nil {
+			verdictReason = patch.VerdictReason
+		}
+		if patch.Confidence != nil {
+			confidence = patch.Confidence
+		}
+	}
+	if status == "closed" && verdict == nil {
+		return model.Investigation{}, store.ErrInvalidValue
+	}
+	if verdict != nil {
+		allowed := map[string]bool{"inconclusive": true}
+		if current.ParentID == nil {
+			allowed["incident"], allowed["false_positive"], allowed["not_affected"] = true, true, true
+		} else {
+			allowed["confirmed"], allowed["rejected"] = true, true
+		}
+		if !allowed[*verdict] || (*verdict == "rejected" && (verdictReason == nil || *verdictReason == "")) {
+			return model.Investigation{}, store.ErrInvalidValue
+		}
+		if *verdict == "confirmed" {
+			var hasEvidence bool
+			if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM investigation_events WHERE investigation_id=$1::uuid AND project_id=$2)`, patch.InvestigationID, patch.ProjectID).Scan(&hasEvidence); err != nil {
+				return model.Investigation{}, fmt.Errorf("check hypothesis evidence: %w", mapConstraint(err))
+			}
+			if !hasEvidence {
+				return model.Investigation{}, store.ErrInvalidValue
+			}
+		}
+	}
+
+	tag, err := tx.Exec(ctx, `UPDATE investigations SET
+		title=COALESCE($4,title),description=COALESCE($5,description),status=$6,
+		verdict=$7,verdict_reason=$8,confidence=$9,severity=COALESCE($10,severity),
+		closed_at=CASE WHEN $6='closed' THEN COALESCE(closed_at,now()) ELSE NULL END,
+		version=version+1
+		WHERE id=$1::uuid AND project_id=$2 AND version=$3 AND is_deleted=false`,
+		patch.InvestigationID, patch.ProjectID, patch.Version, patch.Title, patch.Description,
+		status, verdict, verdictReason, confidence, patch.Severity)
+	if err != nil {
+		return model.Investigation{}, fmt.Errorf("update investigation: %w", mapConstraint(err))
+	}
+	if tag.RowsAffected() == 0 {
+		exists, existsErr := investigationExistsTx(ctx, tx, patch.ProjectID, patch.InvestigationID)
+		if existsErr != nil {
+			return model.Investigation{}, existsErr
+		}
+		if !exists {
+			return model.Investigation{}, store.ErrInvestigationNotFound
+		}
+		return model.Investigation{}, store.ErrConflict
+	}
+	if patch.WorkspaceIDs != nil {
+		if _, err := tx.Exec(ctx, `DELETE FROM investigation_som_workspaces WHERE investigation_id=$1::uuid AND project_id=$2`, patch.InvestigationID, patch.ProjectID); err != nil {
+			return model.Investigation{}, fmt.Errorf("replace workspaces: %w", mapConstraint(err))
+		}
+		for _, workspaceID := range *patch.WorkspaceIDs {
+			if _, err := tx.Exec(ctx, `INSERT INTO investigation_som_workspaces (investigation_id,project_id,workspace_id) VALUES ($1::uuid,$2,$3::uuid)`, patch.InvestigationID, patch.ProjectID, workspaceID); err != nil {
+				return model.Investigation{}, fmt.Errorf("link workspace: %w", mapConstraint(err))
+			}
+		}
+	}
+	out, err := investigationTx(ctx, tx, patch.ProjectID, patch.InvestigationID)
+	if err != nil {
+		return model.Investigation{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return model.Investigation{}, fmt.Errorf("commit investigation update: %w", err)
 	}
 	return out, nil
 }
@@ -103,7 +212,7 @@ func (d *DB) ListInvestigations(ctx context.Context, projectID string, filter mo
 		cursorTime, cursorID = filter.Cursor.Time, filter.Cursor.ID
 	}
 	rows, err := d.Pgx().Query(ctx, investigationSelect+`
-	 WHERE i.project_id=$1
+	 WHERE i.project_id=$1 AND i.is_deleted=false
 	   AND (($2::boolean AND i.parent_id IS NULL) OR ($3::uuid IS NOT NULL AND i.parent_id=$3::uuid) OR (NOT $2::boolean AND $3::uuid IS NULL))
 	   AND ($4::text IS NULL OR i.status=$4)
 	   AND ($5::text IS NULL OR i.severity=$5)
@@ -124,4 +233,54 @@ func (d *DB) ListInvestigations(ctx context.Context, projectID string, filter mo
 		out = append(out, item)
 	}
 	return out, rows.Err()
+}
+
+func (d *DB) DeleteInvestigation(ctx context.Context, projectID, investigationID string) error {
+	tx, err := d.Pgx().Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin investigation delete: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	var one int
+	err = tx.QueryRow(ctx, `SELECT 1 FROM investigations
+		WHERE id=$1::uuid AND project_id=$2 AND is_deleted=false
+		FOR UPDATE`, investigationID, projectID).Scan(&one)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return store.ErrInvestigationNotFound
+	}
+	if err != nil {
+		return fmt.Errorf("lock investigation for delete: %w", mapConstraint(err))
+	}
+
+	var marked int
+	err = tx.QueryRow(ctx, `
+		WITH RECURSIVE subtree(id) AS (
+			SELECT id FROM investigations
+			WHERE id=$1::uuid AND project_id=$2 AND is_deleted=false
+			UNION ALL
+			SELECT child.id FROM investigations child
+			JOIN subtree parent ON child.parent_id=parent.id
+			WHERE child.project_id=$2
+		), marked_investigations AS (
+			UPDATE investigations SET is_deleted=true
+			WHERE id IN (SELECT id FROM subtree) AND project_id=$2 AND is_deleted=false
+			RETURNING id
+		), marked_hypotheses AS (
+			UPDATE hypotheses SET is_deleted=true
+			WHERE investigation_id IN (SELECT id FROM subtree)
+			  AND project_id=$2 AND is_deleted=false
+			RETURNING id
+		)
+		SELECT count(*)::int FROM marked_investigations`, investigationID, projectID).Scan(&marked)
+	if err != nil {
+		return fmt.Errorf("soft-delete investigation subtree: %w", mapConstraint(err))
+	}
+	if marked == 0 {
+		return store.ErrInvestigationNotFound
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit investigation delete: %w", err)
+	}
+	return nil
 }

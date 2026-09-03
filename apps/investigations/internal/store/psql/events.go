@@ -25,7 +25,7 @@ func (d *DB) InvestigationEvents(ctx context.Context, projectID, investigationID
 	}
 	rows, err := d.Pgx().Query(ctx, `
 		SELECT e.id::text,e.source_code,e.source_event_id,e.source_ref,e.title,
-		       e.event_type,e.occurred_at,e.ingested_at,ie.attached_at,ie.attached_by,ie.reason,e.normalized_data
+		       e.event_type,e.occurred_at,e.ingested_at,ie.attached_at,ie.attached_by,ie.reason,ie.is_seed,e.normalized_data
 		  FROM investigation_events ie JOIN events e ON e.id=ie.event_id
 		 WHERE ie.investigation_id=$1::uuid AND ie.project_id=$2
 		   AND ($3::text IS NULL OR e.event_type=$3)
@@ -44,7 +44,7 @@ func (d *DB) InvestigationEvents(ctx context.Context, projectID, investigationID
 	var out []model.EventSummary
 	for rows.Next() {
 		var item model.EventSummary
-		if err := rows.Scan(&item.ID, &item.SourceCode, &item.SourceEventID, &item.SourceRef, &item.Title, &item.EventType, &item.OccurredAt, &item.IngestedAt, &item.AttachedAt, &item.AttachedBy, &item.Reason, &item.NormalizedData); err != nil {
+		if err := rows.Scan(&item.ID, &item.SourceCode, &item.SourceEventID, &item.SourceRef, &item.Title, &item.EventType, &item.OccurredAt, &item.IngestedAt, &item.AttachedAt, &item.AttachedBy, &item.Reason, &item.IsSeed, &item.NormalizedData); err != nil {
 			return nil, err
 		}
 		out = append(out, item)
@@ -97,7 +97,10 @@ func (d *DB) GetEvent(ctx context.Context, projectID, eventID string) (model.Eve
 	if err != nil {
 		return model.Event{}, fmt.Errorf("get event: %w", mapConstraint(err))
 	}
-	rows, err := d.Pgx().Query(ctx, `SELECT investigation_id::text FROM investigation_events WHERE event_id=$1::uuid AND project_id=$2 ORDER BY investigation_id`, eventID, projectID)
+	rows, err := d.Pgx().Query(ctx, `SELECT ie.investigation_id::text
+		FROM investigation_events ie JOIN investigations i
+		  ON i.id=ie.investigation_id AND i.project_id=ie.project_id AND i.is_deleted=false
+		WHERE ie.event_id=$1::uuid AND ie.project_id=$2 ORDER BY ie.investigation_id`, eventID, projectID)
 	if err != nil {
 		return model.Event{}, err
 	}

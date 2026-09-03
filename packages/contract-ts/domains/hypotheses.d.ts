@@ -55,7 +55,7 @@ export interface paths {
         post?: never;
         /**
          * Delete a hypothesis
-         * @description Deletes only the hypothesis and its node and edge memberships. The investigation's shared graph objects remain unchanged.
+         * @description Soft-deletes only the hypothesis. Its node and edge memberships and the investigation's shared graph objects remain stored but are no longer available through the API for this hypothesis.
          */
         delete: operations["deleteHypothesis"];
         options?: never;

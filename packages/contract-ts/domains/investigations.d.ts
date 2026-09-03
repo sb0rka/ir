@@ -161,7 +161,7 @@ export interface paths {
         post?: never;
         /**
          * Delete an investigation
-         * @description Deletes the investigation subtree, its graph data and its links to shared events and entities. Project event and entity records remain.
+         * @description Soft-deletes the investigation subtree and all of its hypotheses. Deleted records and their graph data remain stored but are no longer available through the API. Project event and entity records remain.
          */
         delete: operations["deleteInvestigation"];
         options?: never;
@@ -284,6 +284,11 @@ export interface components {
         };
         /** @description Source-owned identifiers selected in Gateway. At least one item across all four arrays is required; the server validates that aggregate rule. */
         ContextSelection: {
+            /**
+             * @description Marks directly selected events as the seed evidence that opened the investigation. Derived events are never marked as seed.
+             * @default false
+             */
+            seed: boolean;
             findings: components["schemas"]["SourceObjectRef"][];
             sessions: components["schemas"]["SourceObjectRef"][];
             events: components["schemas"]["EventSourceRef"][];
@@ -308,13 +313,23 @@ export interface components {
             source_code: string;
             source_entity_id: string;
         };
-        /** @description A unique local ref and exactly one target: an event/entity selection from this batch, or an existing node in this investigation. */
+        /** @description A unique local ref and exactly one target: an event/entity selection from this batch, an event/entity already attached to this investigation, or an existing node in this investigation. */
         AgentNode: {
             ref: string;
             /** @description Local ref of an event selection from this batch. */
             event_ref?: string;
             /** @description Local ref of an entity selection from this batch. */
             entity_ref?: string;
+            /**
+             * Format: uuid
+             * @description Event UUID already attached to this investigation.
+             */
+            event_id?: string;
+            /**
+             * Format: uuid
+             * @description Entity UUID already attached to this investigation.
+             */
+            entity_id?: string;
             /** Format: uuid */
             node_id?: string;
         };
@@ -377,7 +392,7 @@ export interface components {
          * @description Whether work is still going on. Says nothing about the outcome — that is the verdict.
          * @enum {string}
          */
-        InvestigationStatus: "open" | "closed";
+        InvestigationStatus: "open" | "in_progress" | "closed";
         /**
          * @description Conclusion of a root or child case. Hypotheses have their own status and resolution reason rather than investigation verdicts.
          * @enum {string}

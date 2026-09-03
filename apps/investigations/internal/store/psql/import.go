@@ -282,19 +282,21 @@ func importSelectionTx(ctx context.Context, tx pgx.Tx, request model.ImportReque
 		if derived {
 			attachedBy = "system"
 		}
+		isSeed := request.Seed && direct
 		tag, err := tx.Exec(ctx, `INSERT INTO investigation_events
-			(investigation_id,event_id,project_id,attached_by,directly_added,derived)
-			VALUES ($1::uuid,$2::uuid,$3,$4,$5,$6) ON CONFLICT DO NOTHING`,
-			request.InvestigationID, eventID, request.ProjectID, attachedBy, direct, derived)
+			(investigation_id,event_id,project_id,attached_by,directly_added,derived,is_seed)
+			VALUES ($1::uuid,$2::uuid,$3,$4,$5,$6,$7) ON CONFLICT DO NOTHING`,
+			request.InvestigationID, eventID, request.ProjectID, attachedBy, direct, derived, isSeed)
 		if err != nil {
 			return stats, fmt.Errorf("attach event: %w", mapConstraint(err))
 		}
 		stats.Events += int(tag.RowsAffected())
 		if _, err := tx.Exec(ctx, `UPDATE investigation_events
 			SET directly_added=directly_added OR $4,derived=derived OR $5,
-			    attached_by=CASE WHEN $4 THEN $6 ELSE attached_by END
+			    attached_by=CASE WHEN $4 THEN $6 ELSE attached_by END,
+			    is_seed=is_seed OR $7
 			WHERE investigation_id=$1::uuid AND event_id=$2::uuid AND project_id=$3`,
-			request.InvestigationID, eventID, request.ProjectID, direct, derived, request.Origin); err != nil {
+			request.InvestigationID, eventID, request.ProjectID, direct, derived, request.Origin, isSeed); err != nil {
 			return stats, fmt.Errorf("merge event membership: %w", mapConstraint(err))
 		}
 	}
@@ -537,6 +539,12 @@ func importSelectionTx(ctx context.Context, tx pgx.Tx, request model.ImportReque
 		if spec.SnapshotEntityID != nil {
 			targets++
 		}
+		if spec.EventID != nil {
+			targets++
+		}
+		if spec.EntityID != nil {
+			targets++
+		}
 		if spec.NodeID != nil {
 			targets++
 		}
@@ -558,6 +566,34 @@ func importSelectionTx(ctx context.Context, tx pgx.Tx, request model.ImportReque
 			}
 			entityID := entityIDs[*spec.SnapshotEntityID]
 			node, inserted, err = upsertNodeTx(ctx, tx, request.InvestigationID, "entity", &entityID, nil, "agent", request.SomIssueIDs)
+		} else if spec.EventID != nil {
+			eventID := strings.TrimSpace(*spec.EventID)
+			err = tx.QueryRow(ctx, `SELECT e.id::text
+				FROM events e
+				JOIN investigation_events ie
+				  ON ie.event_id=e.id AND ie.project_id=e.project_id
+				WHERE e.id=$1::uuid AND e.project_id=$2
+				  AND ie.investigation_id=$3::uuid`, eventID, request.ProjectID, request.InvestigationID).Scan(&eventID)
+			if errors.Is(err, pgx.ErrNoRows) {
+				return stats, store.ErrUnknownReference
+			}
+			if err == nil {
+				node, inserted, err = upsertNodeTx(ctx, tx, request.InvestigationID, "event", nil, &eventID, "agent", request.SomIssueIDs)
+			}
+		} else if spec.EntityID != nil {
+			entityID := strings.TrimSpace(*spec.EntityID)
+			err = tx.QueryRow(ctx, `SELECT e.id::text
+				FROM entities e
+				JOIN investigation_entities ie
+				  ON ie.entity_id=e.id AND ie.project_id=e.project_id
+				WHERE e.id=$1::uuid AND e.project_id=$2
+				  AND ie.investigation_id=$3::uuid`, entityID, request.ProjectID, request.InvestigationID).Scan(&entityID)
+			if errors.Is(err, pgx.ErrNoRows) {
+				return stats, store.ErrUnknownReference
+			}
+			if err == nil {
+				node, inserted, err = upsertNodeTx(ctx, tx, request.InvestigationID, "entity", &entityID, nil, "agent", request.SomIssueIDs)
+			}
 		} else {
 			node, err = graphNodeByIDTx(ctx, tx, request.ProjectID, request.InvestigationID, *spec.NodeID)
 			if err == nil {

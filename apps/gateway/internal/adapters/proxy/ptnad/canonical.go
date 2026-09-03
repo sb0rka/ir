@@ -120,7 +120,12 @@ func sessionTitle(value Session, source, destination Endpoint) string {
 func appendSessionContext(page *capability.ContextPage, value Session) {
 	item := canonicalSession(value)
 	page.Sessions = append(page.Sessions, item)
-	page.Resolutions = append(page.Resolutions, domain.ObjectResolution{Ref: item.Ref, Status: "complete", Errors: []domain.SourceError{}})
+	resolution := domain.ObjectResolution{Ref: item.Ref, Status: "complete", Errors: []domain.SourceError{}}
+	for _, err := range value.ContextErrors {
+		resolution.Status = "partial"
+		resolution.Errors = append(resolution.Errors, contextWarning("session HTTP transaction pagination", err))
+	}
+	page.Resolutions = append(page.Resolutions, resolution)
 	for _, attack := range value.RelatedAttacks {
 		finding := canonicalFinding(attack)
 		page.Findings = append(page.Findings, finding)

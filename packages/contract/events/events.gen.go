@@ -173,6 +173,9 @@ type EventSummary struct {
 	// IngestedAt When it was pulled into the investigation.
 	IngestedAt time.Time `json:"ingested_at"`
 
+	// IsSeed Whether this event is seed evidence for the investigation being listed. This belongs to the investigation-event link, not the project event itself.
+	IsSeed bool `json:"is_seed"`
+
 	// NormalizedData The event mapped onto the common envelope.
 	NormalizedData *map[string]interface{} `json:"normalized_data,omitempty"`
 

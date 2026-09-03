@@ -57,6 +57,20 @@ type InvestigationFilter struct {
 	Limit     int
 }
 
+type InvestigationPatch struct {
+	ProjectID       string
+	InvestigationID string
+	Version         int
+	Title           *string
+	Description     *string
+	Status          *string
+	Verdict         *string
+	VerdictReason   *string
+	Confidence      *float32
+	Severity        *string
+	WorkspaceIDs    *[]string
+}
+
 type HypothesisNew struct {
 	ProjectID       string
 	InvestigationID string
@@ -217,6 +231,8 @@ type AgentNode struct {
 	Ref              string
 	SnapshotEventID  *string
 	SnapshotEntityID *string
+	EventID          *string
+	EntityID         *string
 	NodeID           *string
 }
 
@@ -240,6 +256,7 @@ type ImportRequest struct {
 	Nodes                   []AgentNode
 	Edges                   []AgentEdge
 	Warnings                []string
+	Seed                    bool
 }
 
 type ImportStats struct {
@@ -329,6 +346,7 @@ type EventSummary struct {
 	AttachedAt     time.Time
 	AttachedBy     string
 	Reason         *string
+	IsSeed         bool
 	NormalizedData []byte
 	Entities       []EventEntity
 }

@@ -138,7 +138,7 @@ func (d *DB) GetEntityCard(ctx context.Context, projectID, entityID string) (mod
 	if err != nil {
 		return model.EntityCard{}, err
 	}
-	rows, err := d.Pgx().Query(ctx, `SELECT i.id::text,i.title,count(DISTINCT ie.event_id)::int FROM investigation_entities ient JOIN investigations i ON i.id=ient.investigation_id LEFT JOIN investigation_events ie ON ie.investigation_id=i.id LEFT JOIN event_entity_relations r ON r.event_id=ie.event_id AND r.entity_id=ient.entity_id WHERE ient.entity_id=$1::uuid AND ient.project_id=$2 GROUP BY i.id,i.title ORDER BY i.created_at DESC`, entityID, projectID)
+	rows, err := d.Pgx().Query(ctx, `SELECT i.id::text,i.title,count(DISTINCT ie.event_id)::int FROM investigation_entities ient JOIN investigations i ON i.id=ient.investigation_id AND i.is_deleted=false LEFT JOIN investigation_events ie ON ie.investigation_id=i.id LEFT JOIN event_entity_relations r ON r.event_id=ie.event_id AND r.entity_id=ient.entity_id WHERE ient.entity_id=$1::uuid AND ient.project_id=$2 GROUP BY i.id,i.title ORDER BY i.created_at DESC`, entityID, projectID)
 	if err != nil {
 		return model.EntityCard{}, err
 	}
@@ -151,7 +151,7 @@ func (d *DB) GetEntityCard(ctx context.Context, projectID, entityID string) (mod
 		out.Occurrences = append(out.Occurrences, item)
 	}
 	rows.Close()
-	rows, err = d.Pgx().Query(ctx, `SELECT DISTINCT other.entity_id::text,ent.display_name,e.relation_code FROM graph_nodes self JOIN edges e ON e.status='confirmed' AND (e.source_node_id=self.id OR e.target_node_id=self.id) JOIN graph_nodes other ON other.id=CASE WHEN e.source_node_id=self.id THEN e.target_node_id ELSE e.source_node_id END JOIN investigations i ON i.id=e.investigation_id JOIN entities ent ON ent.id=other.entity_id WHERE self.entity_id=$1::uuid AND other.entity_id IS NOT NULL AND i.project_id=$2 ORDER BY other.entity_id::text,e.relation_code`, entityID, projectID)
+	rows, err = d.Pgx().Query(ctx, `SELECT DISTINCT other.entity_id::text,ent.display_name,e.relation_code FROM graph_nodes self JOIN edges e ON e.status='confirmed' AND (e.source_node_id=self.id OR e.target_node_id=self.id) JOIN graph_nodes other ON other.id=CASE WHEN e.source_node_id=self.id THEN e.target_node_id ELSE e.source_node_id END JOIN investigations i ON i.id=e.investigation_id AND i.is_deleted=false JOIN entities ent ON ent.id=other.entity_id WHERE self.entity_id=$1::uuid AND other.entity_id IS NOT NULL AND i.project_id=$2 ORDER BY other.entity_id::text,e.relation_code`, entityID, projectID)
 	if err != nil {
 		return model.EntityCard{}, err
 	}

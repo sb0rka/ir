@@ -17,6 +17,11 @@ import (
 
 const maxResponseBytes int64 = 8 << 20
 
+const (
+	nestedHTTPPageSize     = 100
+	maxNestedHTTPPageCalls = MaxLimit / nestedHTTPPageSize
+)
+
 type Config struct {
 	BaseURL    string
 	HTTPClient *http.Client
@@ -165,7 +170,80 @@ func (client *Client) GetSession(ctx context.Context, ref SessionRef, access Acc
 	if detail.ID != ref.ExternalID {
 		return Session{}, fmt.Errorf("PT NAD session detail ID does not match the requested ID")
 	}
-	return mapFlowDetail(detail, ref.StoreID, ref.TimeRange, client.now().UTC())
+	contextErr := client.completeHTTPTransactions(ctx, ref, access, &detail)
+	session, err := mapFlowDetail(detail, ref.StoreID, ref.TimeRange, client.now().UTC())
+	if err != nil {
+		return Session{}, err
+	}
+	if contextErr != nil {
+		session.ContextErrors = append(session.ContextErrors, contextErr)
+	}
+	return session, nil
+}
+
+func (client *Client) completeHTTPTransactions(ctx context.Context, ref SessionRef, access Access, detail *flowDetail) error {
+	if len(detail.HTTP) < nestedHTTPPageSize {
+		return nil
+	}
+
+	seen := make(map[string]struct{}, len(detail.HTTP))
+	lastTxID := int64(-1)
+	for _, transaction := range detail.HTTP {
+		seen[transaction.ID] = struct{}{}
+		if transaction.TxID > lastTxID {
+			lastTxID = transaction.TxID
+		}
+	}
+	if lastTxID < 0 {
+		return &ProtocolError{Operation: "session HTTP pagination"}
+	}
+
+	for page := 0; page < maxNestedHTTPPageCalls; page++ {
+		fromTxID := lastTxID + 1
+		var response httpPageResponse
+		if err := client.doJSON(
+			ctx,
+			"session HTTP pagination",
+			http.MethodPost,
+			"api/v2/bql",
+			sourceQuery(ref.StoreID),
+			httpPageBQL(ref, fromTxID),
+			access,
+			&response,
+		); err != nil {
+			return err
+		}
+		if err := validateBQLPage(response.Total, len(response.Result)); err != nil || response.Total != 1 || len(response.Result) != 1 || response.Result[0].SessionID != ref.ExternalID {
+			return &ProtocolError{Operation: "session HTTP pagination"}
+		}
+		if len(response.Result[0].Transactions) == 0 {
+			return nil
+		}
+
+		progressed := false
+		for _, transaction := range response.Result[0].Transactions {
+			if transaction.TxID < fromTxID {
+				return &ProtocolError{Operation: "session HTTP pagination"}
+			}
+			value := transaction.detail(ref.ExternalID)
+			if _, err := mapTransaction(value.transactionDTO, ref.ExternalID); err != nil {
+				return &ProtocolError{Operation: "session HTTP pagination"}
+			}
+			if transaction.TxID > lastTxID {
+				lastTxID = transaction.TxID
+				progressed = true
+			}
+			if _, duplicate := seen[transaction.ID]; duplicate {
+				continue
+			}
+			seen[transaction.ID] = struct{}{}
+			detail.HTTP = append(detail.HTTP, value)
+		}
+		if !progressed {
+			return &ProtocolError{Operation: "session HTTP pagination"}
+		}
+	}
+	return &ProtocolError{Operation: "session HTTP pagination"}
 }
 
 func (client *Client) GetStore(ctx context.Context, storeID int64, access Access) (Store, error) {
@@ -370,4 +448,15 @@ WHERE
 ORDER BY "ts" desc
 LIMIT %d
 `, exact, request.From.UnixMilli(), request.To.UnixMilli(), request.From.UnixMilli(), request.To.UnixMilli(), request.Limit)
+}
+
+func httpPageBQL(ref SessionRef, fromTxID int64) string {
+	return fmt.Sprintf(`SELECT "id", (SELECT "id", "tx_id", "tx_time", "rqs.method", "rqs.url", "rqs.entity_len", "rqs.content-type", "rqs.host", "rsp.code", "rsp.status", "rsp.entity_len", "rsp.server", "rsp.content-type" FROM "http" WHERE "tx_id" >= %d LIMIT %d)
+FROM "flow"
+WHERE
+    "end" >= %d AND
+    "end" <= %d AND
+    "id" == '%s'
+LIMIT 1
+`, fromTxID, nestedHTTPPageSize, ref.TimeRange.From.UnixMilli(), ref.TimeRange.To.UnixMilli(), ref.ExternalID)
 }

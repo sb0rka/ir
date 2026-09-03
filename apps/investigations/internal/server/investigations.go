@@ -160,7 +160,8 @@ func (s *Server) AddInvestigationContext(ctx context.Context, request investigat
 	if err != nil {
 		return nil, err
 	}
-	stats, err := s.db.ImportContext(ctx, model.ImportRequest{ProjectID: scope.ProjectID, InvestigationID: request.InvestigationId.String(), Selection: resolved.Selection, Origin: "analyst", Warnings: resolved.Warnings})
+	seed := request.Body.Seed != nil && *request.Body.Seed
+	stats, err := s.db.ImportContext(ctx, model.ImportRequest{ProjectID: scope.ProjectID, InvestigationID: request.InvestigationId.String(), Selection: resolved.Selection, Origin: "analyst", Warnings: resolved.Warnings, Seed: seed})
 	if err != nil {
 		return nil, storeError(err)
 	}
@@ -236,6 +237,14 @@ func (s *Server) AddAgentResults(ctx context.Context, request investigations.Add
 			}
 			v := resolved.EntitiesBySource[sourceKey]
 			converted.SnapshotEntityID = &v
+		}
+		if node.EventId != nil {
+			v := node.EventId.String()
+			converted.EventID = &v
+		}
+		if node.EntityId != nil {
+			v := node.EntityId.String()
+			converted.EntityID = &v
 		}
 		if node.NodeId != nil {
 			v := node.NodeId.String()
@@ -664,14 +673,64 @@ func convertInvestigation(inv model.Investigation) (investigations.Investigation
 	return out, nil
 }
 
-func (s *Server) UpdateInvestigation(context.Context, investigations.UpdateInvestigationRequestObject) (investigations.UpdateInvestigationResponseObject, error) {
-	return nil, httperr.ErrNotImplemented
+func (s *Server) UpdateInvestigation(ctx context.Context, request investigations.UpdateInvestigationRequestObject) (investigations.UpdateInvestigationResponseObject, error) {
+	scope, err := s.scope(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if request.Body == nil {
+		return nil, httperr.BadRequest("request body is required")
+	}
+	patch := model.InvestigationPatch{
+		ProjectID:       scope.ProjectID,
+		InvestigationID: request.InvestigationId.String(),
+		Version:         request.Body.Version,
+		Title:           request.Body.Title,
+		Description:     request.Body.Description,
+		Confidence:      request.Body.Confidence,
+		VerdictReason:   request.Body.VerdictReason,
+	}
+	if request.Body.Status != nil {
+		value := string(*request.Body.Status)
+		patch.Status = &value
+	}
+	if request.Body.Verdict != nil {
+		value := string(*request.Body.Verdict)
+		patch.Verdict = &value
+	}
+	if request.Body.Severity != nil {
+		value := string(*request.Body.Severity)
+		patch.Severity = &value
+	}
+	if request.Body.SomWorkspaceIds != nil {
+		values := make([]string, 0, len(*request.Body.SomWorkspaceIds))
+		for _, id := range *request.Body.SomWorkspaceIds {
+			values = append(values, id.String())
+		}
+		patch.WorkspaceIDs = &values
+	}
+	updated, err := s.db.UpdateInvestigation(ctx, patch)
+	if err != nil {
+		return nil, storeError(err)
+	}
+	out, err := convertInvestigation(updated)
+	if err != nil {
+		return nil, err
+	}
+	return investigations.UpdateInvestigation200JSONResponse(out), nil
 }
 func (s *Server) GetInvestigationTree(context.Context, investigations.GetInvestigationTreeRequestObject) (investigations.GetInvestigationTreeResponseObject, error) {
 	return nil, httperr.ErrNotImplemented
 }
-func (s *Server) DeleteInvestigation(context.Context, investigations.DeleteInvestigationRequestObject) (investigations.DeleteInvestigationResponseObject, error) {
-	return nil, httperr.ErrNotImplemented
+func (s *Server) DeleteInvestigation(ctx context.Context, request investigations.DeleteInvestigationRequestObject) (investigations.DeleteInvestigationResponseObject, error) {
+	scope, err := s.scope(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.db.DeleteInvestigation(ctx, scope.ProjectID, request.InvestigationId.String()); err != nil {
+		return nil, storeError(err)
+	}
+	return investigations.DeleteInvestigation204Response{}, nil
 }
 
 // AddHypothesisAgentResults Save explicit SOM agent results for an active hypothesis
@@ -758,6 +817,14 @@ func (s *Server) AddHypothesisAgentResults(ctx context.Context, request investig
 			}
 			value := resolved.EntitiesBySource[sourceKey]
 			converted.SnapshotEntityID = &value
+		}
+		if node.EventId != nil {
+			value := node.EventId.String()
+			converted.EventID = &value
+		}
+		if node.EntityId != nil {
+			value := node.EntityId.String()
+			converted.EntityID = &value
 		}
 		if node.NodeId != nil {
 			value := node.NodeId.String()

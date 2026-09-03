@@ -70,7 +70,7 @@ tasks:
         if(f.endsWith('.d.ts')&&!exists(f.slice(0,-5)))
         fs.rmSync('packages/contract-ts/domains/'+f,{force:true});
         for(const f of fs.readdirSync('{{.SERVER_DIR}}'))
-        if(f.endsWith('.go')&&!f.endsWith('_test.go')&&f!=='server.go'&&!exists(f.slice(0,-3)))
+        if(f.endsWith('.go')&&!f.endsWith('_test.go')&&f!=='server.go'&&f!=='mcp.go'&&!exists(f.slice(0,-3)))
         fs.rmSync('{{.SERVER_DIR}}/'+f,{force:true});"
 
   spec:

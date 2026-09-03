@@ -629,7 +629,7 @@ export interface paths {
         post?: never;
         /**
          * Delete a hypothesis
-         * @description Deletes only the hypothesis and its node and edge memberships. The investigation's shared graph objects remain unchanged.
+         * @description Soft-deletes only the hypothesis. Its node and edge memberships and the investigation's shared graph objects remain stored but are no longer available through the API for this hypothesis.
          */
         delete: operations["deleteHypothesis"];
         options?: never;
@@ -866,7 +866,7 @@ export interface paths {
         post?: never;
         /**
          * Delete an investigation
-         * @description Deletes the investigation subtree, its graph data and its links to shared events and entities. Project event and entity records remain.
+         * @description Soft-deletes the investigation subtree and all of its hypotheses. Deleted records and their graph data remain stored but are no longer available through the API. Project event and entity records remain.
          */
         delete: operations["deleteInvestigation"];
         options?: never;
@@ -1317,6 +1317,8 @@ export interface components {
             attached_by?: components["schemas"]["Actor"];
             /** @description Explanation stored on the investigation-event link. */
             reason?: string | null;
+            /** @description Whether this event is seed evidence for the investigation being listed. This belongs to the investigation-event link, not the project event itself. */
+            is_seed: boolean;
             /** @description Which tool it came from. */
             source_code: string;
             /** @description Identifier of the record in that tool. */
@@ -1842,6 +1844,11 @@ export interface components {
         };
         /** @description Source-owned identifiers selected in Gateway. At least one item across all four arrays is required; the server validates that aggregate rule. */
         ContextSelection: {
+            /**
+             * @description Marks directly selected events as the seed evidence that opened the investigation. Derived events are never marked as seed.
+             * @default false
+             */
+            seed: boolean;
             findings: components["schemas"]["SourceObjectRef"][];
             sessions: components["schemas"]["SourceObjectRef"][];
             events: components["schemas"]["EventSourceRef"][];
@@ -1866,13 +1873,23 @@ export interface components {
             source_code: string;
             source_entity_id: string;
         };
-        /** @description A unique local ref and exactly one target: an event/entity selection from this batch, or an existing node in this investigation. */
+        /** @description A unique local ref and exactly one target: an event/entity selection from this batch, an event/entity already attached to this investigation, or an existing node in this investigation. */
         AgentNode: {
             ref: string;
             /** @description Local ref of an event selection from this batch. */
             event_ref?: string;
             /** @description Local ref of an entity selection from this batch. */
             entity_ref?: string;
+            /**
+             * Format: uuid
+             * @description Event UUID already attached to this investigation.
+             */
+            event_id?: string;
+            /**
+             * Format: uuid
+             * @description Entity UUID already attached to this investigation.
+             */
+            entity_id?: string;
             /** Format: uuid */
             node_id?: string;
         };
@@ -1935,7 +1952,7 @@ export interface components {
          * @description Whether work is still going on. Says nothing about the outcome — that is the verdict.
          * @enum {string}
          */
-        InvestigationStatus: "open" | "closed";
+        InvestigationStatus: "open" | "in_progress" | "closed";
         /**
          * @description Conclusion of a root or child case. Hypotheses have their own status and resolution reason rather than investigation verdicts.
          * @enum {string}

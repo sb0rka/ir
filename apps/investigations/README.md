@@ -45,6 +45,20 @@ Go API сервис `ir-api` расследований Sb0rka.
 `DEMO_SOM_ACCESS_TOKEN` выбранного проекта и кэшируется в памяти; входящий
 Bearer используется для чтения Sb0rka Secrets, но не передаётся в SOM.
 
+Streamable HTTP MCP на `/mcp` предоставляет четыре investigation tools для
+чтения графа/таймлайна и reference dictionaries и записи `agent-results`, а
+также десять read-only `gateway_*` tools для sources, events, findings,
+sessions, entities, endpoints и раскрытия выбранных source records в
+нормализованный контекст. Graph и agent-results tools принимают optional
+`hypothesis_id`: первый читает graph projection этой гипотезы, второй добавляет
+явные результаты только в active hypothesis; timeline при этом остаётся общим
+для расследования. При работе с гипотезой агент может также прочитать общий
+граф и scoped-записью добавить уже существующий узел в membership без его
+копирования. MCP использует тот же пользовательский `access+jwt` и
+`X-Project-ID`, что REST; `ir-api` server-side передаёт их Gateway. Для demo MCP
+Authorization один раз настраивается в OpenCode profile SOM через `ACCESS_KEY`,
+сам агент токен не читает и прямые Gateway REST-запросы не выполняет.
+
 Событие в Gateway и `ir-api` находится по паре `source_code + source_event_id`.
 Сущность объединяется по `type_code + canonical_key`, а её исходные записи — по
 `source_code + source_entity_id`. Эти значения читаемы и позволяют сразу
