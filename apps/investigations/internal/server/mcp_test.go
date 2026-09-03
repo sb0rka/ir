@@ -64,9 +64,12 @@ func TestMCPInitializeAndListTools(t *testing.T) {
 		"Batch-local entities[].ref",
 		"not a URN",
 		"exactly one locator",
+		"never IR entity_id",
+		"pt-maxpatrol-siem, not NAD",
+		"never an IR entity UUID",
 	} {
 		if !strings.Contains(listed.Body.String(), hint) {
-			t.Fatalf("tools/list must describe agent result locators (%q): %s", hint, listed.Body.String())
+			t.Fatalf("tools/list must describe agent/gateway identity rules (%q): %s", hint, listed.Body.String())
 		}
 	}
 	if count := strings.Count(listed.Body.String(), `"hypothesis_id"`); count != 2 {

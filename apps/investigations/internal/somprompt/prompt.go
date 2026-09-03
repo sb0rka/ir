@@ -36,31 +36,22 @@ func Build(title, description string, c Context) string {
 		}
 	}
 	fmt.Fprintf(&b, "- som_issue_id: %s\n", c.SomIssueID)
+	fmt.Fprintf(&b, "\nThe `investigation` MCP server is configured for project %s. Gateway tools reuse that authenticated project scope; never print or persist credentials.\n\n", c.ProjectID)
 
-	fmt.Fprintf(&b, "\nThe `investigation` MCP server is configured for project %s. Its Gateway tools reuse the same authenticated project scope; never print or persist credentials.\n\n", c.ProjectID)
+	b.WriteString("Hard rules:\n")
+	b.WriteString("1. IDs: investigation `entity_id`/`event_id`/`node_id` are IR UUIDs. Gateway calls need `type`+`value` or `source_code`+`source_event_id`/`source_entity_id`. Never pass IR UUIDs into gateway entity filters.\n")
+	b.WriteString("2. Sources: match capability — accounts/process/auth → SIEM (e.g. pt-maxpatrol-siem); network sessions → NAD. Do not search NAD for Windows accounts.\n")
+	b.WriteString("3. Truncated/partial ≠ absent. Follow `next_cursor`; if truncated without a cursor, narrow `time_range`/filters and retry. Inspect `source_states` and `source_errors`.\n")
+	b.WriteString("4. Write only via `add_investigation_agent_results`: declare Gateway imports in `events`/`entities` with batch-local `ref`, point `nodes` at them with `event_ref`/`entity_ref` (not URNs/objects), or use attached `event_id`/`entity_id`/`node_id`. Edges use batch-local node refs, `why`, and `evidence_event_refs`.\n")
+	b.WriteString("5. Never invent source identifiers; copy them exactly from MCP results. If MCP auth fails, report that — do not retry with another credential.\n\n")
 
 	if c.HypothesisID != "" {
-		fmt.Fprintf(&b, "Workflow:\n"+
-			"1. Read the investigation-wide timeline with `list_investigation_events` for investigation_id %s. Follow pagination until the available context is exhausted.\n"+
-			"2. Read the shared graph with `get_investigation_graph` for investigation_id %s without hypothesis_id, then read the active hypothesis projection for investigation_id %s and hypothesis_id %s. Reuse relevant node_id values from either graph; submitting an existing investigation node in the scoped batch adds its hypothesis membership without duplicating it.\n"+
-			"3. Before creating edges, read `get_investigation_reference` and use its relation_code endpoint kinds and direction.\n"+
-			"4. Investigate additional evidence through the `gateway_*` MCP tools. Start with `gateway_list_sources`, then choose search, aggregation, detail, entity, or endpoint tools supported by the returned capabilities. Use `gateway_resolve_context` to expand selected findings or sessions into canonical events, entities, relations, and per-object resolutions. Use bounded time ranges and the narrowest useful filters. Follow every next_cursor, inspect source_states, source_errors, and resolution status, and never treat partial or truncated output as proof that evidence is absent. If a source is truncated without a cursor, narrow the time range or filters and retry.\n"+
-			"5. Submit `add_investigation_agent_results` with investigation_id %s, hypothesis_id %s, and som_issue_ids [\"%s\"]. To import selected Gateway results, declare events by source_code/source_event_id and entities by source_code/source_entity_id, then point nodes at their batch refs using event_ref/entity_ref. Existing attached event_id/entity_id and graph node_id remain valid locators. A node must use exactly one locator. Only explicitly listed nodes and edges gain hypothesis membership; timeline-only events and entities do not.\n"+
-			"6. Edges use batch-local node refs in source_ref/target_ref. evidence_event_refs must contain batch-local refs of event nodes from the same batch. Every edge needs a concise evidence-based why; IR stores it as proposed for analyst review.\n"+
-			"7. Re-read the hypothesis graph and timeline after the write. Replaying the same batch is safe and should not create duplicate graph facts.\n\n"+
-			"Treat the hypothesis statement as an unverified claim: actively seek both supporting and contradicting evidence, and do not turn temporal proximity or correlation into causation. Never invent source identifiers. Copy source_code/source_event_id/source_entity_id or UUIDs exactly from MCP results. If the MCP server is missing or its authentication expired, report that explicitly instead of exposing or retrying with another credential.\n",
-			c.InvestigationID, c.InvestigationID, c.InvestigationID, c.HypothesisID, c.InvestigationID, c.HypothesisID, c.SomIssueID)
+		fmt.Fprintf(&b, "Workflow: `list_investigation_events` (investigation-wide) → `get_investigation_graph` without hypothesis_id, then with hypothesis_id %s → `get_investigation_reference` → `gateway_*` as needed → `add_investigation_agent_results` with investigation_id %s, hypothesis_id %s, som_issue_ids [\"%s\"] → re-read hypothesis graph. Only listed nodes/edges gain hypothesis membership. Treat the hypothesis as unverified: seek supporting and contradicting evidence; do not turn correlation into causation.\n",
+			c.HypothesisID, c.InvestigationID, c.HypothesisID, c.SomIssueID)
 		return b.String()
 	}
 
-	fmt.Fprintf(&b, "Workflow:\n"+
-		"1. Read attached context with `list_investigation_events` and `get_investigation_graph` for investigation_id %s. Follow timeline pagination and reuse relevant existing node_id values.\n"+
-		"2. Before creating edges, read `get_investigation_reference` and use its relation_code endpoint kinds and direction.\n"+
-		"3. Investigate additional evidence through the `gateway_*` MCP tools. Start with `gateway_list_sources`, then choose search, aggregation, detail, entity, or endpoint tools supported by the returned capabilities. Use `gateway_resolve_context` to expand selected findings or sessions into canonical evidence. Use bounded time ranges and the narrowest useful filters. Follow every next_cursor, inspect source_states, source_errors, and resolution status, and never treat partial or truncated output as proof that evidence is absent. If a source is truncated without a cursor, narrow the time range or filters and retry.\n"+
-		"4. Submit `add_investigation_agent_results` with investigation_id %s and som_issue_ids [\"%s\"]. To import selected Gateway results, declare events by source_code/source_event_id and entities by source_code/source_entity_id, then point nodes at their batch refs using event_ref/entity_ref. Existing attached event_id/entity_id and graph node_id remain valid locators. A node must use exactly one locator.\n"+
-		"5. Edges use batch-local node refs in source_ref/target_ref. evidence_event_refs must contain batch-local refs of event nodes from the same batch. Every edge needs a concise evidence-based why; IR stores it as proposed for analyst review.\n"+
-		"6. Re-read graph and timeline after the write. Replaying the same batch is safe and should not create duplicate graph facts.\n\n"+
-		"Never invent source identifiers. Copy source_code/source_event_id/source_entity_id or UUIDs exactly from MCP results. If the MCP server is missing or its authentication expired, report that explicitly instead of exposing or retrying with another credential.\n",
+	fmt.Fprintf(&b, "Workflow: `list_investigation_events` + `get_investigation_graph` for investigation_id %s → `get_investigation_reference` → `gateway_*` (start with `gateway_list_sources`) → `add_investigation_agent_results` with investigation_id %s and som_issue_ids [\"%s\"] → re-read graph/timeline. Replay is safe.\n",
 		c.InvestigationID, c.InvestigationID, c.SomIssueID)
 	return b.String()
 }

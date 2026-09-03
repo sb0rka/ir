@@ -31,19 +31,17 @@ func TestBuildExpandsURLsAndHeaders(t *testing.T) {
 	}
 	for _, want := range []string{
 		"The `investigation` MCP server is configured",
+		"Hard rules:",
+		"Never pass IR UUIDs into gateway entity filters",
+		"Do not search NAD for Windows accounts",
+		"Truncated/partial ≠ absent",
+		"add_investigation_agent_results",
+		"event_ref`/`entity_ref",
 		"list_investigation_events",
 		"get_investigation_graph",
-		"add_investigation_agent_results",
 		"get_investigation_reference",
 		"gateway_list_sources",
-		"gateway_resolve_context",
-		"gateway_*",
-		"next_cursor",
-		"source_states",
-		"source_errors",
-		"partial or truncated",
 		"investigation_id 496f2041-7949-4816-8d07-734de89d121f",
-		"event_ref/entity_ref",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("missing %q", want)
@@ -89,19 +87,15 @@ func TestBuildScopesGraphAndResultsToHypothesis(t *testing.T) {
 		"hypothesis_statement: The account was reused after phishing",
 		"hypothesis_description: Check authentication and process evidence",
 		"`list_investigation_events`",
-		"shared graph with `get_investigation_graph`",
 		"without hypothesis_id",
-		"active hypothesis projection for investigation_id 496f2041-7949-4816-8d07-734de89d121f and hypothesis_id 22222222-2222-2222-2222-222222222222",
+		"hypothesis_id 22222222-2222-2222-2222-222222222222",
 		"`add_investigation_agent_results` with investigation_id 496f2041-7949-4816-8d07-734de89d121f, hypothesis_id 22222222-2222-2222-2222-222222222222",
-		"Only explicitly listed nodes and edges gain hypothesis membership",
+		"Only listed nodes/edges gain hypothesis membership",
 		"supporting and contradicting evidence",
-		"do not turn temporal proximity or correlation into causation",
+		"do not turn correlation into causation",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("missing %q", want)
 		}
-	}
-	if strings.Contains(got, "`get_investigation_graph` for investigation_id") && !strings.Contains(got, "hypothesis_id 22222222-2222-2222-2222-222222222222") {
-		t.Fatal("hypothesis-scoped graph read must include hypothesis_id")
 	}
 }

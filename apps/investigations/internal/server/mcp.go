@@ -337,30 +337,86 @@ func mcpFailure(err error) (*mcp.CallToolResult, any, error) {
 	}, nil, nil
 }
 
+// MCP-facing Gateway entity conditions spell out the IR-vs-source ID split that
+// generated OpenAPI structs leave undescribed.
+type mcpEntityRef struct {
+	Type  string `json:"type" jsonschema:"Canonical kind from graph/timeline/Gateway results: account, host, ip, domain, … — never an IR entity UUID"`
+	Value string `json:"value" jsonschema:"Entity value such as dkrylova\\\\administrator — never an investigation entity_id"`
+}
+
+type mcpSearchEventsArgs struct {
+	Sources     *[]string                    `json:"sources,omitempty" jsonschema:"Codes from gateway_list_sources. Match capability: accounts/process/auth → SIEM (pt-maxpatrol-siem); network sessions → NAD"`
+	TimeRange   gatewaycontract.TimeRange    `json:"time_range" jsonschema:"Required occurrence-time interval"`
+	Entities    *[]mcpEntityRef              `json:"entities,omitempty" jsonschema:"Prefer this to find events for an account/host/ip. Never pass IR entity UUIDs here"`
+	Filter      *string                      `json:"filter,omitempty" jsonschema:"Optional SIEM predicate. Prefer entities[] when filtering by identity"`
+	Columns     *[]string                    `json:"columns,omitempty" jsonschema:"Optional allowlisted SIEM fields to expose"`
+	Sort        *[]gatewaycontract.EventSort `json:"sort,omitempty" jsonschema:"Optional SIEM sort rules"`
+	GroupBy     *[]string                    `json:"group_by,omitempty" jsonschema:"Optional SIEM group_by fields when drilling into an aggregation"`
+	GroupValues *[]*string                   `json:"group_values,omitempty" jsonschema:"Group values aligned with group_by"`
+	Limit       *int                         `json:"limit,omitempty" jsonschema:"Max merged events per page (1-100)"`
+	Cursor      *string                      `json:"cursor,omitempty" jsonschema:"Opaque next_cursor from the previous page with the same filters"`
+}
+
+func (a mcpSearchEventsArgs) toContract() gatewaycontract.SearchEventsRequest {
+	out := gatewaycontract.SearchEventsRequest{
+		Sources: a.Sources, TimeRange: a.TimeRange, Filter: a.Filter, Columns: a.Columns,
+		Sort: a.Sort, GroupBy: a.GroupBy, GroupValues: a.GroupValues, Limit: a.Limit, Cursor: a.Cursor,
+	}
+	if a.Entities != nil {
+		entities := make([]gatewaycontract.EntityRef, len(*a.Entities))
+		for i, entity := range *a.Entities {
+			entities[i] = gatewaycontract.EntityRef{Type: entity.Type, Value: entity.Value}
+		}
+		out.Entities = &entities
+	}
+	return out
+}
+
+type mcpLookupEntityArgs struct {
+	Entity    mcpEntityRef              `json:"entity" jsonschema:"Entity to enrich using type+value from MCP results — not an IR UUID"`
+	Sources   *[]string                 `json:"sources,omitempty" jsonschema:"Codes from gateway_list_sources; omit to fan out to every allowed lookup source"`
+	TimeRange gatewaycontract.TimeRange `json:"time_range" jsonschema:"Required occurrence-time interval for source records"`
+}
+
+func (a mcpLookupEntityArgs) toContract() gatewaycontract.LookupEntityRequest {
+	return gatewaycontract.LookupEntityRequest{
+		Entity:    gatewaycontract.EntityRef{Type: a.Entity.Type, Value: a.Entity.Value},
+		Sources:   a.Sources,
+		TimeRange: a.TimeRange,
+	}
+}
+
 func addGatewayTools(server *mcp.Server, s *Server) {
 	mcp.AddTool(server, mcpTool[struct{}](
-		"gateway_list_sources", "List project-allowed Gateway sources and their capabilities.",
+		"gateway_list_sources", "List project-allowed Gateway sources and their capabilities. Use capabilities to pick SIEM vs NAD before searching.",
 	), gatewayHandler(s, func(ctx context.Context, _ struct{}, scope socctx.Scope, bearer string) (json.RawMessage, error) {
 		return s.gateway.ListSources(ctx, scope.ProjectID, bearer)
 	}))
-	mcp.AddTool(server, mcpTool[gatewaycontract.SearchEventsRequest](
-		"gateway_search_events", "Search normalized events across project-allowed sources.",
-	), gatewayHandler(s, func(ctx context.Context, args gatewaycontract.SearchEventsRequest, scope socctx.Scope, bearer string) (json.RawMessage, error) {
-		return s.gateway.SearchEvents(ctx, scope.ProjectID, bearer, args)
+	mcp.AddTool(server, mcpTool[mcpSearchEventsArgs](
+		"gateway_search_events",
+		"Search normalized events across project-allowed sources. "+
+			"Filter identities with entities:[{type,value}] (e.g. account + dkrylova\\\\administrator) — never IR entity_id UUIDs. "+
+			"Pick sources by capability (accounts/process/auth → pt-maxpatrol-siem, not NAD). "+
+			"Empty page with truncated source_states is not proof of absence: follow next_cursor or narrow time_range/filters and retry.",
+	), gatewayHandler(s, func(ctx context.Context, args mcpSearchEventsArgs, scope socctx.Scope, bearer string) (json.RawMessage, error) {
+		return s.gateway.SearchEvents(ctx, scope.ProjectID, bearer, args.toContract())
 	}))
 	mcp.AddTool(server, mcpTool[gatewaycontract.AggregateEventsRequest](
 		"gateway_aggregate_events", "Group and count events using source-supported fields.",
 	), gatewayHandler(s, func(ctx context.Context, args gatewaycontract.AggregateEventsRequest, scope socctx.Scope, bearer string) (json.RawMessage, error) {
 		return s.gateway.AggregateEvents(ctx, scope.ProjectID, bearer, args)
 	}))
-	mcp.AddTool(server, mcpTool[gatewaycontract.LookupEntityRequest](
-		"gateway_lookup_entity", "Enrich an entity through project-allowed sources.",
-	), gatewayHandler(s, func(ctx context.Context, args gatewaycontract.LookupEntityRequest, scope socctx.Scope, bearer string) (json.RawMessage, error) {
-		return s.gateway.LookupEntity(ctx, scope.ProjectID, bearer, args)
+	mcp.AddTool(server, mcpTool[mcpLookupEntityArgs](
+		"gateway_lookup_entity",
+		"Enrich one entity through project-allowed sources. "+
+			"Pass entity.type + entity.value from graph/timeline/Gateway results (e.g. type=account, value=dkrylova\\\\administrator). "+
+			"Never pass an investigation entity_id UUID as value. Prefer SIEM sources for accounts; NAD is for network identities.",
+	), gatewayHandler(s, func(ctx context.Context, args mcpLookupEntityArgs, scope socctx.Scope, bearer string) (json.RawMessage, error) {
+		return s.gateway.LookupEntity(ctx, scope.ProjectID, bearer, args.toContract())
 	}))
 	mcp.AddTool(server, mcpTool[gatewaycontract.ResolveContextRequest](
 		"gateway_resolve_context",
-		"Resolve selected finding, session, event, or entity references into normalized context. Read-only: persist only explicitly selected events and entities through add_investigation_agent_results.",
+		"Resolve selected finding, session, event, or entity references into normalized context. Read-only: persist only explicitly selected events and entities through add_investigation_agent_results. Use source_code/source_*_id refs — not IR UUIDs.",
 	), gatewayHandler(s, func(ctx context.Context, args gatewaycontract.ResolveContextRequest, scope socctx.Scope, bearer string) (json.RawMessage, error) {
 		value, err := s.gateway.ResolveContext(ctx, scope.ProjectID, bearer, args)
 		if err != nil {
