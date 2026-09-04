@@ -492,7 +492,7 @@ function CorrelationSubevents({
         <div>
           <div className="mb-1.5 flex items-center justify-between gap-2">
             <div className="text-[10px] uppercase tracking-wider text-fg-dim">
-              Вовлеченные узлы
+              Вовлеченные сущности
             </div>
             <div className="flex items-center gap-1.5">
               {hosts.status === 'ready' ? (

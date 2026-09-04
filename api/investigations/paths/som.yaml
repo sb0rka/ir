@@ -303,6 +303,16 @@ components:
             OpenCode model id in `provider/model` form, forwarded as
             executor_config.model_id. Omitted value is
             `openrouter/deepseek/deepseek-v4-flash`.
+        time_zone:
+          type: string
+          description: >-
+            IANA time zone from the dashboard TimeIntervalPicker (e.g. UTC or
+            Europe/Moscow). Appended to the agent prompt so wall-clock times in
+            the issue are interpreted in this zone when building Gateway
+            time_range. Omit to leave timezone guidance out of the prompt.
+          minLength: 1
+          maxLength: 64
+          example: Europe/Moscow
 
     SomIssueRunResult:
       type: object

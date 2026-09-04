@@ -684,6 +684,7 @@ export function mapGraphEdge(edge: IrEdge): GraphEdge {
     rationale: edge.why ?? undefined,
     version: edge.version,
     origin: mapOrigin(edge.origin),
+    originRef: edge.origin_ref ?? undefined,
   }
 }
 

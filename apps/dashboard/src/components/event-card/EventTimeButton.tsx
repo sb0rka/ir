@@ -1,13 +1,12 @@
 import { useState } from 'react'
 import { Clock } from 'lucide-react'
 import type { Severity } from '../../types'
+import { useAppStore } from '../../store/appStore'
 import { SeverityBadge } from '../ui'
 import {
   TimeIntervalPopover,
   activeTimeZone,
-  defaultWorkingTimeZone,
   intervalAroundInstant,
-  type DisplayZone,
   type TimeInterval,
 } from '../time-interval'
 
@@ -25,8 +24,10 @@ export function EventTimeButton({
   severity?: Severity
 }) {
   const [open, setOpen] = useState(false)
-  const [display, setDisplay] = useState<DisplayZone>('working')
-  const [workingTimeZone, setWorkingTimeZone] = useState(defaultWorkingTimeZone)
+  const display = useAppStore((s) => s.displayTimeZone)
+  const workingTimeZone = useAppStore((s) => s.workingTimeZone)
+  const setDisplay = useAppStore((s) => s.setDisplayTimeZone)
+  const setWorkingTimeZone = useAppStore((s) => s.setWorkingTimeZone)
   const zone = activeTimeZone(display, workingTimeZone)
 
   return (

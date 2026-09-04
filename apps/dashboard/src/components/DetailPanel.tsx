@@ -111,7 +111,30 @@ export function DetailPanel({ investigationId }: { investigationId: string }) {
       side="right"
     >
     <Panel
-      title={entity ? `Сущность · ${kindLabel[entity.kind]}` : 'Событие'}
+      title={
+        entity ? (
+          `Сущность · ${kindLabel[entity.kind]}`
+        ) : (
+          <span className="inline-flex items-center gap-2">
+            Событие
+            {eventReview ? (
+              <span className="normal-case tracking-normal">
+                <Chip
+                  tone={
+                    eventReview === 'proposed'
+                      ? 'proposed'
+                      : eventReview === 'rejected'
+                        ? 'rejected'
+                        : 'confirmed'
+                  }
+                >
+                  {statusLabel[eventReview]}
+                </Chip>
+              </span>
+            ) : null}
+          </span>
+        )
+      }
       className="w-full min-w-0 flex-1"
       actions={
         <button type="button" onClick={() => setDetailPanelOpen(false)}>
@@ -302,20 +325,6 @@ export function DetailPanel({ investigationId }: { investigationId: string }) {
 
         {event && (
           <>
-            {eventReview && (
-              <Chip
-                tone={
-                  eventReview === 'proposed'
-                    ? 'proposed'
-                    : eventReview === 'rejected'
-                      ? 'rejected'
-                      : 'confirmed'
-                }
-              >
-                {statusLabel[eventReview]}
-              </Chip>
-            )}
-
             {eventReview === 'proposed' && (
               <div className="flex gap-2 rounded border border-proposed/40 bg-proposed/10 p-2">
                 <Button

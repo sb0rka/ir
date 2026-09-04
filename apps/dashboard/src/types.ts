@@ -143,6 +143,8 @@ export interface GraphEdge {
   rationale?: string
   version?: number
   origin?: EventOrigin
+  /** Agent edges: SOM issue UUID that produced the claim (`origin_ref`). */
+  originRef?: string
 }
 
 export interface Finding {

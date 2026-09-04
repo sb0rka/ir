@@ -35,7 +35,13 @@ import {
 import { appendCondition, alignGroupValues, astToFilterChips, defaultQuery, drillGroupValues, entityKindForField, findingUuidFromAst, findingUuidQuery, isEntityQueueField, parseQueuePdql, serialize, withExplicitLimit, type FindingFilterField } from '../lib/pdql'
 import { pdqlFieldForFilterField } from '../lib/filters'
 import { filterFingerprint } from '../lib/queryFingerprint'
-import { demoDayInterval, type TimeInterval } from '../components/time-interval'
+import {
+  activeTimeZone,
+  defaultWorkingTimeZone,
+  demoDayInterval,
+  type DisplayZone,
+  type TimeInterval,
+} from '../components/time-interval'
 import { resolveInvestigationTableSearchColumn } from '../components/investigationTableColumns'
 import { readWorkspaceTabs, writeWorkspaceTabs } from '../api/workspace-tabs'
 import {
@@ -269,6 +275,10 @@ function pushQueryHistory(
 interface AppState {
   chips: FilterChip[]
   timeInterval: TimeInterval
+  /** UTC toggle vs working IANA zone in TimeIntervalPicker. */
+  displayTimeZone: DisplayZone
+  /** Working IANA zone when displayTimeZone === 'working' (e.g. Europe/Moscow). */
+  workingTimeZone: string
   queuePdql: string
   queueSource: QueueSource
   /** Last executed table results per QueueSource for tab switches without refetch. */
@@ -342,6 +352,8 @@ interface AppState {
   setQueueTextFilterColumn: (column: string) => void
   setInvestigationTextFilterColumn: (column: string) => void
   setTimeInterval: (interval: TimeInterval) => void
+  setDisplayTimeZone: (display: DisplayZone) => void
+  setWorkingTimeZone: (timeZone: string) => void
   setQueueSource: (source: QueueSource) => void
   applyQueueHistory: (entry: QueryHistoryEntry) => void
   drillGroupValue: (investigationId: string | null, field: string, value: string) => void
@@ -663,6 +675,8 @@ function collectSubtreeIds(
 export const useAppStore = create<AppState>((set, get) => ({
   chips: [],
   timeInterval: DEFAULT_TIME_INTERVAL,
+  displayTimeZone: 'working',
+  workingTimeZone: defaultWorkingTimeZone(),
   queuePdql: DEFAULT_QUEUE_PDQL,
   queueSource: DEFAULT_QUEUE_SOURCE,
   queueSourceCache: {},
@@ -754,6 +768,8 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
   setTimeInterval: (timeInterval) => set({ timeInterval }),
+  setDisplayTimeZone: (displayTimeZone) => set({ displayTimeZone }),
+  setWorkingTimeZone: (workingTimeZone) => set({ workingTimeZone }),
   setQueueSource: (queueSource) => {
     const state = get()
     if (state.queueSource === queueSource) return
@@ -1691,7 +1707,8 @@ export const useAppStore = create<AppState>((set, get) => ({
         },
       })
       const before = await countProposedAgentEdges(investigationId)
-      const run = await runSomIssue(issueDef.id, investigationId)
+      const timeZone = activeTimeZone(get().displayTimeZone, get().workingTimeZone)
+      const run = await runSomIssue(issueDef.id, investigationId, { timeZone })
       const localEnvironmentId = run.local_environment_id
       set({
         issues: {

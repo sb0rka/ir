@@ -1,12 +1,11 @@
 import { useState } from 'react'
 import { Clock } from 'lucide-react'
+import { useAppStore } from '../../store/appStore'
 import { TimeIntervalPopover } from './TimeIntervalPopover'
 import {
   activeTimeZone,
-  defaultWorkingTimeZone,
   intervalButtonLabel,
   timeZoneLabel,
-  type DisplayZone,
   type TimeInterval,
 } from './model'
 
@@ -20,8 +19,10 @@ export function TimeIntervalButton({
   onExecute: (value: TimeInterval) => void
 }) {
   const [open, setOpen] = useState(false)
-  const [display, setDisplay] = useState<DisplayZone>('working')
-  const [workingTimeZone, setWorkingTimeZone] = useState(defaultWorkingTimeZone)
+  const display = useAppStore((s) => s.displayTimeZone)
+  const workingTimeZone = useAppStore((s) => s.workingTimeZone)
+  const setDisplay = useAppStore((s) => s.setDisplayTimeZone)
+  const setWorkingTimeZone = useAppStore((s) => s.setWorkingTimeZone)
   const zone = activeTimeZone(display, workingTimeZone)
 
   return (
