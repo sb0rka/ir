@@ -825,6 +825,164 @@ EXECUTE FUNCTION set_updated_at();
 
 CREATE INDEX IF NOT EXISTS ix_edge_evidence_event ON edge_evidence (event_id);
 
+
+-- GROUPS: analytical decisions are isolated by investigation tree, not project alone.
+
+CREATE TABLE IF NOT EXISTS entity_resolution_groups (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    project_id VARCHAR(12) NOT NULL,
+    root_investigation_id UUID NOT NULL,
+    kind VARCHAR(32) NOT NULL CHECK (kind = 'resolved_entity'),
+    type_code VARCHAR(64) NOT NULL REFERENCES entity_types(code),
+    group_key VARCHAR NOT NULL,
+    title VARCHAR NOT NULL,
+    state VARCHAR(16) NOT NULL DEFAULT 'active' CHECK (state IN ('active','superseded')),
+    version INTEGER NOT NULL DEFAULT 1 CHECK (version > 0),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (id, project_id, root_investigation_id),
+    UNIQUE (project_id, root_investigation_id, group_key),
+    FOREIGN KEY (root_investigation_id, project_id) REFERENCES investigations(id, project_id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS entity_resolution_members (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    group_id UUID NOT NULL,
+    project_id VARCHAR(12) NOT NULL,
+    root_investigation_id UUID NOT NULL,
+    entity_id UUID NOT NULL,
+    role VARCHAR(16) NOT NULL CHECK (role IN ('subject','identifier')),
+    ordinal INTEGER CHECK (ordinal >= 0),
+    status VARCHAR(16) NOT NULL CHECK (status IN ('proposed','confirmed','rejected')),
+    confidence REAL CHECK (confidence >= 0 AND confidence <= 1),
+    decision_reason VARCHAR NOT NULL,
+    assertions JSONB NOT NULL CHECK (jsonb_typeof(assertions) = 'array' AND jsonb_array_length(assertions) > 0),
+    version INTEGER NOT NULL DEFAULT 1 CHECK (version > 0),
+    UNIQUE (group_id, entity_id),
+    FOREIGN KEY (group_id, project_id, root_investigation_id)
+        REFERENCES entity_resolution_groups(id, project_id, root_investigation_id) ON DELETE CASCADE,
+    FOREIGN KEY (entity_id, project_id) REFERENCES entities(id, project_id)
+);
+CREATE INDEX IF NOT EXISTS ix_entity_resolution_members_scope_object
+    ON entity_resolution_members(project_id, root_investigation_id, entity_id);
+
+CREATE TABLE IF NOT EXISTS entity_group_lineage (
+    project_id VARCHAR(12) NOT NULL,
+    root_investigation_id UUID NOT NULL,
+    predecessor_id UUID NOT NULL,
+    successor_id UUID NOT NULL CHECK (successor_id <> predecessor_id),
+    PRIMARY KEY (predecessor_id, successor_id),
+    FOREIGN KEY (predecessor_id, project_id, root_investigation_id)
+        REFERENCES entity_resolution_groups(id, project_id, root_investigation_id) ON DELETE CASCADE,
+    FOREIGN KEY (successor_id, project_id, root_investigation_id)
+        REFERENCES entity_resolution_groups(id, project_id, root_investigation_id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS event_groups (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    project_id VARCHAR(12) NOT NULL,
+    root_investigation_id UUID NOT NULL,
+    kind VARCHAR(32) NOT NULL CHECK (kind IN ('same_event','composite','sequence','correlation')),
+    type_code VARCHAR(64) CHECK (type_code IS NULL),
+    group_key VARCHAR NOT NULL,
+    title VARCHAR NOT NULL,
+    state VARCHAR(16) NOT NULL DEFAULT 'active' CHECK (state IN ('active','superseded')),
+    version INTEGER NOT NULL DEFAULT 1 CHECK (version > 0),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (id, project_id, root_investigation_id),
+    UNIQUE (project_id, root_investigation_id, group_key),
+    FOREIGN KEY (root_investigation_id, project_id) REFERENCES investigations(id, project_id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS event_group_members (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    group_id UUID NOT NULL,
+    project_id VARCHAR(12) NOT NULL,
+    root_investigation_id UUID NOT NULL,
+    event_id UUID NOT NULL,
+    role VARCHAR(16) NOT NULL CHECK (role IN ('primary','duplicate','parent','part','step','evidence')),
+    ordinal INTEGER CHECK (ordinal >= 0),
+    status VARCHAR(16) NOT NULL CHECK (status IN ('proposed','confirmed','rejected')),
+    confidence REAL CHECK (confidence >= 0 AND confidence <= 1),
+    decision_reason VARCHAR NOT NULL,
+    assertions JSONB NOT NULL CHECK (jsonb_typeof(assertions) = 'array' AND jsonb_array_length(assertions) > 0),
+    version INTEGER NOT NULL DEFAULT 1 CHECK (version > 0),
+    UNIQUE (group_id, event_id),
+    FOREIGN KEY (group_id, project_id, root_investigation_id)
+        REFERENCES event_groups(id, project_id, root_investigation_id) ON DELETE CASCADE,
+    FOREIGN KEY (event_id, project_id) REFERENCES events(id, project_id)
+);
+CREATE INDEX IF NOT EXISTS ix_event_group_members_scope_object
+    ON event_group_members(project_id, root_investigation_id, event_id);
+
+CREATE TABLE IF NOT EXISTS event_group_lineage (
+    project_id VARCHAR(12) NOT NULL,
+    root_investigation_id UUID NOT NULL,
+    predecessor_id UUID NOT NULL,
+    successor_id UUID NOT NULL CHECK (successor_id <> predecessor_id),
+    PRIMARY KEY (predecessor_id, successor_id),
+    FOREIGN KEY (predecessor_id, project_id, root_investigation_id)
+        REFERENCES event_groups(id, project_id, root_investigation_id) ON DELETE CASCADE,
+    FOREIGN KEY (successor_id, project_id, root_investigation_id)
+        REFERENCES event_groups(id, project_id, root_investigation_id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS group_operations (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    project_id VARCHAR(12) NOT NULL,
+    root_investigation_id UUID NOT NULL,
+    operation_key VARCHAR NOT NULL,
+    payload_hash VARCHAR(64) NOT NULL,
+    kind VARCHAR(16) NOT NULL CHECK (kind IN ('source','proposal','review','merge','split')),
+    actor VARCHAR NOT NULL,
+    reason VARCHAR NOT NULL,
+    before_state JSONB NOT NULL CHECK (jsonb_typeof(before_state) = 'array'),
+    after_state JSONB NOT NULL CHECK (jsonb_typeof(after_state) = 'array'),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (id, project_id, root_investigation_id),
+    UNIQUE (project_id, root_investigation_id, operation_key),
+    FOREIGN KEY (root_investigation_id, project_id) REFERENCES investigations(id, project_id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS group_operation_links (
+    operation_id UUID NOT NULL,
+    project_id VARCHAR(12) NOT NULL,
+    root_investigation_id UUID NOT NULL,
+    entity_group_id UUID,
+    event_group_id UUID,
+    CHECK ((entity_group_id IS NULL) <> (event_group_id IS NULL)),
+    FOREIGN KEY (operation_id, project_id, root_investigation_id)
+        REFERENCES group_operations(id, project_id, root_investigation_id) ON DELETE CASCADE,
+    FOREIGN KEY (entity_group_id, project_id, root_investigation_id)
+        REFERENCES entity_resolution_groups(id, project_id, root_investigation_id) ON DELETE CASCADE,
+    FOREIGN KEY (event_group_id, project_id, root_investigation_id)
+        REFERENCES event_groups(id, project_id, root_investigation_id) ON DELETE CASCADE
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_group_operation_entity ON group_operation_links(operation_id, entity_group_id);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_group_operation_event ON group_operation_links(operation_id, event_group_id);
+CREATE INDEX IF NOT EXISTS ix_group_operation_links_entity_history
+    ON group_operation_links(project_id, root_investigation_id, entity_group_id, operation_id)
+    WHERE entity_group_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS ix_group_operation_links_event_history
+    ON group_operation_links(project_id, root_investigation_id, event_group_id, operation_id)
+    WHERE event_group_id IS NOT NULL;
+
+CREATE OR REPLACE FUNCTION protect_group_operation() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    -- Only whole-case hard deletion may remove audit; soft deletion retains it.
+    IF TG_OP = 'DELETE' AND NOT EXISTS (
+        SELECT 1 FROM investigations WHERE id=OLD.root_investigation_id AND project_id=OLD.project_id
+    ) THEN
+        RETURN OLD;
+    END IF;
+    RAISE EXCEPTION 'group operations are append-only' USING ERRCODE = '23514';
+END;
+$$;
+DROP TRIGGER IF EXISTS trg_group_operations_append_only ON group_operations;
+CREATE TRIGGER trg_group_operations_append_only BEFORE UPDATE OR DELETE ON group_operations
+    FOR EACH ROW EXECUTE FUNCTION protect_group_operation();
+
 WITH updated AS (
     UPDATE version_investigations
     SET version_num = '202609030001'

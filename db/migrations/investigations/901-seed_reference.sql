@@ -5,6 +5,7 @@ BEGIN;
 SET LOCAL search_path = :"DB_INV_SCHEMA_NAME", pg_temp;
 
 INSERT INTO entity_types (code, title, category) VALUES
+    ('device',    'Устройство',     'asset'),
     ('host',      'Узел',           'asset'),
     ('user',      'Пользователь',   'identity'),
     ('account',   'Учетная запись', 'identity'),
@@ -38,6 +39,7 @@ INSERT INTO relation_types (code, title, source_kind, target_kind, directed) VAL
     ('logged_in',      'Вход на узел',         'entity', 'entity', true),
     ('connected_to',   'Сетевое соединение',   'entity', 'entity', true),
     ('has_interface',  'Сетевой интерфейс',    'entity', 'entity', true),
+    ('has_identifier', 'Идентификатор устройства', 'entity', 'entity', true),
     ('authenticated_to','Аутентификация',       'entity', 'entity', true),
     ('transferred_to', 'Передача данных',       'entity', 'entity', true),
     ('executed',       'Запуск файла',         'entity', 'entity', true),

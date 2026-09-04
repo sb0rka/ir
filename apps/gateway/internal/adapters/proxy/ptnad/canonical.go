@@ -15,8 +15,8 @@ import (
 func canonicalFinding(value Attack) domain.Finding {
 	ref := canonicalRef(value.SourceRef)
 	mentions := make([]domain.EntityMention, 0, 6)
-	mentions = append(mentions, endpointMentions(value.Attacker, "attacker")...)
-	mentions = append(mentions, endpointMentions(value.Victim, "victim")...)
+	mentions = append(mentions, endpointMentions(value.Attacker, "attacker", value.SourceRef.SourceInstance)...)
+	mentions = append(mentions, endpointMentions(value.Victim, "victim", value.SourceRef.SourceInstance)...)
 	mentions = normalizeMentions(mentions)
 	details := &domain.NADAttackDetails{
 		Class: value.Class, GID: int(value.GID), SID: int(value.SID), Revision: int(value.Revision),
@@ -49,8 +49,8 @@ func canonicalSession(value Session) domain.Session {
 	duration := value.DurationSeconds
 	hasFiles := value.HasFiles
 	mentions := make([]domain.EntityMention, 0, 6)
-	mentions = append(mentions, endpointMentions(source, "src")...)
-	mentions = append(mentions, endpointMentions(destination, "dst")...)
+	mentions = append(mentions, endpointMentions(source, "src", value.SourceRef.SourceInstance)...)
+	mentions = append(mentions, endpointMentions(destination, "dst", value.SourceRef.SourceInstance)...)
 	item := domain.Session{
 		Ref: ref, Title: sessionTitle(value, source, destination), Severity: value.Severity,
 		StartedAt: value.Start, EndedAt: &end, DurationSeconds: &duration,
@@ -141,6 +141,9 @@ func appendAttackContext(page *capability.ContextPage, value Attack) {
 	event := attackEvent(value)
 	page.Events = append(page.Events, event)
 	page.Entities = append(page.Entities, entitiesForEvent(event, value.SourceRef.SourceInstance)...)
+	for _, endpoint := range []Endpoint{value.Attacker, value.Victim} {
+		page.Relations = append(page.Relations, endpointIdentifierRelations(endpoint, value.SourceRef.SourceInstance, value.OccurredAt, event.Provenance)...)
+	}
 }
 
 func decomposeSession(value Session) ([]domain.Event, []domain.Entity, []domain.Relation) {
@@ -152,7 +155,10 @@ func decomposeSession(value Session) ([]domain.Event, []domain.Entity, []domain.
 	for _, attack := range value.RelatedAttacks {
 		event := attackEvent(attack)
 		events = append(events, event)
-		entities = append(entities, entitiesForEvent(event, value.SourceRef.SourceInstance)...)
+		entities = append(entities, entitiesForEvent(event, attack.SourceRef.SourceInstance)...)
+		for _, endpoint := range []Endpoint{attack.Attacker, attack.Victim} {
+			relations = append(relations, endpointIdentifierRelations(endpoint, attack.SourceRef.SourceInstance, attack.OccurredAt, event.Provenance)...)
+		}
 	}
 	for _, file := range value.Files {
 		event := fileEvent(value, file)
@@ -430,6 +436,7 @@ func sessionRelations(value Session) []domain.Relation {
 		result = append(result, relation("connected_to", entityRef("ip", source.IP), entityRef("ip", destination.IP), value.Start, provenance))
 	}
 	for _, endpoint := range []Endpoint{source, destination} {
+		result = append(result, endpointIdentifierRelations(endpoint, value.SourceRef.SourceInstance, value.Start, provenance)...)
 		if endpoint.Host != "" && endpoint.IP != "" {
 			result = append(result, relation("has_interface", entityRef("host", endpoint.Host), entityRef("ip", endpoint.IP), value.Start, provenance))
 		}
@@ -493,20 +500,28 @@ func entitiesForEvent(event domain.Event, sourceInstance string) []domain.Entity
 	for _, mention := range event.Entities {
 		provenance := event.Provenance
 		provenance.ExternalID = entitySourceID(sourceInstance, mention.Type, mention.Value)
-		result = append(result, domain.NewEntity(mention.Type, mention.Value, provenance))
+		entity := domain.NewEntity(mention.Type, mention.Value, provenance)
+		if mention.Type == "device" {
+			entity.Attributes["identity_method"] = "pt-nad-host-id"
+			entity.Attributes["source_instance"] = sourceInstance
+		}
+		result = append(result, entity)
 	}
 	return result
 }
 
 func sessionEndpointMentions(value Session) []domain.EntityMention {
 	mentions := make([]domain.EntityMention, 0, 6)
-	mentions = append(mentions, endpointMentions(value.Source, "src")...)
-	mentions = append(mentions, endpointMentions(value.Destination, "dst")...)
+	mentions = append(mentions, endpointMentions(value.Source, "src", value.SourceRef.SourceInstance)...)
+	mentions = append(mentions, endpointMentions(value.Destination, "dst", value.SourceRef.SourceInstance)...)
 	return normalizeMentions(mentions)
 }
 
-func endpointMentions(value Endpoint, role string) []domain.EntityMention {
+func endpointMentions(value Endpoint, role, sourceInstance string) []domain.EntityMention {
 	result := make([]domain.EntityMention, 0, 3)
+	if device, ok := endpointDevice(value, sourceInstance); ok {
+		result = append(result, domain.EntityMention{EntityRef: device, Roles: []string{role}})
+	}
 	if value.IP != "" {
 		result = append(result, mention("ip", value.IP, role))
 	}
@@ -515,6 +530,29 @@ func endpointMentions(value Endpoint, role string) []domain.EntityMention {
 	}
 	if host := firstNonEmpty(value.Host, value.DNS); host != "" {
 		result = append(result, mention("host", host, role))
+	}
+	return result
+}
+
+func endpointDevice(value Endpoint, sourceInstance string) (domain.EntityRef, bool) {
+	if strings.TrimSpace(value.HostID) == "" || strings.TrimSpace(sourceInstance) == "" {
+		return domain.EntityRef{}, false
+	}
+	// HostID is meaningful only in its source instance; weak identifiers never substitute for it.
+	id := domain.StableID("pt-nad", sourceInstance, "host-id", strings.TrimSpace(value.HostID))
+	return entityRef("device", "pt-nad:"+id.String()), true
+}
+
+func endpointIdentifierRelations(endpoint Endpoint, sourceInstance string, at time.Time, provenance domain.Provenance) []domain.Relation {
+	device, ok := endpointDevice(endpoint, sourceInstance)
+	if !ok {
+		return nil
+	}
+	var result []domain.Relation
+	for _, identifier := range []domain.EntityRef{entityRef("ip", endpoint.IP), entityRef("mac", endpoint.MAC), entityRef("host", firstNonEmpty(endpoint.Host, endpoint.DNS))} {
+		if identifier.Value != "" {
+			result = append(result, relation("has_identifier", device, identifier, at, provenance))
+		}
 	}
 	return result
 }

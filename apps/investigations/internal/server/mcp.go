@@ -28,6 +28,7 @@ import (
 )
 
 type investigationArgs struct {
+	Projection      string              `json:"projection,omitempty" jsonschema:"raw (default) or grouped; grouped returns lossless expansion restricted to this investigation or hypothesis, never the entire tree"`
 	InvestigationID openapi_types.UUID  `json:"investigation_id" jsonschema:"Investigation UUID"`
 	HypothesisID    *openapi_types.UUID `json:"hypothesis_id,omitempty" jsonschema:"Optional hypothesis UUID; when set, read only its graph projection"`
 }
@@ -73,22 +74,26 @@ type mcpAgentEdge struct {
 }
 
 type addAgentResultsArgs struct {
-	InvestigationID openapi_types.UUID        `json:"investigation_id" jsonschema:"Investigation UUID"`
-	HypothesisID    *openapi_types.UUID       `json:"hypothesis_id,omitempty" jsonschema:"Optional active hypothesis UUID; when set, add explicit results to its graph projection"`
-	SomIssueIds     []openapi_types.UUID      `json:"som_issue_ids" jsonschema:"SOM issue UUIDs that produced these results"`
-	Events          []mcpAgentEventSelection  `json:"events" jsonschema:"Gateway events to import; empty when nodes use event_id or node_id only"`
-	Entities        []mcpAgentEntitySelection `json:"entities" jsonschema:"Gateway entities to import; empty when nodes use entity_id or node_id only"`
-	Nodes           []mcpAgentNode            `json:"nodes" jsonschema:"Each node needs ref plus exactly one locator: event_ref, entity_ref, event_id, entity_id, or node_id"`
-	Edges           []mcpAgentEdge            `json:"edges" jsonschema:"Proposed evidence-backed edges between nodes in this batch"`
+	InvestigationID      openapi_types.UUID                   `json:"investigation_id" jsonschema:"Investigation UUID"`
+	HypothesisID         *openapi_types.UUID                  `json:"hypothesis_id,omitempty" jsonschema:"Optional active hypothesis UUID; when set, add explicit results to its graph projection"`
+	SomIssueIds          []openapi_types.UUID                 `json:"som_issue_ids" jsonschema:"SOM issue UUIDs that produced these results"`
+	Events               []mcpAgentEventSelection             `json:"events" jsonschema:"Gateway events to import; empty when nodes use event_id or node_id only"`
+	Entities             []mcpAgentEntitySelection            `json:"entities" jsonschema:"Gateway entities to import; empty when nodes use entity_id or node_id only"`
+	Nodes                []mcpAgentNode                       `json:"nodes" jsonschema:"Each node needs ref plus exactly one locator: event_ref, entity_ref, event_id, entity_id, or node_id"`
+	Edges                []mcpAgentEdge                       `json:"edges" jsonschema:"Proposed evidence-backed edges between nodes in this batch"`
+	EntityGroupProposals *[]investigations.AgentGroupProposal `json:"entity_group_proposals,omitempty" jsonschema:"Optional proposed resolved_entity groups using batch-local node refs; proposals never confirm grouping"`
+	EventGroupProposals  *[]investigations.AgentGroupProposal `json:"event_group_proposals,omitempty" jsonschema:"Optional proposed event groups using batch-local node refs; proposals never confirm grouping"`
 }
 
 func (args addAgentResultsArgs) toBatch() investigations.AgentResultBatch {
 	batch := investigations.AgentResultBatch{
-		SomIssueIds: args.SomIssueIds,
-		Events:      make([]investigations.AgentEventSelection, len(args.Events)),
-		Entities:    make([]investigations.AgentEntitySelection, len(args.Entities)),
-		Nodes:       make([]investigations.AgentNode, len(args.Nodes)),
-		Edges:       make([]investigations.AgentEdge, len(args.Edges)),
+		SomIssueIds:          args.SomIssueIds,
+		Events:               make([]investigations.AgentEventSelection, len(args.Events)),
+		Entities:             make([]investigations.AgentEntitySelection, len(args.Entities)),
+		Nodes:                make([]investigations.AgentNode, len(args.Nodes)),
+		Edges:                make([]investigations.AgentEdge, len(args.Edges)),
+		EntityGroupProposals: args.EntityGroupProposals,
+		EventGroupProposals:  args.EventGroupProposals,
 	}
 	for i, event := range args.Events {
 		batch.Events[i] = investigations.AgentEventSelection{
@@ -122,7 +127,7 @@ func (s *Server) MCPHandler() http.Handler {
 	}, nil)
 	mcp.AddTool[investigationArgs, any](server, mcpTool[investigationArgs](
 		"get_investigation_graph",
-		"Read the investigation graph or an optional hypothesis graph projection, including proposed agent edges.",
+		"Read this investigation or hypothesis graph, including proposed agent edges. projection defaults to raw; grouped folds confirmed tree-local groups without importing sibling evidence.",
 	), s.getInvestigationGraphTool)
 	mcp.AddTool[listEventsArgs, any](server, mcpTool[listEventsArgs](
 		"list_investigation_events",
@@ -130,7 +135,9 @@ func (s *Server) MCPHandler() http.Handler {
 	), s.listInvestigationEventsTool)
 	mcp.AddTool[addAgentResultsArgs, any](server, mcpTool[addAgentResultsArgs](
 		"add_investigation_agent_results",
-		"Atomically add graph nodes and proposed evidence-backed edges, optionally scoped to an active hypothesis. "+
+		"Atomically add graph nodes, proposed evidence-backed edges, and optional entity/event group proposals. "+
+			"Group proposals require batch-local node references, evidence, reasons and SOM provenance; they never confirm grouping. "+
+			"Optionally scope the nodes to an active hypothesis. "+
 			"Prefer import_entity_events when the task is to find events for one entity and put them on the graph. "+
 			"To import Gateway evidence manually: put events[{ref,source_code,source_event_id}] and entities[{ref,source_code,source_entity_id}], "+
 			"then nodes use event_ref/entity_ref equal to those batch-local refs (never URNs or {source_code,...} objects). "+
@@ -188,6 +195,16 @@ func (s *Server) getInvestigationGraphTool(
 	}
 	if err := requireMCPHypothesis(args.HypothesisID); err != nil {
 		return mcpFailure(err)
+	}
+	if args.Projection != "" && args.Projection != "raw" && args.Projection != "grouped" {
+		return mcpFailure(errors.New("invalid arguments: projection must be raw or grouped"))
+	}
+	if args.Projection == "grouped" {
+		value, err := s.groupProjection(ctx, id, args.HypothesisID, false, nil, nil)
+		if err != nil {
+			return mcpFailure(err)
+		}
+		return nil, value, nil
 	}
 	if args.HypothesisID != nil {
 		response, err := s.GetHypothesisGraph(ctx, graph.GetHypothesisGraphRequestObject{
@@ -645,7 +662,10 @@ func (s *Server) importEntityEventsTool(
 	if err != nil {
 		return mcpImportFailure(summary, err)
 	}
-	result := importResult(stats)
+	result, err := importResult(stats)
+	if err != nil {
+		return mcpImportFailure(summary, err)
+	}
 	result.Warnings = append(aggregateWarnings, result.Warnings...)
 	summary.EventsImported = result.Events
 	return nil, importEntityEventsResult{ContextImportResult: result, Summary: summary}, nil

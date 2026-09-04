@@ -46,12 +46,9 @@ func (d *DB) ImportContext(ctx context.Context, request model.ImportRequest) (mo
 		return model.ImportStats{}, fmt.Errorf("begin context import: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	exists, err := investigationExistsTx(ctx, tx, request.ProjectID, request.InvestigationID)
+	scope, err := groupScopeTx(ctx, tx, request.ProjectID, request.InvestigationID, true)
 	if err != nil {
 		return model.ImportStats{}, err
-	}
-	if !exists {
-		return model.ImportStats{}, store.ErrInvestigationNotFound
 	}
 	if request.RequireActiveHypothesis && request.HypothesisID == nil {
 		return model.ImportStats{}, store.ErrInvalidValue
@@ -63,7 +60,7 @@ func (d *DB) ImportContext(ctx context.Context, request model.ImportRequest) (mo
 		}
 	}
 	refs := newImportGraphRefs()
-	stats, err := importSelectionTx(ctx, tx, request, refs)
+	stats, err := importSelectionTx(ctx, tx, request, refs, scope)
 	if err != nil {
 		return model.ImportStats{}, err
 	}
@@ -90,7 +87,7 @@ func (d *DB) ImportContext(ctx context.Context, request model.ImportRequest) (mo
 	return stats, nil
 }
 
-func importSelectionTx(ctx context.Context, tx pgx.Tx, request model.ImportRequest, refs *importGraphRefs) (model.ImportStats, error) {
+func importSelectionTx(ctx context.Context, tx pgx.Tx, request model.ImportRequest, refs *importGraphRefs, scope model.GroupScope) (model.ImportStats, error) {
 	if request.Origin != "analyst" && request.Origin != "agent" {
 		return model.ImportStats{}, store.ErrInvalidValue
 	}
@@ -520,7 +517,8 @@ func importSelectionTx(ctx context.Context, tx pgx.Tx, request model.ImportReque
 			}
 			refs.addEdge(edgeID)
 		}
-		return stats, nil
+		err := importGroupsTx(ctx, tx, scope, request, entityIDs, eventIDs, nil, &stats)
+		return stats, err
 	}
 
 	local := make(map[string]resolvedNode, len(request.Nodes))
@@ -639,7 +637,8 @@ func importSelectionTx(ctx context.Context, tx pgx.Tx, request model.ImportReque
 		}
 		refs.addEdge(edgeID)
 	}
-	return stats, nil
+	err = importGroupsTx(ctx, tx, scope, request, entityIDs, eventIDs, local, &stats)
+	return stats, err
 }
 
 func linkSourceSubeventEdgesTx(ctx context.Context, tx pgx.Tx, request model.ImportRequest, eventIDs map[string]string, refs *importGraphRefs) (int, int, []string, error) {

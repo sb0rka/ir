@@ -166,7 +166,11 @@ func (s *Server) AddInvestigationContext(ctx context.Context, request investigat
 	if err != nil {
 		return nil, storeError(err)
 	}
-	return investigations.AddInvestigationContext201JSONResponse(importResult(stats)), nil
+	out, err := importResult(stats)
+	if err != nil {
+		return nil, err
+	}
+	return investigations.AddInvestigationContext201JSONResponse(out), nil
 }
 
 func (s *Server) AddAgentResults(ctx context.Context, request investigations.AddAgentResultsRequestObject) (investigations.AddAgentResultsResponseObject, error) {
@@ -187,7 +191,11 @@ func (s *Server) AddAgentResults(ctx context.Context, request investigations.Add
 	if err != nil {
 		return nil, err
 	}
-	return investigations.AddAgentResults201JSONResponse(importResult(stats)), nil
+	out, err := importResult(stats)
+	if err != nil {
+		return nil, err
+	}
+	return investigations.AddAgentResults201JSONResponse(out), nil
 }
 
 func (s *Server) importAgentBatch(
@@ -289,6 +297,9 @@ func (s *Server) commitAgentBatch(
 			SourceRef: edge.SourceRef, TargetRef: edge.TargetRef, RelationCode: edge.RelationCode,
 			Why: edge.Why, Confidence: edge.Confidence, EvidenceEventRefs: edge.EvidenceEventRefs,
 		})
+	}
+	if err := importGroupProposals(batch, &input); err != nil {
+		return model.ImportStats{}, err
 	}
 	stats, err := s.db.ImportContext(ctx, input)
 	if err != nil {
@@ -889,8 +900,16 @@ func gatewayError(err error) error {
 	return httperr.New(http.StatusBadGateway, httperr.CodeSourceUnavailable, "Gateway context resolver is unavailable")
 }
 
-func importResult(stats model.ImportStats) investigations.ContextImportResult {
-	return investigations.ContextImportResult{Findings: stats.Findings, Sessions: stats.Sessions, Events: stats.Events, Entities: stats.Entities, Nodes: stats.Nodes, Edges: stats.Edges, Warnings: append([]string{}, stats.Warnings...)}
+func importResult(stats model.ImportStats) (investigations.ContextImportResult, error) {
+	out, err := groupDTO[investigations.ContextImportResult](struct {
+		Groups []model.GroupImportResult `json:"groups,omitempty"`
+	}{stats.Groups})
+	if err != nil {
+		return out, err
+	}
+	out.Findings, out.Sessions, out.Events, out.Entities, out.Nodes, out.Edges = stats.Findings, stats.Sessions, stats.Events, stats.Entities, stats.Nodes, stats.Edges
+	out.Warnings = append([]string{}, stats.Warnings...)
+	return out, nil
 }
 
 func convertInvestigation(inv model.Investigation) (investigations.Investigation, error) {
@@ -1010,7 +1029,11 @@ func (s *Server) AddHypothesisAgentResults(ctx context.Context, request investig
 	if err != nil {
 		return nil, err
 	}
-	return investigations.AddHypothesisAgentResults201JSONResponse(importResult(stats)), nil
+	out, err := importResult(stats)
+	if err != nil {
+		return nil, err
+	}
+	return investigations.AddHypothesisAgentResults201JSONResponse(out), nil
 }
 
 // AddHypothesisContext Add analyst-selected context through a hypothesis
@@ -1066,5 +1089,9 @@ func (s *Server) AddHypothesisContext(ctx context.Context, request investigation
 	if err != nil {
 		return nil, hypothesisStoreError(err)
 	}
-	return investigations.AddHypothesisContext201JSONResponse(importResult(stats)), nil
+	out, err := importResult(stats)
+	if err != nil {
+		return nil, err
+	}
+	return investigations.AddHypothesisContext201JSONResponse(out), nil
 }
