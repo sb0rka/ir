@@ -411,6 +411,36 @@ func TestGroupingAgentProposalsAtomicAndScoped(t *testing.T) {
 	}
 }
 
+func TestGroupingHistoryIndexesExist(t *testing.T) {
+	db := softDeleteTestDB(t)
+	expected := []string{
+		"ix_group_operation_links_entity_history",
+		"ix_group_operation_links_event_history",
+	}
+	rows, err := db.Pgx().Query(context.Background(), `SELECT indexname FROM pg_indexes
+		WHERE schemaname=current_schema() AND indexname=ANY($1::text[])`, expected)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	seen := map[string]bool{}
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			t.Fatal(err)
+		}
+		seen[name] = true
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range expected {
+		if !seen[name] {
+			t.Fatalf("history index %s is missing", name)
+		}
+	}
+}
+
 func TestGroupingSourceObjectImportsReuseRawComposite(t *testing.T) {
 	db := softDeleteTestDB(t)
 	ctx := context.Background()

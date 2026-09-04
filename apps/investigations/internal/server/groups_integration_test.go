@@ -55,6 +55,14 @@ func TestGroupingHTTPAndMCPRuntime(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	child, err := db.CreateInvestigation(ctx, model.InvestigationNew{ProjectID: project, ParentID: &inv.ID, Title: "runtime child case"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mutationRoot, err := db.CreateInvestigation(ctx, model.InvestigationNew{ProjectID: project, Title: "runtime mutation case"})
+	if err != nil {
+		t.Fatal(err)
+	}
 	at := time.Now().UTC().Truncate(time.Second)
 	selection := model.GatewaySelection{}
 	for i := 0; i < 2; i++ {
@@ -65,8 +73,56 @@ func TestGroupingHTTPAndMCPRuntime(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	childSelection := model.GatewaySelection{Events: []model.GatewayEvent{{SnapshotID: "child", Direct: true, Title: "child event", EventType: "network", OccurredAt: at, Provenance: model.GatewayProvenance{Source: "pt-nad", ExternalID: "runtime:child", FetchedAt: at}}}}
+	if _, err := db.ImportContext(ctx, model.ImportRequest{ProjectID: project, InvestigationID: child.ID, Origin: "analyst", Selection: childSelection}); err != nil {
+		t.Fatal(err)
+	}
+	sourceSelection := func(device, instance, ip string) model.GatewaySelection {
+		provenance := func(id string) model.GatewayProvenance {
+			return model.GatewayProvenance{Source: "pt-nad", ExternalID: id, FetchedAt: at}
+		}
+		return model.GatewaySelection{
+			Entities: []model.GatewayEntity{
+				{SnapshotID: "device", TypeCode: "device", Value: "pt-nad:" + device, Attributes: map[string]any{"identity_method": "pt-nad-host-id", "source_instance": instance}, Provenance: []model.GatewayProvenance{provenance("device:" + device)}},
+				{SnapshotID: "ip", TypeCode: "ip", Value: ip, Provenance: []model.GatewayProvenance{provenance("ip:" + ip)}},
+			},
+			Events: []model.GatewayEvent{
+				{SnapshotID: "parent", Direct: true, Title: "session " + device, EventType: "network_session", OccurredAt: at, Provenance: provenance("parent:" + device), Entities: []model.GatewayEventEntity{{SnapshotID: "device", Roles: []string{"mentions"}}, {SnapshotID: "ip", Roles: []string{"mentions"}}}},
+				{SnapshotID: "part", Direct: true, Title: "part " + device, EventType: "file", OccurredAt: at, Provenance: provenance("part:" + device), Attributes: map[string]any{"relation_type": "subevent_of", "parent_source_event_id": "parent:" + device}},
+			},
+			Relations: []model.GatewayRelation{{SnapshotID: "device-ip", RelationCode: "has_identifier", SourceEntitySnapshotID: "device", TargetEntitySnapshotID: "ip", OccurredAt: &at, Provenance: provenance("identifier:" + device)}},
+		}
+	}
+	type familyIDs struct{ entity, event string }
+	importedFamilies := make([]familyIDs, 0, 2)
+	for _, fixture := range []struct{ device, instance, ip string }{{"one", "19", "10.0.0.1"}, {"two", "20", "10.0.0.2"}} {
+		stats, err := db.ImportContext(ctx, model.ImportRequest{ProjectID: project, InvestigationID: mutationRoot.ID, Origin: "analyst", Selection: sourceSelection(fixture.device, fixture.instance, fixture.ip)})
+		if err != nil {
+			t.Fatal(err)
+		}
+		ids := familyIDs{}
+		for _, group := range stats.Groups {
+			switch group.Family {
+			case "entity":
+				ids.entity = group.GroupID
+			case "event":
+				ids.event = group.GroupID
+			}
+		}
+		if ids.entity == "" || ids.event == "" {
+			t.Fatalf("source import has incomplete grouping: %+v", stats.Groups)
+		}
+		importedFamilies = append(importedFamilies, ids)
+	}
 	nodes, err := db.GraphNodes(ctx, project, inv.ID, model.NodeFilter{})
 	if err != nil {
+		t.Fatal(err)
+	}
+	hypothesis, err := db.CreateHypothesis(ctx, model.HypothesisNew{ProjectID: project, InvestigationID: inv.ID, Statement: "runtime hypothesis"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AddHypothesisNode(ctx, project, inv.ID, hypothesis.ID, nodes[0].ID); err != nil {
 		t.Fatal(err)
 	}
 	pub, priv, err := ed25519.GenerateKey(rand.Reader)
@@ -127,10 +183,78 @@ func TestGroupingHTTPAndMCPRuntime(t *testing.T) {
 		}
 		return data
 	}
+	mutationBase := "/api/v1/investigations/" + mutationRoot.ID
+	readGroup := func(family, id string) model.Group {
+		var group model.Group
+		path := mutationBase + "/" + family + "-groups/" + id
+		if err := json.Unmarshal(call("GET", path, nil, project, true, 200), &group); err != nil {
+			t.Fatal(err)
+		}
+		return group
+	}
+	mutateGroup := func(family, id, action string, body any) []model.Group {
+		var result struct {
+			Groups []model.Group `json:"groups"`
+		}
+		path := mutationBase + "/" + family + "-groups/" + id + "/" + action
+		raw := call("POST", path, body, project, true, 200)
+		if err := json.Unmarshal(raw, &result); err != nil || len(result.Groups) == 0 {
+			t.Fatalf("%s %s response: %s %v", family, action, raw, err)
+		}
+		return result.Groups
+	}
+	entityA := readGroup("entity", importedFamilies[0].entity)
+	entityB := readGroup("entity", importedFamilies[1].entity)
+	entityReview := model.GroupReview{OperationID: uuid.NewString(), Version: entityA.Version, Reason: "runtime entity review", Members: []model.GroupReviewMember{{ID: entityA.Members[0].ID, Version: entityA.Members[0].Version, Status: "confirmed"}}}
+	entityA = mutateGroup("entity", entityA.ID, "review", entityReview)[0]
+	entityHistory := call("GET", mutationBase+"/entity-groups/"+entityA.ID+"/history?limit=10", nil, project, true, 200)
+	if !bytes.Contains(entityHistory, []byte("test-reviewer")) {
+		t.Fatal("entity history has no authenticated actor")
+	}
+	exerciseMergeSplit := func(family string, target, source model.Group) {
+		merge := model.GroupMerge{OperationID: uuid.NewString(), Version: target.Version, Reason: "runtime merge", Sources: []model.GroupVersion{{ID: source.ID, Version: source.Version}}}
+		for _, member := range target.Members {
+			merge.Members = append(merge.Members, model.GroupPlacement{MemberID: member.ID, Role: member.Role, Ordinal: member.Ordinal})
+		}
+		for _, member := range source.Members {
+			role := member.Role
+			if family == "event" {
+				role = "part"
+			}
+			merge.Members = append(merge.Members, model.GroupPlacement{MemberID: member.ID, Role: role, Ordinal: member.Ordinal})
+		}
+		mergedResult := mutateGroup(family, target.ID, "merge", merge)
+		if len(mergedResult) != 2 || mergedResult[0].State != "active" || mergedResult[1].State != "superseded" {
+			t.Fatalf("%s merge lineage: %+v", family, mergedResult)
+		}
+		merged := mergedResult[0]
+		sourceRoles := map[string]string{}
+		for _, member := range source.Members {
+			sourceRoles[member.ObjectID] = member.Role
+		}
+		split := model.GroupSplit{OperationID: uuid.NewString(), Version: merged.Version, Reason: "runtime split", Partitions: []model.GroupPartition{{Title: "runtime first"}, {Title: "runtime second"}}}
+		for _, member := range merged.Members {
+			partition, role := 0, member.Role
+			if originalRole, ok := sourceRoles[member.ObjectID]; ok {
+				partition, role = 1, originalRole
+			}
+			split.Partitions[partition].Members = append(split.Partitions[partition].Members, model.GroupPlacement{MemberID: member.ID, Role: role, Ordinal: member.Ordinal})
+		}
+		splitResult := mutateGroup(family, merged.ID, "split", split)
+		if len(splitResult) != 3 || splitResult[0].State != "superseded" || splitResult[1].State != "active" || splitResult[2].State != "active" {
+			t.Fatalf("%s split lineage: %+v", family, splitResult)
+		}
+	}
+	exerciseMergeSplit("entity", entityA, entityB)
+	exerciseMergeSplit("event", readGroup("event", importedFamilies[0].event), readGroup("event", importedFamilies[1].event))
 	base := "/api/v1/investigations/" + inv.ID
 	call("GET", base+"/graph/projection", nil, project, false, 401)
 	call("GET", base+"/graph/projection", nil, "ffffffffffff", true, 404)
 	call("GET", base+"/graph/projection?min_confidence=2", nil, project, true, 422)
+	var subtree model.GraphProjection
+	if err := json.Unmarshal(call("GET", base+"/graph/projection?include_subtree=true&statuses=confirmed&min_confidence=0", nil, project, true, 200), &subtree); err != nil || !subtree.IncludeSubtree || len(subtree.RawNodes) != 3 {
+		t.Fatalf("HTTP subtree projection: %+v %v", subtree, err)
+	}
 	payload := map[string]any{"som_issue_ids": []string{uuid.NewString()}, "events": []any{}, "entities": []any{}, "edges": []any{}, "nodes": []any{map[string]any{"ref": "a", "why": "primary event in the same trace", "event_id": *nodes[0].EventID}, map[string]any{"ref": "b", "why": "duplicate event in the same trace", "event_id": *nodes[1].EventID}}, "event_group_proposals": []any{map[string]any{"proposal_id": uuid.NewString(), "kind": "same_event", "title": "same occurrence", "why": "same trace reference", "evidence_event_refs": []string{"a", "b"}, "members": []any{map[string]any{"node_ref": "a", "role": "primary"}, map[string]any{"node_ref": "b", "role": "duplicate"}}}}}
 	raw := call("POST", base+"/agent-results", payload, project, true, 201)
 	var imported struct {
@@ -174,6 +298,11 @@ func TestGroupingHTTPAndMCPRuntime(t *testing.T) {
 	var projected model.GraphProjection
 	if err := json.Unmarshal(httpProjection, &projected); err != nil || len(projected.Nodes) != 1 || len(projected.RawNodes) != 2 {
 		t.Fatalf("HTTP collapse failed: %s %v", httpProjection, err)
+	}
+	var hypothesisProjection model.GraphProjection
+	hypothesisPath := base + "/hypotheses/" + hypothesis.ID + "/graph/projection?statuses=confirmed&min_confidence=0"
+	if err := json.Unmarshal(call("GET", hypothesisPath, nil, project, true, 200), &hypothesisProjection); err != nil || hypothesisProjection.HypothesisID == nil || *hypothesisProjection.HypothesisID != hypothesis.ID || len(hypothesisProjection.RawNodes) != 1 {
+		t.Fatalf("HTTP hypothesis projection: %+v %v", hypothesisProjection, err)
 	}
 	mcpBody := map[string]any{"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": map[string]any{"name": "get_investigation_graph", "arguments": map[string]any{"investigation_id": inv.ID, "projection": "grouped"}}}
 	mcpResponse := call("POST", "/mcp", mcpBody, project, true, 200)

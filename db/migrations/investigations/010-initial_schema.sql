@@ -961,6 +961,12 @@ CREATE TABLE IF NOT EXISTS group_operation_links (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS uq_group_operation_entity ON group_operation_links(operation_id, entity_group_id);
 CREATE UNIQUE INDEX IF NOT EXISTS uq_group_operation_event ON group_operation_links(operation_id, event_group_id);
+CREATE INDEX IF NOT EXISTS ix_group_operation_links_entity_history
+    ON group_operation_links(project_id, root_investigation_id, entity_group_id, operation_id)
+    WHERE entity_group_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS ix_group_operation_links_event_history
+    ON group_operation_links(project_id, root_investigation_id, event_group_id, operation_id)
+    WHERE event_group_id IS NOT NULL;
 
 CREATE OR REPLACE FUNCTION protect_group_operation() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN

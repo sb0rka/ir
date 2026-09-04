@@ -184,13 +184,18 @@ snapshot; attachments загружаются пакетно, группы выб
 
 ## Проверки
 
-CI создаёт disposable PostgreSQL 18, применяет migrations 007–010 и 901, затем
-`task check` запускает также DB и HTTP/JWT/MCP runtime tests. Локально используйте
-отдельную пустую test database с теми же migrations и search_path=inv:
+CI разделён на два независимых job: `Check generated` запускает `task check`,
+а `Investigations integration` создаёт disposable PostgreSQL 18, применяет все
+migrations через `db/migrate.sh` и отдельно запускает DB и HTTP/JWT/MCP runtime
+tests. Локально сначала подготовьте отдельную пустую test database тем же
+`db/migrate.sh`, затем передайте её URI явному integration-прогону:
 
 ```powershell
 $env:INVESTIGATIONS_TEST_DATABASE_URI='postgres://postgres@127.0.0.1:55439/ir_grouping?sslmode=disable&search_path=inv'
 task check
+Push-Location apps/investigations
+go test -count=1 ./internal/store/psql ./internal/server
+Pop-Location
 task dashboard-check
 ```
 
