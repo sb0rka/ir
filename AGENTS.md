@@ -27,6 +27,10 @@
 - Отсутствующая и чужая запись обе отвечают `404`.
 - Все прошедшие JWT-проверку пользователи имеют одинаковые права IR; границу
   данных задаёт обязательный `X-Project-ID`.
+- Group decisions дополнительно ограничены корнем `parent_id` дерева:
+  `(project_id, root_investigation_id)`. Независимые roots не разделяют группы,
+  review, lineage или idempotency. Group scope не расширяет graph view и не
+  является новым ACL. Инварианты и frontend API — в [docs/grouping.md](docs/grouping.md).
 - Gateway использует `PROJECT_SOURCE_ALLOWLISTS` как границу доступных проекту
   источников и не принимает credentials или vendor URL из пользовательских
   запросов.

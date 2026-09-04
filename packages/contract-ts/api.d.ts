@@ -578,6 +578,340 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/investigations/{investigation_id}/graph/projection": {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
+            path: {
+                /** @description Identifier of an investigation in the selected project. */
+                investigation_id: components["parameters"]["InvestigationId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Read lossless grouped graph in the requested view
+         * @description Groups belong to the root investigation tree. This view never imports absent evidence or groups from another root. Raw UUID graph CRUD is unchanged.
+         */
+        get: operations["getGraphProjection"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/investigations/{investigation_id}/hypotheses/{hypothesis_id}/graph/projection": {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
+            path: {
+                /** @description Identifier of an investigation in the selected project. */
+                investigation_id: components["parameters"]["InvestigationId"];
+                /** @description Identifier of a hypothesis owned by the investigation in the path. */
+                hypothesis_id: components["parameters"]["HypothesisId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Read lossless grouped graph in the requested view
+         * @description Groups belong to the root investigation tree. This view never imports absent evidence or groups from another root. Raw UUID graph CRUD is unchanged.
+         */
+        get: operations["getHypothesisGraphProjection"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/investigations/{root_id}/entity-groups/{group_id}": {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
+            path: {
+                /** @description Root investigation UUID; the server verifies it has no parent. */
+                root_id: string;
+                /** @description Group UUID in this project and root investigation tree. */
+                group_id: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * detail entity group within one investigation tree
+         * @description Decisions apply to the root and all descendants. No cross-root sharing or implicit merge is allowed. Retries require the same operation ID and payload.
+         */
+        get: operations["getEntityGroup"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/investigations/{root_id}/entity-groups/{group_id}/review": {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
+            path: {
+                /** @description Root investigation UUID; the server verifies it has no parent. */
+                root_id: string;
+                /** @description Group UUID in this project and root investigation tree. */
+                group_id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * review entity group within one investigation tree
+         * @description Decisions apply to the root and all descendants. No cross-root sharing or implicit merge is allowed. Retries require the same operation ID and payload.
+         */
+        post: operations["reviewEntityGroup"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/investigations/{root_id}/entity-groups/{group_id}/merge": {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
+            path: {
+                /** @description Root investigation UUID; the server verifies it has no parent. */
+                root_id: string;
+                /** @description Group UUID in this project and root investigation tree. */
+                group_id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * merge entity group within one investigation tree
+         * @description Decisions apply to the root and all descendants. No cross-root sharing or implicit merge is allowed. Retries require the same operation ID and payload.
+         */
+        post: operations["mergeEntityGroup"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/investigations/{root_id}/entity-groups/{group_id}/split": {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
+            path: {
+                /** @description Root investigation UUID; the server verifies it has no parent. */
+                root_id: string;
+                /** @description Group UUID in this project and root investigation tree. */
+                group_id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * split entity group within one investigation tree
+         * @description Decisions apply to the root and all descendants. No cross-root sharing or implicit merge is allowed. Retries require the same operation ID and payload.
+         */
+        post: operations["splitEntityGroup"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/investigations/{root_id}/entity-groups/{group_id}/history": {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
+            path: {
+                /** @description Root investigation UUID; the server verifies it has no parent. */
+                root_id: string;
+                /** @description Group UUID in this project and root investigation tree. */
+                group_id: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * history entity group within one investigation tree
+         * @description Decisions apply to the root and all descendants. No cross-root sharing or implicit merge is allowed. Retries require the same operation ID and payload.
+         */
+        get: operations["getEntityGroupHistory"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/investigations/{root_id}/event-groups/{group_id}": {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
+            path: {
+                /** @description Root investigation UUID; the server verifies it has no parent. */
+                root_id: string;
+                /** @description Group UUID in this project and root investigation tree. */
+                group_id: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * detail event group within one investigation tree
+         * @description Decisions apply to the root and all descendants. No cross-root sharing or implicit merge is allowed. Retries require the same operation ID and payload.
+         */
+        get: operations["getEventGroup"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/investigations/{root_id}/event-groups/{group_id}/review": {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
+            path: {
+                /** @description Root investigation UUID; the server verifies it has no parent. */
+                root_id: string;
+                /** @description Group UUID in this project and root investigation tree. */
+                group_id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * review event group within one investigation tree
+         * @description Decisions apply to the root and all descendants. No cross-root sharing or implicit merge is allowed. Retries require the same operation ID and payload.
+         */
+        post: operations["reviewEventGroup"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/investigations/{root_id}/event-groups/{group_id}/merge": {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
+            path: {
+                /** @description Root investigation UUID; the server verifies it has no parent. */
+                root_id: string;
+                /** @description Group UUID in this project and root investigation tree. */
+                group_id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * merge event group within one investigation tree
+         * @description Decisions apply to the root and all descendants. No cross-root sharing or implicit merge is allowed. Retries require the same operation ID and payload.
+         */
+        post: operations["mergeEventGroup"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/investigations/{root_id}/event-groups/{group_id}/split": {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
+            path: {
+                /** @description Root investigation UUID; the server verifies it has no parent. */
+                root_id: string;
+                /** @description Group UUID in this project and root investigation tree. */
+                group_id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * split event group within one investigation tree
+         * @description Decisions apply to the root and all descendants. No cross-root sharing or implicit merge is allowed. Retries require the same operation ID and payload.
+         */
+        post: operations["splitEventGroup"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/investigations/{root_id}/event-groups/{group_id}/history": {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
+            path: {
+                /** @description Root investigation UUID; the server verifies it has no parent. */
+                root_id: string;
+                /** @description Group UUID in this project and root investigation tree. */
+                group_id: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * history event group within one investigation tree
+         * @description Decisions apply to the root and all descendants. No cross-root sharing or implicit merge is allowed. Retries require the same operation ID and payload.
+         */
+        get: operations["getEventGroupHistory"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/investigations/{investigation_id}/hypotheses": {
         parameters: {
             query?: never;
@@ -1710,6 +2044,233 @@ export interface components {
          * @enum {string}
          */
         Origin: "analyst" | "rule" | "agent";
+        Group: {
+            /** Format: uuid */
+            id: string;
+            project_id: string;
+            /** Format: uuid */
+            root_investigation_id: string;
+            /** @enum {string} */
+            family: "entity" | "event";
+            /** @enum {string} */
+            kind: "resolved_entity" | "same_event" | "composite" | "sequence" | "correlation";
+            type_code?: string;
+            group_key: string;
+            title: string;
+            /** @enum {string} */
+            state: "active" | "superseded";
+            version: number;
+            members: components["schemas"]["GroupMember"][];
+            successor_ids: string[];
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        GroupMember: {
+            /** Format: uuid */
+            id: string;
+            /**
+             * Format: uuid
+             * @description Atomic entity UUID for entity groups, event UUID for event groups; never a graph node UUID.
+             */
+            object_id: string;
+            /** @enum {string} */
+            role: "subject" | "identifier" | "primary" | "duplicate" | "parent" | "part" | "step" | "evidence";
+            ordinal?: number;
+            /** @enum {string} */
+            status: "proposed" | "confirmed" | "rejected";
+            confidence?: number;
+            decision_reason: string;
+            version: number;
+            assertions: components["schemas"]["GroupAssertion"][];
+        };
+        GroupAssertion: {
+            /** Format: uuid */
+            investigation_id: string;
+            /** @enum {string} */
+            origin: "source" | "rule" | "analyst" | "agent";
+            origin_ref: string;
+            method: string;
+            method_version: string;
+            evidence_event_ids: string[];
+            /** Format: date-time */
+            valid_from?: string;
+            /** Format: date-time */
+            valid_to?: string;
+            reason: string;
+        };
+        GroupReview: {
+            /** Format: uuid */
+            operation_id: string;
+            version: number;
+            reason: string;
+            members: {
+                /** Format: uuid */
+                id: string;
+                version: number;
+                /** @enum {string} */
+                status: "confirmed" | "rejected";
+            }[];
+        };
+        GroupPlacement: {
+            /** Format: uuid */
+            member_id: string;
+            /** @enum {string} */
+            role: "subject" | "identifier" | "primary" | "duplicate" | "parent" | "part" | "step" | "evidence";
+            ordinal?: number;
+        };
+        GroupMerge: {
+            /** Format: uuid */
+            operation_id: string;
+            version: number;
+            reason: string;
+            sources: {
+                /** Format: uuid */
+                id: string;
+                version: number;
+            }[];
+            /** @description Complete explicit placement of every survivor and source member. Conflicting decisions must be reviewed before merging. */
+            members: components["schemas"]["GroupPlacement"][];
+        };
+        GroupPartition: {
+            title: string;
+            members: components["schemas"]["GroupPlacement"][];
+        };
+        GroupSplit: {
+            /** Format: uuid */
+            operation_id: string;
+            version: number;
+            reason: string;
+            /** @description Complete partition; only entity identifiers may explicitly appear in multiple partitions. */
+            partitions: components["schemas"]["GroupPartition"][];
+        };
+        GroupMutationResult: {
+            groups: components["schemas"]["Group"][];
+        };
+        GroupOperation: {
+            /** Format: uuid */
+            id: string;
+            project_id: string;
+            /** Format: uuid */
+            root_investigation_id: string;
+            operation_id: string;
+            /** @enum {string} */
+            kind: "source" | "proposal" | "review" | "merge" | "split";
+            actor: string;
+            reason: string;
+            before: components["schemas"]["Group"][];
+            after: components["schemas"]["Group"][];
+            /** Format: date-time */
+            created_at: string;
+        };
+        GroupHistory: {
+            operations: components["schemas"]["GroupOperation"][];
+            next_cursor?: string;
+        };
+        GraphProjection: {
+            /** Format: uuid */
+            investigation_id: string;
+            /** Format: uuid */
+            root_investigation_id: string;
+            /** Format: uuid */
+            hypothesis_id?: string;
+            include_subtree: boolean;
+            /** @description Active groups with only members and assertions supported inside this view. Includes proposed/rejected memberships without collapsing them. Whole-tree labels and review reasons are available only via the explicit root detail endpoint. */
+            groups: components["schemas"]["ProjectionGroup"][];
+            nodes: components["schemas"]["ProjectionNode"][];
+            edges: components["schemas"]["ProjectionEdge"][];
+            annotations: components["schemas"]["ProjectionAnnotation"][];
+            diagnostics: components["schemas"]["ProjectionDiagnostic"][];
+            raw_nodes: components["schemas"]["ProjectionRawNode"][];
+            raw_edges: components["schemas"]["ProjectionRawEdge"][];
+        };
+        ProjectionGroup: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            family: "entity" | "event";
+            kind: string;
+            version: number;
+            members: components["schemas"]["ProjectionGroupMember"][];
+        };
+        ProjectionGroupMember: {
+            /** Format: uuid */
+            id: string;
+            node_ids: string[];
+            role: string;
+            ordinal?: number;
+            /** @enum {string} */
+            status: "proposed" | "confirmed" | "rejected";
+            version: number;
+            confidence?: number;
+            assertions: components["schemas"]["GroupAssertion"][];
+        };
+        ProjectionNode: {
+            /** @description Virtual string ID for a group, atomic UUID otherwise. */
+            id: string;
+            /** @enum {string} */
+            node_type: "entity" | "event" | "entity_group" | "event_group";
+            /** Format: uuid */
+            group_id?: string;
+            group_kind?: string;
+            member_node_ids: string[];
+        };
+        ProjectionEdge: {
+            id: string;
+            source_node_id: string;
+            target_node_id: string;
+            relation_code: string;
+            status: string;
+            origins: string[];
+            member_edge_ids: string[];
+            evidence_event_ids: string[];
+            confidence_min?: number;
+            confidence_max?: number;
+        };
+        ProjectionAnnotation: {
+            /** Format: uuid */
+            group_id: string;
+            kind: string;
+            member_node_ids: string[];
+        };
+        ProjectionDiagnostic: {
+            code: string;
+            node_ids: string[];
+        };
+        ProjectionRawNode: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            investigation_id: string;
+            node_type: string;
+            /** Format: uuid */
+            entity_id?: string;
+            /** Format: uuid */
+            event_id?: string;
+            label?: string;
+            type_code?: string;
+            origin: string;
+            som_issue_ids: string[];
+            /** Format: date-time */
+            occurred_at?: string;
+        };
+        ProjectionRawEdge: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            investigation_id: string;
+            /** Format: uuid */
+            source_node_id: string;
+            /** Format: uuid */
+            target_node_id: string;
+            relation_code: string;
+            status: string;
+            origin: string;
+            confidence?: number;
+            why?: string;
+            evidence_event_ids: string[];
+        };
         /** @description A named projection over the owning investigation's shared factual graph. It cannot have child hypotheses, but that does not restrict which events, entities, or edges belong to its graph. Memberships may overlap. */
         Hypothesis: {
             /** Format: uuid */
@@ -1862,11 +2423,37 @@ export interface components {
             entities: components["schemas"]["EntitySourceRef"][];
         };
         AgentResultBatch: {
+            /** @description Proposed resolved_entity groups in this investigation tree, using only local node refs. */
+            entity_group_proposals?: components["schemas"]["AgentGroupProposal"][];
+            /** @description Proposed same_event/composite/sequence/correlation groups; never shared across independent roots. */
+            event_group_proposals?: components["schemas"]["AgentGroupProposal"][];
             som_issue_ids: string[];
             events: components["schemas"]["AgentEventSelection"][];
             entities: components["schemas"]["AgentEntitySelection"][];
             nodes: components["schemas"]["AgentNode"][];
             edges: components["schemas"]["AgentEdge"][];
+        };
+        AgentGroupProposal: {
+            /** Format: uuid */
+            proposal_id: string;
+            /** @enum {string} */
+            kind: "resolved_entity" | "same_event" | "composite" | "sequence" | "correlation";
+            /** @description Required subject entity type for resolved_entity groups. */
+            type_code?: string;
+            title: string;
+            why: string;
+            evidence_event_refs: string[];
+            members: {
+                node_ref: string;
+                /** @enum {string} */
+                role: "subject" | "identifier" | "primary" | "duplicate" | "parent" | "part" | "step" | "evidence";
+                ordinal?: number;
+                confidence?: number;
+                /** Format: date-time */
+                valid_from?: string;
+                /** Format: date-time */
+                valid_to?: string;
+            }[];
         };
         /** @description An event selected by the agent and its batch-local reference. */
         AgentEventSelection: {
@@ -1911,6 +2498,15 @@ export interface components {
             evidence_event_refs: string[];
         };
         ContextImportResult: {
+            groups?: {
+                /** Format: uuid */
+                group_id: string;
+                /** @enum {string} */
+                family: "entity" | "event";
+                /** Format: uuid */
+                root_investigation_id: string;
+                member_ids: string[];
+            }[];
             findings: number;
             sessions: number;
             events: number;
@@ -3376,6 +3972,450 @@ export interface operations {
             422: components["responses"]["ValidationError"];
             500: components["responses"]["InternalError"];
             501: components["responses"]["NotImplemented"];
+        };
+    };
+    getGraphProjection: {
+        parameters: {
+            query?: {
+                /** @description Include descendants of this case, never ancestors or sibling branches. */
+                include_subtree?: boolean;
+                min_confidence?: number;
+                statuses?: ("proposed" | "confirmed" | "rejected")[];
+            };
+            header: {
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
+            path: {
+                /** @description Identifier of an investigation in the selected project. */
+                investigation_id: components["parameters"]["InvestigationId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Scoped result; missing and foreign-tree groups are indistinguishable. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GraphProjection"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationError"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getHypothesisGraphProjection: {
+        parameters: {
+            query?: {
+                min_confidence?: number;
+                statuses?: ("proposed" | "confirmed" | "rejected")[];
+            };
+            header: {
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
+            path: {
+                /** @description Identifier of an investigation in the selected project. */
+                investigation_id: components["parameters"]["InvestigationId"];
+                /** @description Identifier of a hypothesis owned by the investigation in the path. */
+                hypothesis_id: components["parameters"]["HypothesisId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Scoped result; missing and foreign-tree groups are indistinguishable. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GraphProjection"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationError"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getEntityGroup: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
+            path: {
+                /** @description Root investigation UUID; the server verifies it has no parent. */
+                root_id: string;
+                /** @description Group UUID in this project and root investigation tree. */
+                group_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Scoped result; missing and foreign-tree groups are indistinguishable. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Group"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationError"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    reviewEntityGroup: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
+            path: {
+                /** @description Root investigation UUID; the server verifies it has no parent. */
+                root_id: string;
+                /** @description Group UUID in this project and root investigation tree. */
+                group_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GroupReview"];
+            };
+        };
+        responses: {
+            /** @description Scoped result; missing and foreign-tree groups are indistinguishable. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GroupMutationResult"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationError"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    mergeEntityGroup: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
+            path: {
+                /** @description Root investigation UUID; the server verifies it has no parent. */
+                root_id: string;
+                /** @description Group UUID in this project and root investigation tree. */
+                group_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GroupMerge"];
+            };
+        };
+        responses: {
+            /** @description Scoped result; missing and foreign-tree groups are indistinguishable. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GroupMutationResult"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationError"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    splitEntityGroup: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
+            path: {
+                /** @description Root investigation UUID; the server verifies it has no parent. */
+                root_id: string;
+                /** @description Group UUID in this project and root investigation tree. */
+                group_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GroupSplit"];
+            };
+        };
+        responses: {
+            /** @description Scoped result; missing and foreign-tree groups are indistinguishable. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GroupMutationResult"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationError"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getEntityGroupHistory: {
+        parameters: {
+            query?: {
+                cursor?: string;
+                limit?: number;
+            };
+            header: {
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
+            path: {
+                /** @description Root investigation UUID; the server verifies it has no parent. */
+                root_id: string;
+                /** @description Group UUID in this project and root investigation tree. */
+                group_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Scoped result; missing and foreign-tree groups are indistinguishable. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GroupHistory"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationError"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getEventGroup: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
+            path: {
+                /** @description Root investigation UUID; the server verifies it has no parent. */
+                root_id: string;
+                /** @description Group UUID in this project and root investigation tree. */
+                group_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Scoped result; missing and foreign-tree groups are indistinguishable. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Group"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationError"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    reviewEventGroup: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
+            path: {
+                /** @description Root investigation UUID; the server verifies it has no parent. */
+                root_id: string;
+                /** @description Group UUID in this project and root investigation tree. */
+                group_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GroupReview"];
+            };
+        };
+        responses: {
+            /** @description Scoped result; missing and foreign-tree groups are indistinguishable. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GroupMutationResult"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationError"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    mergeEventGroup: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
+            path: {
+                /** @description Root investigation UUID; the server verifies it has no parent. */
+                root_id: string;
+                /** @description Group UUID in this project and root investigation tree. */
+                group_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GroupMerge"];
+            };
+        };
+        responses: {
+            /** @description Scoped result; missing and foreign-tree groups are indistinguishable. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GroupMutationResult"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationError"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    splitEventGroup: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
+            path: {
+                /** @description Root investigation UUID; the server verifies it has no parent. */
+                root_id: string;
+                /** @description Group UUID in this project and root investigation tree. */
+                group_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GroupSplit"];
+            };
+        };
+        responses: {
+            /** @description Scoped result; missing and foreign-tree groups are indistinguishable. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GroupMutationResult"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationError"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getEventGroupHistory: {
+        parameters: {
+            query?: {
+                cursor?: string;
+                limit?: number;
+            };
+            header: {
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
+            path: {
+                /** @description Root investigation UUID; the server verifies it has no parent. */
+                root_id: string;
+                /** @description Group UUID in this project and root investigation tree. */
+                group_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Scoped result; missing and foreign-tree groups are indistinguishable. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GroupHistory"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationError"];
+            500: components["responses"]["InternalError"];
         };
     };
     listHypotheses: {

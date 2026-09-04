@@ -10,6 +10,7 @@ import (
 	"github.com/sb0rka/ir/packages/contract/events"
 	"github.com/sb0rka/ir/packages/contract/findings"
 	"github.com/sb0rka/ir/packages/contract/graph"
+	"github.com/sb0rka/ir/packages/contract/groups"
 	"github.com/sb0rka/ir/packages/contract/hypotheses"
 	"github.com/sb0rka/ir/packages/contract/investigations"
 	"github.com/sb0rka/ir/packages/contract/reference"
@@ -25,6 +26,7 @@ type API interface {
 	events.StrictServerInterface
 	findings.StrictServerInterface
 	graph.StrictServerInterface
+	groups.StrictServerInterface
 	hypotheses.StrictServerInterface
 	investigations.StrictServerInterface
 	reference.StrictServerInterface
@@ -74,6 +76,10 @@ func registerDomains(mux *http.ServeMux, deps Dependencies) {
 	onResponseError := func(w http.ResponseWriter, _ *http.Request, err error) {
 		httperr.Write(w, deps.Log, err)
 	}
+	groups.HandlerWithOptions(
+		groups.NewStrictHandlerWithOptions(deps.Server, nil, groups.StrictHTTPServerOptions{
+			RequestErrorHandlerFunc: onRequestError, ResponseErrorHandlerFunc: onResponseError,
+		}), groups.StdHTTPServerOptions{BaseURL: baseURL, BaseRouter: mux, ErrorHandlerFunc: onRequestError})
 
 	entities.HandlerWithOptions(
 		entities.NewStrictHandlerWithOptions(deps.Server, nil, entities.StrictHTTPServerOptions{

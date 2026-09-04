@@ -12,6 +12,8 @@ security:
   - bearerAuth: []
 
 tags:
+  - name: groups
+    description: Entity and event groups isolated to one root investigation and its descendants.
   - name: investigations
     description: Root and child cases, each with an independent lifecycle and graph.
   - name: hypotheses
