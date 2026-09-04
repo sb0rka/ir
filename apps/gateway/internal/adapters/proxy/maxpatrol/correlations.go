@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/url"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -74,7 +75,10 @@ func (client *Client) SearchCorrelations(ctx context.Context, access Access, req
 	if request.Limit < 1 || request.Limit > defaultChildPageSize {
 		return CorrelationPage{}, &RequestError{Operation: "correlation search", Message: fmt.Sprintf("limit must be between 1 and %d", defaultChildPageSize)}
 	}
-	response, err := client.queryEvents(ctx, access, "correlation search", request.TimeRange, "correlation_name != null", request.Limit)
+	if request.Offset < 0 {
+		return CorrelationPage{}, &RequestError{Operation: "correlation search", Message: "offset must not be negative"}
+	}
+	response, err := client.queryEvents(ctx, access, "correlation search", request.TimeRange, "correlation_name != null", request.Limit, request.Offset)
 	if err != nil {
 		return CorrelationPage{}, err
 	}
@@ -99,13 +103,23 @@ func (client *Client) SearchCorrelations(ctx context.Context, access Access, req
 		}
 		return correlations[left].UUID < correlations[right].UUID
 	})
-	return CorrelationPage{
-		Correlations: correlations,
-		TotalItems:   response.TotalCount,
+	page := CorrelationPage{
+		Correlations:  correlations,
+		TotalItems:    response.TotalCount,
 		ReportedTotal: response.ReportedTotal,
-		// Truncation is inferred from a full page when continuation is unconfirmed.
-		Truncated: len(response.Events) >= request.Limit,
-	}, nil
+		Truncated:     correlationPageTruncated(response.ReportedTotal, len(response.Events), request.Limit),
+	}
+	if next, more := offsetContinuation(request.Offset, len(response.Events), request.Limit, response.ReportedTotal); more {
+		page.NextOffset = &next
+	}
+	return page, nil
+}
+
+func correlationPageTruncated(total *int64, returned, limit int) bool {
+	if total != nil && *total > int64(returned) {
+		return true
+	}
+	return returned >= limit
 }
 
 func (client *Client) ResolveCorrelation(ctx context.Context, access Access, request CorrelationResolveRequest) (CorrelationResolution, error) {
@@ -163,7 +177,7 @@ func (client *Client) getExactEvent(ctx context.Context, access Access, operatio
 	if err != nil {
 		return safeEventRecord{}, err
 	}
-	response, err := client.queryEvents(ctx, access, operation, timeRange, `uuid = "`+id+`"`, 1)
+	response, err := client.queryEvents(ctx, access, operation, timeRange, `uuid = "`+id+`"`, 1, 0)
 	if err != nil {
 		return safeEventRecord{}, err
 	}
@@ -188,15 +202,24 @@ func buildEventsV3PDQL(where string, limit int) string {
 	if where == "" {
 		where = "uuid != null"
 	}
+	// Exact UUID lookups keep limit(1). List searches omit PDQL limit so
+	// totalCount stays the global match count; HTTP limit pages the payload.
+	if limit == 1 {
+		return fmt.Sprintf(
+			"filter(%s) | select(%s) | sort(time desc) | limit(%d)",
+			where,
+			strings.Join(correlationSelect, ", "),
+			limit,
+		)
+	}
 	return fmt.Sprintf(
-		"filter(%s) | select(%s) | sort(time desc) | limit(%d)",
+		"filter(%s) | select(%s) | sort(time desc)",
 		where,
 		strings.Join(correlationSelect, ", "),
-		limit,
 	)
 }
 
-func (client *Client) queryEvents(ctx context.Context, access Access, operation string, timeRange TimeRange, where string, top int) (safeEventsEnvelope, error) {
+func (client *Client) queryEvents(ctx context.Context, access Access, operation string, timeRange TimeRange, where string, top int, offset int) (safeEventsEnvelope, error) {
 	if err := timeRange.validate(); err != nil {
 		return safeEventsEnvelope{}, err
 	}
@@ -207,10 +230,12 @@ func (client *Client) queryEvents(ctx context.Context, access Access, operation 
 		TimeTo:      timeRange.To.Unix(),
 	}
 	query := url.Values{}
-	query.Set("offset", "0")
+	query.Set("offset", fmt.Sprintf("%d", max(0, offset)))
 	query.Set("limit", fmt.Sprintf("%d", top))
 	query.Set("recursive", "true")
-	query.Set("noCount", "true")
+	// The first page requests a real totalCount for correlation search and exact
+	// UUID lookups; offset continuations reuse the first page's total.
+	query.Set("noCount", strconv.FormatBool(offset > 0))
 	var response safeEventsEnvelope
 	if err := client.doJSON(ctx, client.siem, access, operation, http.MethodPost, eventsPath, query, request, &response); err != nil {
 		return safeEventsEnvelope{}, err

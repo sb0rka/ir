@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { Braces, Check, Eye, EyeOff, History, Loader2, Pencil, Play, Plus, Search } from 'lucide-react'
 import {
   addFieldToPdql,
+  defaultQuery,
   findingUuidFromAst,
   isFindingFilterField,
   parseQueuePdql,
@@ -494,7 +495,7 @@ export function QueryComposer({
             className="min-w-0 flex-1 truncate rounded border border-transparent px-2 py-1.5 font-mono text-xs text-fg-muted"
             title={pdql}
           >
-            {pdql || 'select(time) | sort(time desc)'}
+            {pdql || serialize(defaultQuery())}
           </div>
         )}
         <Button

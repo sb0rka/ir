@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"unicode"
 
@@ -29,6 +30,9 @@ type eventSearchQuery struct {
 	PDQL        string
 	GroupValues []*string
 	Limit       int
+	// Offset continues the same PDQL result set; the SIEM orders pages by the
+	// query sort, so offset paging is stable for a fixed time window.
+	Offset int
 }
 
 type eventSearchQueryV3Request struct {
@@ -100,7 +104,9 @@ func buildEventSearchQuery(request capability.SearchEventsRequest, entityWhere s
 			"sort(Cnt desc)",
 		)
 	}
-	parts = append(parts, fmt.Sprintf("limit(%d)", request.Limit))
+	// Do not put limit() in PDQL: MaxPatrol totalCount is computed after the
+	// pipeline, so a PDQL limit would collapse the reported total to the page size.
+	// Page size is applied via the HTTP limit/offset query parameters instead.
 	groupValues := append([]*string(nil), request.GroupValues...)
 	if len(groupBy) == 0 {
 		defaultGroup := "1"
@@ -120,10 +126,13 @@ func (client *Client) searchEventsWithQuery(ctx context.Context, access Access, 
 		TimeTo:      timeRange.To.Unix(),
 	}
 	query := url.Values{}
-	query.Set("offset", "0")
+	query.Set("offset", fmt.Sprintf("%d", max(0, querySpec.Offset)))
 	query.Set("limit", fmt.Sprintf("%d", querySpec.Limit))
 	query.Set("recursive", "true")
-	query.Set("noCount", "true")
+	// The first page requests a real totalCount so the public search response
+	// can expose match totals; continuation pages skip the count to keep the
+	// SIEM from recounting the same result set.
+	query.Set("noCount", strconv.FormatBool(querySpec.Offset > 0))
 	var response safeEventsEnvelope
 	if err := client.doJSON(ctx, client.siem, access, "event search", http.MethodPost, eventsPath, query, request, &response); err != nil {
 		return safeEventsEnvelope{}, err

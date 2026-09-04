@@ -300,6 +300,7 @@ type RawEvent struct {
 type CorrelationSearchRequest struct {
 	TimeRange TimeRange
 	Limit     int
+	Offset    int
 }
 
 type CorrelationPage struct {
@@ -307,6 +308,8 @@ type CorrelationPage struct {
 	TotalItems    int64
 	ReportedTotal *int64
 	Truncated     bool
+	// NextOffset is set while the SIEM still has correlations after this page.
+	NextOffset *int
 }
 
 type CorrelationResolveRequest struct {

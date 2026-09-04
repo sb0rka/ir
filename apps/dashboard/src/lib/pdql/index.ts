@@ -54,15 +54,20 @@ export type {
 } from './toSearch'
 export {
   AGGREGATES,
+  clampQueueLimit,
+  DEFAULT_QUEUE_LIMIT,
   defaultOpForType,
   defaultQuery,
+  effectiveQueueLimit,
   emptyQuery,
   fieldPrefix,
   groupCountColumn,
   isGroupCountColumn,
   isGroupDimensionColumn,
+  MAX_QUEUE_LIMIT,
   newId,
   operatorsForType,
+  withExplicitLimit,
   withoutIds,
 } from './model'
 export type {

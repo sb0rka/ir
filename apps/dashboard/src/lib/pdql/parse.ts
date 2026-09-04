@@ -1,4 +1,5 @@
 import {
+  clampQueueLimit,
   emptyQuery,
   newId,
   type AggregateFn,
@@ -139,7 +140,7 @@ class Parser {
     if (name === 'group') this.parseGroup(ast)
     if (name === 'select') this.parseSelect(ast)
     if (name === 'sort') this.parseSort(ast)
-    if (name === 'limit') this.parseLimit()
+    if (name === 'limit') this.parseLimit(ast)
     this.expectPunct(')', `ожидалась ) после ${name}`)
   }
 
@@ -349,10 +350,17 @@ class Parser {
     target.sort = { dir: item.dir, priority }
   }
 
-  private parseLimit() {
+  private parseLimit(ast: QueryAst) {
     const token = this.peek()
-    if (token.kind !== 'number') throw new ParseFailure('ожидалось число', token.start)
+    if (token.kind !== 'number' || !/^\d+$/.test(token.value)) {
+      throw new ParseFailure('ожидалось целое число', token.start)
+    }
+    const value = Number(token.value)
+    if (value < 1) throw new ParseFailure('limit должен быть не меньше 1', token.start)
     this.take()
+    // SIEM PDQL pasted from MaxPatrol may carry limit(10000); the queue caps it
+    // and the canonical PDQL shows the value actually applied.
+    ast.limit = clampQueueLimit(value)
   }
 
   private peek(): Token {

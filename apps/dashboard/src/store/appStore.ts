@@ -32,7 +32,7 @@ import {
   lookupEntity,
   searchQueue,
 } from '../api/search'
-import { appendCondition, alignGroupValues, astToFilterChips, defaultQuery, drillGroupValues, entityKindForField, findingUuidFromAst, findingUuidQuery, isEntityQueueField, parseQueuePdql, serialize, type FindingFilterField } from '../lib/pdql'
+import { appendCondition, alignGroupValues, astToFilterChips, defaultQuery, drillGroupValues, entityKindForField, findingUuidFromAst, findingUuidQuery, isEntityQueueField, parseQueuePdql, serialize, withExplicitLimit, type FindingFilterField } from '../lib/pdql'
 import { pdqlFieldForFilterField } from '../lib/filters'
 import { filterFingerprint } from '../lib/queryFingerprint'
 import { demoDayInterval, type TimeInterval } from '../components/time-interval'
@@ -909,7 +909,8 @@ export const useAppStore = create<AppState>((set, get) => ({
         if (e.kind === 'host') hosts.add(e.label)
         if (e.kind === 'ip') ips.add(e.label)
       }
-      const canonical = serialize(parsed.ast)
+      // Canonical PDQL always shows limit(N): the loaded row count is never a hidden constant.
+      const canonical = serialize(withExplicitLimit(parsed.ast))
       const effectiveTime = result.effectiveTimeInterval ?? timeInterval
       const executedFingerprint = filterFingerprint(canonical, effectiveTime, queueSource, groupValues)
       const snapshot: QueueSourceResultSnapshot = {
@@ -1377,7 +1378,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const timeInterval = cur.timeInterval
     const queueSource = cur.queueSource
     const groupValues = alignGroupValues(parsed.ast, cur.groupValues)
-    const canonical = serialize(parsed.ast)
+    const canonical = serialize(withExplicitLimit(parsed.ast))
     set({
       lastError: null,
       contextQueue: {

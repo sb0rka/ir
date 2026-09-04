@@ -69,9 +69,10 @@ func NewProvider(config ClientConfig) (registry.Provider, error) {
 }
 
 type findingCursor struct {
-	IncidentOffset   int  `json:"incident_offset"`
-	IncidentDone     bool `json:"incident_done"`
-	CorrelationsDone bool `json:"correlations_done"`
+	IncidentOffset    int  `json:"incident_offset"`
+	IncidentDone      bool `json:"incident_done"`
+	CorrelationOffset int  `json:"correlation_offset,omitempty"`
+	CorrelationsDone  bool `json:"correlations_done"`
 }
 
 func (provider *Provider) SearchFindings(ctx context.Context, access capability.Access, request capability.SearchFindingsRequest) (capability.FindingPage, error) {
@@ -133,6 +134,7 @@ func (provider *Provider) SearchFindings(ctx context.Context, access capability.
 		correlations, callErr := provider.client.SearchCorrelations(ctx, accessValue, CorrelationSearchRequest{
 			TimeRange: vendorRange,
 			Limit:     remaining,
+			Offset:    cursor.CorrelationOffset,
 		})
 		if callErr != nil {
 			return capability.FindingPage{}, translateError(callErr)
@@ -142,7 +144,11 @@ func (provider *Provider) SearchFindings(ctx context.Context, access capability.
 		for _, correlation := range correlations.Correlations {
 			page.Findings = append(page.Findings, findingFromCorrelation(correlation, request.TimeRange, fetchedAt))
 		}
-		cursor.CorrelationsDone = true
+		if correlations.NextOffset != nil {
+			cursor.CorrelationOffset = *correlations.NextOffset
+		} else {
+			cursor.CorrelationsDone = true
+		}
 		if correlations.Truncated {
 			page.Status = "truncated"
 		}
@@ -220,11 +226,12 @@ func (provider *Provider) SearchEvents(ctx context.Context, access capability.Ac
 	if request.TimeFrom.IsZero() || request.TimeTo.IsZero() || !request.TimeFrom.Before(request.TimeTo) {
 		return capability.EventPage{}, sourceRequestError("invalid_time_range", "time_from must be earlier than time_to")
 	}
-	if request.Cursor != "" {
-		return capability.EventPage{}, sourceRequestError("invalid_cursor", "MaxPatrol event continuation is not confirmed")
-	}
 	if request.Limit < 1 || request.Limit > 1000 {
 		return capability.EventPage{}, sourceRequestError("invalid_limit", "limit must be between 1 and 1000")
+	}
+	cursor, err := decodeEventCursor(request.Cursor)
+	if err != nil {
+		return capability.EventPage{}, err
 	}
 	where, err := eventWhere(request.Entities)
 	if err != nil {
@@ -234,6 +241,7 @@ func (provider *Provider) SearchEvents(ctx context.Context, access capability.Ac
 	if err != nil {
 		return capability.EventPage{}, err
 	}
+	query.Offset = cursor.Offset
 	vendorRange := TimeRange{From: request.TimeFrom, To: request.TimeTo}
 	response, err := provider.client.searchEventsWithQuery(ctx, Access{Cookie: access.Cookie}, vendorRange, query)
 	if err != nil {
@@ -241,8 +249,15 @@ func (provider *Provider) SearchEvents(ctx context.Context, access capability.Ac
 	}
 	fetchedAt := provider.client.now().UTC()
 	page := capability.EventPage{Status: "complete", Total: response.ReportedTotal}
-	if len(response.Events) >= request.Limit {
+	if eventPageTruncated(response.ReportedTotal, len(response.Events), request.Limit) {
 		page.Status = "truncated"
+	}
+	if nextOffset, more := offsetContinuation(cursor.Offset, len(response.Events), request.Limit, response.ReportedTotal); more {
+		encoded, encodeErr := encodeEventCursor(eventCursor{Offset: nextOffset})
+		if encodeErr != nil {
+			return capability.EventPage{}, encodeErr
+		}
+		page.NextCursor = encoded
 	}
 	for _, record := range response.Events {
 		event, entities, relations, mappingErr := domainEventFromRecord(record, fetchedAt, "")
@@ -254,6 +269,57 @@ func (provider *Provider) SearchEvents(ctx context.Context, access capability.Ac
 		page.Relations = append(page.Relations, relations...)
 	}
 	return page, nil
+}
+
+func eventPageTruncated(total *int64, returned, limit int) bool {
+	if total != nil && *total > int64(returned) {
+		return true
+	}
+	return returned >= limit
+}
+
+// eventCursor continues a MaxPatrol event or correlation list by HTTP offset.
+// The SIEM pages a fixed PDQL + time window deterministically, so the next
+// page starts where the previous one ended.
+type eventCursor struct {
+	Offset int `json:"offset"`
+}
+
+func encodeEventCursor(cursor eventCursor) (string, error) {
+	raw, err := json.Marshal(cursor)
+	if err != nil {
+		return "", sourceRequestError("invalid_cursor", "MaxPatrol cursor could not be encoded")
+	}
+	return base64.RawURLEncoding.EncodeToString(raw), nil
+}
+
+func decodeEventCursor(raw string) (eventCursor, error) {
+	if strings.TrimSpace(raw) == "" {
+		return eventCursor{}, nil
+	}
+	decoded, err := base64.RawURLEncoding.DecodeString(raw)
+	if err != nil {
+		return eventCursor{}, sourceRequestError("invalid_cursor", "MaxPatrol cursor is invalid")
+	}
+	var cursor eventCursor
+	if json.Unmarshal(decoded, &cursor) != nil || cursor.Offset < 0 {
+		return eventCursor{}, sourceRequestError("invalid_cursor", "MaxPatrol cursor is invalid")
+	}
+	return cursor, nil
+}
+
+// offsetContinuation reports whether another page exists after this one.
+// With a known total the answer is exact; a continuation page (noCount) has no
+// total, so a full page implies more and a short page ends the list.
+func offsetContinuation(offset, returned, limit int, total *int64) (int, bool) {
+	if returned == 0 {
+		return offset, false
+	}
+	next := offset + returned
+	if total != nil {
+		return next, int64(next) < *total
+	}
+	return next, returned >= limit
 }
 
 func (provider *Provider) ResolveContext(ctx context.Context, access capability.Access, request capability.ResolveContextRequest) (capability.ContextPage, error) {
@@ -454,7 +520,7 @@ func decodeFindingCursor(raw string) (findingCursor, error) {
 		return findingCursor{}, sourceRequestError("invalid_cursor", "MaxPatrol cursor is invalid")
 	}
 	var cursor findingCursor
-	if json.Unmarshal(decoded, &cursor) != nil || cursor.IncidentOffset < 0 {
+	if json.Unmarshal(decoded, &cursor) != nil || cursor.IncidentOffset < 0 || cursor.CorrelationOffset < 0 {
 		return findingCursor{}, sourceRequestError("invalid_cursor", "MaxPatrol cursor is invalid")
 	}
 	return cursor, nil

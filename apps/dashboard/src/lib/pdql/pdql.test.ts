@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { defaultQuery, withoutIds, type QueryAst } from './model'
+import {
+  DEFAULT_QUEUE_LIMIT,
+  defaultQuery,
+  effectiveQueueLimit,
+  withExplicitLimit,
+  withoutIds,
+  type QueryAst,
+} from './model'
 import { parse } from './parse'
 import { serialize } from './serialize'
 import { pdqlToChips, serializeToggledChipSort, serializeWithoutChip } from './chips'
@@ -33,8 +40,23 @@ function roundTrip(ast: QueryAst) {
 }
 
 describe('serialize', () => {
-  it('emits default time column and sort', () => {
-    expect(serialize(defaultQuery())).toBe('select(time) | sort(time desc)')
+  it('emits default time column, sort, and the explicit queue limit', () => {
+    expect(serialize(defaultQuery())).toBe('select(time) | sort(time desc) | limit(100)')
+  })
+
+  it('round-trips limit and caps it at the queue maximum', () => {
+    expect(mustParse('select(time) | limit(250)').limit).toBe(250)
+    expect(serialize(mustParse('select(time) | limit(250)'))).toBe('select(time) | limit(250)')
+    expect(serialize(mustParse('select(time) | limit(5000)'))).toBe('select(time) | limit(1000)')
+    expect(mustParse('select(time)').limit).toBeUndefined()
+    expect(effectiveQueueLimit(mustParse('select(time)'))).toBe(DEFAULT_QUEUE_LIMIT)
+    expect(serialize(withExplicitLimit(mustParse('select(time)')))).toBe('select(time) | limit(100)')
+  })
+
+  it('rejects a non-integer or zero limit', () => {
+    expect(parse('select(time) | limit(0)').ok).toBe(false)
+    expect(parse('select(time) | limit(1.5)').ok).toBe(false)
+    expect(parse('select(time) | limit(abc)').ok).toBe(false)
   })
 
   it('emits filter joiners, not, in, and null checks', () => {
@@ -141,11 +163,11 @@ describe('parse', () => {
     expect(result.error.message).toMatch(/стадия/)
   })
 
-  it('ignores limit and accepts a repeated sort after grouping', () => {
+  it('caps a SIEM limit and accepts a repeated sort after grouping', () => {
     const text =
       'filter(event_src.host = "dkrylova.plat.form") | select(time, event_src.host, text, object.process.cmdline) | sort(time asc) | group(key: [action], agg: COUNT(*) as Cnt) | sort(Cnt desc) | limit(10000)'
     expect(serialize(mustParse(text))).toBe(
-      'filter(event_src.host = "dkrylova.plat.form") | group(action) | select(action, time, event_src.host, text, object.process.cmdline, count()) | sort(time asc, count() desc)',
+      'filter(event_src.host = "dkrylova.plat.form") | group(action) | select(action, time, event_src.host, text, object.process.cmdline, count()) | sort(time asc, count() desc) | limit(1000)',
     )
   })
 
@@ -393,8 +415,10 @@ describe('addFieldToPdql', () => {
 
   it('keeps the default time column when grouping', () => {
     const ast = addFieldToAst(defaultQuery(), 'action', 'groups')
-    expect(serialize(ast)).toBe('group(action) | select(action, count(), time) | sort(time desc)')
-    expect(serializeWithoutChip(ast, ast.groups[0]!.id)).toBe('select(action, time) | sort(time desc)')
+    expect(serialize(ast)).toBe('group(action) | select(action, count(), time) | sort(time desc) | limit(100)')
+    expect(serializeWithoutChip(ast, ast.groups[0]!.id)).toBe(
+      'select(action, time) | sort(time desc) | limit(100)',
+    )
   })
 })
 
@@ -561,10 +585,10 @@ describe('drillGroupValues', () => {
 describe('findingUuidQuery', () => {
   it('replaces the query with an incident or correlation filter', () => {
     expect(findingUuidQuery('corr-1', 'siem_correlation')).toBe(
-      'filter(siem_correlation = "corr-1") | select(time) | sort(time desc)',
+      'filter(siem_correlation = "corr-1") | select(time) | sort(time desc) | limit(100)',
     )
     expect(findingUuidQuery('inc-1', 'siem_incident')).toBe(
-      'filter(siem_incident = "inc-1") | select(time) | sort(time desc)',
+      'filter(siem_incident = "inc-1") | select(time) | sort(time desc) | limit(100)',
     )
   })
 })

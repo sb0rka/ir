@@ -49,6 +49,31 @@ export interface QueryAst {
   joiners: LogicalJoiner[]
   columns: Column[]
   groups: Group[]
+  /**
+   * Rows (or groups, when grouped) loaded into the queue. Absent means
+   * DEFAULT_QUEUE_LIMIT; the queue makes it explicit so the loaded count next
+   * to the source total is never a hidden constant.
+   */
+  limit?: number
+}
+
+/** Loaded rows per query when PDQL has no limit(); equals one Gateway page. */
+export const DEFAULT_QUEUE_LIMIT = 100
+/** Upper bound for limit(): Gateway aggregation max; searches page in chunks of 100. */
+export const MAX_QUEUE_LIMIT = 1000
+
+export function clampQueueLimit(value: number): number {
+  if (!Number.isFinite(value)) return DEFAULT_QUEUE_LIMIT
+  return Math.min(MAX_QUEUE_LIMIT, Math.max(1, Math.trunc(value)))
+}
+
+export function effectiveQueueLimit(ast: Pick<QueryAst, 'limit'>): number {
+  return typeof ast.limit === 'number' ? clampQueueLimit(ast.limit) : DEFAULT_QUEUE_LIMIT
+}
+
+/** Same query with the limit made explicit, so serialize() shows it. */
+export function withExplicitLimit(ast: QueryAst): QueryAst {
+  return { ...ast, limit: effectiveQueueLimit(ast) }
 }
 
 export interface ParseError {
@@ -71,6 +96,7 @@ export function defaultQuery(): QueryAst {
     joiners: [],
     columns: [{ id: newId('col'), field: 'time', sort: { dir: 'desc', priority: 1 } }],
     groups: [],
+    limit: DEFAULT_QUEUE_LIMIT,
   }
 }
 
@@ -124,6 +150,7 @@ export function withoutIds(ast: QueryAst): unknown {
     joiners: ast.joiners,
     columns: ast.columns.map(({ field, aggregate, sort }) => ({ field, aggregate, sort })),
     groups: ast.groups.map(({ field }) => ({ field })),
+    limit: ast.limit,
   }
 }
 

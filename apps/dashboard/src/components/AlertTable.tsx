@@ -515,6 +515,9 @@ export function AlertTable({ investigationId }: { investigationId?: string } = {
     Boolean(investigationId && alertIsInContext(alert, findingKeys, eventKeys))
 
   const textNeedle = queueTextFilter.trim().toLowerCase()
+  // Header search narrows loaded rows only; the row count turns red so a
+  // client-side filter is never mistaken for a source-side (PDQL) one.
+  const textFilterActive = textNeedle.length > 0
 
   const rows = queueOrder.filter((item) => {
     if (item.kind === 'entity') {
@@ -761,12 +764,16 @@ export function AlertTable({ investigationId }: { investigationId?: string } = {
                 >
                   <span className="flex min-w-0 items-center gap-1.5 overflow-hidden whitespace-nowrap">
                     <span className="truncate">{alertTableColumnLabel('title')}</span>
-                    <span className="shrink-0 text-fg">
-                      {typeof queueTotal === 'number' && queueTotal > rows.length
-                        ? `${rows.length} / ${queueTotal}`
-                        : typeof queueTotal === 'number'
-                          ? queueTotal
-                          : rows.length}
+                    <span
+                      className="shrink-0 text-fg tabular-nums"
+                      title={
+                        textFilterActive
+                          ? `Поиск в шапке фильтрует только загруженные строки (${queueOrder.length}); PDQL limit() подгружает больше через API`
+                          : undefined
+                      }
+                    >
+                      <span className={clsx(textFilterActive && 'text-high')}>{rows.length}</span>
+                      {typeof queueTotal === 'number' ? ` / ${queueTotal}` : ''}
                     </span>
                     {loading && (
                       <span className="shrink-0 normal-case tracking-normal text-fg-dim">загрузка…</span>

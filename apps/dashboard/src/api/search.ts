@@ -25,6 +25,8 @@ import {
   astToEventAggregate,
   astToEventSearch,
   astToFilterChips,
+  DEFAULT_QUEUE_LIMIT,
+  effectiveQueueLimit,
   findingUuidFromAst,
   pdqlToSearchParts,
   timeIntervalFromAst,
@@ -41,9 +43,19 @@ type EventsBody = Gw['schemas']['SearchEventsRequest']
 type AggregateBody = Gw['schemas']['AggregateEventsRequest']
 type Capability = Gw['schemas']['Capability']
 
-const PAGE_LIMIT = 100
-const MAX_PAGES = 4
+/** Gateway search endpoints accept at most 100 records per request. */
+const GATEWAY_PAGE_MAX = 100
 const NAD_SOURCE = 'pt-nad'
+
+/**
+ * Split the PDQL limit(N) into Gateway pages. Sources without a continuation
+ * cursor (MaxPatrol events/correlations) stop after the first page, so the
+ * loaded count can stay below N — the header shows loaded / total honestly.
+ */
+function pagePlan(limit: number): { pageLimit: number; maxPages: number } {
+  const pageLimit = Math.min(limit, GATEWAY_PAGE_MAX)
+  return { pageLimit, maxPages: Math.max(1, Math.ceil(limit / pageLimit)) }
+}
 
 function projectHeader() {
   const projectId = getProjectId()
@@ -98,10 +110,11 @@ function buildFindingsBody(
   chips: FilterChip[],
   timeInterval: TimeInterval,
   kinds: FindingKind[],
+  limit: number = DEFAULT_QUEUE_LIMIT,
 ): FindingsBody {
   const body: FindingsBody = {
     time_range: resolve(timeInterval),
-    limit: PAGE_LIMIT,
+    limit: pagePlan(limit).pageLimit,
     kinds,
   }
   const sources = chips.find((c) => c.field === 'source')?.values
@@ -186,7 +199,10 @@ function finishQueue(
   }
 }
 
-async function searchFindingKind(body: FindingsBody): Promise<{
+async function searchFindingKind(
+  body: FindingsBody,
+  limit: number = DEFAULT_QUEUE_LIMIT,
+): Promise<{
   findings: Gw['schemas']['Finding'][]
   sourceErrors: string[]
   total?: number
@@ -195,10 +211,12 @@ async function searchFindingKind(body: FindingsBody): Promise<{
   const sourceErrors: string[] = []
   let total: number | undefined
   let cursor: string | undefined
-  for (let page = 0; page < MAX_PAGES; page++) {
+  const { maxPages } = pagePlan(limit)
+  for (let page = 0; page < maxPages && findings.length < limit; page++) {
+    const pageLimit = Math.min(GATEWAY_PAGE_MAX, limit - findings.length)
     const { data, error, response } = await gatewayClient.POST('/api/v1/findings/search', {
       params: projectHeader(),
-      body: { ...body, cursor },
+      body: { ...body, limit: pageLimit, cursor },
     })
     if (error || !data) throw unwrapError(error, response.status)
     findings.push(...(data.findings ?? []))
@@ -209,6 +227,7 @@ async function searchFindingKind(body: FindingsBody): Promise<{
     if (!data.next_cursor) break
     cursor = data.next_cursor
   }
+  if (findings.length > limit) findings.length = limit
   return { findings, sourceErrors, ...(typeof total === 'number' ? { total } : {}) }
 }
 
@@ -218,6 +237,7 @@ async function searchFindingsQueue(
   query: string | undefined,
   kind: FindingKind,
   sort?: QueueSort,
+  limit: number = DEFAULT_QUEUE_LIMIT,
 ): Promise<QueueSearchResult> {
   const sources = await capableSources('findings')
   const sourceErrors: string[] = []
@@ -228,9 +248,9 @@ async function searchFindingsQueue(
   }
 
   const merged = new Map<string, Gw['schemas']['Finding']>()
-  const body = buildFindingsBody(chips, timeInterval, [kind])
+  const body = buildFindingsBody(chips, timeInterval, [kind], limit)
   body.sources = allowedSources
-  const page = await searchFindingKind(body)
+  const page = await searchFindingKind(body, limit)
   sourceErrors.push(...page.sourceErrors)
   for (const finding of page.findings) {
     const id = `${finding.ref.source_code}/${finding.ref.record_type}/${finding.ref.external_id}`
@@ -280,7 +300,8 @@ async function aggregateEventsQueue(
   if (!parts) return { groups: [], sourceErrors: [] }
   const body: AggregateBody = {
     time_range: resolve(timeInterval),
-    limit: PAGE_LIMIT,
+    // SIEM PDQL semantics: after group(), limit(N) bounds the number of groups.
+    limit: effectiveQueueLimit(ast),
     sources: allowedSources,
     group_by: parts.group_by,
   }
@@ -467,9 +488,11 @@ async function searchEntitiesQueue(
     )
   }
 
+  const limit = effectiveQueueLimit(ast)
+  const { pageLimit, maxPages } = pagePlan(limit)
   const body: EventsBody = {
     time_range: resolve(timeInterval),
-    limit: PAGE_LIMIT,
+    limit: pageLimit,
     sources: allowedSources,
   }
   if (eventParts.filter) body.filter = eventParts.filter
@@ -479,10 +502,10 @@ async function searchEntitiesQueue(
   const events: Gw['schemas']['Event'][] = []
   const pageEntities: Gw['schemas']['Entity'][] = []
   let cursor: string | undefined
-  for (let page = 0; page < MAX_PAGES; page++) {
+  for (let page = 0; page < maxPages && events.length < limit; page++) {
     const { data, error, response } = await gatewayClient.POST('/api/v1/events/search', {
       params: projectHeader(),
-      body: { ...body, cursor },
+      body: { ...body, limit: Math.min(GATEWAY_PAGE_MAX, limit - events.length), cursor },
     })
     if (error || !data) throw unwrapError(error, response.status)
     events.push(...(data.events ?? []))
@@ -584,9 +607,11 @@ async function searchEventsQueue(
     }
   }
 
+  const limit = effectiveQueueLimit(ast)
+  const { pageLimit, maxPages } = pagePlan(limit)
   const body: EventsBody = {
     time_range: resolve(timeInterval),
-    limit: PAGE_LIMIT,
+    limit: pageLimit,
     sources: allowedSources,
   }
   if (parts.filter) body.filter = parts.filter
@@ -601,10 +626,10 @@ async function searchEventsQueue(
   const gatewayEntities: Gw['schemas']['Entity'][] = []
   let cursor: string | undefined
   let total: number | undefined
-  for (let page = 0; page < MAX_PAGES; page++) {
+  for (let page = 0; page < maxPages && events.length < limit; page++) {
     const { data, error, response } = await gatewayClient.POST('/api/v1/events/search', {
       params: projectHeader(),
-      body: { ...body, cursor },
+      body: { ...body, limit: Math.min(GATEWAY_PAGE_MAX, limit - events.length), cursor },
     })
     if (error || !data) throw unwrapError(error, response.status)
     events.push(...(data.events ?? []))
@@ -616,6 +641,7 @@ async function searchEventsQueue(
     if (!data.next_cursor) break
     cursor = data.next_cursor
   }
+  if (events.length > limit) events.length = limit
 
   const { alertList, entities } = entitiesFromGateway(events, gatewayEntities)
   return finishQueue(
@@ -655,6 +681,7 @@ export async function searchQueue(
     query,
     queueSource,
     astToEventSearch(ast).sort,
+    effectiveQueueLimit(ast),
   )
   return rewritten ? { ...result, effectiveTimeInterval: effective } : result
 }

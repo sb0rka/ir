@@ -5,10 +5,10 @@ import {
   ChevronsRight,
   CircleX,
   Inbox,
+  LayoutList,
   Lightbulb,
   Network,
   RefreshCw,
-  Table2,
   Undo2,
 } from 'lucide-react'
 import { useAppStore, type SidebarSectionId } from '../store/appStore'
@@ -39,10 +39,10 @@ function writeExpanded(value: boolean) {
 
 type InvestigationView = 'table' | 'graph' | 'queue'
 
-const VIEWS: { id: InvestigationView; title: string; icon: typeof Table2 }[] = [
-  { id: 'table', title: 'Таблица', icon: Table2 },
+const VIEWS: { id: InvestigationView; title: string; icon: typeof Inbox }[] = [
+  { id: 'table', title: 'Таблица', icon: Inbox },
   { id: 'graph', title: 'Граф и таймлайн', icon: Network },
-  { id: 'queue', title: 'Очередь', icon: Inbox },
+  { id: 'queue', title: 'Очередь', icon: LayoutList },
 ]
 
 interface SidebarSectionDef {

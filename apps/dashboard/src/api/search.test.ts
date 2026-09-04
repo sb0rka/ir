@@ -341,6 +341,29 @@ describe('searchQueue findings sort', () => {
     expect(result.total).toBe(1523)
     expect(result.queueOrder).toHaveLength(1)
   })
+
+  it('keeps total when the loaded page is smaller than the vendor match count', async () => {
+    gatewayPost.mockImplementation(async (path: string) => {
+      if (path === '/api/v1/findings/search') {
+        return {
+          data: {
+            findings: Array.from({ length: 100 }, (_, index) =>
+              gwFinding(`inc-${index}`, '2025-10-23T18:00:00.000Z', 'siem_incident'),
+            ),
+            total: 4821,
+            source_states: [{ source: 'pt-maxpatrol-siem', status: 'truncated', total: 4821 }],
+            source_errors: [],
+          },
+          error: undefined,
+          response: { status: 200 },
+        }
+      }
+      throw new Error(`unexpected ${path}`)
+    })
+    const result = await searchQueue(mustParse('select(time)'), demoDayInterval('UTC'), 'siem_incident')
+    expect(result.queueOrder).toHaveLength(100)
+    expect(result.total).toBe(4821)
+  })
 })
 
 describe('resolveFindingEvents session cache', () => {

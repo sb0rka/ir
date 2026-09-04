@@ -1,4 +1,11 @@
-import { isGroupDimensionColumn, type Column, type CompareOp, type Condition, type QueryAst } from './model'
+import {
+  clampQueueLimit,
+  isGroupDimensionColumn,
+  type Column,
+  type CompareOp,
+  type Condition,
+  type QueryAst,
+} from './model'
 
 function quote(value: string): string {
   return `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`
@@ -73,6 +80,9 @@ export function serialize(ast: QueryAst): string {
     stages.push(
       `sort(${sorted.map((column) => `${formatSelectItem(column)} ${column.sort?.dir ?? 'asc'}`).join(', ')})`,
     )
+  }
+  if (typeof ast.limit === 'number') {
+    stages.push(`limit(${clampQueueLimit(ast.limit)})`)
   }
   return stages.join(' | ')
 }
