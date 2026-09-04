@@ -176,7 +176,7 @@ function SomIssueTreeItem({
           <div className="space-y-2 border-t border-border/80 bg-surface-2/30 p-2.5 text-xs">
             {showDescription && (
               <p className="max-h-64 overflow-y-auto whitespace-pre-wrap text-fg-muted">
-                {description}
+                {description.replace(/\\(.)/g, '$1')}
               </p>
             )}
 
@@ -221,6 +221,12 @@ function SomIssueTreeItem({
             )}
           </div>
         )}
+
+        <ProposedLinksSection
+          investigationId={investigationId}
+          somIssueId={item.id}
+          embedded
+        />
       </div>
 
       {showChildren && (
@@ -265,12 +271,29 @@ function buildSomIssueTree(issues: SomIssue[]): SomIssueTreeNode[] {
 }
 
 /** Agent-proposed graph edges waiting for analyst accept/reject. */
-function ProposedLinksSection({ investigationId }: { investigationId: string }) {
+function ProposedLinksSection({
+  investigationId,
+  somIssueId,
+  embedded = false,
+  className,
+}: {
+  investigationId: string
+  /** When set, only edges whose origin_ref matches this SOM issue. */
+  somIssueId?: string
+  /** Inside issue card: no own border, just a top divider. */
+  embedded?: boolean
+  className?: string
+}) {
   const inv = useAppStore((s) => s.investigations[investigationId])
   const edgeReviews = useAppStore((s) => s.edgeReviews)
   const setReview = useAppStore((s) => s.setReview)
   const graphNodes = useAppStore((s) => s.graphNodes)
   const graphEdges = useAppStore((s) => s.graphEdges)
+  const catalogIssues = useAppStore((s) => s.somCatalog?.issues)
+  const catalogIssueIds = useMemo(
+    () => new Set((catalogIssues ?? []).map((issue) => issue.id)),
+    [catalogIssues],
+  )
 
   if (!inv) return null
 
@@ -278,6 +301,11 @@ function ProposedLinksSection({ investigationId }: { investigationId: string }) 
     .map((id) => graphEdges[id])
     .filter(Boolean)
     .filter((e) => (edgeReviews[e.id] ?? e.review) === 'proposed')
+    .filter((e) => {
+      if (somIssueId) return e.originRef === somIssueId
+      // Orphans: no origin_ref, or issue no longer on the board.
+      return !e.originRef || !catalogIssueIds.has(e.originRef)
+    })
 
   if (proposedEdges.length === 0) return null
 
@@ -293,14 +321,22 @@ function ProposedLinksSection({ investigationId }: { investigationId: string }) 
   }
 
   return (
-    <div className="rounded border border-proposed/30 bg-surface-0 p-2">
-      <div className="flex items-center justify-between border-b border-border pb-1.5 mb-2 px-1">
-        <span className="text-[10px] uppercase font-semibold text-fg-dim">
+    <div
+      className={clsx(
+        'p-2',
+        embedded
+          ? 'border-t border-proposed/30 bg-proposed/5'
+          : 'rounded border border-proposed/30 bg-surface-0',
+        className,
+      )}
+    >
+      <div className="mb-2 flex items-center justify-between border-b border-border px-1 pb-1.5">
+        <span className="text-[10px] font-semibold uppercase text-fg-dim">
           Дерево предложенных связей ({proposedEdges.length})
         </span>
       </div>
 
-      <div className="max-h-80 overflow-y-auto space-y-1">
+      <div className="max-h-80 space-y-1 overflow-y-auto">
         {tree.map((rootNode) => (
           <TreeItem
             key={rootNode.id}
@@ -359,8 +395,6 @@ export function AgentSection({ investigationId }: { investigationId: string }) {
 
   return (
     <div className="space-y-3 p-3">
-      <ProposedLinksSection investigationId={investigationId} />
-
       {issueTree.map((rootNode) => (
         <SomIssueTreeItem
           key={rootNode.issue.id}
@@ -375,6 +409,9 @@ export function AgentSection({ investigationId }: { investigationId: string }) {
           }}
         />
       ))}
+
+      {/* Proposed edges not tied to a board issue (missing/stale origin_ref). */}
+      <ProposedLinksSection investigationId={investigationId} />
 
       {issueTree.length === 0 && (
         <div className="rounded border border-border p-4 text-center text-xs text-fg-dim">

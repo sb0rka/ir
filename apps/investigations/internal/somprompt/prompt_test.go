@@ -3,7 +3,6 @@ package somprompt
 import (
 	"strings"
 	"testing"
-	"time"
 )
 
 func sampleContext() Context {
@@ -55,12 +54,14 @@ func TestBuildExpandsURLsAndHeaders(t *testing.T) {
 		"which slice was imported and the total",
 		"imported < found",
 		"imported < total",
+		"time_range` written in the issue",
+		"Wall-clock times in the issue",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("missing %q", want)
 		}
 	}
-	for _, forbidden := range []string{"gateway_base_url", "ACCESS_KEY", "http://gateway:8091", "curl", "Bearer eyJ", `Windows accounts need \\`} {
+	for _, forbidden := range []string{"gateway_base_url", "ACCESS_KEY", "http://gateway:8091", "curl", "Bearer eyJ", `Windows accounts need \\`, "suggested time_range:"} {
 		if strings.Contains(got, forbidden) {
 			t.Errorf("prompt leaks forbidden direct-service instruction %q", forbidden)
 		}
@@ -114,11 +115,32 @@ func TestBuildScopesGraphAndResultsToHypothesis(t *testing.T) {
 	}
 }
 
+func TestBuildIncludesDisplayTimeZone(t *testing.T) {
+	t.Parallel()
+
+	ctx := sampleContext()
+	ctx.TimeZone = "Europe/Moscow"
+	got := Build("Find events", "time_range 18:53 .. 19:43", ctx)
+	if !strings.Contains(got, "display_time_zone: Europe/Moscow") {
+		t.Fatalf("missing display_time_zone:\n%s", got)
+	}
+	if !strings.Contains(got, "Wall-clock times in the issue without an explicit offset/Z are in `display_time_zone`") {
+		t.Fatal("missing timezone hard-rule guidance")
+	}
+}
+
+func TestBuildOmitsDisplayTimeZoneWhenEmpty(t *testing.T) {
+	t.Parallel()
+
+	got := Build("Find events", "", sampleContext())
+	if strings.Contains(got, "display_time_zone:") {
+		t.Fatal("empty time zone must not inject display_time_zone")
+	}
+}
+
 func TestBuildIncludesResolvedReferences(t *testing.T) {
 	t.Parallel()
 
-	from := time.Date(2025, 10, 22, 0, 0, 0, 0, time.UTC)
-	to := time.Date(2025, 10, 24, 0, 0, 0, 0, time.UTC)
 	ctx := sampleContext()
 	ctx.ResolvedEntities = []ResolvedEntity{{
 		EntityID: "b71336ed-25f7-42fa-840a-688ceb087c74",
@@ -127,18 +149,19 @@ func TestBuildIncludesResolvedReferences(t *testing.T) {
 		Sources:  []string{"pt-maxpatrol-siem:account:dkrylova\\administrator"},
 	}}
 	ctx.UnknownUUIDs = []string{"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"}
-	ctx.TimelineFrom = &from
-	ctx.TimelineTo = &to
 	got := Build("Find events", "Use entity b71336ed-25f7-42fa-840a-688ceb087c74", ctx)
 	for _, want := range []string{
 		"Resolved IR references:",
 		"entity_id b71336ed-25f7-42fa-840a-688ceb087c74",
 		"import_entity_events with entity.entity_id=b71336ed-25f7-42fa-840a-688ceb087c74",
 		"unknown UUID aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
-		"suggested time_range: 2025-10-22T00:00:00Z .. 2025-10-24T00:00:00Z",
+		"time_range` written in the issue",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("missing %q", want)
 		}
+	}
+	if strings.Contains(got, "suggested time_range:") {
+		t.Error("prompt must not inject suggested time_range")
 	}
 }

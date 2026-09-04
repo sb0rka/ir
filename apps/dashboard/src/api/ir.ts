@@ -371,7 +371,11 @@ export async function deleteInvestigation(investigationId: string): Promise<void
   )
 }
 
-export async function runSomIssue(issueId: string, investigationId: string) {
+export async function runSomIssue(
+  issueId: string,
+  investigationId: string,
+  options?: { timeZone?: string },
+) {
   const projectId = getProjectId()
   if (!projectId) throw new Error('Проект не выбран')
   const settings = getSomRunSettings(projectId)
@@ -382,6 +386,7 @@ export async function runSomIssue(issueId: string, investigationId: string) {
         investigation_id: investigationId,
         variant: settings.variant,
         model_id: settings.modelId,
+        ...(options?.timeZone ? { time_zone: options.timeZone } : {}),
       },
     }),
   )

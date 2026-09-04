@@ -5,6 +5,7 @@ import {
   ControlButton,
   Controls,
   MiniMap,
+  Panel,
   ReactFlow,
   ReactFlowProvider,
   useEdgesState,
@@ -31,6 +32,15 @@ const nodeTypes = {
 }
 
 type FitToken = number | string
+
+/** Russian plural: 1 нода, 2 ноды, 5 нод (и 11–14 нод). */
+function formatNodeCount(n: number): string {
+  const mod10 = n % 10
+  const mod100 = n % 100
+  if (mod10 === 1 && mod100 !== 11) return `${n} нода`
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return `${n} ноды`
+  return `${n} нод`
+}
 
 function GraphInner({ fitToken }: { fitToken: FitToken }) {
   const { resolvedAppearance } = useTheme()
@@ -85,11 +95,22 @@ function GraphInner({ fitToken }: { fitToken: FitToken }) {
   }, [session, selection, hoverEventId, graphVisibility])
 
   // Length alone misses “same count, new ids” after agent enrichment.
-  const graphSig = useMemo(() => {
-    const nodeIds = derivedNodes.map((n) => n.id).sort().join(',')
-    const edgeIds = derivedEdges.map((e) => e.id).sort().join(',')
+  // Use the full investigation graph — not the filter-visible subset — so
+  // toggling toolbar filters does not refit / jump the viewport.
+  const contentSig = useMemo(() => {
+    if (!session) return ''
+    const nodeIds = [
+      ...session.entities.map((e) => e.id),
+      ...session.alerts.map((a) => a.id),
+    ]
+      .sort()
+      .join(',')
+    const edgeIds = session.edges
+      .map((e) => e.id)
+      .sort()
+      .join(',')
     return `${nodeIds}|${edgeIds}`
-  }, [derivedNodes, derivedEdges])
+  }, [session])
 
   const [nodes, setNodes, onNodesChange] = useNodesState(derivedNodes as Node[])
   const [rfEdges, setEdges, onEdgesChange] = useEdgesState(derivedEdges)
@@ -117,19 +138,19 @@ function GraphInner({ fitToken }: { fitToken: FitToken }) {
     setEdges(derivedEdges)
   }, [derivedEdges, setEdges])
 
+  // Fit on content / view open only — not when filters change or side panels
+  // resize the pane (selecting a node opens DetailPanel and would otherwise jump).
   useEffect(() => {
     if (!hasSize || !nodesMeasured || derivedNodes.length === 0) return
-    const key = `${fitToken}:${paneWidth}x${paneHeight}:${graphSig}`
+    const key = `${fitToken}:${contentSig}`
     if (fittedSizeKey.current === key) return
     const duration = fittedSizeKey.current === null ? 0 : 200
     fittedSizeKey.current = key
     void fitView({ padding: 0.15, duration })
   }, [
     fitToken,
-    paneWidth,
-    paneHeight,
     fitView,
-    graphSig,
+    contentSig,
     derivedNodes.length,
     hasSize,
     nodesMeasured,
@@ -239,6 +260,12 @@ function GraphInner({ fitToken }: { fitToken: FitToken }) {
           resolvedAppearance === 'dark' ? 'rgba(0, 0, 0, 0.5)' : 'rgba(255, 255, 255, 0.6)'
         }
       />
+      <Panel
+        position="bottom-left"
+        className="pointer-events-none m-2 text-[11px] tabular-nums text-[var(--text-muted)]"
+      >
+        {formatNodeCount(nodes.length)}
+      </Panel>
     </ReactFlow>
   )
 }

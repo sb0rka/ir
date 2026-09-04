@@ -7,7 +7,6 @@ import (
 	"regexp"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/google/uuid"
 
@@ -21,6 +20,7 @@ import (
 )
 
 var issueUUIDPattern = regexp.MustCompile(`(?i)\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b`)
+var ianaTimeZonePattern = regexp.MustCompile(`^[A-Za-z0-9+_/-]+$`)
 
 const somAccessTokenSecretName = "DEMO_SOM_ACCESS_TOKEN"
 
@@ -197,6 +197,10 @@ func (s *Server) RunSomIssue(ctx context.Context, request som.RunSomIssueRequest
 	if issue.Description != nil {
 		description = *issue.Description
 	}
+	timeZone, err := normalizeRunTimeZone(request.Body.TimeZone)
+	if err != nil {
+		return nil, err
+	}
 	promptContext := somprompt.Context{
 		ProjectID:             scope.ProjectID,
 		InvestigationID:       investigationID,
@@ -204,6 +208,7 @@ func (s *Server) RunSomIssue(ctx context.Context, request som.RunSomIssueRequest
 		HypothesisStatement:   hypothesisStatement,
 		HypothesisDescription: hypothesisDescription,
 		SomIssueID:            issue.ID,
+		TimeZone:              timeZone,
 	}
 	s.fillResolvedIssueRefs(ctx, scope.ProjectID, investigationID, issue.Title+"\n"+description, &promptContext)
 	prompt := somprompt.Build(issue.Title, description, promptContext)
@@ -508,12 +513,23 @@ func (s *Server) fillResolvedIssueRefs(ctx context.Context, projectID, investiga
 		}
 		promptContext.UnknownUUIDs = append(promptContext.UnknownUUIDs, id)
 	}
-	from, to, err := s.db.InvestigationTimelineBounds(ctx, projectID, investigationID)
-	if err != nil || from == nil || to == nil || from.IsZero() || to.IsZero() {
-		return
+}
+
+func normalizeRunTimeZone(raw *string) (string, error) {
+	if raw == nil {
+		return "", nil
 	}
-	start := from.Add(-24 * time.Hour)
-	end := to.Add(24 * time.Hour)
-	promptContext.TimelineFrom = &start
-	promptContext.TimelineTo = &end
+	tz := strings.TrimSpace(*raw)
+	if tz == "" {
+		return "", nil
+	}
+	if len(tz) > 64 {
+		return "", validationError("time_zone must be at most 64 characters")
+	}
+	// Prompt-only hint: do not call time.LoadLocation — Alpine runtime images
+	// often lack zoneinfo, so Europe/Moscow would 422 despite being valid IANA.
+	if !ianaTimeZonePattern.MatchString(tz) {
+		return "", validationError("time_zone must be a valid IANA time zone")
+	}
+	return tz, nil
 }

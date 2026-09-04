@@ -180,6 +180,11 @@ type SomIssueRunRequest struct {
 	// ModelId OpenCode model id in `provider/model` form, forwarded as executor_config.model_id. Omitted value is `openrouter/deepseek/deepseek-v4-flash`.
 	ModelId *string `json:"model_id,omitempty"`
 
+	// TimeZone IANA time zone from the dashboard TimeIntervalPicker (e.g. UTC or Europe/Moscow). Appended to the agent prompt so wall-clock times in the issue are interpreted in this zone when building Gateway time_range. Omit to leave timezone guidance out of the prompt.
+	//
+	// Example: Europe/Moscow
+	TimeZone *string `json:"time_zone,omitempty"`
+
 	// Variant Daemon executor variant, e.g. DEFAULT. Omitted uses the executor's default variant.
 	Variant *string `json:"variant,omitempty"`
 }

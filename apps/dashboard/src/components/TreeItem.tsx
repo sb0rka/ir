@@ -18,39 +18,36 @@ export function TreeItem({
 
   return (
     <div className="relative text-xs">
-      <div className="group flex items-center justify-between rounded px-2 py-1.5 hover:bg-surface-2">
-        <div className="flex items-center gap-1.5 min-w-0">
-          {hasChildren ? (
-            <button
-              onClick={() => setExpanded(!expanded)}
-              className="text-fg-dim hover:text-fg p-0.5"
-            >
-              {expanded ? (
-                <ChevronDown className="h-3.5 w-3.5" />
-              ) : (
-                <ChevronRight className="h-3.5 w-3.5" />
-              )}
-            </button>
-          ) : (
-            <span className="w-4.5" />
-          )}
-          <span className="font-mono font-medium truncate text-fg">
-            {item.node.label}
-          </span>
-          <span className="text-[10px] text-fg-dim font-mono uppercase">
-            ({item.node.kind})
-          </span>
-        </div>
-
+      <div className="group flex items-center gap-1.5 rounded px-2 py-1.5 hover:bg-surface-2">
+        {hasChildren ? (
+          <button
+            onClick={() => setExpanded(!expanded)}
+            className="shrink-0 text-fg-dim hover:text-fg p-0.5"
+          >
+            {expanded ? (
+              <ChevronDown className="h-3.5 w-3.5" />
+            ) : (
+              <ChevronRight className="h-3.5 w-3.5" />
+            )}
+          </button>
+        ) : (
+          <span className="w-4.5 shrink-0" />
+        )}
+        <span className="min-w-0 flex-1 truncate font-mono font-medium text-fg">
+          {item.node.label}
+        </span>
         {hasChildren && (
           <button
             onClick={() => onAcceptBranch(item)}
-            className="hidden group-hover:inline-flex items-center gap-1 text-[10px] text-confirmed hover:underline"
+            className="hidden shrink-0 group-hover:inline-flex items-center gap-1 text-[10px] text-confirmed hover:underline"
             title="Принять всю ветку"
           >
             <Check className="h-3 w-3" /> Всю ветку
           </button>
         )}
+        <span className="shrink-0 text-[10px] text-fg-dim font-mono uppercase">
+          {item.node.kind}
+        </span>
       </div>
 
       {expanded && (
@@ -62,7 +59,7 @@ export function TreeItem({
             >
               <div className="flex items-center justify-between gap-1">
                 <span className="text-[11px] text-proposed">
-                  ──{edge.relation}──►
+                  Связь: {edge.relation}
                 </span>
                 <div className="flex gap-1">
                   <button

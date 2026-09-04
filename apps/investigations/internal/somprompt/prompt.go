@@ -13,11 +13,10 @@ type Context struct {
 	HypothesisStatement   string
 	HypothesisDescription string
 	SomIssueID            string
+	TimeZone              string
 	ResolvedEntities      []ResolvedEntity
 	ResolvedEvents        []ResolvedEvent
 	UnknownUUIDs          []string
-	TimelineFrom          *time.Time
-	TimelineTo            *time.Time
 }
 
 type ResolvedEntity struct {
@@ -55,12 +54,15 @@ func Build(title, description string, c Context) string {
 		}
 	}
 	fmt.Fprintf(&b, "- som_issue_id: %s\n", c.SomIssueID)
+	if tz := strings.TrimSpace(c.TimeZone); tz != "" {
+		fmt.Fprintf(&b, "- display_time_zone: %s\n", tz)
+	}
 	fmt.Fprintf(&b, "\nThe `investigation` MCP server is configured for project %s. Gateway tools reuse that authenticated project scope; never print or persist credentials.\n\n", c.ProjectID)
 
 	writeResolvedBlock(&b, c)
 
 	b.WriteString("Hard rules:\n")
-	b.WriteString("1. Prefer `import_entity_events` when the task is to find events for one entity and add them to the graph. Call it once with the resolved `entity_id` (or type+value) and the suggested time_range. If the issue specifies a predicate or ordering, pass `filter`/`sort` to `import_entity_events`. Use manual `add_investigation_agent_results` only for edges the tool cannot derive.\n")
+	b.WriteString("1. Prefer `import_entity_events` when the task is to find events for one entity and add them to the graph. Call it once with the resolved `entity_id` (or type+value) and the `time_range` written in the issue — do not invent or widen the window. Wall-clock times in the issue without an explicit offset/Z are in `display_time_zone`; convert them to absolute RFC3339 for Gateway/`import_entity_events`. If the issue specifies a predicate or ordering, pass `filter`/`sort` to `import_entity_events`. Use manual `add_investigation_agent_results` only for edges the tool cannot derive.\n")
 	b.WriteString("2. IDs: investigation `entity_id`/`event_id`/`node_id` are IR UUIDs. Gateway calls need `type`+`value` or `source_code`+`source_event_id`/`source_entity_id`. Never pass IR UUIDs into gateway entity filters or into `source_*_id` fields.\n")
 	b.WriteString("3. Windows account values use a single backslash, e.g. `dkrylova\\administrator`. Doubled backslashes are tolerated by IR/Gateway, but do not invent extra escapes.\n")
 	b.WriteString("4. Sources: match capability — accounts/process/auth → SIEM (e.g. pt-maxpatrol-siem); network sessions → NAD. Do not search NAD for Windows accounts.\n")
@@ -81,8 +83,7 @@ func Build(title, description string, c Context) string {
 }
 
 func writeResolvedBlock(b *strings.Builder, c Context) {
-	if len(c.ResolvedEntities) == 0 && len(c.ResolvedEvents) == 0 && len(c.UnknownUUIDs) == 0 &&
-		c.TimelineFrom == nil && c.TimelineTo == nil {
+	if len(c.ResolvedEntities) == 0 && len(c.ResolvedEvents) == 0 && len(c.UnknownUUIDs) == 0 {
 		return
 	}
 	b.WriteString("Resolved IR references:\n")
@@ -99,10 +100,6 @@ func writeResolvedBlock(b *strings.Builder, c Context) {
 	}
 	for _, unknown := range c.UnknownUUIDs {
 		fmt.Fprintf(b, "- unknown UUID %s — do not use as a Gateway source id\n", unknown)
-	}
-	if c.TimelineFrom != nil && c.TimelineTo != nil {
-		fmt.Fprintf(b, "- suggested time_range: %s .. %s\n",
-			c.TimelineFrom.UTC().Format(time.RFC3339), c.TimelineTo.UTC().Format(time.RFC3339))
 	}
 	b.WriteString("\n")
 }

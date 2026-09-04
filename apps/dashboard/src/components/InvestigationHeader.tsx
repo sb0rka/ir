@@ -5,7 +5,6 @@ import {
 import { ContextQueueToolbar } from './ContextQueue'
 import { Button, Chip, SeverityBadge } from '../components/ui'
 import { clsx, eventOriginLabel, formatTime, matchesOriginFilter, statusLabel, verdictLabel } from '../lib/utils'
-import { fieldForEntityKind } from '../lib/filters'
 import { Check, X } from 'lucide-react'
 
 /** Compact investigation identity for the app header (between logo and actions). */
@@ -56,9 +55,7 @@ export function ContextTable({ investigationId }: { investigationId: string }) {
   const queue = useAppStore((s) => s.contextQueue[investigationId]) ?? emptyContextQueue
   const setReview = useAppStore((s) => s.setReview)
   const update = useAppStore((s) => s.updateInvestigation)
-  const addContextChip = useAppStore((s) => s.addContextChip)
   const contextEvents = useAppStore((s) => s.contextEvents)
-  const entities = useAppStore((s) => s.entities)
 
   if (!inv) return null
 
@@ -79,20 +76,19 @@ export function ContextTable({ investigationId }: { investigationId: string }) {
       <table className="w-full min-w-[900px] border-collapse text-left">
         <thead className="sticky top-0 bg-surface-1 text-[11px] uppercase tracking-wider text-fg-dim">
           <tr className="border-b border-border">
-            <th className="px-3 py-2">Время</th>
-            <th className="px-3 py-2">Источник</th>
             <th className="px-3 py-2">Тип</th>
-            <th className="px-3 py-2">Событие</th>
-            <th className="px-3 py-2">Сущности</th>
+            <th className="w-[41%] px-3 py-2">Событие</th>
             <th className="px-3 py-2">Происхождение</th>
-            <th className="px-3 py-2">Статус</th>
+            <th className="min-w-[11rem] px-3 py-2">Статус</th>
             <th className="px-3 py-2">Действия</th>
+            <th className="px-3 py-2">Произошло</th>
+            <th className="px-3 py-2">Источник</th>
           </tr>
         </thead>
         <tbody>
           {rows.length === 0 && (
             <tr>
-              <td colSpan={8} className="px-3 py-6 text-center text-sm text-fg-dim">
+              <td colSpan={7} className="px-3 py-6 text-center text-sm text-fg-dim">
                 Нет событий под выбранные фильтры
               </td>
             </tr>
@@ -115,55 +111,15 @@ export function ContextTable({ investigationId }: { investigationId: string }) {
                   })
                 }
               >
-                <td className="whitespace-nowrap px-3 py-2 font-mono text-xs text-fg-muted">
-                  {formatTime(ev.time)}
-                </td>
-                <td className="px-3 py-2">
-                  <span className="rounded border border-border px-1.5 py-0.5 font-mono text-[11px]">
-                    {ev.source}
-                  </span>
-                </td>
                 <td className="px-3 py-2 font-mono text-xs text-fg-dim">{ev.type}</td>
-                <td className="px-3 py-2">
+                <td className="w-[41%] px-3 py-2">
                   <div className="flex items-center gap-2 text-sm">
                     <SeverityBadge severity={ev.severity} label="" />
                     {ev.title}
                   </div>
                 </td>
-                <td className="px-3 py-2">
-                  <div className="flex flex-wrap gap-1">
-                    {ev.entityIds.slice(0, 3).map((id) => {
-                      const e = entities[id]
-                      if (!e) return null
-                      return (
-                        <button
-                          key={id}
-                          type="button"
-                          className="rounded border border-border px-1.5 py-0.5 font-mono text-[11px] text-fg-muted hover:text-fg"
-                          onClick={(evt) => {
-                            evt.stopPropagation()
-                            const field = fieldForEntityKind(e.kind)
-                            if (field)
-                              addContextChip(
-                                investigationId,
-                                field,
-                                e.label.replace(/[\[\]]/g, ''),
-                              )
-                            update(investigationId, {
-                              selectedEntityIds: inv.selectedEntityIds.includes(id)
-                                ? inv.selectedEntityIds.filter((x) => x !== id)
-                                : [...inv.selectedEntityIds, id],
-                            })
-                          }}
-                        >
-                          {e.label}
-                        </button>
-                      )
-                    })}
-                  </div>
-                </td>
                 <td className="px-3 py-2 text-xs text-fg-muted">{eventOriginLabel(ev)}</td>
-                <td className="px-3 py-2">
+                <td className="min-w-[11rem] px-3 py-2">
                   <Chip
                     tone={
                       review === 'proposed'
@@ -201,6 +157,17 @@ export function ContextTable({ investigationId }: { investigationId: string }) {
                       </Button>
                     </div>
                   )}
+                </td>
+                <td className="whitespace-nowrap px-3 py-2 font-mono text-xs text-fg-muted">
+                  {formatTime(ev.time)}
+                </td>
+                <td
+                  className="max-w-0 overflow-hidden whitespace-nowrap px-3 py-2"
+                  title={ev.source}
+                >
+                  <span className="block truncate font-mono text-[11px] text-fg-muted">
+                    {ev.source}
+                  </span>
                 </td>
               </tr>
             )
