@@ -4,8 +4,6 @@ import { Button, Chip } from './ui'
 import { clsx, formatTime, statusLabel } from '../lib/utils'
 import {
   CheckCircle2,
-  ChevronDown,
-  ChevronRight,
   CircleDashed,
   Loader2,
   MessageSquare,
@@ -35,152 +33,163 @@ interface SomIssueTreeNode {
   children: SomIssueTreeNode[]
 }
 
+function containsIssue(node: SomIssueTreeNode, issueId: string): boolean {
+  if (node.issue.id === issueId) return true
+  return node.children.some((child) => containsIssue(child, issueId))
+}
+
 function SomIssueTreeItem({
   node,
   investigationId,
-  depth = 0
+  expandedId,
+  confirmIssueId,
+  onToggleExpand,
+  onConfirmIssue,
+  depth = 0,
 }: {
   node: SomIssueTreeNode
   investigationId: string
+  expandedId: string | null
+  confirmIssueId: string | null
+  onToggleExpand: (issueId: string) => void
+  onConfirmIssue: (issueId: string | null) => void
   depth?: number
 }) {
   const item = node.issue
-  const [expanded, setExpanded] = useState(false)
   const [commentDraft, setCommentDraft] = useState('')
   const issues = useAppStore((s) => s.issues)
   const runEnrichment = useAppStore((s) => s.runEnrichment)
   const cancelIssue = useAppStore((s) => s.cancelIssue)
   const addComment = useAppStore((s) => s.addIssueComment)
-  const entities = useAppStore((s) => s.entities)
 
   const issue = issues[item.id]
   const busy = issue?.status === 'running'
   const hasChildren = node.children.length > 0
-  const hasDetails = Boolean(
-    item.description?.trim() || issue?.description || issue
-  )
-  const canExpand = hasChildren || hasDetails
+  const selected = expandedId === item.id
+  const awaitingConfirm = confirmIssueId === item.id
+  const cta = selected || awaitingConfirm
+  const onActivePath = expandedId != null && containsIssue(node, expandedId)
+  const showChildren = hasChildren && onActivePath
+  const description = item.description?.trim() || issue?.description
+  const showDescription = onActivePath && Boolean(description)
+  const showComments = selected && Boolean(issue)
+
+  const handleRunClick = () => {
+    if (busy) return
+    if (selected) {
+      void runEnrichment(investigationId, item.id)
+      return
+    }
+    if (awaitingConfirm) {
+      onConfirmIssue(null)
+      void runEnrichment(investigationId, item.id)
+      return
+    }
+    onConfirmIssue(item.id)
+  }
 
   return (
     <div
       className={clsx(
         'relative',
-        depth > 0 && 'ml-3 border-l border-border/70 pl-3 mt-1.5'
+        depth > 0 && 'ml-3 mt-1.5 border-l border-border/70 pl-3',
       )}
     >
-      <div className="rounded border border-border bg-surface-0 overflow-hidden shadow-xs">
-        <div className="flex items-start gap-2 p-2.5">
-          {canExpand ? (
-            <button
-              type="button"
-              onClick={() => setExpanded(!expanded)}
-              className="mt-0.5 text-fg-dim hover:text-fg p-0.5"
-            >
-              {expanded ? (
-                <ChevronDown className="h-3.5 w-3.5" />
-              ) : (
-                <ChevronRight className="h-3.5 w-3.5" />
-              )}
-            </button>
-          ) : (
-            <span className="w-4.5" />
-          )}
-
-          <div
-            className={clsx('min-w-0 flex-1', canExpand && 'cursor-pointer')}
-            onClick={canExpand ? () => setExpanded(!expanded) : undefined}
-          >
-            <div className="flex items-center gap-2">
-              {issue && <StatusIcon status={issue.status} />}
-              <span className="text-xs font-semibold text-fg truncate">
-                {item.title}
-              </span>
-              {issue && (
-                <Chip
-                  tone={issue.status === 'completed' ? 'confirmed' : 'default'}
-                >
-                  {statusLabel[issue.status]}
-                </Chip>
-              )}
-            </div>
-
-            <div className="mt-0.5 flex items-center gap-2 text-xs text-fg-dim font-mono">
-              <span>{item.simple_id}</span>
-              {hasChildren && <span>· подзадач: {node.children.length}</span>}
-              {issue?.createdAt && <span>· {formatTime(issue.createdAt)}</span>}
-            </div>
-
-            {issue && issue.entityIds.length > 0 && (
-              <div className="mt-1 flex flex-wrap gap-1">
-                {issue.entityIds.map((id) => (
-                  <span
-                    key={id}
-                    className="rounded border border-border bg-surface-2 px-1.5 py-0.5 font-mono text-xs text-fg-muted"
-                  >
-                    {entities[id]?.label ?? id}
-                  </span>
-                ))}
-              </div>
-            )}
-
-            {issue?.resultSummary && (
-              <div className="mt-1 text-xs text-fg-dim">
-                {issue.resultSummary}
-              </div>
+      <div
+        className={clsx(
+          'overflow-hidden rounded border shadow-xs',
+          onActivePath
+            ? 'border-accent bg-accent/10 ring-1 ring-accent/50'
+            : 'border-border bg-surface-0',
+        )}
+      >
+        <button
+          type="button"
+          className="w-full cursor-pointer p-2.5 text-left"
+          onClick={() => onToggleExpand(item.id)}
+        >
+          <div className="flex items-center gap-2">
+            <span className="min-w-0 flex-1 truncate text-xs font-semibold text-fg">
+              {item.title}
+            </span>
+            {issue && (
+              <Chip tone={issue.status === 'completed' ? 'confirmed' : 'default'}>
+                <StatusIcon status={issue.status} />
+                {statusLabel[issue.status]}
+              </Chip>
             )}
           </div>
-        </div>
 
-        <div className="flex gap-1 border-t border-border/60 bg-surface-1/40 px-2.5 py-1.5">
-          <Button
-            size="sm"
-            className="flex-1 text-xs"
-            disabled={busy}
-            onClick={() => void runEnrichment(investigationId, item.id)}
-          >
-            {busy ? (
-              <>
-                <Loader2 className="h-3 w-3 animate-spin text-proposed" />{' '}
-                Выполняется…
-              </>
-            ) : (
-              <>
-                <Play className="h-3 w-3" /> Запустить
-              </>
+          <div className="mt-0.5 flex items-center gap-2 font-mono text-xs text-fg-dim">
+            <span>{item.simple_id}</span>
+            {hasChildren && <span>· подзадач: {node.children.length}</span>}
+            {issue?.createdAt && (
+              <span className="ml-auto">· {formatTime(issue.createdAt)}</span>
             )}
-          </Button>
+          </div>
+
+          {issue?.resultSummary && (
+            <div className="mt-1 text-xs text-fg-dim">{issue.resultSummary}</div>
+          )}
+        </button>
+
+        <div className="flex gap-1 border-t border-border/60 px-2.5 py-1.5">
+          <div
+            className="min-w-0 flex-1"
+            data-som-confirm={awaitingConfirm ? item.id : undefined}
+          >
+            <Button
+              size="sm"
+              className="w-full"
+              variant={cta ? 'primary' : 'default'}
+              disabled={busy}
+              onClick={handleRunClick}
+            >
+              {busy ? (
+                <>
+                  <Loader2 className="h-3 w-3 animate-spin text-proposed" />
+                  Выполняется…
+                </>
+              ) : awaitingConfirm ? (
+                'Подтвердить?'
+              ) : (
+                <>
+                  <Play className="h-3 w-3" />
+                  Запустить
+                </>
+              )}
+            </Button>
+          </div>
           {busy && (
             <Button
               size="sm"
-              variant="ghost"
+              title="Остановить"
+              aria-label="Остановить"
               onClick={() => cancelIssue(item.id)}
             >
-              <Square className="h-3 w-3" />
+              <Square className="h-3.5 w-3.5" />
             </Button>
           )}
         </div>
 
-        {expanded && hasDetails && (
+        {(showDescription || showComments) && (
           <div className="space-y-2 border-t border-border/80 bg-surface-2/30 p-2.5 text-xs">
-            {(item.description?.trim() || issue?.description) && (
+            {showDescription && (
               <p className="max-h-64 overflow-y-auto whitespace-pre-wrap text-fg-muted">
-                {item.description?.trim() || issue?.description}
+                {description}
               </p>
             )}
 
-            {issue && (
-              <div className="space-y-1.5 pt-1 border-t border-border/60">
-                <div className="flex items-center gap-1 text-[10px] uppercase font-semibold tracking-wider text-fg-dim">
+            {showComments && issue && (
+              <div className="space-y-1.5 border-t border-border/60 pt-1">
+                <div className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-fg-dim">
                   <MessageSquare className="h-3 w-3" />
                   Комментарии ({issue.comments.length})
                 </div>
                 {issue.comments.length > 0 && (
-                  <div className="space-y-1.5">
+                  <div className="max-h-48 space-y-1.5 overflow-y-auto">
                     {issue.comments.map((c) => (
-                      <div
-                        key={c.id}
-                        className="rounded bg-surface-2 p-1.5 text-xs"
-                      >
+                      <div key={c.id} className="rounded bg-surface-2 p-1.5 text-xs">
                         <div className="text-[10px] text-fg-dim">
                           {c.author} · {formatTime(c.time)}
                         </div>
@@ -199,16 +208,12 @@ function SomIssueTreeItem({
                   }}
                 >
                   <input
-                    className="flex-1 rounded border border-border bg-surface-0 px-2 py-1 text-xs outline-none focus:border-fg/30 placeholder:text-fg-dim"
+                    className="flex-1 rounded border border-border bg-surface-0 px-2 py-1 text-xs outline-none placeholder:text-fg-dim focus:border-fg/30"
                     placeholder="Комментарий / обоснование…"
                     value={commentDraft}
                     onChange={(e) => setCommentDraft(e.target.value)}
                   />
-                  <Button
-                    size="sm"
-                    type="submit"
-                    disabled={!commentDraft.trim()}
-                  >
+                  <Button size="sm" type="submit" disabled={!commentDraft.trim()}>
                     →
                   </Button>
                 </form>
@@ -218,13 +223,17 @@ function SomIssueTreeItem({
         )}
       </div>
 
-      {hasChildren && expanded && (
-        <div className="space-y-1.5 mt-1.5">
+      {showChildren && (
+        <div className="mt-1.5 space-y-1.5">
           {node.children.map((child) => (
             <SomIssueTreeItem
               key={child.issue.id}
               node={child}
               investigationId={investigationId}
+              expandedId={expandedId}
+              confirmIssueId={confirmIssueId}
+              onToggleExpand={onToggleExpand}
+              onConfirmIssue={onConfirmIssue}
               depth={depth + 1}
             />
           ))}
@@ -314,10 +323,33 @@ export function AgentSection({ investigationId }: { investigationId: string }) {
   const inv = useAppStore((s) => s.investigations[investigationId])
   const catalog = useAppStore((s) => s.somCatalog)
   const loadSomCatalog = useAppStore((s) => s.loadSomCatalog)
+  const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [confirmIssueId, setConfirmIssueId] = useState<string | null>(null)
 
   useEffect(() => {
     void loadSomCatalog()
   }, [loadSomCatalog])
+
+  useEffect(() => {
+    if (!confirmIssueId) return
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target
+      if (
+        target instanceof Element &&
+        target.closest(`[data-som-confirm="${confirmIssueId}"]`)
+      ) {
+        return
+      }
+      setConfirmIssueId(null)
+    }
+    const timer = window.setTimeout(() => {
+      document.addEventListener('pointerdown', onPointerDown)
+    }, 0)
+    return () => {
+      window.clearTimeout(timer)
+      document.removeEventListener('pointerdown', onPointerDown)
+    }
+  }, [confirmIssueId])
 
   const issueTree = useMemo(() => {
     return buildSomIssueTree(catalog?.issues ?? [])
@@ -334,6 +366,13 @@ export function AgentSection({ investigationId }: { investigationId: string }) {
           key={rootNode.issue.id}
           node={rootNode}
           investigationId={investigationId}
+          expandedId={expandedId}
+          confirmIssueId={confirmIssueId}
+          onConfirmIssue={setConfirmIssueId}
+          onToggleExpand={(issueId) => {
+            setConfirmIssueId(null)
+            setExpandedId((current) => (current === issueId ? null : issueId))
+          }}
         />
       ))}
 

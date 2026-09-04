@@ -181,7 +181,11 @@ func entityMentionsToAPI(values []domain.EntityMention) []api.EntityMention {
 func sourceStatesToAPI(values []domain.SourceState) []api.SourceState {
 	result := make([]api.SourceState, 0, len(values))
 	for _, value := range values {
-		result = append(result, api.SourceState{Source: value.Source, Status: api.SourceStateStatus(value.Status)})
+		item := api.SourceState{Source: value.Source, Status: api.SourceStateStatus(value.Status)}
+		if value.Total != nil {
+			item.Total = value.Total
+		}
+		result = append(result, item)
 	}
 	return result
 }

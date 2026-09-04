@@ -11,7 +11,7 @@ import {
 import { useAppStore } from '../store/appStore'
 import { Button, Chip } from './ui'
 import { clsx } from '../lib/utils'
-import { ChevronDown, ChevronRight, Eye, EyeOff, Focus, Highlighter, Plus } from 'lucide-react'
+import { Eye, EyeOff, Focus, Highlighter, Plus, Trash2 } from 'lucide-react'
 
 type StatusFilter = 'all' | 'open' | 'resolved'
 
@@ -155,7 +155,13 @@ export function HypothesesSection({ investigationId }: { investigationId: string
         visible={visibleIds.includes(INVESTIGATION_LAYER_ID)}
         highlighted={highlightedIds.includes(INVESTIGATION_LAYER_ID)}
         isSolo={visibleIds.length === 1 && visibleIds[0] === INVESTIGATION_LAYER_ID}
-        onSelect={() => void setActive(investigationId, null)}
+        onSelect={() => {
+          void setActive(investigationId, null)
+          setExpandedId(null)
+          setResolveId(null)
+          setDeleteId(null)
+          setReason('')
+        }}
         onToggleVisible={(solo) =>
           toggleVisible(investigationId, INVESTIGATION_LAYER_ID, solo)
         }
@@ -272,9 +278,6 @@ function LayerCard({
       )}
     >
       <div className="flex items-start gap-1.5 p-3">
-        <span className="mt-0.5 p-0.5" aria-hidden>
-          <span className="block h-3.5 w-3.5" />
-        </span>
         <button type="button" className="min-w-0 flex-1 text-left" onClick={onSelect}>
           <span className="block break-words text-xs font-semibold text-fg">{title}</span>
           <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[10px] text-fg-dim">
@@ -430,37 +433,42 @@ function HypothesisCard({
           : 'border-border bg-surface-0',
       )}
     >
-      <div className="flex items-start gap-1.5 p-3">
+      <div className="space-y-1.5 p-3">
+        <div className="flex items-start gap-1.5">
+          <button
+            type="button"
+            className="min-w-0 flex-1 text-left"
+            onClick={() => {
+              onSelect()
+              onToggleExpand()
+            }}
+          >
+            <span className="block break-words text-xs font-semibold text-fg">{item.statement}</span>
+          </button>
+          <LayerToggles
+            visible={visible}
+            highlighted={highlighted}
+            isSolo={isSolo}
+            onToggleVisible={onToggleVisible}
+            onToggleHighlight={onToggleHighlight}
+            onToggleSolo={onToggleSolo}
+          />
+        </div>
         <button
           type="button"
-          className="mt-0.5 p-0.5 text-fg-dim hover:text-fg"
-          onClick={onToggleExpand}
+          className="flex w-full flex-wrap items-center gap-1.5 text-left text-[10px] text-fg-dim"
+          onClick={() => {
+            onSelect()
+            onToggleExpand()
+          }}
         >
-          {expanded ? (
-            <ChevronDown className="h-3.5 w-3.5" />
-          ) : (
-            <ChevronRight className="h-3.5 w-3.5" />
-          )}
+          <Chip tone={tone}>{hypothesisStatusLabel(item.status)}</Chip>
+          {nodeCount != null && <NodeCount count={nodeCount} />}
+          <span className="ml-auto">{hypothesisOriginLabel(item.origin)}</span>
         </button>
-        <button type="button" className="min-w-0 flex-1 text-left" onClick={onSelect}>
-          <span className="block break-words text-xs font-semibold text-fg">{item.statement}</span>
-          <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[10px] text-fg-dim">
-            <Chip tone={tone}>{hypothesisStatusLabel(item.status)}</Chip>
-            <span>{hypothesisOriginLabel(item.origin)}</span>
-            {nodeCount != null && <NodeCount count={nodeCount} />}
-          </div>
-          {item.status === 'resolved' && item.reason && !expanded && (
-            <div className="mt-1 line-clamp-2 text-xs text-fg-muted">{item.reason}</div>
-          )}
-        </button>
-        <LayerToggles
-          visible={visible}
-          highlighted={highlighted}
-          isSolo={isSolo}
-          onToggleVisible={onToggleVisible}
-          onToggleHighlight={onToggleHighlight}
-          onToggleSolo={onToggleSolo}
-        />
+        {item.status === 'resolved' && item.reason && !expanded && (
+          <div className="line-clamp-2 text-xs text-fg-muted">{item.reason}</div>
+        )}
       </div>
 
       {expanded && (
@@ -479,37 +487,32 @@ function HypothesisCard({
                 value={reason}
                 onChange={(e) => onReason(e.target.value)}
               />
-              <div className="flex gap-1">
-                <Button size="sm" disabled={!reason.trim()} onClick={onResolve}>
-                  Закрыть
-                </Button>
+              <div className="flex gap-2">
                 <Button size="sm" variant="ghost" onClick={onCancelResolve}>
                   Отмена
+                </Button>
+                <Button size="sm" disabled={!reason.trim()} onClick={onResolve}>
+                  Закрыть
                 </Button>
               </div>
             </div>
           ) : deleting ? (
             <div className="space-y-1">
               <p className="text-fg-muted">Граф расследования не изменится. Удалить гипотезу?</p>
-              <div className="flex gap-1">
-                <Button size="sm" variant="danger" onClick={onDelete}>
-                  Удалить
-                </Button>
+              <div className="flex gap-2">
                 <Button size="sm" variant="ghost" onClick={onCancelDelete}>
                   Отмена
+                </Button>
+                <Button size="sm" variant="danger" onClick={onDelete}>
+                  Удалить
                 </Button>
               </div>
             </div>
           ) : (
-            <div className="flex flex-wrap gap-1">
+            <div className="flex flex-wrap gap-2">
               {item.status === 'proposed' && (
                 <Button size="sm" onClick={onActivate}>
                   Активировать
-                </Button>
-              )}
-              {item.status !== 'resolved' && (
-                <Button size="sm" variant="ghost" onClick={onAskResolve}>
-                  Закрыть…
                 </Button>
               )}
               {item.status === 'resolved' && (
@@ -517,9 +520,14 @@ function HypothesisCard({
                   Вернуть в работу
                 </Button>
               )}
-              <Button size="sm" variant="ghost" onClick={onAskDelete}>
-                Удалить
+              <Button size="sm" title="Удалить" aria-label="Удалить" onClick={onAskDelete}>
+                <Trash2 className="h-3.5 w-3.5" />
               </Button>
+              {item.status !== 'resolved' && (
+                <Button size="sm" onClick={onAskResolve}>
+                  Закрыть
+                </Button>
+              )}
             </div>
           )}
         </div>

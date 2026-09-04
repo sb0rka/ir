@@ -254,16 +254,14 @@ function uniqueFields(fields: string[]): string[] {
   return out
 }
 
-function eventSearchFields(ast: QueryAst): string[] {
-  return uniqueFields([
-    ...ast.groups.map((group) => group.field),
-    ...ast.columns.filter((column) => column.field && !column.aggregate).map((column) => column.field),
-  ])
-}
-
-/** Select fields to show as extra queue columns. `time` already has a dedicated column. */
+/** Select fields to show as extra queue columns. `time` and group keys already have UI. */
 export function queueSelectFields(ast: QueryAst): string[] {
-  return eventSearchFields(ast).filter((field) => field !== 'time')
+  const groupFields = new Set(ast.groups.map((group) => group.field))
+  return uniqueFields(
+    ast.columns
+      .filter((column) => column.field && !column.aggregate && !groupFields.has(column.field))
+      .map((column) => column.field),
+  ).filter((field) => field !== 'time')
 }
 
 function isDefaultSort(sort: { field: string; direction: 'asc' | 'desc' }[]): boolean {

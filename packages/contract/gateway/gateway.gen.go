@@ -997,6 +997,9 @@ type SearchEventsResponse struct {
 	// SourceErrors Per-source failures when at least one selected source succeeded.
 	SourceErrors []SourceError `json:"source_errors"`
 	SourceStates []SourceState `json:"source_states"`
+
+	// Total Sum of per-source match totals when every non-failed source reported a total; omitted when any successful source lacks a known total.
+	Total *int64 `json:"total,omitempty"`
 }
 
 // SearchFindingsRequest defines model for SearchFindingsRequest.
@@ -1016,6 +1019,9 @@ type SearchFindingsResponse struct {
 	NextCursor   *string       `json:"next_cursor,omitempty"`
 	SourceErrors []SourceError `json:"source_errors"`
 	SourceStates []SourceState `json:"source_states"`
+
+	// Total Sum of per-source match totals when every non-failed source reported a total; omitted when any successful source lacks a known total.
+	Total *int64 `json:"total,omitempty"`
 }
 
 // SearchSessionsRequest defines model for SearchSessionsRequest.
@@ -1034,6 +1040,9 @@ type SearchSessionsResponse struct {
 	Sessions     []Session     `json:"sessions"`
 	SourceErrors []SourceError `json:"source_errors"`
 	SourceStates []SourceState `json:"source_states"`
+
+	// Total Sum of per-source match totals when every non-failed source reported a total; omitted when any successful source lacks a known total.
+	Total *int64 `json:"total,omitempty"`
 }
 
 // Session defines model for Session.
@@ -1158,6 +1167,9 @@ type SourceState struct {
 	Reason *string           `json:"reason,omitempty"`
 	Source string            `json:"source"`
 	Status SourceStateStatus `json:"status"`
+
+	// Total Vendor match count for this source and query when known. Absent when the source did not report a total (for example noCount without totalCount).
+	Total *int64 `json:"total,omitempty"`
 }
 
 // SourceStateStatus defines model for SourceState.Status.

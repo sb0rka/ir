@@ -22,6 +22,7 @@ func ToEventPage(response EventsResponse, offset int, fetchedAt time.Time) (capa
 	page := capability.EventPage{
 		Events: make([]domain.Event, 0, len(response.Events)),
 		Status: "complete",
+		Total:  authenticMatchTotal(response.TotalCount, len(response.Events)),
 	}
 	if int64(offset+len(response.Events)) < response.TotalCount {
 		// The reviewed capture does not establish how response.Token is

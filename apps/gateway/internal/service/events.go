@@ -33,6 +33,7 @@ type SearchEventsResult struct {
 	Entities     []domain.Entity
 	Relations    []domain.Relation
 	NextCursor   string
+	Total        *int64
 	SourceStates []domain.SourceState
 	SourceErrors []domain.SourceError
 }
@@ -101,7 +102,9 @@ func (service *Service) SearchEvents(ctx context.Context, access ProjectAccess, 
 			if status == "" {
 				status = "complete"
 			}
-			result.SourceStates = append(result.SourceStates, domain.SourceState{Source: item.source, Status: status})
+			result.SourceStates = append(result.SourceStates, domain.SourceState{
+				Source: item.source, Status: status, Total: item.page.Total,
+			})
 			result.Events = append(result.Events, item.page.Events...)
 			result.Entities = append(result.Entities, item.page.Entities...)
 			result.Relations = append(result.Relations, item.page.Relations...)
@@ -146,6 +149,7 @@ func (service *Service) SearchEvents(ctx context.Context, access ProjectAccess, 
 	}
 	sortSourceStates(result.SourceStates)
 	sortSourceErrors(result.SourceErrors)
+	result.Total = sumSourceTotals(result.SourceStates)
 	return result, nil
 }
 
@@ -254,6 +258,27 @@ func entityKey(entity domain.EntityRef) string {
 
 func sortSourceStates(items []domain.SourceState) {
 	sort.Slice(items, func(i, j int) bool { return items[i].Source < items[j].Source })
+}
+
+// sumSourceTotals returns the sum of per-source totals when every non-failed
+// source reported a total; otherwise nil.
+func sumSourceTotals(states []domain.SourceState) *int64 {
+	var sum int64
+	sawSuccess := false
+	for _, state := range states {
+		if state.Status == "failed" {
+			continue
+		}
+		sawSuccess = true
+		if state.Total == nil {
+			return nil
+		}
+		sum += *state.Total
+	}
+	if !sawSuccess {
+		return nil
+	}
+	return &sum
 }
 
 func markCompleteStatesTruncated(items []domain.SourceState) {

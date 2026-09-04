@@ -45,8 +45,11 @@ func (provider *Provider) SearchEvents(ctx context.Context, access capability.Ac
 	}
 	partial := sessionPartial || attackPartial || sessionErr != nil || attackErr != nil
 	page := capability.EventPage{Status: "complete"}
+	var total int64
+	totalsComplete := sessionErr == nil && attackErr == nil
 	for _, result := range sessionResults {
 		partial = partial || result.Truncated
+		total += result.Total
 		for _, session := range result.Sessions {
 			event := sessionEvent(session)
 			if !eventMatchesEntities(event, request.Entities) {
@@ -59,6 +62,7 @@ func (provider *Provider) SearchEvents(ctx context.Context, access capability.Ac
 	}
 	for _, result := range attackResults {
 		partial = partial || result.Truncated
+		total += result.Total
 		for _, attack := range result.Attacks {
 			event := attackEvent(attack)
 			if !eventMatchesEntities(event, request.Entities) {
@@ -67,6 +71,10 @@ func (provider *Provider) SearchEvents(ctx context.Context, access capability.Ac
 			page.Events = append(page.Events, event)
 			page.Entities = append(page.Entities, entitiesForEvent(event, attack.SourceRef.SourceInstance)...)
 		}
+	}
+	// Entity filters drop rows after the vendor counted them, so the sum is not a match total.
+	if totalsComplete && len(request.Entities) == 0 {
+		page.Total = &total
 	}
 	page.Events = normalization.Events(page.Events)
 	if len(page.Events) > limit {

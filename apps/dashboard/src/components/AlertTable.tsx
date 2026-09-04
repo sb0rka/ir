@@ -466,6 +466,7 @@ export function AlertTable({ investigationId }: { investigationId?: string } = {
   const correlations = useAppStore((s) => s.correlations)
   const globalOrder = useAppStore((s) => s.queueOrder)
   const globalLoading = useAppStore((s) => s.queueLoading)
+  const globalTotal = useAppStore((s) => s.queueTotal)
   const globalPdql = useAppStore((s) => s.queuePdql)
   const globalSource = useAppStore((s) => s.queueSource)
   const globalGroupValues = useAppStore((s) => s.groupValues)
@@ -492,11 +493,12 @@ export function AlertTable({ investigationId }: { investigationId?: string } = {
   const alerts = queue?.alerts ?? globalAlerts
   const queueOrder = queue?.queueOrder ?? globalOrder
   const loading = queue?.loading ?? globalLoading
+  const queueSource = queue?.queueSource ?? globalSource
+  const queueTotal = queueSource === 'entities' ? undefined : (queue?.total ?? globalTotal)
   const eventKeys = inv ? contextEventKeys(inv.eventIds, contextEvents) : new Set<string>()
   const findingKeys = new Set(inv?.findingSourceKeys ?? [])
   const parsed = parseQueuePdql(queue?.pdql ?? globalPdql)
   const selectFields = parsed.ok ? queueSelectFields(parsed.ast) : []
-  const queueSource = queue?.queueSource ?? globalSource
   const showCategory = queueSource === 'siem_incident'
   const searchColumn = resolveAlertTableSearchColumn(
     queueTextFilterColumn,
@@ -759,7 +761,13 @@ export function AlertTable({ investigationId }: { investigationId?: string } = {
                 >
                   <span className="flex min-w-0 items-center gap-1.5 overflow-hidden whitespace-nowrap">
                     <span className="truncate">{alertTableColumnLabel('title')}</span>
-                    <span className="shrink-0 text-fg">{rows.length}</span>
+                    <span className="shrink-0 text-fg">
+                      {typeof queueTotal === 'number' && queueTotal > rows.length
+                        ? `${rows.length} / ${queueTotal}`
+                        : typeof queueTotal === 'number'
+                          ? queueTotal
+                          : rows.length}
+                    </span>
                     {loading && (
                       <span className="shrink-0 normal-case tracking-normal text-fg-dim">загрузка…</span>
                     )}

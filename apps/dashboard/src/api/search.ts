@@ -64,6 +64,8 @@ export interface QueueSearchResult {
   mockSources: string[]
   /** Wide range ∩ PDQL time — when set, UI time button should adopt this range. */
   effectiveTimeInterval?: TimeInterval
+  /** Vendor match count when Gateway reported total; omitted when unknown. */
+  total?: number
 }
 
 function emptyQueue(sourceErrors: string[], availableSources: string[]): QueueSearchResult {
@@ -78,6 +80,18 @@ function emptyQueue(sourceErrors: string[], availableSources: string[]): QueueSe
     availableSources,
     mockSources: [],
   }
+}
+
+/** Prefer response.total; otherwise sum source_states totals when every non-failed source reported one. */
+function gatewaySearchTotal(data: {
+  total?: number
+  source_states?: { status: string; total?: number }[]
+}): number | undefined {
+  if (typeof data.total === 'number' && Number.isFinite(data.total)) return data.total
+  const states = data.source_states ?? []
+  const ok = states.filter((state) => state.status !== 'failed')
+  if (!ok.length || ok.some((state) => typeof state.total !== 'number')) return undefined
+  return ok.reduce((sum, state) => sum + (state.total as number), 0)
 }
 
 function buildFindingsBody(
@@ -141,6 +155,7 @@ function finishQueue(
   availableSources: string[],
   sort?: QueueSort,
   eventGroups: EventGroupItem[] = [],
+  total?: number,
 ): QueueSearchResult {
   const filtered = sortQueueAlerts(
     alertList
@@ -167,15 +182,18 @@ function finishQueue(
     availableSources,
     mockSources: [],
     eventGroups,
+    ...(typeof total === 'number' ? { total } : {}),
   }
 }
 
 async function searchFindingKind(body: FindingsBody): Promise<{
   findings: Gw['schemas']['Finding'][]
   sourceErrors: string[]
+  total?: number
 }> {
   const findings: Gw['schemas']['Finding'][] = []
   const sourceErrors: string[] = []
+  let total: number | undefined
   let cursor: string | undefined
   for (let page = 0; page < MAX_PAGES; page++) {
     const { data, error, response } = await gatewayClient.POST('/api/v1/findings/search', {
@@ -184,13 +202,14 @@ async function searchFindingKind(body: FindingsBody): Promise<{
     })
     if (error || !data) throw unwrapError(error, response.status)
     findings.push(...(data.findings ?? []))
+    if (total === undefined) total = gatewaySearchTotal(data)
     for (const err of data.source_errors ?? []) {
       sourceErrors.push(`${err.source}: ${err.message}`)
     }
     if (!data.next_cursor) break
     cursor = data.next_cursor
   }
-  return { findings, sourceErrors }
+  return { findings, sourceErrors, ...(typeof total === 'number' ? { total } : {}) }
 }
 
 async function searchFindingsQueue(
@@ -225,7 +244,7 @@ async function searchFindingsQueue(
     for (const entity of mapped.entities) entities[entity.id] = entity
     alertList.push(mapped.alert)
   }
-  return finishQueue(alertList, entities, chips, query, sourceErrors, sources.available, sort)
+  return finishQueue(alertList, entities, chips, query, sourceErrors, sources.available, sort, [], page.total)
 }
 
 function sourcesForEventSearch(allowed: string[], hasControls: boolean): string[] {
@@ -581,6 +600,7 @@ async function searchEventsQueue(
   const events: Gw['schemas']['Event'][] = []
   const gatewayEntities: Gw['schemas']['Entity'][] = []
   let cursor: string | undefined
+  let total: number | undefined
   for (let page = 0; page < MAX_PAGES; page++) {
     const { data, error, response } = await gatewayClient.POST('/api/v1/events/search', {
       params: projectHeader(),
@@ -589,6 +609,7 @@ async function searchEventsQueue(
     if (error || !data) throw unwrapError(error, response.status)
     events.push(...(data.events ?? []))
     gatewayEntities.push(...(data.entities ?? []))
+    if (total === undefined) total = gatewaySearchTotal(data)
     for (const err of data.source_errors ?? []) {
       sourceErrors.push(`${err.source}: ${err.message}`)
     }
@@ -606,6 +627,7 @@ async function searchEventsQueue(
     sources.available,
     parts.sort,
     eventGroups,
+    total,
   )
 }
 

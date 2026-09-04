@@ -7,9 +7,9 @@ import {
   Inbox,
   Lightbulb,
   Network,
+  RefreshCw,
   Table2,
   Undo2,
-  X,
 } from 'lucide-react'
 import { useAppStore, type SidebarSectionId } from '../store/appStore'
 import { clsx } from '../lib/utils'
@@ -74,9 +74,11 @@ export function WorkspaceSidebar({ investigationId }: { investigationId: string 
   const view = inv?.view ?? 'graph'
   const update = useAppStore((s) => s.updateInvestigation)
   const persistInvestigation = useAppStore((s) => s.persistInvestigation)
+  const loadSomCatalog = useAppStore((s) => s.loadSomCatalog)
   const [expanded, setExpanded] = useState(readExpanded)
   const [closeOpen, setCloseOpen] = useState(false)
   const [closing, setClosing] = useState(false)
+  const [somRefreshing, setSomRefreshing] = useState(false)
   const agentBadge = useAppStore((s) => {
     const current = s.investigations[investigationId]
     if (!current) return 0
@@ -146,7 +148,14 @@ export function WorkspaceSidebar({ investigationId }: { investigationId: string 
                 key={item.id}
                 type="button"
                 title={expanded ? undefined : item.title}
-                onClick={() => update(investigationId, { view: item.id })}
+                onClick={() => {
+                  if (selected) {
+                    if (sectionId) setSection(null)
+                    return
+                  }
+                  update(investigationId, { view: item.id })
+                  if (sectionId) setSection(null)
+                }}
                 className={railBtn(selected)}
               >
                 <Icon className="h-4 w-4 shrink-0" />
@@ -270,9 +279,25 @@ export function WorkspaceSidebar({ investigationId }: { investigationId: string 
             side="left"
             className="w-full min-w-0 flex-1"
             actions={
-              <button type="button" onClick={() => setSection(null)}>
-                <X className="h-3.5 w-3.5 text-fg-dim" />
-              </button>
+              active.id === 'agent' ? (
+                <button
+                  type="button"
+                  title="Обновить задачи SOM"
+                  aria-label="Обновить задачи SOM"
+                  disabled={somRefreshing}
+                  onClick={() => {
+                    setSomRefreshing(true)
+                    void loadSomCatalog().finally(() => setSomRefreshing(false))
+                  }}
+                >
+                  <RefreshCw
+                    className={clsx(
+                      'h-3.5 w-3.5 text-fg-dim',
+                      somRefreshing && 'animate-spin',
+                    )}
+                  />
+                </button>
+              ) : undefined
             }
           >
             {active.render(investigationId)}

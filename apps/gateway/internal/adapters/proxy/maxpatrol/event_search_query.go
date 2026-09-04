@@ -131,11 +131,8 @@ func (client *Client) searchEventsWithQuery(ctx context.Context, access Access, 
 	if nonNullVendorErrors(response.Errors) {
 		return safeEventsEnvelope{}, &ResponseError{Operation: "event search", Message: "vendor reported query errors"}
 	}
-	if response.TotalCount <= 0 {
-		response.TotalCount = int64(len(response.Events))
-	}
-	if int64(len(response.Events)) > response.TotalCount {
-		return safeEventsEnvelope{}, &ResponseError{Operation: "event search", Message: "pagination metadata is inconsistent"}
+	if err := finalizeEventsEnvelope(&response); err != nil {
+		return safeEventsEnvelope{}, &ResponseError{Operation: "event search", Message: err.Error()}
 	}
 	return response, nil
 }

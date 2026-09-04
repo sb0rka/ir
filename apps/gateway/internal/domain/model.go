@@ -174,6 +174,8 @@ type Session struct {
 type SourceState struct {
 	Source string
 	Status string
+	// Total is the vendor match count for this source when known.
+	Total *int64
 }
 
 type ObjectResolution struct {

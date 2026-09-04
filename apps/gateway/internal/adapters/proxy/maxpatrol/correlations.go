@@ -102,7 +102,8 @@ func (client *Client) SearchCorrelations(ctx context.Context, access Access, req
 	return CorrelationPage{
 		Correlations: correlations,
 		TotalItems:   response.TotalCount,
-		// v3 with noCount=true does not return a total; hitting the limit implies truncation.
+		ReportedTotal: response.ReportedTotal,
+		// Truncation is inferred from a full page when continuation is unconfirmed.
 		Truncated: len(response.Events) >= request.Limit,
 	}, nil
 }
@@ -217,11 +218,8 @@ func (client *Client) queryEvents(ctx context.Context, access Access, operation 
 	if nonNullVendorErrors(response.Errors) {
 		return safeEventsEnvelope{}, &ResponseError{Operation: operation, Message: "vendor reported query errors"}
 	}
-	if response.TotalCount <= 0 {
-		response.TotalCount = int64(len(response.Events))
-	}
-	if int64(len(response.Events)) > response.TotalCount {
-		return safeEventsEnvelope{}, &ResponseError{Operation: operation, Message: "pagination metadata is inconsistent"}
+	if err := finalizeEventsEnvelope(&response); err != nil {
+		return safeEventsEnvelope{}, &ResponseError{Operation: operation, Message: err.Error()}
 	}
 	return response, nil
 }

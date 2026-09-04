@@ -530,22 +530,22 @@ describe('queueSelectFields', () => {
     ).toEqual(['event_src.host', 'text'])
   })
 
-  it('includes group dimensions and skips aggregates', () => {
+  it('skips group dimensions and aggregates', () => {
     expect(
       queueSelectFields(
         mustParse('group(event_src.host) | select(event_src.host, uniq(src.ip), count(), time)'),
       ),
-    ).toEqual(['event_src.host'])
+    ).toEqual([])
   })
 
-  it('puts group keys before extra columns', () => {
+  it('keeps extra columns and omits group keys', () => {
     expect(
       queueSelectFields(
         mustParse(
           'filter(event_src.host = "dkrylova.plat.form") | select(time, event_src.host, text, object.process.cmdline) | sort(time asc) | group(key: [action], agg: COUNT(*) as Cnt)',
         ),
       ),
-    ).toEqual(['action', 'event_src.host', 'text', 'object.process.cmdline'])
+    ).toEqual(['event_src.host', 'text', 'object.process.cmdline'])
   })
 })
 

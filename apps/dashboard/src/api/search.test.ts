@@ -320,6 +320,27 @@ describe('searchQueue findings sort', () => {
       'pt-maxpatrol-siem/siem_correlation/new',
     ])
   })
+
+  it('preserves gateway findings total', async () => {
+    gatewayPost.mockImplementation(async (path: string) => {
+      if (path === '/api/v1/findings/search') {
+        return {
+          data: {
+            findings: [gwFinding('one', '2025-10-23T18:00:00.000Z', 'siem_incident')],
+            total: 1523,
+            source_states: [{ source: 'pt-maxpatrol-siem', status: 'truncated', total: 1523 }],
+            source_errors: [],
+          },
+          error: undefined,
+          response: { status: 200 },
+        }
+      }
+      throw new Error(`unexpected ${path}`)
+    })
+    const result = await searchQueue(mustParse('select(time)'), demoDayInterval('UTC'), 'siem_incident')
+    expect(result.total).toBe(1523)
+    expect(result.queueOrder).toHaveLength(1)
+  })
 })
 
 describe('resolveFindingEvents session cache', () => {

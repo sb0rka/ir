@@ -130,6 +130,7 @@ function snapshotGlobalQueue(state: {
   eventGroups: EventGroupItem[]
   executedFingerprint: string | null
   mockSources: string[]
+  queueTotal?: number
 }): QueueSourceResultSnapshot {
   return {
     alerts: state.alerts,
@@ -138,6 +139,7 @@ function snapshotGlobalQueue(state: {
     eventGroups: state.eventGroups,
     executedFingerprint: state.executedFingerprint,
     mockSources: state.mockSources,
+    ...(typeof state.queueTotal === 'number' ? { total: state.queueTotal } : {}),
   }
 }
 
@@ -147,6 +149,7 @@ function snapshotContextQueue(state: ContextQueueState): ContextSourceResultSnap
     queueOrder: state.queueOrder,
     eventGroups: state.eventGroups,
     executedFingerprint: state.executedFingerprint,
+    ...(typeof state.total === 'number' ? { total: state.total } : {}),
   }
 }
 
@@ -161,6 +164,7 @@ function swapGlobalQueueSource(
     eventGroups: EventGroupItem[]
     executedFingerprint: string | null
     mockSources: string[]
+    queueTotal?: number
   },
   nextSource: QueueSource,
 ): {
@@ -172,6 +176,7 @@ function swapGlobalQueueSource(
   eventGroups: EventGroupItem[]
   executedFingerprint: string | null
   mockSources: string[]
+  queueTotal: number | undefined
   inspectedQueueItem: null
   selectedAlertIds: string[]
   expandedCorrelationIds: string[]
@@ -187,6 +192,7 @@ function swapGlobalQueueSource(
       eventGroups: state.eventGroups,
       executedFingerprint: state.executedFingerprint,
       mockSources: state.mockSources,
+      queueTotal: state.queueTotal,
       inspectedQueueItem: null,
       selectedAlertIds: [],
       expandedCorrelationIds: [],
@@ -208,6 +214,7 @@ function swapGlobalQueueSource(
     // Source is part of the filter: keep cached rows, but force the stale execute CTA.
     executedFingerprint: null,
     mockSources: hit?.mockSources ?? [],
+    queueTotal: hit?.total,
     inspectedQueueItem: null,
     selectedAlertIds: [],
     expandedCorrelationIds: [],
@@ -236,6 +243,7 @@ function swapContextQueueSource(
     executedFingerprint: null,
     selectedIds: [],
     loading: false,
+    total: hit?.total,
   }
 }
 
@@ -305,6 +313,8 @@ interface AppState {
   alerts: Record<string, AlertEvent>
   correlations: Record<string, CorrelationGroup>
   queueOrder: QueueItem[]
+  /** Vendor match count for the last findings/events search when known. */
+  queueTotal?: number
   /** Client-side text filter for the global queue list (header search). */
   queueTextFilter: string
   /** Which visible queue table column the header text filter applies to. */
@@ -909,6 +919,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         eventGroups: result.eventGroups,
         executedFingerprint,
         mockSources: result.mockSources,
+        ...(typeof result.total === 'number' ? { total: result.total } : {}),
       }
       set({
         chips,
@@ -925,6 +936,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         alerts: result.alerts,
         correlations: result.correlations,
         queueOrder: result.queueOrder,
+        queueTotal: result.total,
         eventGroups: result.eventGroups,
         queueSourceCache: { ...get().queueSourceCache, [queueSource]: snapshot },
         entities: mergeEntities(get().entities, result.entities),
@@ -1394,6 +1406,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         queueOrder: result.queueOrder,
         eventGroups: result.eventGroups,
         executedFingerprint,
+        ...(typeof result.total === 'number' ? { total: result.total } : {}),
       }
       set({
         entities: mergeEntities(get().entities, result.entities),
@@ -1416,6 +1429,7 @@ export const useAppStore = create<AppState>((set, get) => ({
             eventGroups: result.eventGroups,
             alerts: result.alerts,
             queueOrder: result.queueOrder,
+            total: result.total,
             loading: false,
             executedFingerprint,
             sourceResults: { ...(latest.sourceResults ?? {}), [queueSource]: sourceSnapshot },

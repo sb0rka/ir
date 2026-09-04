@@ -255,6 +255,8 @@ export interface QueueSourceResultSnapshot {
   eventGroups: EventGroupItem[]
   executedFingerprint: string | null
   mockSources: string[]
+  /** Vendor match count when known. */
+  total?: number
 }
 
 /** Context-queue subset of a source snapshot (no correlations / mockSources). */
@@ -263,6 +265,8 @@ export interface ContextSourceResultSnapshot {
   queueOrder: QueueItem[]
   eventGroups: EventGroupItem[]
   executedFingerprint: string | null
+  /** Vendor match count when known. */
+  total?: number
 }
 
 /** Filter context-queue rows by membership in the investigation. */
@@ -293,6 +297,8 @@ export interface ContextQueueState {
   alerts: Record<string, AlertEvent>
   queueOrder: QueueItem[]
   loading: boolean
+  /** Vendor match count for the last findings/events search when known. */
+  total?: number
   /** Last executed results per source while switching QueueSourceToggle. */
   sourceResults: Partial<Record<QueueSource, ContextSourceResultSnapshot>>
 }

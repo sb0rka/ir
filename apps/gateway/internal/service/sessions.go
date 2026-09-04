@@ -19,6 +19,7 @@ type SearchSessionsRequest struct {
 type SearchSessionsResult struct {
 	Sessions     []domain.Session
 	NextCursor   string
+	Total        *int64
 	SourceStates []domain.SourceState
 	SourceErrors []domain.SourceError
 }
@@ -84,7 +85,9 @@ func (service *Service) SearchSessions(ctx context.Context, access ProjectAccess
 			if status == "" {
 				status = "complete"
 			}
-			result.SourceStates = append(result.SourceStates, domain.SourceState{Source: item.source, Status: status})
+			result.SourceStates = append(result.SourceStates, domain.SourceState{
+				Source: item.source, Status: status, Total: item.page.Total,
+			})
 			result.Sessions = append(result.Sessions, item.page.Sessions...)
 			if item.page.NextCursor != "" {
 				state.Positions[item.source] = item.page.NextCursor
@@ -117,6 +120,7 @@ func (service *Service) SearchSessions(ctx context.Context, access ProjectAccess
 	}
 	sortSourceStates(result.SourceStates)
 	sortSourceErrors(result.SourceErrors)
+	result.Total = sumSourceTotals(result.SourceStates)
 	return result, nil
 }
 

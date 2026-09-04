@@ -101,6 +101,10 @@ func (provider *Provider) SearchFindings(ctx context.Context, access capability.
 	fetchedAt := provider.client.now().UTC()
 	vendorRange := TimeRange{From: request.TimeRange.From, To: request.TimeRange.To}
 	accessValue := Access{Cookie: access.Cookie}
+	var incidentTotal *int64
+	var correlationTotal *int64
+	sawIncidents := false
+	sawCorrelations := false
 
 	if !cursor.IncidentDone && remaining > 0 {
 		incidents, callErr := provider.client.SearchIncidents(ctx, accessValue, IncidentSearchRequest{
@@ -111,6 +115,9 @@ func (provider *Provider) SearchFindings(ctx context.Context, access capability.
 		if callErr != nil {
 			return capability.FindingPage{}, translateError(callErr)
 		}
+		sawIncidents = true
+		total := int64(incidents.TotalItems)
+		incidentTotal = &total
 		for _, incident := range incidents.Incidents {
 			page.Findings = append(page.Findings, findingFromIncident(incident, request.TimeRange, fetchedAt, nil))
 		}
@@ -130,6 +137,8 @@ func (provider *Provider) SearchFindings(ctx context.Context, access capability.
 		if callErr != nil {
 			return capability.FindingPage{}, translateError(callErr)
 		}
+		sawCorrelations = true
+		correlationTotal = correlations.ReportedTotal
 		for _, correlation := range correlations.Correlations {
 			page.Findings = append(page.Findings, findingFromCorrelation(correlation, request.TimeRange, fetchedAt))
 		}
@@ -139,6 +148,8 @@ func (provider *Provider) SearchFindings(ctx context.Context, access capability.
 		}
 	}
 
+	page.Total = findingsMatchTotal(wantIncidents, wantCorrelations, sawIncidents, sawCorrelations, incidentTotal, correlationTotal)
+
 	if !cursor.IncidentDone || !cursor.CorrelationsDone {
 		encoded, encodeErr := encodeFindingCursor(cursor)
 		if encodeErr != nil {
@@ -147,6 +158,32 @@ func (provider *Provider) SearchFindings(ctx context.Context, access capability.
 		page.NextCursor = encoded
 	}
 	return page, nil
+}
+
+func findingsMatchTotal(
+	wantIncidents, wantCorrelations, sawIncidents, sawCorrelations bool,
+	incidentTotal, correlationTotal *int64,
+) *int64 {
+	switch {
+	case wantIncidents && !wantCorrelations:
+		if sawIncidents {
+			return incidentTotal
+		}
+		return nil
+	case wantCorrelations && !wantIncidents:
+		if sawCorrelations {
+			return correlationTotal
+		}
+		return nil
+	case wantIncidents && wantCorrelations:
+		if !sawIncidents || !sawCorrelations || incidentTotal == nil || correlationTotal == nil {
+			return nil
+		}
+		sum := *incidentTotal + *correlationTotal
+		return &sum
+	default:
+		return nil
+	}
 }
 
 func (provider *Provider) ResolveFinding(ctx context.Context, access capability.Access, ref domain.SourceObjectRef) (capability.ContextPage, error) {
@@ -203,7 +240,7 @@ func (provider *Provider) SearchEvents(ctx context.Context, access capability.Ac
 		return capability.EventPage{}, translateError(err)
 	}
 	fetchedAt := provider.client.now().UTC()
-	page := capability.EventPage{Status: "complete"}
+	page := capability.EventPage{Status: "complete", Total: response.ReportedTotal}
 	if len(response.Events) >= request.Limit {
 		page.Status = "truncated"
 	}
