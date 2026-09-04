@@ -35,6 +35,7 @@ func (server *Server) SearchEvents(w http.ResponseWriter, r *http.Request, _ api
 	response := api.SearchEventsResponse{
 		Events: eventsToAPI(result.Events), Entities: entitiesToAPI(result.Entities), Relations: relationsToAPI(result.Relations),
 		SourceStates: sourceStatesToAPI(result.SourceStates), SourceErrors: sourceErrorsToAPI(result.SourceErrors),
+		Total: result.Total,
 	}
 	if result.NextCursor != "" {
 		response.NextCursor = &result.NextCursor

@@ -1,6 +1,6 @@
 import { DndContext, PointerSensor, useSensor, useSensors } from '@dnd-kit/core'
 import { useEffect, useState } from 'react'
-import { Braces, Check, History, Loader2, Pencil, Play, Plus, Search } from 'lucide-react'
+import { Braces, Check, Eye, EyeOff, History, Loader2, Pencil, Play, Plus, Search } from 'lucide-react'
 import {
   addFieldToPdql,
   findingUuidFromAst,
@@ -21,9 +21,11 @@ import { usePdqlStore } from '../store/pdqlStore'
 import {
   DEFAULT_QUEUE_SOURCE,
   QUEUE_SOURCE_OPTIONS,
+  type AddedFilter,
   type QueryHistoryEntry,
   type QueueSource,
 } from '../types'
+import { AlertSelectionActions } from './AlertSelectionActions'
 import { PdqlBuilderModal } from './pdql/PdqlBuilderModal'
 import { FieldSearchList } from './pdql/FieldSearchList'
 import {
@@ -84,12 +86,104 @@ function QueueSourceToggle({
   )
 }
 
+const ADDED_FILTER_OPTIONS: Array<{
+  id: AddedFilter
+  title: string
+  icon: 'eye-off' | 'none' | 'eye'
+}> = [
+  { id: 'hide_added', title: 'Скрыть добавленные', icon: 'eye-off' },
+  { id: 'all', title: 'Показать все', icon: 'none' },
+  { id: 'only_added', title: 'Скрыть не добавленные', icon: 'eye' },
+]
+
+/** 3-position slider in QueueSourceToggle chrome: hide added / all / only added. */
+function AddedFilterToggle({
+  value,
+  onChange,
+}: {
+  value: AddedFilter
+  onChange: (value: AddedFilter) => void
+}) {
+  const index = Math.max(
+    0,
+    ADDED_FILTER_OPTIONS.findIndex((option) => option.id === value),
+  )
+  const active = ADDED_FILTER_OPTIONS[index] ?? ADDED_FILTER_OPTIONS[1]
+
+  const moveBy = (delta: number) => {
+    const next = Math.min(
+      ADDED_FILTER_OPTIONS.length - 1,
+      Math.max(0, index + delta),
+    )
+    const option = ADDED_FILTER_OPTIONS[next]
+    if (option) onChange(option.id)
+  }
+
+  return (
+    <div
+      role="slider"
+      tabIndex={0}
+      title={active.title}
+      aria-label="Фильтр по добавленным в расследование"
+      aria-valuemin={0}
+      aria-valuemax={2}
+      aria-valuenow={index}
+      aria-valuetext={active.title}
+      className="relative inline-flex min-h-9 w-36 overflow-hidden rounded border border-border bg-surface-0 outline-none focus-visible:ring-1 focus-visible:ring-fg/30"
+      onKeyDown={(e) => {
+        if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') {
+          e.preventDefault()
+          moveBy(-1)
+        } else if (e.key === 'ArrowRight' || e.key === 'ArrowUp') {
+          e.preventDefault()
+          moveBy(1)
+        } else if (e.key === 'Home') {
+          e.preventDefault()
+          onChange('hide_added')
+        } else if (e.key === 'End') {
+          e.preventDefault()
+          onChange('only_added')
+        }
+      }}
+    >
+      <span
+        aria-hidden
+        className="pointer-events-none absolute inset-y-0 w-1/3 bg-surface-3 transition-[left] duration-200 ease-out"
+        style={{ left: `${(index * 100) / 3}%` }}
+      />
+      {ADDED_FILTER_OPTIONS.map((option) => (
+        <button
+          key={option.id}
+          type="button"
+          tabIndex={-1}
+          title={option.title}
+          aria-label={option.title}
+          onClick={() => onChange(option.id)}
+          className={clsx(
+            'relative z-10 flex flex-1 items-center justify-center px-2.5 py-1.5 transition-colors',
+            value === option.id ? 'text-fg' : 'text-fg-muted hover:text-fg',
+          )}
+        >
+          {option.icon === 'eye-off' ? (
+            <EyeOff className="h-3.5 w-3.5" />
+          ) : option.icon === 'eye' ? (
+            <Eye className="h-3.5 w-3.5" />
+          ) : (
+            <span className="block h-1 w-1 rounded-full bg-current opacity-60" />
+          )}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 export function QueryComposer({
   pdql,
   timeInterval,
   executedFingerprint,
   history,
   extra,
+  headerEnd,
   executing,
   queueSource,
   groupValues = [],
@@ -107,6 +201,7 @@ export function QueryComposer({
   executedFingerprint: string | null
   history: QueryHistoryEntry[]
   extra?: React.ReactNode
+  headerEnd?: React.ReactNode
   executing?: boolean
   queueSource?: QueueSource
   groupValues?: (string | null)[]
@@ -205,6 +300,7 @@ export function QueryComposer({
         {queueSource && onQueueSourceChange && (
           <QueueSourceToggle value={queueSource} onChange={onQueueSourceChange} />
         )}
+        {headerEnd}
       </div>
       <div className="flex flex-wrap items-center gap-2">
         {filters.map((chip) => (
@@ -302,7 +398,7 @@ export function QueryComposer({
           {historyOpen && (
             <>
               <div className="fixed inset-0 z-20" onClick={() => setHistoryOpen(false)} />
-              <div className="absolute right-0 top-full z-30 mt-1 w-80 overflow-hidden rounded border border-border bg-surface-2 shadow-xl">
+              <div className="absolute left-0 top-full z-30 mt-1 w-80 max-w-[calc(100vw-2rem)] overflow-hidden rounded border border-border bg-surface-2 shadow-xl">
                 <button
                   type="button"
                   className="flex w-full flex-col items-start gap-0.5 px-3 py-2 text-left hover:bg-surface-3"
@@ -419,11 +515,12 @@ export function QueryComposer({
         </Button>
         <Button
           size="sm"
-          variant="ghost"
+          variant="default"
           title="Конструктор PDQL"
           onClick={() => setBuilderOpen(true)}
         >
           <Braces className="h-3.5 w-3.5" />
+          Конструктор
         </Button>
         <Button
           size="sm"
@@ -437,7 +534,7 @@ export function QueryComposer({
           ) : (
             <Play className="h-3.5 w-3.5" />
           )}
-          {stale ? 'Выполнить · фильтр изменён' : 'Выполнить'}
+          {stale ? 'Выполнить · фильтр изменен' : 'Выполнить'}
         </Button>
       </div>
       {(editError || parseError) && (
@@ -447,6 +544,7 @@ export function QueryComposer({
       <PdqlBuilderModal
         open={builderOpen}
         initialPdql={pdql}
+        timeInterval={timeInterval}
         onClose={() => setBuilderOpen(false)}
         onApply={(text) => {
           onPdqlChange(text)
@@ -489,6 +587,7 @@ export function GlobalQueryComposer() {
       history={history}
       executing={executing}
       findingFilterWarnAt={findingFilterWarnAt}
+      headerEnd={<AlertSelectionActions />}
       onPdqlChange={setQueuePdql}
       onTimeChange={setTimeInterval}
       onQueueSourceChange={setQueueSource}
@@ -523,6 +622,15 @@ export function ContextQueryComposer({
       history={queue.queryHistory}
       executing={queue.loading}
       extra={extra}
+      headerEnd={
+        <>
+          <AddedFilterToggle
+            value={queue.addedFilter}
+            onChange={(addedFilter) => setContextQueue(investigationId, { addedFilter })}
+          />
+          <AlertSelectionActions investigationId={investigationId} />
+        </>
+      }
       findingFilterWarnAt={queue.findingFilterWarnAt}
       onPdqlChange={(pdql) => setContextQueue(investigationId, { pdql })}
       onTimeChange={(timeInterval) => setContextQueue(investigationId, { timeInterval })}

@@ -128,6 +128,7 @@ components:
       properties:
         key: { type: string }
         external_key: { type: string }
+        type: { type: string }
         verdict: { type: string }
         damage: { type: string }
         recommendation: { type: string }
@@ -180,6 +181,13 @@ components:
           type: array
           items: { $ref: '#/components/schemas/Finding' }
         next_cursor: { type: string }
+        total:
+          type: integer
+          format: int64
+          minimum: 0
+          description: >-
+            Sum of per-source match totals when every non-failed source reported
+            a total; omitted when any successful source lacks a known total.
         source_states:
           type: array
           items: { $ref: '../shared/schemas.yaml#/SourceState' }

@@ -78,6 +78,7 @@ func findingsToAPI(values []domain.Finding) []api.Finding {
 		if value.Incident != nil {
 			item.Incident = &api.IncidentDetails{
 				Key: stringPointer(value.Incident.Key), ExternalKey: stringPointer(value.Incident.ExternalKey),
+				Type: stringPointer(value.Incident.Type),
 				Verdict: stringPointer(value.Incident.Verdict), Damage: stringPointer(value.Incident.Damage),
 				Recommendation: stringPointer(value.Incident.Recommendation), AssignedTo: stringPointer(value.Incident.AssignedTo),
 				ChangedAt: value.Incident.ChangedAt, Archived: boolPointer(value.Incident.Archived), Removed: boolPointer(value.Incident.Removed),
@@ -180,7 +181,11 @@ func entityMentionsToAPI(values []domain.EntityMention) []api.EntityMention {
 func sourceStatesToAPI(values []domain.SourceState) []api.SourceState {
 	result := make([]api.SourceState, 0, len(values))
 	for _, value := range values {
-		result = append(result, api.SourceState{Source: value.Source, Status: api.SourceStateStatus(value.Status)})
+		item := api.SourceState{Source: value.Source, Status: api.SourceStateStatus(value.Status)}
+		if value.Total != nil {
+			item.Total = value.Total
+		}
+		result = append(result, item)
 	}
 	return result
 }

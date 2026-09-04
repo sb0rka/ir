@@ -89,6 +89,11 @@ export function eventHeaderMeta(raw: Record<string, string>, source: string): Ev
   }
 }
 
+function headerParameterRows(raw: Record<string, string>, source: string): FieldRow[] {
+  const meta = eventHeaderMeta(raw, source)
+  return [...meta.source, ...meta.identifier, ...meta.category]
+}
+
 export function groupEventFields(source: string, raw: Record<string, string>): FieldGroup[] {
   const remaining = new Map<string, string>()
   for (const [field, value] of Object.entries(raw)) {
@@ -98,9 +103,13 @@ export function groupEventFields(source: string, raw: Record<string, string>): F
   if (!isSiemSource(source) && !looksLikeSiem(remaining)) {
     return leftoverGroup(remaining)
   }
-  for (const field of CATEGORY_FIELDS) remaining.delete(field)
 
+  const headerRows = headerParameterRows(raw, source)
+  for (const row of headerRows) remaining.delete(row.field)
+
+  const incident = isIncidentRecord(raw)
   const correlation = isCorrelationRecord(raw)
+  const incidentFields = incident ? incidentGroup(remaining) : undefined
   const correlationFields = correlation
     ? namedGroup(remaining, 'correlation', 'Параметры корреляции', isCorrelationField)
     : undefined
@@ -112,18 +121,38 @@ export function groupEventFields(source: string, raw: Record<string, string>): F
     { title: 'Отправитель', pick: (field) => field.startsWith('src.') },
     { title: 'Получатель', pick: (field) => field.startsWith('dst.') || field.startsWith('external_dst.') },
   ])
-  const interaction = namedGroup(remaining, 'interaction', 'Параметры взаимодействия', (field) =>
-    INTERACTION_FIELDS.has(field) || field.startsWith('logon_'),
+  const interactionRows = take(
+    remaining,
+    (field) => INTERACTION_FIELDS.has(field) || field.startsWith('logon_'),
   )
+  const interaction =
+    headerRows.length > 0 || interactionRows.length > 0
+      ? {
+          id: 'interaction',
+          title: 'Параметры',
+          columns: [{ title: '', rows: [...headerRows, ...interactionRows] }],
+        }
+      : undefined
   const eventSrc = namedGroup(remaining, 'event-src', 'Источник событий', isEventSourceField)
   const collection = namedGroup(remaining, 'collection', 'Точка сбора', (field) =>
     field === 'recv_host' || field === 'recv_time' || field.startsWith('recv_'),
   )
-  const service = namedGroup(remaining, 'service', 'Служебные данные', isServiceField)
+  const serviceRows = take(remaining, isServiceField)
   const rawEvent = namedGroup(remaining, 'raw', 'Исходное событие', (field) => RAW_FIELDS.has(field))
-  const extra = leftoverGroup(remaining)[0]
+  const extra = mergeExtra(leftoverGroup(remaining)[0], serviceRows)
 
   const groups: FieldGroup[] = []
+  if (incident) {
+    pushGroup(groups, incidentFields)
+    pushGroup(groups, roles)
+    pushGroup(groups, addresses)
+    pushGroup(groups, interaction)
+    pushGroup(groups, eventSrc)
+    pushGroup(groups, collection)
+    pushGroup(groups, extra)
+    pushGroup(groups, rawEvent)
+    return groups
+  }
   if (correlation) {
     pushGroup(groups, correlationFields)
     pushGroup(groups, roles)
@@ -131,7 +160,6 @@ export function groupEventFields(source: string, raw: Record<string, string>): F
     pushGroup(groups, interaction)
     pushGroup(groups, eventSrc)
     pushGroup(groups, collection)
-    pushGroup(groups, service)
     pushGroup(groups, extra)
     pushGroup(groups, rawEvent)
     return groups
@@ -143,7 +171,6 @@ export function groupEventFields(source: string, raw: Record<string, string>): F
   pushGroup(groups, extra)
   pushGroup(groups, eventSrc)
   pushGroup(groups, collection)
-  pushGroup(groups, service)
   pushGroup(groups, rawEvent)
   return groups
 }
@@ -161,6 +188,51 @@ function looksLikeSiem(fields: Map<string, string>): boolean {
     }
   }
   return false
+}
+
+function isIncidentRecord(raw: Record<string, string>): boolean {
+  return raw.finding_kind === 'siem_incident'
+}
+
+const INCIDENT_FIELD_ORDER = [
+  'incident.type',
+  'incident.key',
+  'incident.external_key',
+  'incident.verdict',
+  'incident.damage',
+  'incident.recommendation',
+  'incident.assigned_to',
+  'status',
+  'rule.name',
+  'uuid',
+  'finding_kind',
+] as const
+
+function incidentGroup(remaining: Map<string, string>): FieldGroup | undefined {
+  const rows: FieldRow[] = []
+  for (const field of INCIDENT_FIELD_ORDER) {
+    const value = remaining.get(field)
+    if (value == null || value === '') continue
+    remaining.delete(field)
+    rows.push({ field, value })
+  }
+  for (const [field, value] of [...remaining.entries()]) {
+    if (!isIncidentField(field)) continue
+    remaining.delete(field)
+    rows.push({ field, value })
+  }
+  if (rows.length === 0) return undefined
+  return { id: 'incident', title: 'Параметры инцидента', columns: [{ title: '', rows }] }
+}
+
+function isIncidentField(field: string): boolean {
+  return (
+    field.startsWith('incident.') ||
+    field === 'finding_kind' ||
+    field === 'rule.name' ||
+    field === 'uuid' ||
+    field === 'status'
+  )
 }
 
 function isCorrelationField(field: string): boolean {
@@ -232,6 +304,15 @@ function leftoverGroup(remaining: Map<string, string>): FieldGroup[] {
   remaining.clear()
   if (rows.length === 0) return []
   return [{ id: 'extra', title: 'Дополнительная информация', columns: [{ title: '', rows }] }]
+}
+
+function mergeExtra(extra: FieldGroup | undefined, serviceRows: FieldRow[]): FieldGroup | undefined {
+  if (serviceRows.length === 0) return extra
+  if (!extra) {
+    return { id: 'extra', title: 'Дополнительная информация', columns: [{ title: '', rows: serviceRows }] }
+  }
+  extra.columns[0]?.rows.push(...serviceRows)
+  return extra
 }
 
 function take(remaining: Map<string, string>, pick: (field: string) => boolean): FieldRow[] {

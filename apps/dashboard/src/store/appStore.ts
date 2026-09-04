@@ -5,6 +5,7 @@ import {
   type AlertEvent,
   type ContextEvent,
   type ContextQueueState,
+  type ContextSourceResultSnapshot,
   type CorrelationGroup,
   type Entity,
   type EventGroupItem,
@@ -18,28 +19,32 @@ import {
   type Issue,
   type QueueItem,
   type QueueSource,
+  type QueueSourceResultSnapshot,
   type QueryHistoryEntry,
   type ReviewState,
 } from '../types'
 import { uid } from '../lib/utils'
 import { defaultFilterValueOptions, issueTemplates } from '../lib/catalog'
 import { parseGatewayEventId, saveLayout } from '../api/adapters'
-import { errorMessage, isConflict, isNotImplemented, isUnauthorized } from '../api/error'
+import { errorMessage, isApiError, isConflict, isNotImplemented, isUnauthorized } from '../api/error'
 import {
   analyzeArtifact,
   lookupEntity,
   searchQueue,
 } from '../api/search'
-import { appendCondition, alignGroupValues, astToFilterChips, defaultQuery, drillGroupValues, entityKindForField, findingUuidFromAst, findingUuidQuery, parseQueuePdql, serialize, type FindingFilterField } from '../lib/pdql'
+import { appendCondition, alignGroupValues, astToFilterChips, defaultQuery, drillGroupValues, entityKindForField, findingUuidFromAst, findingUuidQuery, isEntityQueueField, parseQueuePdql, serialize, type FindingFilterField } from '../lib/pdql'
 import { pdqlFieldForFilterField } from '../lib/filters'
 import { filterFingerprint } from '../lib/queryFingerprint'
 import { demoDayInterval, type TimeInterval } from '../components/time-interval'
+import { resolveInvestigationTableSearchColumn } from '../components/investigationTableColumns'
+import { readWorkspaceTabs, writeWorkspaceTabs } from '../api/workspace-tabs'
 import {
   addContext,
   countProposedAgentEdges,
   createEntity,
   createInvestigation,
   getEntityCard,
+  getInvestigation,
   getSomEnvironment,
   listInvestigations,
   loadInvestigationBundle,
@@ -107,12 +112,139 @@ export const emptyContextQueue: ContextQueueState = {
   queryHistory: [],
   findingFilterWarnAt: 0,
   selectedIds: [],
-  hideAdded: false,
+  addedFilter: 'all',
   originFilter: 'all',
   reviewFilter: 'all',
+  textFilter: '',
+  textFilterColumn: 'title',
   alerts: {},
   queueOrder: [],
   loading: false,
+  sourceResults: {},
+}
+
+function snapshotGlobalQueue(state: {
+  alerts: Record<string, AlertEvent>
+  correlations: Record<string, CorrelationGroup>
+  queueOrder: QueueItem[]
+  eventGroups: EventGroupItem[]
+  executedFingerprint: string | null
+  mockSources: string[]
+  queueTotal?: number
+}): QueueSourceResultSnapshot {
+  return {
+    alerts: state.alerts,
+    correlations: state.correlations,
+    queueOrder: state.queueOrder,
+    eventGroups: state.eventGroups,
+    executedFingerprint: state.executedFingerprint,
+    mockSources: state.mockSources,
+    ...(typeof state.queueTotal === 'number' ? { total: state.queueTotal } : {}),
+  }
+}
+
+function snapshotContextQueue(state: ContextQueueState): ContextSourceResultSnapshot {
+  return {
+    alerts: state.alerts,
+    queueOrder: state.queueOrder,
+    eventGroups: state.eventGroups,
+    executedFingerprint: state.executedFingerprint,
+    ...(typeof state.total === 'number' ? { total: state.total } : {}),
+  }
+}
+
+/** Save current source results and restore the target source cache (or empty). */
+function swapGlobalQueueSource(
+  state: {
+    queueSource: QueueSource
+    queueSourceCache: Partial<Record<QueueSource, QueueSourceResultSnapshot>>
+    alerts: Record<string, AlertEvent>
+    correlations: Record<string, CorrelationGroup>
+    queueOrder: QueueItem[]
+    eventGroups: EventGroupItem[]
+    executedFingerprint: string | null
+    mockSources: string[]
+    queueTotal?: number
+  },
+  nextSource: QueueSource,
+): {
+  queueSource: QueueSource
+  queueSourceCache: Partial<Record<QueueSource, QueueSourceResultSnapshot>>
+  alerts: Record<string, AlertEvent>
+  correlations: Record<string, CorrelationGroup>
+  queueOrder: QueueItem[]
+  eventGroups: EventGroupItem[]
+  executedFingerprint: string | null
+  mockSources: string[]
+  queueTotal: number | undefined
+  inspectedQueueItem: null
+  selectedAlertIds: string[]
+  expandedCorrelationIds: string[]
+  queueLoading: false
+} {
+  if (state.queueSource === nextSource) {
+    return {
+      queueSource: nextSource,
+      queueSourceCache: state.queueSourceCache,
+      alerts: state.alerts,
+      correlations: state.correlations,
+      queueOrder: state.queueOrder,
+      eventGroups: state.eventGroups,
+      executedFingerprint: state.executedFingerprint,
+      mockSources: state.mockSources,
+      queueTotal: state.queueTotal,
+      inspectedQueueItem: null,
+      selectedAlertIds: [],
+      expandedCorrelationIds: [],
+      queueLoading: false,
+    }
+  }
+  const queueSourceCache = {
+    ...state.queueSourceCache,
+    [state.queueSource]: snapshotGlobalQueue(state),
+  }
+  const hit = queueSourceCache[nextSource]
+  return {
+    queueSource: nextSource,
+    queueSourceCache,
+    alerts: hit?.alerts ?? {},
+    correlations: hit?.correlations ?? {},
+    queueOrder: hit?.queueOrder ?? [],
+    eventGroups: hit?.eventGroups ?? [],
+    // Source is part of the filter: keep cached rows, but force the stale execute CTA.
+    executedFingerprint: null,
+    mockSources: hit?.mockSources ?? [],
+    queueTotal: hit?.total,
+    inspectedQueueItem: null,
+    selectedAlertIds: [],
+    expandedCorrelationIds: [],
+    queueLoading: false,
+  }
+}
+
+function swapContextQueueSource(
+  cur: ContextQueueState,
+  nextSource: QueueSource,
+): ContextQueueState {
+  if (cur.queueSource === nextSource) return { ...cur, queueSource: nextSource }
+  const sourceResults = {
+    ...(cur.sourceResults ?? {}),
+    [cur.queueSource]: snapshotContextQueue(cur),
+  }
+  const hit = sourceResults[nextSource]
+  return {
+    ...cur,
+    queueSource: nextSource,
+    sourceResults,
+    alerts: hit?.alerts ?? {},
+    queueOrder: hit?.queueOrder ?? [],
+    eventGroups: hit?.eventGroups ?? [],
+    // Source is part of the filter: keep cached rows, but force the stale execute CTA.
+    executedFingerprint: null,
+    selectedIds: [],
+    loading: false,
+    total: hit?.total,
+  }
 }
 
 function pushQueryHistory(
@@ -139,6 +271,8 @@ interface AppState {
   timeInterval: TimeInterval
   queuePdql: string
   queueSource: QueueSource
+  /** Last executed table results per QueueSource for tab switches without refetch. */
+  queueSourceCache: Partial<Record<QueueSource, QueueSourceResultSnapshot>>
   groupValues: (string | null)[]
   eventGroups: EventGroupItem[]
   executedFingerprint: string | null
@@ -179,6 +313,14 @@ interface AppState {
   alerts: Record<string, AlertEvent>
   correlations: Record<string, CorrelationGroup>
   queueOrder: QueueItem[]
+  /** Vendor match count for the last findings/events search when known. */
+  queueTotal?: number
+  /** Client-side text filter for the global queue list (header search). */
+  queueTextFilter: string
+  /** Which visible queue table column the header text filter applies to. */
+  queueTextFilterColumn: string
+  /** Which investigations table column the header text filter applies to. */
+  investigationTextFilterColumn: string
   entities: Record<string, Entity>
   contextEvents: Record<string, ContextEvent>
   graphNodes: Record<string, GraphNode>
@@ -196,6 +338,9 @@ interface AppState {
 
   addChip: (field: FilterField, value: string) => void
   setQueuePdql: (pdql: string) => void
+  setQueueTextFilter: (q: string) => void
+  setQueueTextFilterColumn: (column: string) => void
+  setInvestigationTextFilterColumn: (column: string) => void
   setTimeInterval: (interval: TimeInterval) => void
   setQueueSource: (source: QueueSource) => void
   applyQueueHistory: (entry: QueryHistoryEntry) => void
@@ -205,6 +350,7 @@ interface AppState {
   clearGroupPathFrom: (investigationId: string | null, index: number) => void
   toggleAlertSelect: (id: string) => void
   clearAlertSelection: () => void
+  setAlertSelection: (ids: string[]) => void
   toggleCorrelationExpand: (id: string) => void
   inspectQueueItem: (item: QueueItem | null) => void
 
@@ -385,14 +531,18 @@ function applyBundle(
 
 function listQueryFromFilters(
   filters: InvestigationListFilter,
-  extra: { parentId?: string; cursor?: string } = {},
+  extra: { parentId?: string; cursor?: string; textColumn?: string } = {},
 ) {
+  const textColumn = resolveInvestigationTableSearchColumn(
+    extra.textColumn ?? 'title',
+  )
   return {
     parentId: extra.parentId,
     cursor: extra.cursor,
     status: filters.status === 'all' ? undefined : filters.status,
     severity: filters.severity === 'all' ? undefined : filters.severity,
-    q: filters.q,
+    // Server `q` is title search; other columns are filtered client-side.
+    q: textColumn === 'title' ? filters.q : undefined,
     limit: 100,
   }
 }
@@ -444,6 +594,49 @@ function prependId(ids: string[], id: string): string[] {
   return [id, ...ids.filter((item) => item !== id)]
 }
 
+function isMissingInvestigation(err: unknown): boolean {
+  return isApiError(err) && (err.code === 'not_found' || err.status === 404)
+}
+
+async function restoreWorkspaceTabs(
+  get: () => AppState,
+  set: (partial: Partial<AppState>) => void,
+): Promise<void> {
+  const saved = readWorkspaceTabs()
+  if (!saved) return
+
+  const openIds = [...new Set(saved.openIds.filter((id) => !isPinnedTab(id)))]
+  const missing = openIds.filter((id) => !get().investigations[id])
+  const fetched: Investigation[] = []
+  const gone = new Set<string>()
+
+  await Promise.all(
+    missing.map(async (id) => {
+      try {
+        fetched.push(await getInvestigation(id))
+      } catch (err) {
+        if (isMissingInvestigation(err)) gone.add(id)
+      }
+    }),
+  )
+
+  const investigations = mergeListed(get().investigations, fetched)
+  const kept = openIds.filter((id) => {
+    if (gone.has(id)) return false
+    return investigations[id]?.status !== 'closed'
+  })
+  const tabs: TabId[] = [...PINNED_TABS, ...kept]
+  const activeTab = tabs.includes(saved.activeTab)
+    ? saved.activeTab
+    : (kept[kept.length - 1] ?? 'investigations')
+
+  set({
+    investigations,
+    tabs,
+    activeTab,
+  })
+}
+
 function collectSubtreeIds(
   rootId: string,
   investigations: Record<string, Investigation>,
@@ -472,6 +665,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   timeInterval: DEFAULT_TIME_INTERVAL,
   queuePdql: DEFAULT_QUEUE_PDQL,
   queueSource: DEFAULT_QUEUE_SOURCE,
+  queueSourceCache: {},
   groupValues: [],
   eventGroups: [],
   executedFingerprint: null,
@@ -512,6 +706,9 @@ export const useAppStore = create<AppState>((set, get) => ({
   alerts: {},
   correlations: {},
   queueOrder: [],
+  queueTextFilter: '',
+  queueTextFilterColumn: 'title',
+  investigationTextFilterColumn: 'title',
   entities: {},
   contextEvents: {},
   graphNodes: {},
@@ -544,15 +741,33 @@ export const useAppStore = create<AppState>((set, get) => ({
       groupValues: parsed.ok ? alignGroupValues(parsed.ast, get().groupValues) : get().groupValues,
     })
   },
+  setQueueTextFilter: (queueTextFilter) => set({ queueTextFilter }),
+  setQueueTextFilterColumn: (queueTextFilterColumn) => set({ queueTextFilterColumn }),
+  setInvestigationTextFilterColumn: (column) => {
+    const previous = resolveInvestigationTableSearchColumn(get().investigationTextFilterColumn)
+    const next = resolveInvestigationTableSearchColumn(column)
+    set({ investigationTextFilterColumn: next })
+    if (previous === next) return
+    // Crossing title ↔ other changes whether server `q` applies.
+    if (previous === 'title' || next === 'title') {
+      void get().loadInvestigationList(true)
+    }
+  },
   setTimeInterval: (timeInterval) => set({ timeInterval }),
-  setQueueSource: (queueSource) => set({ queueSource }),
-  applyQueueHistory: (entry) =>
+  setQueueSource: (queueSource) => {
+    const state = get()
+    if (state.queueSource === queueSource) return
+    set(swapGlobalQueueSource(state, queueSource))
+  },
+  applyQueueHistory: (entry) => {
+    const nextSource = entry.queueSource ?? DEFAULT_QUEUE_SOURCE
     set({
+      ...swapGlobalQueueSource(get(), nextSource),
       queuePdql: entry.pdql,
       timeInterval: entry.timeInterval,
-      queueSource: entry.queueSource ?? DEFAULT_QUEUE_SOURCE,
       groupValues: entry.groupValues ?? [],
-    }),
+    })
+  },
   drillGroupValue: (investigationId, field, value) => {
     if (!investigationId) {
       const parsed = parseQueuePdql(get().queuePdql)
@@ -633,6 +848,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     })
   },
   clearAlertSelection: () => set({ selectedAlertIds: [] }),
+  setAlertSelection: (selectedAlertIds) => set({ selectedAlertIds }),
   inspectQueueItem: (item) => set({ inspectedQueueItem: item }),
   toggleCorrelationExpand: (id) => {
     const cur = get().expandedCorrelationIds
@@ -667,6 +883,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   bootstrap: async () => {
     await get().loadInvestigationList(true)
+    await restoreWorkspaceTabs(get, set)
     await get().loadQueue()
   },
 
@@ -693,21 +910,35 @@ export const useAppStore = create<AppState>((set, get) => ({
         if (e.kind === 'ip') ips.add(e.label)
       }
       const canonical = serialize(parsed.ast)
+      const effectiveTime = result.effectiveTimeInterval ?? timeInterval
+      const executedFingerprint = filterFingerprint(canonical, effectiveTime, queueSource, groupValues)
+      const snapshot: QueueSourceResultSnapshot = {
+        alerts: result.alerts,
+        correlations: result.correlations,
+        queueOrder: result.queueOrder,
+        eventGroups: result.eventGroups,
+        executedFingerprint,
+        mockSources: result.mockSources,
+        ...(typeof result.total === 'number' ? { total: result.total } : {}),
+      }
       set({
         chips,
         queuePdql: canonical,
         groupValues,
-        executedFingerprint: filterFingerprint(canonical, timeInterval, queueSource, groupValues),
+        timeInterval: effectiveTime,
+        executedFingerprint,
         queryHistory: pushQueryHistory(get().queryHistory, {
           pdql: canonical,
-          timeInterval,
+          timeInterval: effectiveTime,
           queueSource,
           groupValues,
         }),
         alerts: result.alerts,
         correlations: result.correlations,
         queueOrder: result.queueOrder,
+        queueTotal: result.total,
         eventGroups: result.eventGroups,
+        queueSourceCache: { ...get().queueSourceCache, [queueSource]: snapshot },
         entities: mergeEntities(get().entities, result.entities),
         contextEvents: { ...get().contextEvents, ...result.contextEvents },
         expandedCorrelationIds: result.queueOrder
@@ -747,7 +978,12 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (!reset && !cursor) return
     set({ investigationsLoading: true, lastError: null })
     try {
-      const page = await listInvestigations(listQueryFromFilters(filters, { cursor }))
+      const page = await listInvestigations(
+        listQueryFromFilters(filters, {
+          cursor,
+          textColumn: get().investigationTextFilterColumn,
+        }),
+      )
       const ids = page.items.map((item) => item.id)
       set({
         investigations: mergeListed(get().investigations, page.items),
@@ -766,7 +1002,11 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   setInvestigationFilter: async (patch) => {
-    set({ investigationFilters: { ...get().investigationFilters, ...patch } })
+    const previous = get().investigationFilters
+    set({ investigationFilters: { ...previous, ...patch } })
+    const onlyQ = Object.keys(patch).length === 1 && Object.prototype.hasOwnProperty.call(patch, 'q')
+    const textColumn = resolveInvestigationTableSearchColumn(get().investigationTextFilterColumn)
+    if (onlyQ && textColumn !== 'title') return
     await get().loadInvestigationList(true)
   },
 
@@ -783,7 +1023,10 @@ export const useAppStore = create<AppState>((set, get) => ({
     })
     try {
       const page = await listInvestigations(
-        listQueryFromFilters(get().investigationFilters, { parentId: id }),
+        listQueryFromFilters(get().investigationFilters, {
+          parentId: id,
+          textColumn: get().investigationTextFilterColumn,
+        }),
       )
       set({
         investigations: mergeListed(get().investigations, page.items),
@@ -902,7 +1145,6 @@ export const useAppStore = create<AppState>((set, get) => ({
           },
         },
       })
-      void get().loadSomCatalog()
       return created.id
     } catch (err) {
       set({ investigationLoading: false, lastError: errorMessage(err) })
@@ -1006,6 +1248,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const inv = get().investigations[id]
     if (!inv || inv.version == null) {
       get().updateInvestigation(id, patch)
+      if (patch.status === 'closed') get().closeTab(id)
       return true
     }
     try {
@@ -1031,6 +1274,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         ...(patch.title != null ? { title: patch.title } : {}),
         ...(patch.severity != null ? { severity: patch.severity } : {}),
       })
+      if (updated.status === 'closed') get().closeTab(id)
       return true
     } catch (err) {
       if (isNotImplemented(err)) {
@@ -1084,7 +1328,12 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   setContextQueue: (investigationId, patch) => {
     const cur = get().contextQueue[investigationId] ?? emptyContextQueue
-    const next = { ...cur, ...patch }
+    let next: ContextQueueState
+    if (patch.queueSource != null && patch.queueSource !== cur.queueSource) {
+      next = { ...swapContextQueueSource(cur, patch.queueSource), ...patch }
+    } else {
+      next = { ...cur, ...patch }
+    }
     if (patch.pdql != null && patch.groupValues == null) {
       const parsed = parseQueuePdql(next.pdql)
       if (parsed.ok) next.groupValues = alignGroupValues(parsed.ast, next.groupValues)
@@ -1145,6 +1394,20 @@ export const useAppStore = create<AppState>((set, get) => ({
         if (e.kind === 'ip') ips.add(e.label)
       }
       const latest = get().contextQueue[investigationId] ?? emptyContextQueue
+      const effectiveTime = result.effectiveTimeInterval ?? timeInterval
+      const executedFingerprint = filterFingerprint(
+        canonical,
+        effectiveTime,
+        queueSource,
+        groupValues,
+      )
+      const sourceSnapshot = {
+        alerts: result.alerts,
+        queueOrder: result.queueOrder,
+        eventGroups: result.eventGroups,
+        executedFingerprint,
+        ...(typeof result.total === 'number' ? { total: result.total } : {}),
+      }
       set({
         entities: mergeEntities(get().entities, result.entities),
         filterValueOptions: {
@@ -1162,19 +1425,17 @@ export const useAppStore = create<AppState>((set, get) => ({
             pdql: canonical,
             queueSource,
             groupValues,
+            timeInterval: effectiveTime,
             eventGroups: result.eventGroups,
             alerts: result.alerts,
             queueOrder: result.queueOrder,
+            total: result.total,
             loading: false,
-            executedFingerprint: filterFingerprint(
-              canonical,
-              timeInterval,
-              queueSource,
-              groupValues,
-            ),
+            executedFingerprint,
+            sourceResults: { ...(latest.sourceResults ?? {}), [queueSource]: sourceSnapshot },
             queryHistory: pushQueryHistory(latest.queryHistory, {
               pdql: canonical,
-              timeInterval,
+              timeInterval: effectiveTime,
               queueSource,
               groupValues,
             }),
@@ -1236,15 +1497,51 @@ export const useAppStore = create<AppState>((set, get) => ({
       get().drillGroupValue(investigationId, field, value)
       return
     }
+    const nextPdql = appendCondition(
+      investigationId
+        ? (get().contextQueue[investigationId] ?? emptyContextQueue).pdql
+        : get().queuePdql,
+      field,
+      '=',
+      value,
+    )
+    // Involved host/account filters belong on the entities queue, not SIEM PDQL events.
+    const switchToEntities = isEntityQueueField(field)
     if (!investigationId) {
-      set({ queuePdql: appendCondition(get().queuePdql, field, '=', value) })
+      if (switchToEntities) {
+        set({
+          ...swapGlobalQueueSource(get(), 'entities'),
+          queuePdql: nextPdql,
+          groupValues: [],
+          eventGroups: [],
+        })
+        return
+      }
+      set({ queuePdql: nextPdql })
       return
     }
     const cur = get().contextQueue[investigationId] ?? emptyContextQueue
+    if (switchToEntities) {
+      set({
+        contextQueue: {
+          ...get().contextQueue,
+          [investigationId]: {
+            ...swapContextQueueSource(cur, 'entities'),
+            pdql: nextPdql,
+            groupValues: [],
+            eventGroups: [],
+          },
+        },
+      })
+      return
+    }
     set({
       contextQueue: {
         ...get().contextQueue,
-        [investigationId]: { ...cur, pdql: appendCondition(cur.pdql, field, '=', value) },
+        [investigationId]: {
+          ...cur,
+          pdql: nextPdql,
+        },
       },
     })
   },
@@ -1254,7 +1551,12 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (!value) return
     const pdql = findingUuidQuery(value, recordType)
     if (!investigationId) {
-      set({ queuePdql: pdql, queueSource: 'events', groupValues: [], eventGroups: [] })
+      set({
+        ...swapGlobalQueueSource(get(), 'events'),
+        queuePdql: pdql,
+        groupValues: [],
+        eventGroups: [],
+      })
       return
     }
     const cur = get().contextQueue[investigationId] ?? emptyContextQueue
@@ -1262,9 +1564,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       contextQueue: {
         ...get().contextQueue,
         [investigationId]: {
-          ...cur,
+          ...swapContextQueueSource(cur, 'events'),
           pdql,
-          queueSource: 'events',
           groupValues: [],
           eventGroups: [],
         },
@@ -1959,6 +2260,11 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 }))
+
+useAppStore.subscribe((state, prev) => {
+  if (state.tabs === prev.tabs && state.activeTab === prev.activeTab) return
+  writeWorkspaceTabs(state.tabs, state.activeTab)
+})
 
 export { savedViews, issueTemplates, filterFieldLabels } from '../lib/catalog'
 

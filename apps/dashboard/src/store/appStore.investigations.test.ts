@@ -6,6 +6,7 @@ import {
 } from './appStore'
 import * as irApi from '../api/ir'
 import * as searchApi from '../api/search'
+import * as workspaceTabs from '../api/workspace-tabs'
 
 function investigation(overrides: Partial<Investigation> = {}): Investigation {
   return {
@@ -62,6 +63,36 @@ afterEach(() => {
 describe('investigation catalog', () => {
   beforeEach(() => {
     useAppStore.setState({ ...snapshot, investigations: {}, investigationChildren: {} })
+  })
+
+  it('bootstrap restores open workspace tabs from localStorage', async () => {
+    const root = investigation({ id: 'inv-1', title: 'Persisted' })
+    vi.spyOn(irApi, 'listInvestigations').mockResolvedValue({
+      items: [root],
+      nextCursor: null,
+    })
+    vi.spyOn(searchApi, 'searchQueue').mockResolvedValue({
+      alerts: {},
+      correlations: {},
+      queueOrder: [],
+      entities: {},
+      contextEvents: {},
+      eventGroups: [],
+      sourceErrors: [],
+      availableSources: [],
+      mockSources: [],
+    })
+    vi.spyOn(workspaceTabs, 'readWorkspaceTabs').mockReturnValue({
+      openIds: ['inv-1'],
+      activeTab: 'inv-1',
+    })
+
+    await useAppStore.getState().bootstrap()
+
+    const state = useAppStore.getState()
+    expect(state.tabs).toEqual(['queue', 'investigations', 'inv-1'])
+    expect(state.activeTab).toBe('inv-1')
+    expect(state.investigations['inv-1']?.title).toBe('Persisted')
   })
 
   it('bootstrap lists roots without opening workspace tabs', async () => {
@@ -190,6 +221,8 @@ describe('investigation catalog', () => {
 
   it('persistInvestigation closes a case with a verdict', async () => {
     useAppStore.setState({
+      tabs: ['queue', 'investigations', 'inv-1'],
+      activeTab: 'inv-1',
       investigations: { 'inv-1': investigation({ version: 1 }) },
     })
     vi.spyOn(irApi, 'patchInvestigation').mockResolvedValue({
@@ -230,11 +263,14 @@ describe('investigation catalog', () => {
         verdict_reason: 'c2 confirmed',
       }),
     )
-    const inv = useAppStore.getState().investigations['inv-1']
+    const state = useAppStore.getState()
+    const inv = state.investigations['inv-1']
     expect(inv?.status).toBe('closed')
     expect(inv?.verdict).toBe('incident')
     expect(inv?.verdictReason).toBe('c2 confirmed')
     expect(inv?.version).toBe(2)
+    expect(state.tabs).toEqual(['queue', 'investigations'])
+    expect(state.activeTab).toBe('investigations')
   })
 
   it('persistInvestigation reopens a closed case', async () => {

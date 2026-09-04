@@ -1,7 +1,14 @@
+import { useLayoutEffect, useMemo } from 'react'
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { ChevronDown, ChevronUp, X } from 'lucide-react'
 import { operatorsForType, type CompareOp } from '../../lib/pdql'
 import { usePdqlStore } from '../../store/pdqlStore'
+import {
+  DateTimeParts,
+  defaultWorkingTimeZone,
+  formatInstant,
+  parseTimestamp,
+} from '../time-interval'
 import { Button } from '../ui'
 import { SectionShell } from './SectionShell'
 import { SortableRow } from './SortableRow'
@@ -21,6 +28,29 @@ const OP_LABELS: Record<CompareOp, string> = {
 }
 
 const IP_RE = /^(\d{1,3}\.){3}\d{1,3}$/
+
+function FilterDatetimeInput({ id, value }: { id: string; value: string }) {
+  const updateCondition = usePdqlStore((s) => s.updateCondition)
+  const fallbackIso = usePdqlStore((s) => s.defaultDatetimeIso)
+  const zone = useMemo(() => defaultWorkingTimeZone(), [])
+  const iso = parseTimestamp(value, zone) ?? fallbackIso
+
+  useLayoutEffect(() => {
+    if (value.trim()) return
+    updateCondition(id, { value: formatInstant(fallbackIso, zone) })
+  }, [fallbackIso, id, updateCondition, value, zone])
+
+  return (
+    <div className="rounded border border-border bg-surface-1 px-1.5 py-0.5">
+      <DateTimeParts
+        size="sm"
+        iso={iso}
+        zone={zone}
+        onCommit={(next) => updateCondition(id, { value: formatInstant(next, zone) })}
+      />
+    </div>
+  )
+}
 
 export function FilterSection() {
   const query = usePdqlStore((s) => s.query)
@@ -123,13 +153,7 @@ export function FilterSection() {
                     />
                   )}
                   {needsValue && condition.op !== 'in' && type === 'datetime' && (
-                    <input
-                      type="datetime-local"
-                      step={1}
-                      value={condition.value}
-                      onChange={(e) => updateCondition(condition.id, { value: e.target.value })}
-                      className="rounded border border-border bg-surface-1 px-1.5 py-0.5 font-mono text-[11px] text-fg"
-                    />
+                    <FilterDatetimeInput id={condition.id} value={condition.value} />
                   )}
                   {needsValue && condition.op !== 'in' && (type === 'string' || type === 'ip') && (
                     <input

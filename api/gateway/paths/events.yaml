@@ -415,6 +415,13 @@ components:
         next_cursor:
           type: string
           description: Opaque cursor for the next page; absent when the search is exhausted.
+        total:
+          type: integer
+          format: int64
+          minimum: 0
+          description: >-
+            Sum of per-source match totals when every non-failed source reported
+            a total; omitted when any successful source lacks a known total.
         source_states:
           type: array
           items:

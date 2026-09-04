@@ -1,3 +1,5 @@
+import { useEffect, useRef, useState } from 'react'
+import { ChevronDown } from 'lucide-react'
 import type { Severity } from '../types'
 import { clsx, severityDot } from '../lib/utils'
 
@@ -80,6 +82,7 @@ export function Button({
   className,
   type = 'button',
   title,
+  'aria-label': ariaLabel,
   tabIndex,
 }: {
   children: React.ReactNode
@@ -90,6 +93,7 @@ export function Button({
   className?: string
   type?: 'button' | 'submit'
   title?: string
+  'aria-label'?: string
   tabIndex?: number
 }) {
   const variants = {
@@ -108,6 +112,7 @@ export function Button({
       type={type}
       disabled={disabled}
       title={title}
+      aria-label={ariaLabel}
       tabIndex={tabIndex}
       onClick={onClick}
       className={clsx(
@@ -119,6 +124,91 @@ export function Button({
     >
       {children}
     </button>
+  )
+}
+
+export function Select<T extends string>({
+  value,
+  options,
+  onChange,
+  'aria-label': ariaLabel,
+  className,
+}: {
+  value: T
+  options: ReadonlyArray<{ value: T; label: string }>
+  onChange: (value: T) => void
+  'aria-label'?: string
+  className?: string
+}) {
+  const [open, setOpen] = useState(false)
+  const rootRef = useRef<HTMLDivElement>(null)
+  const label = options.find((option) => option.value === value)?.label ?? value
+
+  useEffect(() => {
+    if (!open) return
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      event.stopImmediatePropagation()
+      setOpen(false)
+    }
+    const onPointer = (event: MouseEvent) => {
+      if (rootRef.current?.contains(event.target as Node)) return
+      setOpen(false)
+    }
+    window.addEventListener('keydown', onKey, true)
+    window.addEventListener('mousedown', onPointer)
+    return () => {
+      window.removeEventListener('keydown', onKey, true)
+      window.removeEventListener('mousedown', onPointer)
+    }
+  }, [open])
+
+  return (
+    <div ref={rootRef} className={clsx('relative', className)}>
+      <button
+        type="button"
+        aria-label={ariaLabel}
+        aria-expanded={open}
+        aria-haspopup="listbox"
+        onClick={() => setOpen((current) => !current)}
+        className="inline-flex w-full items-center gap-1.5 rounded border border-border bg-surface-0 py-1.5 pr-2 pl-2.5 text-xs text-fg outline-none focus:border-fg/40"
+      >
+        <span className="min-w-0 flex-1 truncate text-left">{label}</span>
+        <ChevronDown
+          className={clsx('h-3.5 w-3.5 shrink-0 text-fg-dim transition-transform', open && 'rotate-180')}
+          aria-hidden
+        />
+      </button>
+      {open ? (
+        <div
+          role="listbox"
+          aria-label={ariaLabel}
+          className="absolute right-0 top-full z-40 mt-1 min-w-full overflow-hidden rounded border border-border bg-surface-1 py-1 shadow-xl"
+        >
+          {options.map((option) => {
+            const selected = option.value === value
+            return (
+              <button
+                key={option.value}
+                type="button"
+                role="option"
+                aria-selected={selected}
+                className={clsx(
+                  'flex w-full px-2.5 py-1.5 text-left text-xs outline-none hover:bg-surface-2 hover:text-fg',
+                  selected ? 'bg-surface-2 text-fg' : 'text-fg-muted',
+                )}
+                onClick={() => {
+                  onChange(option.value)
+                  setOpen(false)
+                }}
+              >
+                {option.label}
+              </button>
+            )
+          })}
+        </div>
+      ) : null}
+    </div>
   )
 }
 

@@ -303,9 +303,10 @@ type CorrelationSearchRequest struct {
 }
 
 type CorrelationPage struct {
-	Correlations []Correlation
-	TotalItems   int64
-	Truncated    bool
+	Correlations  []Correlation
+	TotalItems    int64
+	ReportedTotal *int64
+	Truncated     bool
 }
 
 type CorrelationResolveRequest struct {
@@ -413,6 +414,36 @@ type safeEventsEnvelope struct {
 	Events     []safeEventRecord `json:"events"`
 	Token      string            `json:"token"`
 	TotalCount int64             `json:"totalCount"`
+	// ReportedTotal is the authentic vendor match count when known. It is not
+	// JSON-backed: TotalCount may be filled with len(events) for internal checks
+	// when noCount omitted a real total.
+	ReportedTotal *int64 `json:"-"`
+}
+
+// authenticMatchTotal returns a pointer to the vendor match count when SIEM
+// reported one. TotalCount == 0 with a non-empty page is treated as unknown
+// (typical noCount response without totalCount).
+func authenticMatchTotal(totalCount int64, returned int) *int64 {
+	if totalCount > 0 {
+		value := totalCount
+		return &value
+	}
+	if returned == 0 {
+		zero := int64(0)
+		return &zero
+	}
+	return nil
+}
+
+func finalizeEventsEnvelope(response *safeEventsEnvelope) error {
+	response.ReportedTotal = authenticMatchTotal(response.TotalCount, len(response.Events))
+	if response.TotalCount <= 0 {
+		response.TotalCount = int64(len(response.Events))
+	}
+	if int64(len(response.Events)) > response.TotalCount {
+		return fmt.Errorf("pagination metadata is inconsistent")
+	}
+	return nil
 }
 
 func vendorTime(value time.Time) string {

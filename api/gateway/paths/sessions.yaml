@@ -191,6 +191,13 @@ components:
           type: array
           items: { $ref: '#/components/schemas/Session' }
         next_cursor: { type: string }
+        total:
+          type: integer
+          format: int64
+          minimum: 0
+          description: >-
+            Sum of per-source match totals when every non-failed source reported
+            a total; omitted when any successful source lacks a known total.
         source_states:
           type: array
           items: { $ref: '../shared/schemas.yaml#/SourceState' }

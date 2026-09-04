@@ -68,6 +68,62 @@ export function pickFindingChildEvents(
     .sort((a, b) => a.time.localeCompare(b.time))
 }
 
+/** Account names from a resolved finding's entity mentions (incident /accounts). */
+export function pickFindingAccounts(
+  mentions: ReadonlyArray<{ type?: string; value?: string; roles?: readonly string[] }>,
+): string[] {
+  const accountMentions = mentions.filter((mention) => mention.type === 'account')
+  const preferInvolved = accountMentions.some((mention) => mention.roles?.includes('mentions'))
+  const names = new Set<string>()
+  for (const mention of accountMentions) {
+    if (preferInvolved && !mention.roles?.includes('mentions')) continue
+    const name = normalizeAccountName(mention.value)
+    if (!name) continue
+    names.add(name)
+  }
+  return [...names].sort((a, b) => a.localeCompare(b))
+}
+
+export interface FindingHost {
+  value: string
+  roles: string[]
+}
+
+const INCIDENT_HOST_ROLES = new Set(['src', 'dst', 'mentions'])
+
+/** Hosts from a resolved finding's entity mentions (incident /hosts). */
+export function pickFindingHosts(
+  mentions: ReadonlyArray<{ type?: string; value?: string; roles?: readonly string[] }>,
+): FindingHost[] {
+  const byValue = new Map<string, Set<string>>()
+  for (const mention of mentions) {
+    if (mention.type !== 'host') continue
+    const value = mention.value?.trim().toLowerCase() ?? ''
+    if (!value || value === '-') continue
+    const roles = (mention.roles ?? []).filter((role) => INCIDENT_HOST_ROLES.has(role))
+    if ((mention.roles?.length ?? 0) > 0 && roles.length === 0) continue
+    const bucket = byValue.get(value) ?? new Set<string>()
+    for (const role of roles.length ? roles : ['mentions']) bucket.add(role)
+    byValue.set(value, bucket)
+  }
+  return [...byValue.entries()]
+    .map(([value, roles]) => ({
+      value,
+      roles: [...roles].sort((a, b) => a.localeCompare(b)),
+    }))
+    .sort((a, b) => a.value.localeCompare(b.value))
+}
+
+/** Collapse escapes and drop backslashes for chip display (`domain\\user` → `domainuser`). */
+export function normalizeAccountName(value: string | undefined): string {
+  let name = value?.trim().toLowerCase() ?? ''
+  if (!name || name === '-') return ''
+  while (name.includes('\\\\')) {
+    name = name.replaceAll('\\\\', '\\')
+  }
+  return name.replaceAll('\\', '')
+}
+
 export function pickCorrelationSubevents(
   events: AlertEvent[],
   correlationId: string,

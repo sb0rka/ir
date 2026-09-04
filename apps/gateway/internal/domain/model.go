@@ -68,6 +68,7 @@ type RuleRef struct {
 type IncidentDetails struct {
 	Key            string
 	ExternalKey    string
+	Type           string
 	Verdict        string
 	Damage         string
 	Recommendation string
@@ -173,6 +174,8 @@ type Session struct {
 type SourceState struct {
 	Source string
 	Status string
+	// Total is the vendor match count for this source when known.
+	Total *int64
 }
 
 type ObjectResolution struct {

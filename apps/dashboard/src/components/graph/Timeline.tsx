@@ -7,6 +7,7 @@ import {
 } from 'react'
 import { EMPTY_LAYER_IDS } from '../../lib/hypotheses'
 import { useWorkspaceStore } from '../../state/useWorkspaceStore'
+import { Button } from '../ui'
 import { SEVERITY_COLOR } from './constants'
 import { eventsInRange } from './graph-adapters'
 import { useHypothesisGraphView } from './useHypothesisGraphView'
@@ -163,53 +164,60 @@ function TimelineInner({
 
   return (
     <div className="flex h-[176px] flex-col border-t border-[var(--border)] bg-[var(--bg-panel)] px-4 py-3">
-      <div className="mb-2 flex items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <div className="text-xs font-medium text-[var(--text)]">Таймлайн</div>
-          {rangeActive && (
-            <button
-              type="button"
-              className="rounded border border-[var(--border)] px-1.5 py-0.5 text-[10px] text-[var(--text-muted)] transition-colors hover:border-[var(--border-strong)] hover:text-[var(--text)]"
-              onClick={() =>
-                setTimeRange({ start: windowStart, end: windowEnd })
-              }
-            >
-              Сбросить диапазон
-            </button>
-          )}
-        </div>
-        <div className="text-[10px] text-[var(--text-dim)]">
-          Потяните по шкале, чтобы отфильтровать граф по времени · клик по
-          маркеру — детали события
-        </div>
-        <div className="text-[11px] tabular-nums text-[var(--text-muted)]">
-          {formatShortDate(range.start)} — {formatShortDate(range.end)}
-        </div>
-      </div>
-
       <div
         ref={trackRef}
-        className="relative h-20 flex-1 cursor-crosshair select-none rounded-md border border-[var(--border)] bg-[var(--bg)]"
+        className="relative h-20 flex-1 cursor-crosshair select-none overflow-hidden rounded-md border border-[var(--border)] bg-[var(--bg)]"
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
       >
+        <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-center justify-between gap-3 px-2.5 pt-1.5">
+          <div className="flex items-center gap-2">
+            <div className="text-[11px] text-[var(--text-muted)]">Таймлайн</div>
+            {rangeActive && (
+              <Button
+                size="sm"
+                variant="primary"
+                className="pointer-events-auto"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setTimeRange({ start: windowStart, end: windowEnd })
+                }}
+              >
+                Сбросить диапазон
+              </Button>
+            )}
+          </div>
+          <div className="text-[11px] tabular-nums text-[var(--text-muted)]">
+            {formatShortDate(range.start)} — {formatShortDate(range.end)}
+          </div>
+        </div>
+
         <div
           className="pointer-events-none absolute inset-y-0 border-x border-[var(--border-strong)] bg-[var(--timeline-brush)]"
           style={{ left: `${brushPct.left}%`, width: `${brushPct.width}%` }}
         />
 
-        {ticks.map((tick) => (
-          <div
-            key={tick.t}
-            className="pointer-events-none absolute bottom-0 top-0 border-l border-[var(--border)]/60"
-            style={{ left: `${tick.pct}%` }}
-          >
-            <span className="absolute bottom-1 left-1.5 text-[10px] tabular-nums text-[var(--text-muted)]">
-              {formatClock(tick.t)}
-            </span>
-          </div>
-        ))}
+        {ticks.map((tick, i) => {
+          const isLast = i === ticks.length - 1
+          return (
+            <div
+              key={tick.t}
+              className="pointer-events-none absolute bottom-0 top-0 border-l border-[var(--border)]/60"
+              style={{ left: `${tick.pct}%` }}
+            >
+              <span
+                className={
+                  isLast
+                    ? 'absolute bottom-1 right-1.5 text-[10px] tabular-nums text-[var(--text-muted)]'
+                    : 'absolute bottom-1 left-1.5 text-[10px] tabular-nums text-[var(--text-muted)]'
+                }
+              >
+                {formatClock(tick.t)}
+              </span>
+            </div>
+          )
+        })}
 
         {visible.map((ev, idx) => {
           const t = toMs(ev.event_ts)
@@ -219,7 +227,7 @@ function TimelineInner({
             ? SEVERITY_COLOR[ev.severity]
             : 'var(--accent)'
           const selected = selectedEventId === ev.id
-          const lane = (idx % 3) * 19 + 6
+          const lane = (idx % 3) * 16 + 26
 
           return (
             <button

@@ -1,16 +1,140 @@
-import { useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useAppStore, emptyContextQueue } from '../store/appStore'
-import type { AlertEvent, CorrelationGroup, QueueItem } from '../types'
-import { Button, Chip, SeverityBadge } from './ui'
-import { StartInvestigationModal } from './StartInvestigationModal'
-import { clsx, formatTime } from '../lib/utils'
-import { titlesForQueueIds } from '../lib/investigationTitle'
-import { hasGroupValueSelection, parseQueuePdql, queueSelectFields } from '../lib/pdql'
+import type { AlertEvent, CorrelationGroup, Entity, QueueItem } from '../types'
+import { Chip, SeverityBadge } from './ui'
+import { clsx, formatTime, kindLabel } from '../lib/utils'
+import { hasGroupValueSelection, incidentTypeLabelRu, parseQueuePdql, queueSelectFields } from '../lib/pdql'
 import { alertIsInContext, contextEventKeys } from '../lib/queueContext'
-import { ChevronDown, ChevronRight, Layers, Loader2, Play, Plus } from 'lucide-react'
+import {
+  alertMatchesQueueText,
+  correlationMatchesQueueText,
+} from '../lib/queueTextSearch'
+import {
+  alertTableColumnLabel,
+  alertTableSearchColumns,
+  resolveAlertTableSearchColumn,
+  type AlertTableColumnId,
+} from './alertTableColumns'
+import { ChevronDown, ChevronRight, Layers } from 'lucide-react'
 
-const COL_FIT = 'w-px whitespace-nowrap'
-const COL_TITLE = 'min-w-0 w-full'
+const COL_FIT = 'max-w-0 overflow-hidden whitespace-nowrap'
+const COL_TITLE = 'min-w-0 max-w-0 overflow-hidden'
+const TABLE_CLASS = 'border-collapse table-fixed text-left'
+
+const COL_WIDTHS_STORAGE_KEY = 'ir.alertTable.colWidths'
+const MIN_COL_WIDTH = 48
+const MIN_TITLE_WIDTH = 120
+
+const DEFAULT_COL_WIDTHS: Record<string, number> = {
+  select: 40,
+  severity: 96,
+  time: 148,
+  title: 360,
+  category: 280,
+  source: 160,
+}
+
+function fieldColKey(field: string) {
+  return `field:${field}`
+}
+
+function alertTableColKeys(
+  selectFields: string[],
+  showCategory: boolean,
+): string[] {
+  return [
+    'select',
+    'severity',
+    'time',
+    'title',
+    ...(showCategory ? ['category'] : []),
+    ...selectFields.map(fieldColKey),
+    'source',
+  ]
+}
+
+function defaultWidthForCol(key: string): number {
+  if (key.startsWith('field:')) return 144
+  return DEFAULT_COL_WIDTHS[key] ?? 120
+}
+
+function minWidthForCol(key: string): number {
+  if (key === 'title') return MIN_TITLE_WIDTH
+  if (key === 'select') return 36
+  return MIN_COL_WIDTH
+}
+
+function loadStoredColWidths(): Record<string, number> {
+  try {
+    const raw = localStorage.getItem(COL_WIDTHS_STORAGE_KEY)
+    if (!raw) return {}
+    const parsed = JSON.parse(raw) as Record<string, unknown>
+    const out: Record<string, number> = {}
+    for (const [key, value] of Object.entries(parsed)) {
+      if (typeof value === 'number' && Number.isFinite(value) && value >= 24) {
+        out[key] = value
+      }
+    }
+    return out
+  } catch {
+    return {}
+  }
+}
+
+function ColumnResizeHandle({
+  leftWidth,
+  rightWidth,
+  leftMin,
+  rightMin,
+  onWidthsChange,
+  onWidthsCommit,
+}: {
+  leftWidth: number
+  rightWidth: number
+  leftMin: number
+  rightMin: number
+  onWidthsChange: (left: number, right: number) => void
+  onWidthsCommit: (left: number, right: number) => void
+}) {
+  return (
+    <div
+      role="separator"
+      aria-orientation="vertical"
+      aria-label="Изменить ширину колонки"
+      title="Потяните, чтобы изменить ширину"
+      className="group/resize absolute top-0 right-0 z-20 flex h-full w-2 translate-x-1/2 cursor-col-resize touch-none select-none items-center justify-center"
+      onPointerDown={(e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        const startX = e.clientX
+        const startLeft = leftWidth
+        const startRight = rightWidth
+        let latestLeft = startLeft
+        let latestRight = startRight
+
+        const onMove = (ev: PointerEvent) => {
+          const rawDelta = Math.round(ev.clientX - startX)
+          const delta = Math.max(leftMin - startLeft, Math.min(startRight - rightMin, rawDelta))
+          latestLeft = startLeft + delta
+          latestRight = startRight - delta
+          onWidthsChange(latestLeft, latestRight)
+        }
+        const onUp = () => {
+          onWidthsCommit(latestLeft, latestRight)
+          window.removeEventListener('pointermove', onMove)
+          window.removeEventListener('pointerup', onUp)
+          window.removeEventListener('pointercancel', onUp)
+        }
+
+        window.addEventListener('pointermove', onMove)
+        window.addEventListener('pointerup', onUp)
+        window.addEventListener('pointercancel', onUp)
+      }}
+    >
+      <div className="h-full w-px bg-transparent transition-colors group-hover/resize:bg-border-strong group-active/resize:bg-fg/50" />
+    </div>
+  )
+}
 
 function isInspected(item: QueueItem | null, kind: QueueItem['kind'], id: string) {
   return item?.kind === kind && item.id === id
@@ -56,12 +180,12 @@ function SelectFieldCell({
   const appendPdqlFilter = useAppStore((s) => s.appendPdqlFilter)
   const display = formatQueueFieldValue(field, value)
   return (
-    <td className={clsx(COL_FIT, 'max-w-[16rem] px-3 py-2')}>
+    <td className={clsx(COL_FIT, 'px-3 py-2')}>
       {value ? (
         <button
           type="button"
           title={display}
-          className="block max-w-[16rem] truncate text-left font-mono text-xs text-fg hover:underline"
+          className="block w-full truncate text-left font-mono text-xs text-fg hover:underline"
           onClick={(ev) => {
             ev.stopPropagation()
             appendPdqlFilter(investigationId ?? null, field, value)
@@ -76,6 +200,41 @@ function SelectFieldCell({
   )
 }
 
+function EntityRow({ entity }: { entity: Entity | undefined }) {
+  const inspect = useAppStore((s) => s.inspectQueueItem)
+  const inspected = useAppStore((s) =>
+    entity ? isInspected(s.inspectedQueueItem, 'entity', entity.id) : false,
+  )
+  if (!entity) return null
+  return (
+    <tr
+      className={clsx(
+        'cursor-pointer border-b border-border/60 hover:bg-surface-2/60',
+        inspected && 'bg-surface-3/70',
+      )}
+      onClick={() => inspect({ kind: 'entity', id: entity.id })}
+    >
+      <td className={clsx(COL_FIT, 'px-3 py-2')} />
+      <td className={clsx(COL_FIT, 'px-3 py-2')}>
+        <span className="text-[11px] uppercase tracking-wider text-fg-dim">
+          {kindLabel[entity.kind] ?? entity.kind}
+        </span>
+      </td>
+      <td className={clsx(COL_FIT, 'px-3 py-2 text-fg-dim')}>—</td>
+      <td className={clsx(COL_TITLE, 'px-3 py-2')}>
+        <span className="block truncate font-mono text-sm text-fg" title={entity.label}>
+          {entity.label}
+        </span>
+      </td>
+      <td className={clsx(COL_FIT, 'px-3 py-2')} title={entity.source}>
+        <span className="block truncate font-mono text-[11px] text-fg-muted">
+          {entity.source ?? '—'}
+        </span>
+      </td>
+    </tr>
+  )
+}
+
 function AlertRow({
   alert,
   nested,
@@ -83,6 +242,7 @@ function AlertRow({
   inContext,
   selected,
   selectFields,
+  showCategory,
   onToggle,
 }: {
   alert: AlertEvent
@@ -91,20 +251,40 @@ function AlertRow({
   inContext?: boolean
   selected: boolean
   selectFields: string[]
+  showCategory: boolean
   onToggle: () => void
 }) {
   const inspect = useAppStore((s) => s.inspectQueueItem)
-  const addEventsToContext = useAppStore((s) => s.addEventsToContext)
   const inspected = useAppStore((s) => isInspected(s.inspectedQueueItem, 'alert', alert.id))
+  const categoryCode = alert.raw?.['incident.type'] ?? ''
+  const categoryLabel = incidentTypeLabelRu(categoryCode)
+  const isIncident =
+    showCategory || alert.findingRef?.record_type === 'siem_incident'
+  const subtitle =
+    isIncident && alert.description && alert.description !== alert.title
+      ? alert.description
+      : isIncident
+        ? ''
+        : alert.rule
 
   return (
     <tr
       className={clsx(
-        'cursor-pointer border-b border-border/60 hover:bg-surface-2/60',
-        inContext && 'bg-surface-0/40',
-        selected && 'bg-surface-2',
-        inspected && 'bg-surface-3/70',
-        nested && !inspected && 'bg-surface-0/40',
+        'cursor-pointer border-b border-border/60',
+        inContext
+          ? clsx(
+              inspected
+                ? 'bg-confirmed/25 hover:bg-confirmed/30'
+                : selected
+                  ? 'bg-confirmed/20 hover:bg-confirmed/25'
+                  : 'bg-confirmed/10 hover:bg-confirmed/15',
+            )
+          : clsx(
+              'hover:bg-surface-2/60',
+              selected && 'bg-surface-2',
+              inspected && 'bg-surface-3/70',
+              nested && !inspected && 'bg-surface-0/40',
+            ),
       )}
       onClick={() => inspect({ kind: 'alert', id: alert.id })}
     >
@@ -119,20 +299,33 @@ function AlertRow({
         />
       </td>
       <td className={clsx(COL_FIT, 'px-3 py-2')}>
-        <SeverityBadge severity={alert.severity} />
+        <div className="truncate">
+          <SeverityBadge severity={alert.severity} />
+        </div>
       </td>
-      <td className={clsx(COL_FIT, 'px-3 py-2 font-mono text-xs text-fg-muted')}>
-        {formatTime(alert.time)}
+      <td className={clsx(COL_FIT, 'px-3 py-2 font-mono text-xs text-fg-muted')} title={formatTime(alert.time)}>
+        <span className="block truncate">{formatTime(alert.time)}</span>
       </td>
       <td className={clsx(COL_TITLE, 'px-3 py-2')}>
-        <div className="flex min-w-0 items-center gap-2">
-          <div className={clsx('min-w-0 text-sm', inContext && 'text-fg-muted')}>{alert.title}</div>
-          {inContext && (
-            <Chip tone="confirmed">в контексте</Chip>
-          )}
+        <div
+          className={clsx('min-w-0 truncate text-sm', inContext && 'text-fg-muted')}
+          title={alert.title}
+        >
+          {alert.title}
         </div>
-        <div className="text-xs text-fg-dim">{alert.rule}</div>
+        {subtitle ? (
+          <div className="truncate text-xs text-fg-dim" title={subtitle}>
+            {subtitle}
+          </div>
+        ) : null}
       </td>
+      {showCategory && (
+        <td className="max-w-0 overflow-hidden px-3 py-2 align-top" title={categoryLabel || categoryCode}>
+          <span className="line-clamp-2 text-xs leading-snug text-fg-muted">
+            {categoryLabel || <span className="text-fg-dim">&nbsp;</span>}
+          </span>
+        </td>
+      )}
       {selectFields.map((field) => (
         <SelectFieldCell
           key={field}
@@ -141,28 +334,11 @@ function AlertRow({
           investigationId={investigationId}
         />
       ))}
-      <td className={clsx(COL_FIT, 'px-3 py-2')}>
-        <span className="rounded border border-border px-1.5 py-0.5 font-mono text-[11px]">
+      <td className={clsx(COL_FIT, 'px-3 py-2')} title={alert.source}>
+        <span className="block truncate font-mono text-[11px] text-fg-muted">
           {alert.source}
         </span>
       </td>
-      {investigationId && (
-        <td className={clsx(COL_FIT, 'px-3 py-2')}>
-          {!inContext && (
-            <Button
-              size="sm"
-              variant="ghost"
-              title="Добавить в расследование"
-              onClick={(e) => {
-                e.stopPropagation()
-                void addEventsToContext(investigationId, [alert.id])
-              }}
-            >
-              <Plus className="h-3 w-3" />
-            </Button>
-          )}
-        </td>
-      )}
     </tr>
   )
 }
@@ -171,10 +347,12 @@ function CorrelationRow({
   group,
   alerts,
   selectFields,
+  showCategory,
 }: {
   group: CorrelationGroup
   alerts: Record<string, AlertEvent>
   selectFields: string[]
+  showCategory: boolean
 }) {
   const expanded = useAppStore((s) => s.expandedCorrelationIds.includes(group.id))
   const toggleExpand = useAppStore((s) => s.toggleCorrelationExpand)
@@ -205,10 +383,12 @@ function CorrelationRow({
           />
         </td>
         <td className={clsx(COL_FIT, 'px-3 py-2.5')}>
-          <SeverityBadge severity={group.severity} />
+          <div className="truncate">
+            <SeverityBadge severity={group.severity} />
+          </div>
         </td>
-        <td className={clsx(COL_FIT, 'px-3 py-2.5 font-mono text-xs text-fg-muted')}>
-          {formatTime(group.time)}
+        <td className={clsx(COL_FIT, 'px-3 py-2.5 font-mono text-xs text-fg-muted')} title={formatTime(group.time)}>
+          <span className="block truncate">{formatTime(group.time)}</span>
         </td>
         <td className={clsx(COL_TITLE, 'px-3 py-2.5')}>
           <div className="flex min-w-0 items-start gap-2 text-left">
@@ -227,27 +407,33 @@ function CorrelationRow({
                 <ChevronRight className="h-4 w-4" />
               )}
             </button>
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2 text-sm font-medium">
-                <Layers className="h-3.5 w-3.5 text-proposed" />
-                {group.title}
+            <div className="min-w-0 flex-1 overflow-hidden">
+              <div className="flex min-w-0 items-center gap-2 text-sm font-medium">
+                <Layers className="h-3.5 w-3.5 shrink-0 text-proposed" />
+                <span className="min-w-0 truncate" title={group.title}>
+                  {group.title}
+                </span>
                 <Chip>
                   {eventCount} соб. / {sourceCount} ист.
                 </Chip>
               </div>
-              <div className="mt-0.5 text-xs text-fg-dim">{group.reason}</div>
+              <div className="mt-0.5 truncate text-xs text-fg-dim" title={group.reason}>
+                {group.reason}
+              </div>
             </div>
           </div>
         </td>
+        {showCategory && <td className={clsx(COL_FIT, 'px-3 py-2.5')} />}
         {selectFields.map((field) => (
           <td key={field} className={clsx(COL_FIT, 'px-3 py-2.5')} />
         ))}
         <td className={clsx(COL_FIT, 'px-3 py-2.5')}>
-          <div className="flex flex-wrap gap-1">
+          <div className="flex min-w-0 gap-1 overflow-hidden">
             {Object.entries(group.sourceCounts).map(([src, n]) => (
               <span
                 key={src}
-                className="rounded border border-border px-1.5 py-0.5 font-mono text-[11px]"
+                title={`${src}:${n}`}
+                className="truncate font-mono text-[11px] text-fg-muted"
               >
                 {src}:{n}
               </span>
@@ -264,6 +450,7 @@ function CorrelationRow({
               alert={a}
               nested
               selectFields={selectFields}
+              showCategory={showCategory}
               selected={false}
               onToggle={() => {}}
             />
@@ -275,13 +462,11 @@ function CorrelationRow({
 
 export function AlertTable({ investigationId }: { investigationId?: string } = {}) {
   const globalSelected = useAppStore((s) => s.selectedAlertIds)
-  const start = useAppStore((s) => s.startInvestigation)
-  const starting = useAppStore((s) => s.investigationLoading)
-  const clear = useAppStore((s) => s.clearAlertSelection)
   const globalAlerts = useAppStore((s) => s.alerts)
   const correlations = useAppStore((s) => s.correlations)
   const globalOrder = useAppStore((s) => s.queueOrder)
   const globalLoading = useAppStore((s) => s.queueLoading)
+  const globalTotal = useAppStore((s) => s.queueTotal)
   const globalPdql = useAppStore((s) => s.queuePdql)
   const globalSource = useAppStore((s) => s.queueSource)
   const globalGroupValues = useAppStore((s) => s.groupValues)
@@ -291,19 +476,34 @@ export function AlertTable({ investigationId }: { investigationId?: string } = {
   const inv = useAppStore((s) => (investigationId ? s.investigations[investigationId] : undefined))
   const contextEvents = useAppStore((s) => s.contextEvents)
   const setContextQueue = useAppStore((s) => s.setContextQueue)
-  const addEventsToContext = useAppStore((s) => s.addEventsToContext)
   const toggleAlertSelect = useAppStore((s) => s.toggleAlertSelect)
-  const [naming, setNaming] = useState(false)
+  const setAlertSelection = useAppStore((s) => s.setAlertSelection)
+  const queueTextFilter = useAppStore((s) =>
+    investigationId
+      ? (s.contextQueue[investigationId] ?? emptyContextQueue).textFilter
+      : s.queueTextFilter,
+  )
+  const queueTextFilterColumn = useAppStore((s) =>
+    investigationId
+      ? (s.contextQueue[investigationId] ?? emptyContextQueue).textFilterColumn
+      : s.queueTextFilterColumn,
+  )
 
+  const entities = useAppStore((s) => s.entities)
   const alerts = queue?.alerts ?? globalAlerts
   const queueOrder = queue?.queueOrder ?? globalOrder
   const loading = queue?.loading ?? globalLoading
+  const queueSource = queue?.queueSource ?? globalSource
+  const queueTotal = queueSource === 'entities' ? undefined : (queue?.total ?? globalTotal)
   const eventKeys = inv ? contextEventKeys(inv.eventIds, contextEvents) : new Set<string>()
   const findingKeys = new Set(inv?.findingSourceKeys ?? [])
   const parsed = parseQueuePdql(queue?.pdql ?? globalPdql)
   const selectFields = parsed.ok ? queueSelectFields(parsed.ast) : []
-  const colSpan = 5 + selectFields.length + (investigationId ? 1 : 0)
-  const queueSource = queue?.queueSource ?? globalSource
+  const showCategory = queueSource === 'siem_incident'
+  const searchColumn = resolveAlertTableSearchColumn(
+    queueTextFilterColumn,
+    alertTableSearchColumns(selectFields, { showCategory }),
+  ) as AlertTableColumnId
   const groupValues = queue?.groupValues ?? globalGroupValues
   const waitingForGroup =
     queueSource === 'events' &&
@@ -314,18 +514,37 @@ export function AlertTable({ investigationId }: { investigationId?: string } = {
   const inContextOf = (alert: AlertEvent) =>
     Boolean(investigationId && alertIsInContext(alert, findingKeys, eventKeys))
 
+  const textNeedle = queueTextFilter.trim().toLowerCase()
+
   const rows = queueOrder.filter((item) => {
+    if (item.kind === 'entity') {
+      const entity = entities[item.id]
+      if (!entity) return false
+      if (!textNeedle) return true
+      return (
+        entity.label.toLowerCase().includes(textNeedle) ||
+        entity.kind.toLowerCase().includes(textNeedle)
+      )
+    }
     if (item.kind === 'correlation') {
       if (investigationId) return false
-      return Boolean(correlations[item.id])
+      const group = correlations[item.id]
+      if (!group) return false
+      return correlationMatchesQueueText(group, textNeedle, searchColumn)
     }
     const alert = alerts[item.id]
     if (!alert) return false
-    if (investigationId && queue?.hideAdded && inContextOf(alert)) return false
+    if (investigationId && queue) {
+      const inCtx = inContextOf(alert)
+      if (queue.addedFilter === 'hide_added' && inCtx) return false
+      if (queue.addedFilter === 'only_added' && !inCtx) return false
+    }
+    if (!alertMatchesQueueText(alert, textNeedle, searchColumn)) return false
     return true
   })
 
   const criticalCount = rows.filter((r) => {
+    if (r.kind === 'entity') return false
     const s =
       r.kind === 'correlation'
         ? correlations[r.id]?.severity
@@ -338,6 +557,23 @@ export function AlertTable({ investigationId }: { investigationId?: string } = {
     : 0
 
   const selected = investigationId ? (queue?.selectedIds ?? []) : globalSelected
+  const selectableIds = rows
+    .filter((item) => item.kind === 'alert')
+    .map((item) => item.id)
+    .filter((id) => {
+      const alert = alerts[id]
+      return Boolean(alert && !(investigationId && inContextOf(alert)))
+    })
+  const selectedSelectableCount = selectableIds.filter((id) => selected.includes(id)).length
+  const allSelectableSelected =
+    selectableIds.length > 0 && selectedSelectableCount === selectableIds.length
+  const someSelectableSelected = selectedSelectableCount > 0 && !allSelectableSelected
+  const selectAllRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (!selectAllRef.current) return
+    selectAllRef.current.indeterminate = someSelectableSelected
+  }, [someSelectableSelected])
 
   const toggleRow = (id: string) => {
     if (!investigationId) {
@@ -354,147 +590,303 @@ export function AlertTable({ investigationId }: { investigationId?: string } = {
     })
   }
 
-  const addSelected = () => {
-    if (!investigationId) return
-    const ids = selected.filter((id) => {
-      const alert = alerts[id]
-      return alert && !inContextOf(alert)
-    })
-    if (ids.length === 0) return
-    void addEventsToContext(investigationId, ids)
+  const toggleSelectAll = () => {
+    if (selectableIds.length === 0) return
+    if (allSelectableSelected) {
+      if (!investigationId) {
+        setAlertSelection([])
+        return
+      }
+      setContextQueue(investigationId, { selectedIds: [] })
+      return
+    }
+    if (!investigationId) {
+      setAlertSelection(selectableIds)
+      return
+    }
+    setContextQueue(investigationId, { selectedIds: selectableIds })
   }
 
-  const clearSelection = () => {
-    if (investigationId) setContextQueue(investigationId, { selectedIds: [] })
-    else clear()
+  const headerWrapRef = useRef<HTMLDivElement>(null)
+  const bodyWrapRef = useRef<HTMLDivElement>(null)
+  const syncingScroll = useRef(false)
+  const [colWidths, setColWidths] = useState<Record<string, number>>(loadStoredColWidths)
+  const [viewportWidth, setViewportWidth] = useState(0)
+
+  const colKeys = alertTableColKeys(selectFields, showCategory)
+  const storedWidths = colKeys.map((key) => colWidths[key] ?? defaultWidthForCol(key))
+  const titleIndex = colKeys.indexOf('title')
+  const storedSum = storedWidths.reduce((sum, width) => sum + width, 0)
+  // Fill leftover space into title so the last columns aren't cut off by an empty gap.
+  const tableWidth = Math.max(storedSum, viewportWidth)
+  const titleExtra = Math.max(0, tableWidth - storedSum)
+  const resolvedWidths = storedWidths.map((width, index) =>
+    index === titleIndex ? width + titleExtra : width,
+  )
+
+  const applyPairWidths = (
+    leftKey: string,
+    rightKey: string,
+    left: number,
+    right: number,
+    persist: boolean,
+  ) => {
+    setColWidths((prev) => {
+      const updated = { ...prev }
+      for (const key of colKeys) {
+        updated[key] = updated[key] ?? defaultWidthForCol(key)
+      }
+      updated[leftKey] = left
+      updated[rightKey] = right
+      if (persist) {
+        try {
+          localStorage.setItem(COL_WIDTHS_STORAGE_KEY, JSON.stringify(updated))
+        } catch {
+          /* ignore */
+        }
+      }
+      return updated
+    })
+  }
+
+  const resetColumnWidths = () => {
+    const next: Record<string, number> = {}
+    for (const key of colKeys) {
+      next[key] = defaultWidthForCol(key)
+    }
+    setColWidths(next)
+    try {
+      localStorage.setItem(COL_WIDTHS_STORAGE_KEY, JSON.stringify(next))
+    } catch {
+      /* ignore */
+    }
+  }
+
+  const syncScrollLeft = (source: 'header' | 'body') => {
+    const header = headerWrapRef.current
+    const body = bodyWrapRef.current
+    if (!header || !body || syncingScroll.current) return
+    syncingScroll.current = true
+    if (source === 'body') header.scrollLeft = body.scrollLeft
+    else body.scrollLeft = header.scrollLeft
+    syncingScroll.current = false
+  }
+
+  useLayoutEffect(() => {
+    const body = bodyWrapRef.current
+    if (!body) return
+    const update = () => {
+      setViewportWidth(body.clientWidth)
+      syncScrollLeft('body')
+    }
+    update()
+    const ro = new ResizeObserver(update)
+    ro.observe(body)
+    return () => ro.disconnect()
+  }, [])
+
+  const colGroup = (
+    <colgroup>
+      {colKeys.map((key, index) => (
+        <col key={key} style={{ width: resolvedWidths[index] }} />
+      ))}
+    </colgroup>
+  )
+
+  const tableStyle = { width: tableWidth }
+
+  const renderResizeHandle = (leftKey: string, index: number) => {
+    const rightKey = colKeys[index + 1]
+    if (!rightKey) return null
+    // Drag against stored widths (title without the fill extra) so pair math stays stable.
+    const leftWidth = storedWidths[index]
+    const rightWidth = storedWidths[index + 1]
+    return (
+      <ColumnResizeHandle
+        leftWidth={leftWidth}
+        rightWidth={rightWidth}
+        leftMin={minWidthForCol(leftKey)}
+        rightMin={minWidthForCol(rightKey)}
+        onWidthsChange={(left, right) => applyPairWidths(leftKey, rightKey, left, right, false)}
+        onWidthsCommit={(left, right) => applyPairWidths(leftKey, rightKey, left, right, true)}
+      />
+    )
   }
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="flex items-center justify-between border-b border-border px-4 py-2">
-        <div className="flex items-center gap-3 text-sm">
-          <span className="text-fg-muted">
-            Срабатываний: <span className="text-fg">{rows.length}</span>
-            {loading && <span className="ml-2 text-fg-dim">загрузка…</span>}
-          </span>
-          <span className="text-fg-muted">
-            critical/high: <span className="text-high">{criticalCount}</span>
-          </span>
-          {investigationId && !queue?.hideAdded && (
-            <span className="text-fg-muted">
-              в контексте: <span className="text-fg">{inContextCount}</span>
-            </span>
-          )}
-        </div>
-        {selected.length > 0 && (
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-fg-muted">Выбрано: {selected.length}</span>
-            {investigationId ? (
-              <Button
-                size="sm"
-                variant="primary"
-                onClick={addSelected}
-              >
-                <Plus className="h-3 w-3" />
-                Добавить в расследование
-              </Button>
-            ) : (
-              <Button
-                size="sm"
-                disabled={starting}
-                onClick={() => setNaming(true)}
-              >
-                {starting ? (
-                  <Loader2 className="h-3 w-3 animate-spin" />
-                ) : (
-                  <Play className="h-3 w-3" />
+      <div className="relative flex shrink-0 border-b border-border bg-surface-1">
+        <div
+          ref={headerWrapRef}
+          className="min-w-0 flex-1 overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          onScroll={() => syncScrollLeft('header')}
+        >
+          <table className={TABLE_CLASS} style={tableStyle}>
+            {colGroup}
+            <thead className="text-[11px] uppercase tracking-wider text-fg-dim">
+              <tr>
+                <th className={clsx(COL_FIT, 'relative px-3 py-2')}>
+                  <input
+                    ref={selectAllRef}
+                    type="checkbox"
+                    checked={allSelectableSelected}
+                    disabled={selectableIds.length === 0}
+                    onChange={toggleSelectAll}
+                    title={allSelectableSelected ? 'Снять выбор' : 'Выбрать все'}
+                    aria-label={allSelectableSelected ? 'Снять выбор' : 'Выбрать все'}
+                    className="accent-fg"
+                  />
+                  {renderResizeHandle('select', 0)}
+                </th>
+                <th
+                  className={clsx(COL_FIT, 'relative px-3 py-2')}
+                  title={alertTableColumnLabel('severity')}
+                >
+                  <span className="flex min-w-0 items-center gap-1.5 overflow-hidden">
+                    <span className="truncate">{alertTableColumnLabel('severity')}</span>
+                    <span className="shrink-0 text-high">{criticalCount}</span>
+                  </span>
+                  {renderResizeHandle('severity', 1)}
+                </th>
+                <th
+                  className={clsx(COL_FIT, 'relative px-3 py-2')}
+                  title={alertTableColumnLabel('time')}
+                >
+                  <span className="block truncate">{alertTableColumnLabel('time')}</span>
+                  {renderResizeHandle('time', 2)}
+                </th>
+                <th
+                  className={clsx(COL_TITLE, 'relative px-3 py-2')}
+                  title={alertTableColumnLabel('title')}
+                >
+                  <span className="flex min-w-0 items-center gap-1.5 overflow-hidden whitespace-nowrap">
+                    <span className="truncate">{alertTableColumnLabel('title')}</span>
+                    <span className="shrink-0 text-fg">
+                      {typeof queueTotal === 'number' && queueTotal > rows.length
+                        ? `${rows.length} / ${queueTotal}`
+                        : typeof queueTotal === 'number'
+                          ? queueTotal
+                          : rows.length}
+                    </span>
+                    {loading && (
+                      <span className="shrink-0 normal-case tracking-normal text-fg-dim">загрузка…</span>
+                    )}
+                    {investigationId && queue?.addedFilter !== 'hide_added' && (
+                      <span className="shrink-0 text-fg-muted">
+                        в контексте <span className="text-fg">{inContextCount}</span>
+                      </span>
+                    )}
+                  </span>
+                  {renderResizeHandle('title', 3)}
+                </th>
+                {showCategory && (
+                  <th
+                    className={clsx(COL_FIT, 'relative px-3 py-2')}
+                    title={alertTableColumnLabel('category')}
+                  >
+                    <span className="block truncate">{alertTableColumnLabel('category')}</span>
+                    {renderResizeHandle('category', 4)}
+                  </th>
                 )}
-                Начать расследование
-              </Button>
-            )}
-            <Button size="sm" variant="ghost" onClick={clearSelection}>
-              Сбросить
-            </Button>
+                {selectFields.map((field, fieldIndex) => {
+                  const key = fieldColKey(field)
+                  const index = 4 + (showCategory ? 1 : 0) + fieldIndex
+                  return (
+                    <th
+                      key={field}
+                      className={clsx(
+                        COL_FIT,
+                        'relative px-3 py-2 font-mono normal-case tracking-normal',
+                      )}
+                      title={field}
+                    >
+                      <span className="block truncate">{field}</span>
+                      {renderResizeHandle(key, index)}
+                    </th>
+                  )
+                })}
+                <th
+                  className={clsx(COL_FIT, 'relative px-3 py-2')}
+                  title={alertTableColumnLabel('source')}
+                >
+                  <span className="block truncate">{alertTableColumnLabel('source')}</span>
+                  {renderResizeHandle('source', 4 + (showCategory ? 1 : 0) + selectFields.length)}
+                </th>
+              </tr>
+            </thead>
+          </table>
+        </div>
+        {/* Match body vertical scrollbar width so header/body columns stay aligned. */}
+        <div className="w-2 shrink-0" aria-hidden />
+        <button
+          type="button"
+          title="Сбросить ширину колонок"
+          aria-label="Сбросить ширину колонок"
+          onClick={resetColumnWidths}
+          className="absolute top-1/2 right-0 z-30 h-8 w-8 -translate-y-1/2 rounded hover:bg-surface-2"
+        />
+      </div>
+      <div
+        ref={bodyWrapRef}
+        className="relative min-h-0 flex-1 overflow-auto"
+        onScroll={() => syncScrollLeft('body')}
+      >
+        {rows.length === 0 ? (
+          <div className="flex h-full items-center justify-center px-4 text-center">
+            <div>
+              {waitingForGroup ? (
+                <>
+                  <div className="text-sm text-fg-muted">
+                    Выберите группу слева для просмотра событий
+                  </div>
+                  <div className="mt-1 text-xs text-fg-dim">
+                    Сначала загружаются агрегаты, поиск событий запускается после выбора значения
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="text-sm text-fg-muted">
+                    Нет находок по текущим фильтрам
+                  </div>
+                  <div className="mt-1 text-xs text-fg-dim">
+                    Попробуйте расширить поиск и изменить фильтры
+                  </div>
+                </>
+              )}
+            </div>
           </div>
+        ) : (
+          <table className={TABLE_CLASS} style={tableStyle}>
+            {colGroup}
+            <tbody>
+              {rows.map((item) =>
+                item.kind === 'correlation' ? (
+                  <CorrelationRow
+                    key={item.id}
+                    group={correlations[item.id]}
+                    alerts={alerts}
+                    selectFields={selectFields}
+                    showCategory={showCategory}
+                  />
+                ) : item.kind === 'entity' ? (
+                  <EntityRow key={item.id} entity={entities[item.id]} />
+                ) : (
+                  <AlertRow
+                    key={item.id}
+                    alert={alerts[item.id]}
+                    investigationId={investigationId}
+                    inContext={inContextOf(alerts[item.id])}
+                    selected={selected.includes(item.id)}
+                    selectFields={selectFields}
+                    showCategory={showCategory}
+                    onToggle={() => toggleRow(item.id)}
+                  />
+                ),
+              )}
+            </tbody>
+          </table>
         )}
       </div>
-      <div className="flex-1 overflow-auto">
-        <table className="w-full min-w-[880px] border-collapse text-left">
-          <thead className="sticky top-0 z-10 bg-surface-1 text-[11px] uppercase tracking-wider text-fg-dim">
-            <tr className="border-b border-border">
-              <th className={clsx(COL_FIT, 'px-3 py-2')} />
-              <th className={clsx(COL_FIT, 'px-3 py-2')}>Крит.</th>
-              <th className={clsx(COL_FIT, 'px-3 py-2')}>Время</th>
-              <th className={clsx(COL_TITLE, 'px-3 py-2')}>Срабатывание</th>
-              {selectFields.map((field) => (
-                <th key={field} className={clsx(COL_FIT, 'px-3 py-2 font-mono normal-case tracking-normal')}>
-                  {field}
-                </th>
-              ))}
-              <th className={clsx(COL_FIT, 'px-3 py-2')}>Источник</th>
-              {investigationId && <th className={clsx(COL_FIT, 'px-3 py-2')} />}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((item) =>
-              item.kind === 'correlation' ? (
-                <CorrelationRow
-                  key={item.id}
-                  group={correlations[item.id]}
-                  alerts={alerts}
-                  selectFields={selectFields}
-                />
-              ) : (
-                <AlertRow
-                  key={item.id}
-                  alert={alerts[item.id]}
-                  investigationId={investigationId}
-                  inContext={inContextOf(alerts[item.id])}
-                  selected={selected.includes(item.id)}
-                  selectFields={selectFields}
-                  onToggle={() => toggleRow(item.id)}
-                />
-              ),
-            )}
-            {rows.length === 0 && (
-              <tr>
-                <td colSpan={colSpan} className="px-4 py-12 text-center">
-                  {waitingForGroup ? (
-                    <>
-                      <div className="text-sm text-fg-muted">
-                        Выберите группу слева для просмотра событий
-                      </div>
-                      <div className="mt-1 text-xs text-fg-dim">
-                        Сначала загружаются агрегаты, поиск событий запускается после выбора значения
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      <div className="text-sm text-fg-muted">
-                        Нет срабатываний по текущим фильтрам
-                      </div>
-                      <div className="mt-1 text-xs text-fg-dim">
-                        Удалите часть чипов или расширьте окно времени
-                      </div>
-                    </>
-                  )}
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-      {naming && !investigationId && (
-        <StartInvestigationModal
-          eventTitles={titlesForQueueIds(selected, alerts, correlations)}
-          busy={starting}
-          onClose={() => setNaming(false)}
-          onConfirm={async (title) => {
-            const createdId = await start(selected, title)
-            if (createdId) setNaming(false)
-          }}
-        />
-      )}
     </div>
   )
 }

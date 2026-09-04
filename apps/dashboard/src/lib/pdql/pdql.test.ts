@@ -13,6 +13,7 @@ import {
   hasGroupValueSelection,
   pdqlToSearchParts,
   queueSelectFields,
+  timeIntervalFromAst,
 } from './toSearch'
 import { addFieldToAst, addFieldToPdql, setGroupAggregate } from './ast'
 import { appendCondition, findingUuidQuery } from './append'
@@ -174,6 +175,18 @@ describe('pdqlToSearchParts', () => {
       ],
       query: '',
     })
+  })
+
+  it('maps bare host/account queue fields to gateway entities', () => {
+    const ast = mustParse('filter(host = "aamelina" and account = "alice") | select(time)')
+    expect(pdqlToSearchParts(ast)).toEqual({
+      entities: [
+        { type: 'host', value: 'aamelina' },
+        { type: 'account', value: 'alice' },
+      ],
+      query: '',
+    })
+    expect(astToEventSearch(ast)).toEqual({ hasControls: true })
   })
 
   it('leaves non-entity and negated conditions in the query string', () => {
@@ -403,7 +416,6 @@ describe('astToEventSearch', () => {
       'filter(event_src.host = "dkrylova.plat.form") | select(time, event_src.host, text, object.process.cmdline) | sort(time asc) | group(key: [action], agg: COUNT(*) as Cnt) | sort(Cnt desc) | limit(10000)',
     )
     expect(astToEventSearch(ast)).toEqual({
-      filter: 'event_src.host = "dkrylova.plat.form"',
       sort: [{ field: 'time', direction: 'asc' }],
       hasControls: true,
     })
@@ -415,14 +427,15 @@ describe('astToEventSearch', () => {
     })
   })
 
-  it('puts the full predicate in filter, including entity fields', () => {
+  it('keeps non-entity predicates in filter and drops mapped entity fields', () => {
     const ast = mustParse(
       'filter(event_src.host = "dc01" and action = "login" or not src.ip = "8.8.8.8") | select(time) | sort(time desc)',
     )
     expect(astToEventSearch(ast)).toEqual({
-      filter: 'event_src.host = "dc01" and action = "login" or not src.ip = "8.8.8.8"',
+      filter: 'action = "login" or not src.ip = "8.8.8.8"',
       hasControls: true,
     })
+    expect(pdqlToSearchParts(ast).entities).toEqual([{ type: 'host', value: 'dc01' }])
   })
 
   it('sends non-default sort without aggregates and omits columns', () => {
@@ -517,22 +530,22 @@ describe('queueSelectFields', () => {
     ).toEqual(['event_src.host', 'text'])
   })
 
-  it('includes group dimensions and skips aggregates', () => {
+  it('skips group dimensions and aggregates', () => {
     expect(
       queueSelectFields(
         mustParse('group(event_src.host) | select(event_src.host, uniq(src.ip), count(), time)'),
       ),
-    ).toEqual(['event_src.host'])
+    ).toEqual([])
   })
 
-  it('puts group keys before extra columns', () => {
+  it('keeps extra columns and omits group keys', () => {
     expect(
       queueSelectFields(
         mustParse(
           'filter(event_src.host = "dkrylova.plat.form") | select(time, event_src.host, text, object.process.cmdline) | sort(time asc) | group(key: [action], agg: COUNT(*) as Cnt)',
         ),
       ),
-    ).toEqual(['action', 'event_src.host', 'text', 'object.process.cmdline'])
+    ).toEqual(['event_src.host', 'text', 'object.process.cmdline'])
   })
 })
 
@@ -572,6 +585,82 @@ describe('findingUuidFromAst', () => {
   it('ignores queries without a finding filter', () => {
     expect(findingUuidFromAst(mustParse('filter(uuid = "inc-42") | select(time)'))).toBeNull()
     expect(findingUuidFromAst(mustParse('filter(action = "login") | select(time)'))).toBeNull()
+  })
+})
+
+describe('timeIntervalFromAst', () => {
+  const fallback = {
+    kind: 'range' as const,
+    from: '2024-01-01T00:00:00.000Z',
+    to: '2027-01-01T00:00:00.000Z',
+  }
+
+  it('intersects PDQL bounds with the wide-range button interval', () => {
+    const { interval, rewritten } = timeIntervalFromAst(
+      mustParse(
+        'filter(time >= "2025-10-23 00:00:00" and time <= "2025-10-23 23:59:59") | select(time)',
+      ),
+      fallback,
+      'UTC',
+    )
+    expect(rewritten).toBe(true)
+    expect(interval).toEqual({
+      kind: 'range',
+      from: '2025-10-23T00:00:00.000Z',
+      // Inclusive `<= 23:59:59` ends 1s later so gateway from < to holds.
+      to: '2025-10-24T00:00:00.000Z',
+    })
+  })
+
+  it('keeps wide from when only an upper PDQL bound is set', () => {
+    const { interval, rewritten } = timeIntervalFromAst(
+      mustParse('filter(time <= "2025-10-23 00:00:00") | select(time)'),
+      fallback,
+      'UTC',
+    )
+    expect(rewritten).toBe(true)
+    expect(interval.from).toBe(fallback.from)
+    expect(interval.to).toBe('2025-10-23T00:00:01.000Z')
+  })
+
+  it('keeps fallback when there are no time bounds', () => {
+    const result = timeIntervalFromAst(
+      mustParse('filter(action = "login") | select(time)'),
+      fallback,
+    )
+    expect(result).toEqual({ interval: fallback, rewritten: false })
+  })
+
+  it('rejects OR between time windows', () => {
+    expect(() =>
+      timeIntervalFromAst(
+        mustParse(
+          'filter(time >= "2025-01-01 00:00:00" or time <= "2025-02-01 00:00:00") | select(time)',
+        ),
+        fallback,
+        'UTC',
+      ),
+    ).toThrow(/Несколько окон времени/)
+  })
+
+  it('rejects an empty intersection', () => {
+    expect(() =>
+      timeIntervalFromAst(
+        mustParse('filter(time < "2023-01-01 00:00:00") | select(time)'),
+        fallback,
+        'UTC',
+      ),
+    ).toThrow(/пустое/)
+  })
+
+  it('does not put time predicates into the findings text query', () => {
+    expect(
+      pdqlToSearchParts(
+        mustParse(
+          'filter(time >= "2025-10-23 00:00:00" and time <= "2025-10-23 23:59:59" and action = "login") | select(time)',
+        ),
+      ),
+    ).toEqual({ entities: [], query: 'action = "login"' })
   })
 })
 

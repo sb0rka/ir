@@ -139,31 +139,19 @@ func (d *DB) UpdateInvestigation(ctx context.Context, patch model.InvestigationP
 	if status == "closed" && verdict == nil {
 		return model.Investigation{}, store.ErrInvalidValue
 	}
+	// Root and child cases share the same verdict vocabulary (see OpenAPI Verdict + DB CHECK).
 	if verdict != nil {
-		allowed := map[string]bool{"inconclusive": true}
-		if current.ParentID == nil {
-			allowed["incident"], allowed["false_positive"], allowed["not_affected"] = true, true, true
-		} else {
-			allowed["confirmed"], allowed["rejected"] = true, true
-		}
-		if !allowed[*verdict] || (*verdict == "rejected" && (verdictReason == nil || *verdictReason == "")) {
+		switch *verdict {
+		case "incident", "false_positive", "not_affected", "inconclusive":
+		default:
 			return model.Investigation{}, store.ErrInvalidValue
-		}
-		if *verdict == "confirmed" {
-			var hasEvidence bool
-			if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM investigation_events WHERE investigation_id=$1::uuid AND project_id=$2)`, patch.InvestigationID, patch.ProjectID).Scan(&hasEvidence); err != nil {
-				return model.Investigation{}, fmt.Errorf("check hypothesis evidence: %w", mapConstraint(err))
-			}
-			if !hasEvidence {
-				return model.Investigation{}, store.ErrInvalidValue
-			}
 		}
 	}
 
 	tag, err := tx.Exec(ctx, `UPDATE investigations SET
-		title=COALESCE($4,title),description=COALESCE($5,description),status=$6,
+		title=COALESCE($4,title),description=COALESCE($5,description),status=$6::varchar,
 		verdict=$7,verdict_reason=$8,confidence=$9,severity=COALESCE($10,severity),
-		closed_at=CASE WHEN $6='closed' THEN COALESCE(closed_at,now()) ELSE NULL END,
+		closed_at=CASE WHEN $6::varchar='closed' THEN COALESCE(closed_at,now()) ELSE NULL END,
 		version=version+1
 		WHERE id=$1::uuid AND project_id=$2 AND version=$3 AND is_deleted=false`,
 		patch.InvestigationID, patch.ProjectID, patch.Version, patch.Title, patch.Description,

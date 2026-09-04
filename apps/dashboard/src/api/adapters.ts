@@ -120,6 +120,7 @@ function flattenFindingRaw(finding: Gw['schemas']['Finding']): Record<string, st
   if (incident) {
     putRaw(raw, 'incident.key', incident.key)
     putRaw(raw, 'incident.external_key', incident.external_key)
+    putRaw(raw, 'incident.type', incident.type)
     putRaw(raw, 'incident.verdict', incident.verdict)
     putRaw(raw, 'incident.damage', incident.damage)
     putRaw(raw, 'incident.recommendation', incident.recommendation)
@@ -137,11 +138,19 @@ function flattenFindingRaw(finding: Gw['schemas']['Finding']): Record<string, st
 
 export function mapGatewayEntity(entity: GwEntity): Entity {
   const id = gatewayEntityId(entity)
+  const sourceCodes = [
+    ...new Set(
+      (entity.sources ?? [])
+        .map((item) => item.source_code?.trim())
+        .filter((code): code is string => Boolean(code)),
+    ),
+  ]
   return {
     id,
     kind: mapEntityKind(entity.type),
     label: entity.value,
     attributes: stringifyAttrs(entity.attributes as Record<string, unknown> | undefined),
+    source: sourceCodes[0],
   }
 }
 

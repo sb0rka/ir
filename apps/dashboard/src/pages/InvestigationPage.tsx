@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect } from 'react'
-import { InvestigationHeader, ContextTable } from '../components/InvestigationHeader'
+import { ContextTable } from '../components/InvestigationHeader'
 import { ContextQueuePage } from '../components/ContextQueue'
 import { InvestigationGraph } from '../components/graph'
 import { DetailPanel } from '../components/DetailPanel'
@@ -39,34 +39,31 @@ export function InvestigationPage({ investigationId }: { investigationId: string
   }
 
   return (
-    <div className="flex h-full flex-col">
-      <InvestigationHeader investigationId={investigationId} />
-      <div className="flex min-h-0 flex-1">
-        <WorkspaceSidebar investigationId={investigationId} />
-        <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
-          {inv.view === 'table' ? (
-            <ContextTable investigationId={investigationId} />
-          ) : inv.view === 'queue' ? (
-            <div className="flex min-h-0 flex-1">
-              <div className="min-w-0 flex-1">
-                <ContextQueuePage investigationId={investigationId} />
-              </div>
-              <QueueDetailPanel investigationId={investigationId} />
+    <div className="flex h-full min-h-0 flex-1">
+      <WorkspaceSidebar investigationId={investigationId} />
+      <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+        {inv.view === 'table' ? (
+          <ContextTable investigationId={investigationId} />
+        ) : inv.view === 'queue' ? (
+          <div className="flex min-h-0 flex-1">
+            <div className="min-w-0 flex-1">
+              <ContextQueuePage investigationId={investigationId} />
             </div>
-          ) : loading && inv.nodeIds.length === 0 ? (
-            <div className="flex h-full items-center justify-center text-fg-dim">
-              Загрузка расследования…
-            </div>
-          ) : (
-            <div className="relative flex min-h-0 flex-1 flex-col">
-              <InvestigationGraph fitNonce={investigationId} />
-            </div>
-          )}
-        </div>
-        {detailPanelOpen && inv.view !== 'queue' && (
-          <DetailPanel investigationId={investigationId} />
+            <QueueDetailPanel investigationId={investigationId} />
+          </div>
+        ) : loading && inv.nodeIds.length === 0 ? (
+          <div className="flex h-full items-center justify-center text-fg-dim">
+            Загрузка расследования…
+          </div>
+        ) : (
+          <div className="relative flex min-h-0 flex-1 flex-col">
+            <InvestigationGraph fitNonce={investigationId} />
+          </div>
         )}
       </div>
+      {detailPanelOpen && inv.view !== 'queue' && (
+        <DetailPanel investigationId={investigationId} />
+      )}
     </div>
   )
 }

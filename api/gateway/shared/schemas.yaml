@@ -105,6 +105,13 @@ SourceState:
       enum: [complete, truncated, failed]
     reason:
       type: string
+    total:
+      type: integer
+      format: int64
+      minimum: 0
+      description: >-
+        Vendor match count for this source and query when known. Absent when the
+        source did not report a total (for example noCount without totalCount).
 
 EventSourceRef:
   type: object

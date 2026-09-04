@@ -3,7 +3,9 @@ import type { AlertEvent } from '../types'
 import {
   findingResolveKey,
   pickCorrelationSubevents,
+  pickFindingAccounts,
   pickFindingChildEvents,
+  pickFindingHosts,
 } from './correlationSubevents'
 
 function alert(partial: Partial<AlertEvent> & Pick<AlertEvent, 'id'>): AlertEvent {
@@ -146,5 +148,37 @@ describe('pickFindingChildEvents', () => {
       rule: 'siem.incident.file',
     })
     expect(pickFindingChildEvents([root, file, corr], key).map((e) => e.id)).toEqual(['corr'])
+  })
+})
+
+describe('pickFindingAccounts', () => {
+  it('keeps unique involved accounts and drops placeholders and backslashes', () => {
+    expect(
+      pickFindingAccounts([
+        { type: 'account', value: 'administrator', roles: ['mentions'] },
+        { type: 'host', value: 'ws01', roles: ['src'] },
+        { type: 'account', value: '-', roles: ['mentions'] },
+        { type: 'account', value: 'DKRYLOVA\\\\administrator', roles: ['mentions'] },
+        { type: 'account', value: 'dkrylova\\user', roles: ['actor'] },
+        { type: 'account', value: 'noise', roles: ['object'] },
+      ]),
+    ).toEqual(['administrator', 'dkrylovaadministrator'])
+  })
+})
+
+describe('pickFindingHosts', () => {
+  it('keeps unique incident hosts with roles', () => {
+    expect(
+      pickFindingHosts([
+        { type: 'host', value: 'dc01.local', roles: ['dst'] },
+        { type: 'host', value: 'WS01.LOCAL', roles: ['src'] },
+        { type: 'ip', value: '10.0.0.1', roles: ['src'] },
+        { type: 'host', value: 'ws01.local', roles: ['mentions'] },
+        { type: 'host', value: 'noise', roles: ['actor'] },
+      ]),
+    ).toEqual([
+      { value: 'dc01.local', roles: ['dst'] },
+      { value: 'ws01.local', roles: ['mentions', 'src'] },
+    ])
   })
 })

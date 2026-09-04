@@ -53,17 +53,20 @@ export function DateTimeParts({
   zone,
   onCommit,
   onEdit,
+  size = 'md',
   className,
 }: {
   iso: string
   zone: string
   onCommit: (iso: string) => void
   onEdit?: () => void
+  size?: 'md' | 'sm'
   className?: string
 }) {
   const [draft, setDraft] = useState(() => partsToDraft(instantToParts(iso, zone)))
   const [focused, setFocused] = useState(false)
   const refs = useRef<Array<HTMLInputElement | null>>([])
+  const compact = size === 'sm'
 
   useEffect(() => {
     if (!focused) setDraft(partsToDraft(instantToParts(iso, zone)))
@@ -102,7 +105,11 @@ export function DateTimeParts({
     <div
       role="group"
       aria-label="Время ДДММГГГГ:ЧЧММСС"
-      className={clsx('flex min-w-0 flex-1 items-center font-mono text-sm tabular-nums', className)}
+      className={clsx(
+        'flex min-w-0 flex-1 items-center font-mono tabular-nums',
+        compact ? 'text-[11px] leading-4' : 'text-sm',
+        className,
+      )}
       onFocus={() => setFocused(true)}
       onBlur={(e) => {
         if (e.currentTarget.contains(e.relatedTarget as Node | null)) return
@@ -124,7 +131,7 @@ export function DateTimeParts({
             <span
               className={clsx(
                 'select-none text-fg-dim',
-                field.sep === '·' ? 'px-1.5' : 'px-0.5',
+                field.sep === '·' ? (compact ? 'px-1' : 'px-1.5') : 'px-0.5',
               )}
             >
               {field.sep}

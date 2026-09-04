@@ -7,6 +7,7 @@ import {
   type DragEndEvent,
 } from '@dnd-kit/core'
 import { useEffect } from 'react'
+import { X } from 'lucide-react'
 import { usePdqlStore } from '../../store/pdqlStore'
 import { Button } from '../ui'
 import { ColumnsSection } from './ColumnsSection'
@@ -15,11 +16,10 @@ import { FilterSection } from './FilterSection'
 import { GroupsSection } from './GroupsSection'
 import { PdqlPreview } from './PdqlPreview'
 
-export function PdqlBuilder() {
+export function PdqlBuilder({ onClose }: { onClose: () => void }) {
   const loadFields = usePdqlStore((s) => s.loadFields)
   const addField = usePdqlStore((s) => s.addField)
   const reorder = usePdqlStore((s) => s.reorder)
-  const resetQuery = usePdqlStore((s) => s.resetQuery)
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }))
 
   useEffect(() => {
@@ -69,8 +69,14 @@ export function PdqlBuilder() {
           <div className="flex items-center justify-between gap-3 border-b border-border px-3 py-2">
             <div className="text-sm text-fg">Конструктор PDQL</div>
             <div className="flex items-center gap-2">
-              <Button size="sm" variant="ghost" onClick={resetQuery}>
-                Сбросить
+              <Button
+                size="icon"
+                variant="ghost"
+                title="Закрыть"
+                aria-label="Закрыть"
+                onClick={onClose}
+              >
+                <X className="h-3.5 w-3.5" />
               </Button>
             </div>
           </div>

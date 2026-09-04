@@ -43,6 +43,7 @@ interface PdqlState {
   activeSection: ActiveSection
   pdqlDraft: string
   parseError: ParseError | null
+  defaultDatetimeIso: string
   loadFields: () => Promise<void>
   setActiveSection: (section: ActiveSection) => void
   addField: (name: string, section?: ActiveSection) => void
@@ -61,7 +62,7 @@ interface PdqlState {
   reorder: (section: ActiveSection, from: number, to: number) => void
   setPdqlDraft: (text: string) => void
   applyPdql: () => boolean
-  initFrom: (pdql: string) => void
+  initFrom: (pdql: string, defaultDatetimeIso?: string) => void
   resetQuery: () => void
 }
 
@@ -74,6 +75,7 @@ export const usePdqlStore = create<PdqlState>((set, get) => ({
   activeSection: 'filter',
   pdqlDraft: serialize(defaultQuery()),
   parseError: null,
+  defaultDatetimeIso: new Date(0).toISOString(),
 
   loadFields: async () => {
     set({ fieldsLoading: true, fieldsError: null })
@@ -249,18 +251,19 @@ export const usePdqlStore = create<PdqlState>((set, get) => ({
     return true
   },
 
-  initFrom: (pdql) => {
+  initFrom: (pdql, defaultDatetimeIso) => {
     const trimmed = pdql.trim()
+    const stamp = defaultDatetimeIso ?? get().defaultDatetimeIso
     if (!trimmed) {
-      set({ ...commit(defaultQuery()), activeSection: 'filter' })
+      set({ ...commit(defaultQuery()), activeSection: 'filter', defaultDatetimeIso: stamp })
       return
     }
     const result = parse(trimmed)
     if (!result.ok) {
-      set({ pdqlDraft: pdql, parseError: result.error })
+      set({ pdqlDraft: pdql, parseError: result.error, defaultDatetimeIso: stamp })
       return
     }
-    set({ ...commit(result.ast), activeSection: 'filter' })
+    set({ ...commit(result.ast), activeSection: 'filter', defaultDatetimeIso: stamp })
   },
 
   resetQuery: () => {

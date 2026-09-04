@@ -14,6 +14,10 @@ export function roleForField(field: string): string {
  * status, importance, …) cannot be added to context as entities.
  */
 export function entityKindForField(field: string): EntityKind | null {
+  if (field === 'host' || field === 'ip' || field === 'account' || field === 'process' || field === 'user') {
+    if (field === 'user') return 'account'
+    return field
+  }
   if (field.endsWith('.ip')) return 'ip'
   if (field.includes('.hash.')) return 'file_hash'
   if (field.includes('.account.')) return 'account'

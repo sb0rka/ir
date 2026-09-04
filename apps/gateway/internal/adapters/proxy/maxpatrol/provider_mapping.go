@@ -39,6 +39,7 @@ func findingFromIncident(value Incident, timeRange domain.TimeRange, fetchedAt t
 		Incident: &domain.IncidentDetails{
 			Key:            value.Key,
 			ExternalKey:    value.ExternalKey,
+			Type:           value.Type,
 			Verdict:        strings.ToLower(value.Verdict),
 			Damage:         strings.ToLower(value.Damage),
 			Recommendation: value.Recommendation,

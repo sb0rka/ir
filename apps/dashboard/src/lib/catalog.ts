@@ -3,6 +3,7 @@ import type { FilterField, SavedView } from '../types'
 export const filterFieldLabels: Record<FilterField, string> = {
   host: 'хост',
   user: 'пользователь',
+  account: 'учётная запись',
   process: 'процесс',
   hash: 'хеш',
   ip: 'IP',
@@ -15,6 +16,7 @@ export const filterFieldLabels: Record<FilterField, string> = {
 export const defaultFilterValueOptions: Record<FilterField, string[]> = {
   host: ['ws-alpha.corp.example', 'ws-beta.corp.example'],
   user: [],
+  account: [],
   process: [],
   hash: [],
   ip: ['192.0.2.44', '192.0.2.62'],

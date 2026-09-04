@@ -1,136 +1,51 @@
-import { useState } from 'react'
 import {
   emptyContextQueue,
   useAppStore,
 } from '../store/appStore'
 import { ContextQueueToolbar } from './ContextQueue'
-import { CloseInvestigationModal } from './CloseInvestigationModal'
 import { Button, Chip, SeverityBadge } from '../components/ui'
 import { clsx, eventOriginLabel, formatTime, matchesOriginFilter, statusLabel, verdictLabel } from '../lib/utils'
 import { fieldForEntityKind } from '../lib/filters'
-import { Check, Inbox, Network, Table2, X } from 'lucide-react'
+import { Check, X } from 'lucide-react'
 
+/** Compact investigation identity for the app header (between logo and actions). */
 export function InvestigationHeader({ investigationId }: { investigationId: string }) {
   const inv = useAppStore((s) => s.investigations[investigationId])
   const parent = useAppStore((s) =>
     inv?.parentId ? s.investigations[inv.parentId] : null,
   )
   const issues = useAppStore((s) => s.issues)
-  const update = useAppStore((s) => s.updateInvestigation)
-  const persistInvestigation = useAppStore((s) => s.persistInvestigation)
   const openInvestigationTab = useAppStore((s) => s.openInvestigationTab)
-  const [closeOpen, setCloseOpen] = useState(false)
-  const [closing, setClosing] = useState(false)
 
   if (!inv) return null
 
   const running = inv.issueIds.some((id) => issues[id]?.status === 'running')
-  const closed = inv.status === 'closed'
 
   return (
-    <div className="border-b border-border bg-surface-1 px-4 py-3">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-sm font-semibold">{inv.title}</h1>
-            <SeverityBadge severity={inv.severity} />
-            <Chip>{statusLabel[inv.status]}</Chip>
-            {inv.verdict ? <Chip>{verdictLabel[inv.verdict] ?? inv.verdict}</Chip> : null}
-            {closed ? (
-              <Button
-                size="sm"
-                variant="ghost"
-                disabled={closing}
-                onClick={() => {
-                  setClosing(true)
-                  void persistInvestigation(investigationId, { status: 'open' }).finally(() =>
-                    setClosing(false),
-                  )
-                }}
-              >
-                Вернуть в работу
-              </Button>
-            ) : (
-              <Button size="sm" onClick={() => setCloseOpen(true)}>
-                Закрыть…
-              </Button>
-            )}
-            <span className="text-xs text-fg-dim">аналитик: {inv.assignee}</span>
-            {running && (
-              <span className="inline-flex items-center gap-1.5 text-xs text-proposed">
-                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-proposed" />
-                фоновые задачи
-              </span>
-            )}
-          </div>
-          {parent && (
-            <button
-              type="button"
-              className="mt-1 text-xs text-fg-muted hover:text-fg"
-              onClick={() => openInvestigationTab(parent.id)}
-            >
-              ← родитель: {parent.title}
-            </button>
-          )}
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="flex rounded border border-border p-0.5">
-            <button
-              type="button"
-              className={clsx(
-                'inline-flex items-center gap-1 rounded px-2 py-1 text-xs',
-                inv.view === 'table' ? 'bg-surface-3 text-fg' : 'text-fg-muted',
-              )}
-              onClick={() => update(investigationId, { view: 'table' })}
-            >
-              <Table2 className="h-3 w-3" />
-              Таблица
-            </button>
-            <button
-              type="button"
-              className={clsx(
-                'inline-flex items-center gap-1 rounded px-2 py-1 text-xs',
-                inv.view === 'graph' ? 'bg-surface-3 text-fg' : 'text-fg-muted',
-              )}
-              onClick={() => update(investigationId, { view: 'graph' })}
-            >
-              <Network className="h-3 w-3" />
-              Граф + таймлайн
-            </button>
-            <button
-              type="button"
-              className={clsx(
-                'inline-flex items-center gap-1 rounded px-2 py-1 text-xs',
-                inv.view === 'queue' ? 'bg-surface-3 text-fg' : 'text-fg-muted',
-              )}
-              onClick={() => update(investigationId, { view: 'queue' })}
-            >
-              <Inbox className="h-3 w-3" />
-              Очередь
-            </button>
-          </div>
-        </div>
-      </div>
-      {closeOpen && !closed ? (
-        <CloseInvestigationModal
-          title={inv.title}
-          busy={closing}
-          onClose={() => {
-            if (!closing) setCloseOpen(false)
-          }}
-          onConfirm={async ({ verdict, reason }) => {
-            setClosing(true)
-            const ok = await persistInvestigation(investigationId, {
-              status: 'closed',
-              verdict,
-              verdictReason: reason || null,
-            })
-            setClosing(false)
-            if (ok) setCloseOpen(false)
-          }}
-        />
+    <div className="flex min-w-0 flex-1 items-baseline gap-2">
+      <SeverityBadge severity={inv.severity} />
+      <span className="shrink-0 text-xs text-fg-muted">{statusLabel[inv.status]}</span>
+      {inv.verdict ? (
+        <span className="shrink-0 text-xs text-fg-dim">
+          {verdictLabel[inv.verdict] ?? inv.verdict}
+        </span>
       ) : null}
+      <h1 className="min-w-0 truncate text-xs font-medium">{inv.title}</h1>
+      {running && (
+        <span className="inline-flex shrink-0 items-center gap-1.5 text-xs text-proposed">
+          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-proposed" />
+          фоновые задачи
+        </span>
+      )}
+      {parent && (
+        <button
+          type="button"
+          className="shrink-0 truncate text-xs text-fg-muted hover:text-fg"
+          onClick={() => openInvestigationTab(parent.id)}
+        >
+          ← {parent.title}
+        </button>
+      )}
     </div>
   )
 }

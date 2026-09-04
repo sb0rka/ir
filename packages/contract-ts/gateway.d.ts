@@ -685,6 +685,11 @@ export interface components {
             relations: components["schemas"]["Relation"][];
             /** @description Opaque cursor for the next page; absent when the search is exhausted. */
             next_cursor?: string;
+            /**
+             * Format: int64
+             * @description Sum of per-source match totals when every non-failed source reported a total; omitted when any successful source lacks a known total.
+             */
+            total?: number;
             source_states: components["schemas"]["SourceState"][];
             /** @description Per-source failures when at least one selected source succeeded. */
             source_errors: components["schemas"]["SourceError"][];
@@ -710,6 +715,11 @@ export interface components {
             /** @enum {string} */
             status: "complete" | "truncated" | "failed";
             reason?: string;
+            /**
+             * Format: int64
+             * @description Vendor match count for this source and query when known. Absent when the source did not report a total (for example noCount without totalCount).
+             */
+            total?: number;
         };
         /** @description Stable source-owned object identity plus the bounded time window needed to resolve it again. */
         SourceObjectRef: {
@@ -747,6 +757,7 @@ export interface components {
         IncidentDetails: {
             key?: string;
             external_key?: string;
+            type?: string;
             verdict?: string;
             damage?: string;
             recommendation?: string;
@@ -870,6 +881,11 @@ export interface components {
         SearchFindingsResponse: {
             findings: components["schemas"]["Finding"][];
             next_cursor?: string;
+            /**
+             * Format: int64
+             * @description Sum of per-source match totals when every non-failed source reported a total; omitted when any successful source lacks a known total.
+             */
+            total?: number;
             source_states: components["schemas"]["SourceState"][];
             source_errors: components["schemas"]["SourceError"][];
         };
@@ -891,6 +907,11 @@ export interface components {
         SearchSessionsResponse: {
             sessions: components["schemas"]["Session"][];
             next_cursor?: string;
+            /**
+             * Format: int64
+             * @description Sum of per-source match totals when every non-failed source reported a total; omitted when any successful source lacks a known total.
+             */
+            total?: number;
             source_states: components["schemas"]["SourceState"][];
             source_errors: components["schemas"]["SourceError"][];
         };

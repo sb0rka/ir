@@ -46,6 +46,7 @@ export type IssueStatus = 'running' | 'completed' | 'error' | 'cancelled'
 export type FilterField =
   | 'host'
   | 'user'
+  | 'account'
   | 'process'
   | 'hash'
   | 'ip'
@@ -59,6 +60,8 @@ export interface Entity {
   kind: EntityKind
   label: string
   attributes: Record<string, string>
+  /** Gateway source code when known (e.g. pt-maxpatrol-siem). */
+  source?: string
   firstSeen?: string
   lastSeen?: string
 }
@@ -98,7 +101,7 @@ export interface CorrelationGroup {
 }
 
 export interface QueueItem {
-  kind: 'alert' | 'correlation'
+  kind: 'alert' | 'correlation' | 'entity'
   id: string
 }
 
@@ -217,8 +220,8 @@ export interface FilterChip {
   values: string[]
 }
 
-/** High-level queue search target: a finding kind or normalized events. */
-export type QueueSource = 'siem_incident' | 'siem_correlation' | 'nad_attack' | 'events'
+/** High-level queue search target: a finding kind, normalized events, or entities. */
+export type QueueSource = 'siem_incident' | 'siem_correlation' | 'nad_attack' | 'events' | 'entities'
 
 export const DEFAULT_QUEUE_SOURCE: QueueSource = 'siem_incident'
 
@@ -227,6 +230,7 @@ export const QUEUE_SOURCE_OPTIONS: { id: QueueSource; label: string }[] = [
   { id: 'siem_correlation', label: 'Корреляции' },
   { id: 'nad_attack', label: 'Атаки NAD' },
   { id: 'events', label: 'События' },
+  { id: 'entities', label: 'Сущности' },
 ]
 
 export interface QueryHistoryEntry {
@@ -243,6 +247,31 @@ export interface EventGroupItem {
   count: number
 }
 
+/** Cached queue table results for one QueueSource (session memory). */
+export interface QueueSourceResultSnapshot {
+  alerts: Record<string, AlertEvent>
+  correlations: Record<string, CorrelationGroup>
+  queueOrder: QueueItem[]
+  eventGroups: EventGroupItem[]
+  executedFingerprint: string | null
+  mockSources: string[]
+  /** Vendor match count when known. */
+  total?: number
+}
+
+/** Context-queue subset of a source snapshot (no correlations / mockSources). */
+export interface ContextSourceResultSnapshot {
+  alerts: Record<string, AlertEvent>
+  queueOrder: QueueItem[]
+  eventGroups: EventGroupItem[]
+  executedFingerprint: string | null
+  /** Vendor match count when known. */
+  total?: number
+}
+
+/** Filter context-queue rows by membership in the investigation. */
+export type AddedFilter = 'all' | 'hide_added' | 'only_added'
+
 /** Per-investigation state of the context event queue (search + filters). */
 export interface ContextQueueState {
   /** Last executed entity chips used to filter the table. */
@@ -257,12 +286,21 @@ export interface ContextQueueState {
   /** Bumped when a finding resolve chip blocks adding another filter. */
   findingFilterWarnAt: number
   selectedIds: string[]
-  hideAdded: boolean
+  /** Filter rows by whether they are already in the investigation context. */
+  addedFilter: AddedFilter
   originFilter: EventOrigin | 'all'
   reviewFilter: ReviewState | 'all'
+  /** Client-side text filter for the context queue AlertTable. */
+  textFilter: string
+  /** Which alert table column textFilter applies to. */
+  textFilterColumn: string
   alerts: Record<string, AlertEvent>
   queueOrder: QueueItem[]
   loading: boolean
+  /** Vendor match count for the last findings/events search when known. */
+  total?: number
+  /** Last executed results per source while switching QueueSourceToggle. */
+  sourceResults: Partial<Record<QueueSource, ContextSourceResultSnapshot>>
 }
 
 export interface SavedView {

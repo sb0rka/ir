@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { LogOut, Settings2 } from 'lucide-react'
 import { TabBar } from './components/TabBar'
+import { PrimaryNav } from './components/PrimaryNav'
 import { QueuePage } from './pages/QueuePage'
 import { InvestigationsPage } from './pages/InvestigationsPage'
 import { InvestigationPage } from './pages/InvestigationPage'
-import { useAppStore } from './store/appStore'
+import { emptyContextQueue, useAppStore } from './store/appStore'
 import { Button, ErrorBanner } from './components/ui'
 import { ThemeToggle } from './components/theme-toggle'
 import {
@@ -19,6 +20,17 @@ import { getProjectId, setProjectId } from './api/env'
 import { listProjects, type Project } from './api/platform'
 import { LoginPage } from './components/LoginPage'
 import { ConfigurationModal } from './components/ConfigurationModal'
+import { InvestigationHeader } from './components/InvestigationHeader'
+import { HeaderSearch } from './components/HeaderSearch'
+import { parseQueuePdql, queueSelectFields } from './lib/pdql'
+import {
+  alertTableSearchColumns,
+  resolveAlertTableSearchColumn,
+} from './components/alertTableColumns'
+import {
+  INVESTIGATION_TABLE_SEARCH_COLUMNS,
+  resolveInvestigationTableSearchColumn,
+} from './components/investigationTableColumns'
 
 type SessionPhase = 'loading' | 'ready' | 'signed-out' | 'error'
 
@@ -152,8 +164,123 @@ function Dashboard({
   const somHint = useAppStore((state) => state.somHint)
   const clearError = useAppStore((state) => state.clearError)
   const bootstrap = useAppStore((state) => state.bootstrap)
+  const investigationFilters = useAppStore((state) => state.investigationFilters)
+  const setInvestigationFilter = useAppStore((state) => state.setInvestigationFilter)
+  const queueTextFilter = useAppStore((state) => state.queueTextFilter)
+  const setQueueTextFilter = useAppStore((state) => state.setQueueTextFilter)
+  const queueTextFilterColumn = useAppStore((state) => state.queueTextFilterColumn)
+  const setQueueTextFilterColumn = useAppStore((state) => state.setQueueTextFilterColumn)
+  const investigationTextFilterColumn = useAppStore(
+    (state) => state.investigationTextFilterColumn,
+  )
+  const setInvestigationTextFilterColumn = useAppStore(
+    (state) => state.setInvestigationTextFilterColumn,
+  )
+  const queuePdql = useAppStore((state) => state.queuePdql)
+  const queueSource = useAppStore((state) => state.queueSource)
+  const setContextQueue = useAppStore((state) => state.setContextQueue)
+  const contextQueue = useAppStore((state) =>
+    state.activeTab !== 'queue' && state.activeTab !== 'investigations'
+      ? (state.contextQueue[state.activeTab] ?? emptyContextQueue)
+      : null,
+  )
+  const investigationView = useAppStore((state) =>
+    state.activeTab !== 'queue' && state.activeTab !== 'investigations'
+      ? (state.investigations[state.activeTab]?.view ?? null)
+      : null,
+  )
   const bootstrapped = useRef(false)
   const [configurationOpen, setConfigurationOpen] = useState(false)
+  const investigationOpen =
+    activeTab !== 'queue' && activeTab !== 'investigations'
+  const contextQueueSearchOpen = investigationOpen && investigationView === 'queue'
+  const listSearchOpen =
+    activeTab === 'queue' || activeTab === 'investigations' || contextQueueSearchOpen
+  const contextQueuePdql = contextQueue?.pdql
+  const contextQueueSource = contextQueue?.queueSource
+  const alertSearchOpen = activeTab === 'queue' || contextQueueSearchOpen
+  const alertSearchColumns = alertSearchOpen
+    ? (() => {
+        const pdql = contextQueueSearchOpen ? (contextQueuePdql ?? queuePdql) : queuePdql
+        const source = contextQueueSearchOpen
+          ? (contextQueueSource ?? queueSource)
+          : queueSource
+        const parsed = parseQueuePdql(pdql)
+        const selectFields = parsed.ok ? queueSelectFields(parsed.ast) : []
+        return alertTableSearchColumns(selectFields, {
+          showCategory: source === 'siem_incident',
+        })
+      })()
+    : undefined
+  const searchColumns =
+    alertSearchColumns ??
+    (activeTab === 'investigations' ? [...INVESTIGATION_TABLE_SEARCH_COLUMNS] : undefined)
+  const listSearchValue = contextQueueSearchOpen
+    ? (contextQueue?.textFilter ?? '')
+    : activeTab === 'investigations'
+      ? investigationFilters.q
+      : queueTextFilter
+  const listSearchColumn = contextQueueSearchOpen
+    ? (contextQueue?.textFilterColumn ?? 'title')
+    : activeTab === 'queue'
+      ? queueTextFilterColumn
+      : investigationTextFilterColumn
+  const resolvedSearchColumn = alertSearchColumns
+    ? resolveAlertTableSearchColumn(listSearchColumn, alertSearchColumns)
+    : activeTab === 'investigations'
+      ? resolveInvestigationTableSearchColumn(investigationTextFilterColumn)
+      : undefined
+
+  const onListSearchChange = useCallback(
+    (next: string) => {
+      if (activeTab === 'investigations') {
+        void setInvestigationFilter({ q: next })
+        return
+      }
+      if (activeTab !== 'queue' && activeTab !== 'investigations') {
+        setContextQueue(activeTab, { textFilter: next })
+        return
+      }
+      setQueueTextFilter(next)
+    },
+    [activeTab, setContextQueue, setInvestigationFilter, setQueueTextFilter],
+  )
+
+  const onSearchColumnChange = useCallback(
+    (column: string) => {
+      if (activeTab === 'investigations') {
+        setInvestigationTextFilterColumn(column)
+        return
+      }
+      if (activeTab !== 'queue' && activeTab !== 'investigations') {
+        setContextQueue(activeTab, { textFilterColumn: column })
+        return
+      }
+      setQueueTextFilterColumn(column)
+    },
+    [activeTab, setContextQueue, setInvestigationTextFilterColumn, setQueueTextFilterColumn],
+  )
+
+  useEffect(() => {
+    if (!alertSearchColumns || !resolvedSearchColumn) return
+    if (contextQueueSearchOpen) {
+      if (resolvedSearchColumn === contextQueue?.textFilterColumn) return
+      setContextQueue(activeTab, { textFilterColumn: resolvedSearchColumn })
+      return
+    }
+    if (activeTab !== 'queue') return
+    if (resolvedSearchColumn === queueTextFilterColumn) return
+    setQueueTextFilterColumn(resolvedSearchColumn)
+  }, [
+    activeTab,
+    alertSearchColumns,
+    contextQueue?.textFilterColumn,
+    contextQueueSearchOpen,
+    queueTextFilterColumn,
+    resolvedSearchColumn,
+    setContextQueue,
+    setQueueTextFilterColumn,
+  ])
 
   useEffect(() => {
     if (bootstrapped.current) return
@@ -163,11 +290,37 @@ function Dashboard({
 
   return (
     <div className="flex h-full flex-col bg-surface-0 text-fg">
-      <header className="flex items-center justify-between gap-4 border-b border-border px-4 py-2">
-        <div className="flex min-w-0 items-center gap-3">
-          <div className="shrink-0 font-mono text-sm font-semibold tracking-widest">SB0RKA / IR</div>
+      <header className="flex items-center gap-4 border-b border-border px-4 py-2">
+        <div className="flex min-w-0 flex-1 items-center gap-3">
+          <div className="ml-1.5 mr-6 shrink-0 -translate-y-px leading-none">
+            <img
+              src="https://static.sb0rka.ru/logo-light.png"
+              alt="Sb0rka Incident Response"
+              className="block h-3.5 w-auto dark:hidden"
+            />
+            <img
+              src="https://static.sb0rka.ru/logo-dark.png"
+              alt=""
+              className="hidden h-3.5 w-auto dark:block"
+            />
+          </div>
+          <PrimaryNav />
+          {investigationOpen ? (
+            <InvestigationHeader investigationId={activeTab} />
+          ) : null}
+          {listSearchOpen ? (
+            <HeaderSearch
+              key={activeTab}
+              value={listSearchValue}
+              onChange={onListSearchChange}
+              placeholder="Поиск"
+              columns={searchColumns}
+              column={resolvedSearchColumn}
+              onColumnChange={onSearchColumnChange}
+            />
+          ) : null}
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex shrink-0 items-center gap-1">
           <span className="hidden max-w-48 truncate px-2 font-mono text-[11px] text-fg-dim sm:block">
             {subject.user?.username ?? subject.subject_id}
           </span>

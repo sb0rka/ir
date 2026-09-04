@@ -24,6 +24,7 @@ type SearchFindingsRequest struct {
 type SearchFindingsResult struct {
 	Findings     []domain.Finding
 	NextCursor   string
+	Total        *int64
 	SourceStates []domain.SourceState
 	SourceErrors []domain.SourceError
 }
@@ -89,7 +90,9 @@ func (service *Service) SearchFindings(ctx context.Context, access ProjectAccess
 			if status == "" {
 				status = "complete"
 			}
-			result.SourceStates = append(result.SourceStates, domain.SourceState{Source: item.source, Status: status})
+			result.SourceStates = append(result.SourceStates, domain.SourceState{
+				Source: item.source, Status: status, Total: item.page.Total,
+			})
 			result.Findings = append(result.Findings, item.page.Findings...)
 			if item.page.NextCursor != "" {
 				state.Positions[item.source] = item.page.NextCursor
@@ -125,6 +128,7 @@ func (service *Service) SearchFindings(ctx context.Context, access ProjectAccess
 	}
 	sortSourceStates(result.SourceStates)
 	sortSourceErrors(result.SourceErrors)
+	result.Total = sumSourceTotals(result.SourceStates)
 	return result, nil
 }
 

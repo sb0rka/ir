@@ -4,6 +4,7 @@ import { emptyContextQueue, useAppStore } from '../store/appStore'
 import { hasGroupValueSelection, parseQueuePdql } from '../lib/pdql'
 import { clsx } from '../lib/utils'
 import type { EventGroupItem } from '../types'
+import { Button } from './ui'
 
 const NULL_LABEL = 'Нет данных'
 
@@ -64,14 +65,15 @@ export function EventGroupFilter({ investigationId }: { investigationId?: string
           </div>
         </div>
         {selected && (
-          <button
-            type="button"
-            className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-fg-muted hover:bg-surface-2 hover:text-fg"
+          <Button
+            size="icon"
+            variant="ghost"
+            title="Сбросить"
+            aria-label="Сбросить"
             onClick={() => clearGroupSelection(investigationId ?? null)}
           >
-            <X className="h-3 w-3" />
-            Сбросить
-          </button>
+            <X className="h-3.5 w-3.5" />
+          </Button>
         )}
       </div>
       <label className="flex items-center gap-1.5 border-b border-border px-3 py-1.5">

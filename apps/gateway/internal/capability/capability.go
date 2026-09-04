@@ -24,6 +24,8 @@ type FindingPage struct {
 	Findings   []domain.Finding
 	Status     string
 	NextCursor string
+	// Total is the vendor match count when known; nil when the source did not report one.
+	Total *int64
 }
 
 type FindingSource interface {
@@ -41,6 +43,8 @@ type SessionPage struct {
 	Sessions   []domain.Session
 	Status     string
 	NextCursor string
+	// Total is the vendor match count when known; nil when the source did not report one.
+	Total *int64
 }
 
 type SessionSource interface {
@@ -72,6 +76,8 @@ type EventPage struct {
 	Relations  []domain.Relation
 	Status     string
 	NextCursor string
+	// Total is the vendor match count when known; nil when the source did not report one.
+	Total *int64
 }
 
 type ResolveContextRequest struct {

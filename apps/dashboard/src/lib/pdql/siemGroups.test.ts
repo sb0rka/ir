@@ -82,21 +82,33 @@ describe('groupEventFields', () => {
       'extra',
       'event-src',
       'collection',
-      'service',
       'raw',
     ])
     const roles = groups.find((group) => group.id === 'roles')
     expect(roles?.columns.map((column) => column.title)).toEqual(['Субъект', 'Объект'])
     expect(roles?.columns[0]?.rows.map((row) => row.field)).toContain('subject.process.name')
-    expect(groups.find((group) => group.id === 'extra')?.columns[0]?.rows).toEqual([
-      { field: 'msgid', value: 'openat' },
-      { field: 'datafield1', value: 'cat' },
-      { field: 'chain_id', value: '20183' },
-    ])
-    expect(groups.find((group) => group.id === 'event-src')?.columns[0]?.rows.map((row) => row.field)).toEqual([
+    expect(groups.find((group) => group.id === 'interaction')?.title).toBe('Параметры')
+    expect(groups.find((group) => group.id === 'interaction')?.columns[0]?.rows.map((row) => row.field)).toEqual([
       'event_src.vendor',
       'event_src.title',
+      'msgid',
       'event_src.subsys',
+      'category.generic',
+      'category.high',
+      'category.low',
+      'importance',
+      'logon_service',
+      'action',
+      'status',
+    ])
+    expect(groups.find((group) => group.id === 'extra')?.columns[0]?.rows).toEqual([
+      { field: 'datafield1', value: 'cat' },
+      { field: 'chain_id', value: '20183' },
+      { field: 'id', value: 'PT_UNIX_like_auditd_syslog_structured' },
+      { field: 'uuid', value: 'b5eaeea8-6c18-11f1-b241-d00d762d3dd7' },
+      { field: 'normalized', value: 'true' },
+    ])
+    expect(groups.find((group) => group.id === 'event-src')?.columns[0]?.rows.map((row) => row.field)).toEqual([
       'event_src.host',
       'origin_app_name',
     ])
@@ -104,11 +116,7 @@ describe('groupEventFields', () => {
       { field: 'recv_host', value: '' },
       { field: 'recv_time', value: '2026-06-19T19:54:41Z' },
     ])
-    expect(groups.find((group) => group.id === 'service')?.columns[0]?.rows.map((row) => row.field)).toEqual([
-      'id',
-      'uuid',
-      'normalized',
-    ])
+    expect(groups.find((group) => group.id === 'service')).toBeUndefined()
   })
 
   it('keeps process.parent fields on the subject/object, not a separate entity group', () => {
@@ -117,11 +125,36 @@ describe('groupEventFields', () => {
       'object.process.parent.name': 'explorer.exe',
       'subject.account.name': 'apetrov$',
     })
-    expect(groups.map((group) => group.id)).toEqual(['roles'])
+    expect(groups.map((group) => group.id)).toEqual(['roles', 'interaction'])
     const roles = groups.find((group) => group.id === 'roles')
     expect(roles?.columns[1]?.rows.map((row) => row.field)).toEqual([
       'object.process.name',
       'object.process.parent.name',
+    ])
+    expect(groups.find((group) => group.id === 'interaction')?.columns[0]?.rows).toEqual([
+      { field: 'source', value: 'pt-maxpatrol-siem' },
+    ])
+  })
+
+  it('uses an incident schema for siem_incident findings', () => {
+    const groups = groupEventFields('pt-maxpatrol-siem', {
+      finding_kind: 'siem_incident',
+      uuid: '11111111-1111-1111-1111-111111111111',
+      status: 'new',
+      'rule.name': 'CAP_Activity_From_Known_Malicious_Hostname',
+      'incident.key': 'INC-1',
+      'incident.type': 'InfectionAttempt',
+      'incident.verdict': 'undefined',
+    })
+    expect(groups.map((group) => group.id)).toEqual(['incident', 'interaction'])
+    expect(groups.find((group) => group.id === 'incident')?.columns[0]?.rows.map((row) => row.field)).toEqual([
+      'incident.type',
+      'incident.key',
+      'incident.verdict',
+      'status',
+      'rule.name',
+      'uuid',
+      'finding_kind',
     ])
   })
 
@@ -153,7 +186,6 @@ describe('groupEventFields', () => {
       'addresses',
       'interaction',
       'event-src',
-      'service',
       'extra',
     ])
     expect(groups.find((group) => group.id === 'correlation')?.columns[0]?.rows.map((row) => row.field)).toEqual([
@@ -162,8 +194,15 @@ describe('groupEventFields', () => {
       'count.subevents',
       'alert.key',
     ])
+    expect(groups.find((group) => group.id === 'interaction')?.title).toBe('Параметры')
+    expect(groups.find((group) => group.id === 'interaction')?.columns[0]?.rows.map((row) => row.field)).toEqual([
+      'source',
+      'action',
+      'status',
+    ])
     expect(groups.find((group) => group.id === 'extra')?.columns[0]?.rows).toEqual([
       { field: 'datafield6', value: 'Network' },
+      { field: 'uuid', value: '11111111-1111-1111-1111-111111111111' },
     ])
   })
 

@@ -82,7 +82,8 @@ func (provider *Provider) SearchFindings(ctx context.Context, access capability.
 		return capability.FindingPage{}, err
 	}
 	if !wantedKind(request.Kinds, AttackRecordType) {
-		return capability.FindingPage{Findings: []domain.Finding{}, Status: "complete"}, nil
+		zero := int64(0)
+		return capability.FindingPage{Findings: []domain.Finding{}, Status: "complete", Total: &zero}, nil
 	}
 	limit, err := validateCapabilityLimit(request.Limit)
 	if err != nil {
@@ -98,8 +99,10 @@ func (provider *Provider) SearchFindings(ctx context.Context, access capability.
 	}
 	page := capability.FindingPage{Status: "complete"}
 	seen := make(map[string]struct{})
+	var total int64
 	for _, result := range results {
 		partial = partial || result.Truncated
+		total += result.Total
 		for _, attack := range result.Attacks {
 			finding := canonicalFinding(attack)
 			key := objectIdentity(finding.Ref)
@@ -110,6 +113,7 @@ func (provider *Provider) SearchFindings(ctx context.Context, access capability.
 			page.Findings = append(page.Findings, finding)
 		}
 	}
+	page.Total = &total
 	sort.Slice(page.Findings, func(left, right int) bool {
 		if !page.Findings[left].OccurredAt.Equal(page.Findings[right].OccurredAt) {
 			return page.Findings[left].OccurredAt.After(page.Findings[right].OccurredAt)
@@ -209,8 +213,10 @@ func (provider *Provider) SearchSessions(ctx context.Context, access capability.
 	}
 	page := capability.SessionPage{Status: "complete"}
 	seen := make(map[string]struct{})
+	var total int64
 	for _, result := range results {
 		partial = partial || result.Truncated
+		total += result.Total
 		for _, session := range result.Sessions {
 			item := canonicalSession(session)
 			key := objectIdentity(item.Ref)
@@ -221,6 +227,7 @@ func (provider *Provider) SearchSessions(ctx context.Context, access capability.
 			page.Sessions = append(page.Sessions, item)
 		}
 	}
+	page.Total = &total
 	sort.Slice(page.Sessions, func(left, right int) bool {
 		if !page.Sessions[left].StartedAt.Equal(page.Sessions[right].StartedAt) {
 			return page.Sessions[left].StartedAt.After(page.Sessions[right].StartedAt)

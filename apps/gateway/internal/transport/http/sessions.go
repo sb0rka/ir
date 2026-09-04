@@ -40,6 +40,7 @@ func (server *Server) SearchSessions(w http.ResponseWriter, r *http.Request, _ a
 	}
 	response := api.SearchSessionsResponse{
 		Sessions: sessionsToAPI(result.Sessions), SourceStates: sourceStatesToAPI(result.SourceStates), SourceErrors: sourceErrorsToAPI(result.SourceErrors),
+		Total: result.Total,
 	}
 	if result.NextCursor != "" {
 		response.NextCursor = &result.NextCursor
