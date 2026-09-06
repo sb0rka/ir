@@ -121,6 +121,8 @@ services:
     profiles:
       - apps
 
+  # Optional OpenVPN tunnel (PT lab). Managed separately via `task vpn:up` / `task vpn:down`.
+  # Does not publish Gateway ports — start gateway with profile apps.
   openvpn:
     build:
       context: docker/openvpn-client
@@ -132,8 +134,6 @@ services:
       - /dev/net/tun
     volumes:
       - ${OPENVPN_CONFIG_FILE:?set OPENVPN_CONFIG_FILE in .env}:/vpn/vpn.conf:ro
-    ports:
-      - "${GATEWAY_PORT:-8091}:8091"
     extra_hosts:
       - "host.docker.internal:host-gateway"
       # Lab VPN DNS may not publish these hosts; set IPs in .env when needed.
@@ -145,26 +145,16 @@ services:
       timeout: 5s
       retries: 12
       start_period: 45s
-    # Gateway shares this netns; join som_selfrun so selfrun can reach :8091.
     networks:
-      default: {}
-      som_selfrun:
-        aliases:
-          - gateway
-          - openvpn
+      - default
     profiles:
-      - apps
+      - vpn
 
   gateway:
     build:
       context: .
       dockerfile: apps/gateway/Dockerfile
     restart: unless-stopped
-    # Shares openvpn network namespace so outbound SIEM traffic goes through the VPN tunnel.
-    network_mode: service:openvpn
-    depends_on:
-      openvpn:
-        condition: service_healthy
     env_file:
       - .env
     environment:
@@ -187,8 +177,26 @@ services:
       SOURCE_PT_NAD_BASE_URL: "${SOURCE_PT_NAD_BASE_URL:-}"
       SOURCE_PT_NAD_STORE_IDS: "${SOURCE_PT_NAD_STORE_IDS:-}"
       GATEWAY_SKIP_TLS_VERIFY: "${GATEWAY_SKIP_TLS_VERIFY:-false}"
+      SOURCE_WAZUH_BASE_URL: "${SOURCE_WAZUH_BASE_URL:-}"
+      SOURCE_WAZUH_USERNAME: "${SOURCE_WAZUH_USERNAME:-}"
+      SOURCE_WAZUH_PASSWORD: "${SOURCE_WAZUH_PASSWORD:-}"
+      SOURCE_WAZUH_INSECURE_SKIP_VERIFY: "${SOURCE_WAZUH_INSECURE_SKIP_VERIFY:-false}"
+      SOURCE_WAZUH_INDEX_PATTERN: "${SOURCE_WAZUH_INDEX_PATTERN:-wazuh-alerts-*}"
+      SOURCE_WAZUH_TIMEOUT_SEC: "${SOURCE_WAZUH_TIMEOUT_SEC:-}"
+      SOURCE_WAZUH_TLS_CA_FILE: "${SOURCE_WAZUH_TLS_CA_FILE:-}"
+    ports:
+      - "${GATEWAY_PORT:-8091}:8091"
     volumes:
       - ./keys:/keys:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+      - "pt-nad.edtechlab.local:${PT_NAD_HOST_IP:-127.0.0.1}"
+      - "mp-siem.edtechlab.local:${PT_SIEM_HOST_IP:-127.0.0.1}"
+    networks:
+      default: {}
+      som_selfrun:
+        aliases:
+          - gateway
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8091/ping || exit 1"]
       interval: 10s

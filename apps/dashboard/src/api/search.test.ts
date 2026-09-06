@@ -462,3 +462,46 @@ describe('resolveFindingEvents session cache', () => {
     expect(gatewayPost).toHaveBeenCalledTimes(2)
   })
 })
+
+describe('searchQueue events includes wazuh', () => {
+  it('keeps wazuh in the mixed events tab search', async () => {
+    gatewayGet.mockResolvedValue({
+      data: {
+        items: [
+          {
+            code: 'pt-maxpatrol-siem',
+            name: 'MaxPatrol SIEM',
+            kind: 'siem',
+            mode: 'proxy',
+            status: 'online',
+            capabilities: ['events', 'findings'],
+          },
+          {
+            code: 'wazuh',
+            name: 'Wazuh',
+            kind: 'siem',
+            mode: 'proxy',
+            status: 'online',
+            capabilities: ['events'],
+          },
+        ],
+      },
+      error: undefined,
+      response: { status: 200 },
+    })
+    gatewayPost.mockImplementation(async (path: string, init?: { body?: { sources?: string[] } }) => {
+      if (path === '/api/v1/events/search') {
+        expect(init?.body?.sources).toEqual(expect.arrayContaining(['pt-maxpatrol-siem', 'wazuh']))
+        return {
+          data: { events: [], entities: [], relations: [], source_states: [], source_errors: [] },
+          error: undefined,
+          response: { status: 200 },
+        }
+      }
+      throw new Error(`unexpected ${path}`)
+    })
+
+    await searchQueue(mustParse('select(time)'), demoDayInterval('UTC'), 'events')
+    expect(gatewayPost).toHaveBeenCalled()
+  })
+})

@@ -22,11 +22,13 @@ const (
 	DefaultSourceTimeout  = 10 * time.Second
 	PTMaxPatrolSIEM       = "pt-maxpatrol-siem"
 	PTNAD                 = "pt-nad"
+	Wazuh                 = "wazuh"
 	PTMaxPatrolCookie     = "DEMO_PT_SIEM_COOKIE"
 	PTNADCookie           = "DEMO_PT_NAD_COOKIE"
+	DefaultWazuhIndex     = "wazuh-alerts-*"
 )
 
-var SourceCodes = []string{PTMaxPatrolSIEM, PTNAD}
+var SourceCodes = []string{PTMaxPatrolSIEM, PTNAD, Wazuh}
 
 type Config struct {
 	Server           ServerConfig
@@ -56,12 +58,16 @@ type AuthConfig struct {
 }
 
 type SourceConfig struct {
-	BaseURL          string
-	IncidentsBaseURL string
-	StoreIDs         []string
-	Timeout          time.Duration
-	TLSCAFile        string
-	CredentialSecret string
+	BaseURL           string
+	IncidentsBaseURL  string
+	StoreIDs          []string
+	Timeout           time.Duration
+	TLSCAFile         string
+	SkipTLSVerify     bool
+	CredentialSecret  string
+	Username     string
+	Password     string
+	IndexPattern string
 }
 
 func Load() (Config, error) {
@@ -126,6 +132,15 @@ func Load() (Config, error) {
 		TLSCAFile:        coreconfig.GetStringEnv("SOURCE_PT_NAD_TLS_CA_FILE", ""),
 		CredentialSecret: PTNADCookie,
 	}
+	cfg.Sources[Wazuh] = SourceConfig{
+		BaseURL:       coreconfig.GetStringEnv("SOURCE_WAZUH_BASE_URL", ""),
+		Timeout:       coreconfig.GetDurationEnv("SOURCE_WAZUH_TIMEOUT_SEC", cfg.Server.SourceTimeout, time.Second),
+		TLSCAFile:     coreconfig.GetStringEnv("SOURCE_WAZUH_TLS_CA_FILE", ""),
+		SkipTLSVerify: coreconfig.GetBoolEnv("SOURCE_WAZUH_INSECURE_SKIP_VERIFY", false),
+		Username:      coreconfig.GetStringEnv("SOURCE_WAZUH_USERNAME", ""),
+		Password:      coreconfig.GetStringEnv("SOURCE_WAZUH_PASSWORD", ""),
+		IndexPattern:  coreconfig.GetStringEnv("SOURCE_WAZUH_INDEX_PATTERN", DefaultWazuhIndex),
+	}
 
 	for code := range configuredSources(cfg.ProjectSources) {
 		source := cfg.Sources[code]
@@ -143,6 +158,16 @@ func Load() (Config, error) {
 		case PTNAD:
 			if len(source.StoreIDs) == 0 {
 				return Config{}, fmt.Errorf("source %s requires SOURCE_PT_NAD_STORE_IDS", code)
+			}
+		case Wazuh:
+			if strings.TrimSpace(source.Username) == "" || strings.ContainsAny(source.Username, "\r\n") {
+				return Config{}, fmt.Errorf("source %s requires SOURCE_WAZUH_USERNAME", code)
+			}
+			if strings.TrimSpace(source.Password) == "" || strings.ContainsAny(source.Password, "\r\n") {
+				return Config{}, fmt.Errorf("source %s requires SOURCE_WAZUH_PASSWORD", code)
+			}
+			if err := validateWazuhIndexPattern(source.IndexPattern); err != nil {
+				return Config{}, fmt.Errorf("source %s: %w", code, err)
 			}
 		}
 	}
@@ -164,6 +189,32 @@ func validateSourceURL(source, label, raw string) error {
 	value, err := url.Parse(strings.TrimSpace(raw))
 	if err != nil || value.Scheme != "https" || value.Host == "" || value.User != nil || value.RawQuery != "" || value.Fragment != "" {
 		return fmt.Errorf("source %s %s must be an absolute HTTPS URL without credentials, query, or fragment", source, label)
+	}
+	return nil
+}
+
+func validateWazuhIndexPattern(raw string) error {
+	pattern := strings.TrimSpace(raw)
+	if pattern == "" {
+		return fmt.Errorf("index pattern is required")
+	}
+	if strings.ContainsAny(pattern, "/, \t\r\n") || strings.Contains(pattern, "..") {
+		return fmt.Errorf("index pattern must not contain path separators, commas, spaces, or ..")
+	}
+	if !strings.HasPrefix(pattern, "wazuh-alerts-") {
+		return fmt.Errorf("index pattern must start with wazuh-alerts-")
+	}
+	rest := strings.TrimPrefix(pattern, "wazuh-alerts-")
+	if rest == "" {
+		return fmt.Errorf("index pattern is incomplete")
+	}
+	for _, character := range rest {
+		if (character >= 'a' && character <= 'z') || (character >= 'A' && character <= 'Z') ||
+			(character >= '0' && character <= '9') || character == '-' || character == '_' ||
+			character == '.' || character == '*' {
+			continue
+		}
+		return fmt.Errorf("index pattern contains an unsupported character")
 	}
 	return nil
 }

@@ -554,12 +554,13 @@ func (s *Server) importEntityEventsTool(
 		Limit:     &limit,
 	}
 	var (
-		foundEvents  []gatewaycontract.Event
-		pageEntities []gatewaycontract.Entity
-		sourceStates []gatewaycontract.SourceState
-		sourceErrors = append([]gatewaycontract.SourceError{}, aggregateSourceErrors...)
-		nextCursor   *string
-		truncated    bool
+		foundEvents   []gatewaycontract.Event
+		pageEntities  []gatewaycontract.Entity
+		pageRelations []gatewaycontract.Relation
+		sourceStates  []gatewaycontract.SourceState
+		sourceErrors  = append([]gatewaycontract.SourceError{}, aggregateSourceErrors...)
+		nextCursor    *string
+		truncated     bool
 	)
 	for {
 		raw, err := s.gateway.SearchEvents(ctx, scope.ProjectID, bearer, searchReq)
@@ -577,6 +578,7 @@ func (s *Server) importEntityEventsTool(
 		sourceStates = append(sourceStates, page.SourceStates...)
 		sourceErrors = append(sourceErrors, page.SourceErrors...)
 		pageEntities = append(pageEntities, page.Entities...)
+		pageRelations = append(pageRelations, page.Relations...)
 		for _, event := range page.Events {
 			foundEvents = append(foundEvents, event)
 			if len(foundEvents) >= limit {
@@ -654,7 +656,7 @@ func (s *Server) importEntityEventsTool(
 
 	// Persist search hits directly — re-resolving each UUID through Gateway
 	// times out before a full page of SIEM events can be re-fetched.
-	resolved := selectionFromSearchEvents(foundEvents, pageEntities)
+	resolved := selectionFromSearchEvents(foundEvents, pageEntities, pageRelations)
 	if resolvedEntity.Type != "" && resolvedEntity.Value != "" {
 		markSearchEntityDirect(&resolved, resolvedEntity.Type, resolvedEntity.Value)
 	}
@@ -802,14 +804,10 @@ func (s *Server) resolveImportTimeRange(
 }
 
 func defaultSourcesForEntityType(typeCode string) []string {
-	switch strings.ToLower(strings.TrimSpace(typeCode)) {
-	case "account", "host", "hostname", "process", "hash", "file_hash", "md5", "sha1", "sha256":
-		return []string{"pt-maxpatrol-siem"}
-	case "ip", "domain":
-		return nil
-	default:
-		return []string{"pt-maxpatrol-siem"}
-	}
+	_ = typeCode
+	// Fan out to every project-allowlisted event source. Callers that need a
+	// specific vendor pass sources explicitly.
+	return nil
 }
 
 func buildEntityEventsBatch(

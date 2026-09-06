@@ -3,6 +3,7 @@ import { ChevronDown, ChevronRight } from 'lucide-react'
 import {
   eventFieldLabelRu,
   groupEventFields,
+  groupWazuhFields,
   incidentTypeLabelRu,
   type FieldColumn,
   type FieldGroup,
@@ -45,7 +46,7 @@ export function EventFields({
   raw: Record<string, string>
   onValueClick: (field: string, value: string) => void
 }) {
-  const groups = groupEventFields(source, raw)
+  const groups = source === 'wazuh' ? groupWazuhFields(raw) : groupEventFields(source, raw)
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set())
   if (groups.length === 0) return null
 
@@ -55,6 +56,7 @@ export function EventFields({
         <FieldGroupBlock
           key={group.id}
           group={group}
+          source={source}
           collapsed={collapsed.has(group.id)}
           onToggle={() => {
             setCollapsed((current) => {
@@ -73,11 +75,13 @@ export function EventFields({
 
 function FieldGroupBlock({
   group,
+  source,
   collapsed,
   onToggle,
   onValueClick,
 }: {
   group: FieldGroup
+  source: string
   collapsed: boolean
   onToggle: () => void
   onValueClick: (field: string, value: string) => void
@@ -102,6 +106,7 @@ function FieldGroupBlock({
             <FieldColumnBlock
               key={column.title || group.id}
               column={column}
+              source={source}
               onValueClick={onValueClick}
             />
           ))}
@@ -113,9 +118,11 @@ function FieldGroupBlock({
 
 function FieldColumnBlock({
   column,
+  source,
   onValueClick,
 }: {
   column: FieldColumn
+  source: string
   onValueClick: (field: string, value: string) => void
 }) {
   return (
@@ -127,7 +134,7 @@ function FieldColumnBlock({
       )}
       <dl>
         {column.rows.map((row) => (
-          <FieldValueRow key={row.field} row={row} onValueClick={onValueClick} />
+          <FieldValueRow key={row.field} row={row} source={source} onValueClick={onValueClick} />
         ))}
       </dl>
     </div>
@@ -136,14 +143,18 @@ function FieldColumnBlock({
 
 function FieldValueRow({
   row,
+  source,
   onValueClick,
 }: {
   row: FieldRow
+  source: string
   onValueClick: (field: string, value: string) => void
 }) {
   return (
     <div className="flex items-start justify-between gap-2 text-xs">
-      <dt className="min-w-0 max-w-[45%] break-all text-fg-dim">{eventFieldLabelRu(row.field)}</dt>
+      <dt className="min-w-0 max-w-[45%] break-all text-fg-dim">
+        {eventFieldLabelRu(row.field, source)}
+      </dt>
       <dd className="min-w-0 flex-1 break-all text-right">
         {row.value ? (
           <ValueButton row={row} onValueClick={onValueClick} />

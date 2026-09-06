@@ -679,7 +679,7 @@ export async function searchQueue(
     chips,
     effective,
     query,
-    queueSource,
+    queueSource as FindingKind,
     astToEventSearch(ast).sort,
     effectiveQueueLimit(ast),
   )

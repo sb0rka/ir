@@ -949,7 +949,7 @@ type SearchEndpointsResponse struct {
 
 // SearchEventsRequest Filters for a normalized multi-source event search.
 type SearchEventsRequest struct {
-	// Columns Allowlisted source event fields to fetch and expose through canonical event fields or attributes. Currently supported by pt-maxpatrol-siem.
+	// Columns Allowlisted source event fields to fetch and expose through canonical event fields or attributes. Supported by pt-maxpatrol-siem and wazuh.
 	Columns *[]string `json:"columns,omitempty"`
 
 	// Cursor Opaque next_cursor from the previous response with the same filters.
@@ -958,10 +958,10 @@ type SearchEventsRequest struct {
 	// Entities Entity conditions; an event matches when it contains at least one listed entity.
 	Entities *[]EntityRef `json:"entities,omitempty"`
 
-	// Filter Bounded source predicate without a query pipeline. Currently supported by pt-maxpatrol-siem; pipeline separators and control characters are rejected.
+	// Filter Bounded source predicate without a query pipeline. Supported by pt-maxpatrol-siem and wazuh; pipeline separators and control characters are rejected. Each source validates its own field allowlist.
 	Filter *string `json:"filter,omitempty"`
 
-	// GroupBy Allowlisted source fields whose selected group is searched. Currently supported by pt-maxpatrol-siem.
+	// GroupBy Allowlisted source fields whose selected group is searched. Supported by pt-maxpatrol-siem and wazuh.
 	GroupBy *[]string `json:"group_by,omitempty"`
 
 	// GroupValues Group values aligned by position with group_by. A null item selects the source null group. Currently supported by pt-maxpatrol-siem.
@@ -970,7 +970,7 @@ type SearchEventsRequest struct {
 	// Limit Maximum number of events returned after merging all sources.
 	Limit *int `json:"limit,omitempty"`
 
-	// Sort Ordered source event sort rules. Currently supported by pt-maxpatrol-siem.
+	// Sort Ordered source event sort rules. Supported by pt-maxpatrol-siem and wazuh.
 	Sort *[]EventSort `json:"sort,omitempty"`
 
 	// Sources Source codes to query; omit to use every allowed source with event search.

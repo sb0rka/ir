@@ -62,6 +62,8 @@ function toFieldDef(name: string): EventFieldDef {
  * Local MaxPatrol-shaped catalog with hardcoded RU titles.
  * SIEM `GET /api/events/v2/taxonomy` has no localized names;
  * `POST /api/events/v2/localization` returns 403 for Student role.
+ * Wazuh events use native attribute keys in the card; filter vocabulary
+ * for the Events tab remains MaxPatrol-shaped (per-source allowlists).
  */
 export async function fetchEventFields(): Promise<EventFieldDef[]> {
   return [...KNOWN_EVENT_FIELDS].map(toFieldDef)

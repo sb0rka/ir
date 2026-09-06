@@ -55,7 +55,8 @@ ON CONFLICT (code) DO NOTHING;
 
 INSERT INTO sources (code, kind, title) VALUES
     ('pt-maxpatrol-siem', 'siem', 'MaxPatrol SIEM'),
-    ('pt-nad',            'ndr',  'PT Network Attack Discovery')
+    ('pt-nad',            'ndr',  'PT Network Attack Discovery'),
+    ('wazuh',             'siem', 'Wazuh')
 ON CONFLICT (code) DO NOTHING;
 
 COMMIT;

@@ -617,7 +617,7 @@ func convertGatewayContext(input gatewayclient.ResolveContextResponse, request g
 
 // selectionFromSearchEvents builds an import selection directly from Gateway search
 // pages so import_entity_events does not re-resolve every event by UUID.
-func selectionFromSearchEvents(events []gatewaycontract.Event, pageEntities []gatewaycontract.Entity) resolvedGatewayContext {
+func selectionFromSearchEvents(events []gatewaycontract.Event, pageEntities []gatewaycontract.Entity, pageRelations []gatewaycontract.Relation) resolvedGatewayContext {
 	out := resolvedGatewayContext{
 		EventsBySource:   map[string]string{},
 		EntitiesBySource: map[string]string{},
@@ -727,6 +727,32 @@ func selectionFromSearchEvents(events []gatewaycontract.Event, pageEntities []ga
 		}
 		out.Selection.Events = append(out.Selection.Events, item)
 		out.EventsBySource[snapshotID] = snapshotID
+	}
+	selectedEntities := make(map[string]struct{}, len(out.Selection.Entities))
+	for _, entity := range out.Selection.Entities {
+		selectedEntities[entity.SnapshotID] = struct{}{}
+	}
+	for _, relation := range pageRelations {
+		sourceSnap := entityKey(relation.SourceEntity.Type, normalizeEntityValue(relation.SourceEntity.Type, relation.SourceEntity.Value))
+		targetSnap := entityKey(relation.TargetEntity.Type, normalizeEntityValue(relation.TargetEntity.Type, relation.TargetEntity.Value))
+		if _, ok := selectedEntities[sourceSnap]; !ok {
+			continue
+		}
+		if _, ok := selectedEntities[targetSnap]; !ok {
+			continue
+		}
+		sourceURL := relation.SourceRef
+		out.Selection.Relations = append(out.Selection.Relations, model.GatewayRelation{
+			SnapshotID:             sourceRecordKey(relation.SourceCode, relation.SourceRelationId),
+			RelationCode:           relation.Type,
+			SourceEntitySnapshotID: sourceSnap,
+			TargetEntitySnapshotID: targetSnap,
+			OccurredAt:             relation.OccurredAt,
+			Provenance: model.GatewayProvenance{
+				Source: relation.SourceCode, ExternalID: relation.SourceRelationId,
+				SourceURL: sourceURL, FetchedAt: relation.FetchedAt,
+			},
+		})
 	}
 	assignGatewayObjectOwnership(&out.Selection)
 	return out

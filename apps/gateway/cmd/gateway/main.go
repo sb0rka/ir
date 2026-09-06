@@ -17,6 +17,7 @@ import (
 
 	"github.com/sb0rka/ir/apps/gateway/internal/adapters/proxy/maxpatrol"
 	"github.com/sb0rka/ir/apps/gateway/internal/adapters/proxy/ptnad"
+	"github.com/sb0rka/ir/apps/gateway/internal/adapters/proxy/wazuh"
 	"github.com/sb0rka/ir/apps/gateway/internal/config"
 	gatewayproxy "github.com/sb0rka/ir/apps/gateway/internal/proxy"
 	"github.com/sb0rka/ir/apps/gateway/internal/registry"
@@ -158,6 +159,21 @@ func buildRegistry(cfg config.Config) (*registry.Registry, error) {
 			return nil, fmt.Errorf("configure %s provider: %w", config.PTNAD, err)
 		}
 		providers = append(providers, provider.RegistryProvider())
+	}
+	if enabled[config.Wazuh] {
+		source := cfg.Sources[config.Wazuh]
+		provider, err := wazuh.NewProvider(wazuh.ClientConfig{
+			HTTP: gatewayproxy.HTTPClientConfig{
+				BaseURL: source.BaseURL, Timeout: source.Timeout, TLSCAFile: source.TLSCAFile, SkipTLSVerify: source.SkipTLSVerify,
+			},
+			Username:     source.Username,
+			Password:     source.Password,
+			IndexPattern: source.IndexPattern,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("configure %s: %w", config.Wazuh, err)
+		}
+		providers = append(providers, provider)
 	}
 	return registry.New(providers...)
 }

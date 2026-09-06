@@ -214,6 +214,20 @@ func (service *Service) loadCredentials(ctx context.Context, access ProjectAcces
 	}
 	service.cacheMu.Unlock()
 
+	if strings.TrimSpace(provider.CredentialMode) == registry.CredentialModeProcess {
+		snapshot := credentialSnapshot{}
+		service.cacheMu.Lock()
+		defer service.cacheMu.Unlock()
+		if len(service.credentials) >= credentialCacheLimit {
+			oldest := service.credentialKeys[0]
+			service.credentialKeys = service.credentialKeys[1:]
+			delete(service.credentials, oldest)
+		}
+		service.credentials[key] = snapshot
+		service.credentialKeys = append(service.credentialKeys, key)
+		return snapshot, nil
+	}
+
 	if service.secrets == nil || strings.TrimSpace(access.Bearer) == "" || strings.TrimSpace(provider.CredentialSecret) == "" {
 		return credentialSnapshot{}, sourceUnavailable()
 	}
@@ -280,6 +294,18 @@ func retryableProviderError(ctx context.Context, err error) bool {
 	return errors.As(err, &networkErr)
 }
 
+// credentialReloadWorthy is true only when a fresh project secret may help.
+// Timeouts and dial failures mean the backend is unreachable — reloading
+// cookies just doubles the wait and blocks healthy sources behind GET /sources.
+func credentialReloadWorthy(err error) bool {
+	var upstream *domain.UpstreamError
+	if errors.As(err, &upstream) {
+		return upstream.StatusCode == 401 || upstream.StatusCode == 403 ||
+			(upstream.StatusCode >= 300 && upstream.StatusCode < 400)
+	}
+	return false
+}
+
 func providerError(err error) error {
 	if errors.Is(err, domain.ErrNotFound) {
 		return err
@@ -322,7 +348,7 @@ func (service *Service) callProviderWithCredentialReload(ctx context.Context, ac
 	if err == nil {
 		return nil
 	}
-	if !retryableProviderError(ctx, err) {
+	if !credentialReloadWorthy(err) || !retryableProviderError(ctx, err) {
 		return providerError(err)
 	}
 	credentials, reloadErr := service.loadCredentials(ctx, access, provider, true)

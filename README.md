@@ -29,6 +29,8 @@ task db:up      # Локальный Postgres
 task db:migrate # Миграции
 task apps:up    # ir-api и gateway
 task apps:down
+task vpn:up     # только OpenVPN-клиент
+task vpn:down
 ```
 
 Сгенерированные файлы коммитятся, но вручную не редактируются. Источник правды

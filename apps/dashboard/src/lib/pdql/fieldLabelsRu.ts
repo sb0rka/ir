@@ -82,6 +82,11 @@ export const EVENT_FIELD_LABELS_RU: Record<string, string> = {
   'category.low': 'Категория (низкая)',
 }
 
-export function eventFieldLabelRu(name: string): string {
+import { WAZUH_FIELD_LABELS_RU } from './wazuhFields'
+
+export function eventFieldLabelRu(name: string, source?: string): string {
+  if (source === 'wazuh') {
+    return WAZUH_FIELD_LABELS_RU[name] ?? name
+  }
   return EVENT_FIELD_LABELS_RU[name] ?? name
 }

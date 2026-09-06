@@ -11,9 +11,9 @@ HTTP client
   -> normalization (canonical values, merge, sort)
 ```
 
-Gateway owns no database, investigation, vendor URL, or credential supplied by a public request. Process configuration fixes URLs, TLS policy, and NAD store IDs. Project Secrets supply one cookie per project/source. The domain and service packages do not depend on HTTP, so a future MCP transport must use the same service boundary.
+Gateway owns no database, investigation, vendor URL, or credential supplied by a public request. Process configuration fixes URLs, TLS policy, and NAD store IDs. Project Secrets supply one cookie per project/source for PT providers. Wazuh uses process-level Basic Auth (`CredentialMode=process`) from environment variables instead of Secrets. The domain and service packages do not depend on HTTP, so a future MCP transport must use the same service boundary.
 
-Providers register only implemented capabilities. The composition root constructs real `pt-maxpatrol-siem` and `pt-nad` adapters; an empty allowlist produces an empty registry. Mock and Sandbox providers are not registered and there is no generic proxy fallback.
+Providers register only implemented capabilities. The composition root constructs real `pt-maxpatrol-siem`, `pt-nad`, and `wazuh` adapters; an empty allowlist produces an empty registry. Mock and Sandbox providers are not registered and there is no generic proxy fallback.
 
 Search calls fan out concurrently to the selected allowed providers. Each response carries `complete`, `truncated`, or `failed` source state. Gateway emits a cursor only when the provider confirmed a real continuation mechanism; it never invents a SIEM token or NAD continuation.
 

@@ -8,7 +8,10 @@ import (
 	"github.com/sb0rka/ir/apps/gateway/internal/domain"
 )
 
-const sourceStatusTTL = 15 * time.Second
+const (
+	sourceStatusTTL   = 15 * time.Second
+	sourceProbeBudget = 3 * time.Second
+)
 
 func (service *Service) Supports(sourceCode string, capabilityName domain.Capability) bool {
 	provider, ok := service.registry.Provider(sourceCode)
@@ -36,7 +39,13 @@ func (service *Service) ListSources(ctx context.Context, access ProjectAccess, a
 		}
 	}
 
-	requestCtx, cancel := context.WithTimeout(ctx, service.requestTimeout)
+	// Keep probes short so an unreachable PT SIEM/NAD cannot block Wazuh (or the
+	// dashboard search gate that waits on GET /sources) for the full request budget.
+	probeBudget := service.sourceTimeout
+	if probeBudget > sourceProbeBudget {
+		probeBudget = sourceProbeBudget
+	}
+	requestCtx, cancel := context.WithTimeout(ctx, probeBudget)
 	defer cancel()
 	type probeResult struct {
 		index  int
@@ -66,9 +75,10 @@ func (service *Service) ListSources(ctx context.Context, access ProjectAccess, a
 			})
 			if err != nil || (status != "online" && status != "degraded") {
 				status = "offline"
-			} else if requestCtx.Err() == nil {
-				service.cacheSourceStatus(key, status)
 			}
+			// Cache offline too: otherwise every search re-probes dead backends and
+			// blocks on their dial/timeout again.
+			service.cacheSourceStatus(key, status)
 			results <- probeResult{index: index, status: status}
 		}()
 	}
