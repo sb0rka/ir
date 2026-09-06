@@ -342,15 +342,16 @@ components:
           type: string
           maxLength: 4096
           description: >-
-            Bounded source predicate without a query pipeline. Currently supported by
-            pt-maxpatrol-siem; pipeline separators and control characters are rejected.
+            Bounded source predicate without a query pipeline. Supported by
+            pt-maxpatrol-siem and wazuh; pipeline separators and control characters
+            are rejected. Each source validates its own field allowlist.
         columns:
           type: array
           maxItems: 64
           uniqueItems: true
           description: >-
             Allowlisted source event fields to fetch and expose through canonical event
-            fields or attributes. Currently supported by pt-maxpatrol-siem.
+            fields or attributes. Supported by pt-maxpatrol-siem and wazuh.
           items:
             type: string
             minLength: 1
@@ -358,7 +359,7 @@ components:
         sort:
           type: array
           maxItems: 8
-          description: Ordered source event sort rules. Currently supported by pt-maxpatrol-siem.
+          description: Ordered source event sort rules. Supported by pt-maxpatrol-siem and wazuh.
           items:
             $ref: '#/components/schemas/EventSort'
         group_by:
@@ -366,8 +367,8 @@ components:
           maxItems: 8
           uniqueItems: true
           description: >-
-            Allowlisted source fields whose selected group is searched. Currently supported
-            by pt-maxpatrol-siem.
+            Allowlisted source fields whose selected group is searched. Supported by
+            pt-maxpatrol-siem and wazuh.
           items:
             type: string
             minLength: 1

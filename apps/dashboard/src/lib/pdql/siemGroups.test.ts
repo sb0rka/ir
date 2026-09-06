@@ -34,6 +34,7 @@ describe('groupEventFields', () => {
   it('treats MaxPatrol SIEM as a grouped source', () => {
     expect(isSiemSource('pt-maxpatrol-siem')).toBe(true)
     expect(isSiemSource('pt-nad')).toBe(false)
+    expect(isSiemSource('wazuh')).toBe(false)
   })
 
   it('treats incidents and correlations as finding cards', () => {

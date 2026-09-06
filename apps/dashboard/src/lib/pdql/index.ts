@@ -23,6 +23,8 @@ export {
   isSiemSource,
 } from './siemGroups'
 export type { EventHeaderMeta, FieldColumn, FieldGroup, FieldRow } from './siemGroups'
+export { groupWazuhFields, wazuhHeaderMeta } from './wazuhGroups'
+export { WAZUH_EVENT_FIELDS, wazuhFieldLabelRu } from './wazuhFields'
 export {
   pdqlToChips,
   removePdqlChip,

@@ -273,6 +273,21 @@ tasks:
     cmds:
       - docker compose --profile apps down
 
+  vpn:up:
+    desc: Start OpenVPN client only
+    cmds:
+      - docker compose --profile vpn up -d --build --force-recreate --no-deps openvpn
+
+  vpn:down:
+    desc: Stop OpenVPN client only
+    cmds:
+      - docker compose --profile vpn rm -sf openvpn
+
+  vpn:logs:
+    desc: Follow OpenVPN logs
+    cmds:
+      - docker compose --profile vpn logs -f openvpn
+
   exec:gateway:
     desc: Execute gateway
     dir: bin

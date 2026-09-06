@@ -25,6 +25,36 @@ SIEM object identity is `pt-maxpatrol-siem + empty source_instance + kind + UUID
 
 NAD object identity is `pt-nad + store_id + kind + vendor_id`; identical vendor IDs in different stores do not collapse.
 
+## Wazuh (`wazuh`)
+
+- Reads only `wazuh-alerts-*` (configurable pattern) from the Wazuh Indexer /
+  OpenSearch HTTP API. Archives, inventory, and vulnerability-state indices are
+  out of scope.
+- Authenticates with process-level Basic Auth (`SOURCE_WAZUH_USERNAME` /
+  `SOURCE_WAZUH_PASSWORD`). Credentials never enter project Secrets, public
+  requests, or logs. `CredentialMode=process` skips the Secret resolver.
+- TLS uses a Wazuh-specific `SOURCE_WAZUH_INSECURE_SKIP_VERIFY` flag; it does
+  not reuse `GATEWAY_SKIP_TLS_VERIFY`.
+- Event search builds a fixed Query DSL: required `@timestamp` range, optional
+  entity `should` clauses, optional PDQL-compatible predicate (`filter`),
+  `group_by`/`group_values`, `_source` includes, and `search_after` pagination
+  with sort `[..., @timestamp, id, _index, _id]`.
+- The filter allowlist is Wazuh-native (`rule.groups`, `rule.level`,
+  `agent.name`, `data.srcip`, `syscheck.*`, …) plus canonical `time`, `uuid`,
+  `correlation_type`, and `correlation_name`. MaxPatrol field aliases are not
+  accepted; unknown fields fail only the Wazuh source.
+- Event attributes use the same native keys as the filter allowlist so the
+  dashboard card and PDQL filters share one vocabulary.
+- Frequency rules (`rule.frequency`) emit `correlation_name` and
+  `correlation_type=wazuh_frequency` (other rules use `wazuh_rule`). Each alert
+  remains a standalone event; there is no `correlation_event_id` collapse.
+- Aggregation supports terms/composite groups plus a synthetic
+  `correlation_type` filters aggregation used by `import_entity_events`.
+- Identity is `wazuh + <_index>/<_id>`. Resolve rejects indexes outside the
+  configured alerts pattern. `full_log` and `previous_output` are never returned.
+
+Wazuh object identity for events is `wazuh + empty source_instance + source_event_id`.
+
 ## Unregistered canonical capabilities
 
 Artifact analysis, endpoint inventory, response catalog, and account contracts remain in the canonical API, but no mock, dummy, or `pt-sandbox` provider backs them. A future source must add a reviewed real client before it can be allowlisted.

@@ -12,6 +12,10 @@ import (
 type Provider struct {
 	Source           domain.Source
 	CredentialSecret string
+	// CredentialMode selects how Access is built. Empty and "project_secret"
+	// resolve a project Secret named CredentialSecret. "process" skips Secrets
+	// because the adapter authenticates from process config itself.
+	CredentialMode   string
 	Findings         capability.FindingSource
 	Sessions         capability.SessionSource
 	Events           capability.EventSource
@@ -23,6 +27,11 @@ type Provider struct {
 	AccountUserinfo  capability.AccountUserinfoSource
 	Prober           capability.SourceProber
 }
+
+const (
+	CredentialModeProjectSecret = "project_secret"
+	CredentialModeProcess       = "process"
+)
 
 type Registry struct {
 	providers map[string]Provider
@@ -105,7 +114,14 @@ func supports(source domain.Source, capabilityName domain.Capability) bool {
 }
 
 func validateCapabilities(provider Provider) error {
-	if len(provider.Source.Capabilities) > 0 && strings.TrimSpace(provider.CredentialSecret) == "" {
+	mode := strings.TrimSpace(provider.CredentialMode)
+	if mode == "" {
+		mode = CredentialModeProjectSecret
+	}
+	if mode != CredentialModeProjectSecret && mode != CredentialModeProcess {
+		return fmt.Errorf("unknown credential mode %q", mode)
+	}
+	if len(provider.Source.Capabilities) > 0 && mode == CredentialModeProjectSecret && strings.TrimSpace(provider.CredentialSecret) == "" {
 		return fmt.Errorf("credential secret name is required")
 	}
 	for _, item := range provider.Source.Capabilities {
