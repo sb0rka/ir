@@ -38,6 +38,8 @@ Thumbs.db
 *.log
 docs-internal/
 docs-internal
+data-internal/
+data-internal
 api/build/
 api/bundle.yaml
 api/docs.html
