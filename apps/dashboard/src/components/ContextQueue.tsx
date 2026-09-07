@@ -5,7 +5,12 @@ import { ContextQueryComposer } from './QueryComposer'
 import { AlertTable } from './AlertTable'
 import { EventGroupFilter } from './EventGroupFilter'
 import { Button } from './ui'
-import { clsx, matchesOriginFilter } from '../lib/utils'
+import {
+  acceptEdgesWithNodes,
+  filterInvestigationEdges,
+  proposedInvestigationEdgeIds,
+} from '../lib/edge-review'
+import { clsx } from '../lib/utils'
 import { filterFingerprint } from '../lib/queryFingerprint'
 import { Check, Plus, X } from 'lucide-react'
 
@@ -28,22 +33,28 @@ const REVIEW_FILTERS: Array<{ id: ReviewState | 'all'; label: string }> = [
 export function ContextQueueToolbar({ investigationId }: { investigationId: string }) {
   const inv = useAppStore((s) => s.investigations[investigationId])
   const queue = useAppStore((s) => s.contextQueue[investigationId]) ?? emptyContextQueue
-  const eventReviews = useAppStore((s) => s.eventReviews)
-  const contextEvents = useAppStore((s) => s.contextEvents)
+  const edgeReviews = useAppStore((s) => s.edgeReviews)
+  const nodeReviews = useAppStore((s) => s.nodeReviews)
+  const graphEdges = useAppStore((s) => s.graphEdges)
+  const graphNodes = useAppStore((s) => s.graphNodes)
   const setContextQueue = useAppStore((s) => s.setContextQueue)
   const setReview = useAppStore((s) => s.setReview)
   const update = useAppStore((s) => s.updateInvestigation)
 
   if (!inv) return null
 
-  const visibleProposedIds = inv.eventIds.filter((id) => {
-    const ev = contextEvents[id]
-    if (!ev) return false
-    if (!matchesOriginFilter(ev, queue.originFilter)) return false
-    const review = eventReviews[id] ?? ev.review
-    if (queue.reviewFilter !== 'all' && review !== queue.reviewFilter) return false
-    return review === 'proposed'
-  })
+  const visibleProposedIds = proposedInvestigationEdgeIds(
+    inv.edgeIds,
+    graphEdges,
+    edgeReviews,
+    queue,
+  )
+  const visibleProposedEdges = filterInvestigationEdges(
+    visibleProposedIds,
+    graphEdges,
+    edgeReviews,
+    { ...queue, reviewFilter: 'proposed' },
+  )
 
   return (
     <div className="flex flex-wrap items-center gap-3 border-b border-border bg-surface-1 px-3 py-2">
@@ -99,7 +110,13 @@ export function ContextQueueToolbar({ investigationId }: { investigationId: stri
               size="sm"
               variant="ghost"
               onClick={() =>
-                visibleProposedIds.forEach((id) => setReview('event', id, 'confirmed'))
+                acceptEdgesWithNodes(
+                  setReview,
+                  visibleProposedEdges,
+                  investigationId,
+                  graphNodes,
+                  nodeReviews,
+                )
               }
             >
               <Check className="h-3 w-3 text-confirmed" />
@@ -109,7 +126,9 @@ export function ContextQueueToolbar({ investigationId }: { investigationId: stri
               size="sm"
               variant="ghost"
               onClick={() =>
-                visibleProposedIds.forEach((id) => setReview('event', id, 'rejected'))
+                visibleProposedIds.forEach((id) =>
+                  setReview('edge', id, 'rejected', investigationId),
+                )
               }
             >
               <X className="h-3 w-3 text-critical" />

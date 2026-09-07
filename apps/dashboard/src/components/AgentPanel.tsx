@@ -13,6 +13,12 @@ import {
 } from 'lucide-react'
 import { TreeItem } from './TreeItem'
 import { buildEntityTree, type ProposedTreeNode } from '../lib/tree-bundler'
+import {
+  acceptEdgeWithNodes,
+  confirmProposedNodes,
+  edgeReviewState,
+} from '../lib/edge-review'
+import type { GraphEdge } from '../types'
 import type { components } from '@ir/contract'
 
 function StatusIcon({ status }: { status: string }) {
@@ -286,6 +292,7 @@ function ProposedLinksSection({
 }) {
   const inv = useAppStore((s) => s.investigations[investigationId])
   const edgeReviews = useAppStore((s) => s.edgeReviews)
+  const nodeReviews = useAppStore((s) => s.nodeReviews)
   const setReview = useAppStore((s) => s.setReview)
   const graphNodes = useAppStore((s) => s.graphNodes)
   const graphEdges = useAppStore((s) => s.graphEdges)
@@ -300,7 +307,7 @@ function ProposedLinksSection({
   const proposedEdges = inv.edgeIds
     .map((id) => graphEdges[id])
     .filter(Boolean)
-    .filter((e) => (edgeReviews[e.id] ?? e.review) === 'proposed')
+    .filter((e) => edgeReviewState(e, edgeReviews) === 'proposed')
     .filter((e) => {
       if (somIssueId) return e.originRef === somIssueId
       // Orphans: no origin_ref, or issue no longer on the board.
@@ -311,13 +318,43 @@ function ProposedLinksSection({
 
   const tree = buildEntityTree(proposedEdges, graphNodes)
 
+  const collectBranchNodeIds = (node: ProposedTreeNode): string[] => [
+    node.id,
+    ...node.children.flatMap(collectBranchNodeIds),
+  ]
+
   const handleAcceptBranch = (treeNode: ProposedTreeNode) => {
-    const collectEdges = (node: ProposedTreeNode): string[] => [
-      ...node.edges.map((e) => e.id),
-      ...node.children.flatMap(collectEdges)
+    const collectEdges = (node: ProposedTreeNode): GraphEdge[] => [
+      ...node.edges,
+      ...node.children.flatMap(collectEdges),
     ]
-    const edgeIds = collectEdges(treeNode)
-    edgeIds.forEach((id) => setReview('edge', id, 'confirmed', investigationId))
+    for (const edge of collectEdges(treeNode)) {
+      acceptEdgeWithNodes(
+        setReview,
+        edge,
+        investigationId,
+        graphNodes,
+        nodeReviews,
+      )
+    }
+    confirmProposedNodes(
+      setReview,
+      collectBranchNodeIds(treeNode),
+      graphNodes,
+      nodeReviews,
+    )
+  }
+
+  const handleAcceptEdge = (edgeId: string) => {
+    const edge = graphEdges[edgeId]
+    if (!edge) return
+    acceptEdgeWithNodes(
+      setReview,
+      edge,
+      investigationId,
+      graphNodes,
+      nodeReviews,
+    )
   }
 
   return (
@@ -341,9 +378,7 @@ function ProposedLinksSection({
           <TreeItem
             key={rootNode.id}
             item={rootNode}
-            onAcceptEdge={(id) =>
-              setReview('edge', id, 'confirmed', investigationId)
-            }
+            onAcceptEdge={handleAcceptEdge}
             onRejectEdge={(id) =>
               setReview('edge', id, 'rejected', investigationId)
             }
