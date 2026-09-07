@@ -104,11 +104,13 @@ function buildFromApp(inv: Investigation): GraphInvestigation {
   const storeEntities = app.entities
   const storeEdges = app.graphEdges
   const contextEvents = app.contextEvents
+  const hiddenNodeIds = new Set(app.hiddenGraphNodeIds[inv.id] ?? [])
 
   const visibleGraphNodes = inv.nodeIds
     .map((id) => graphNodes[id])
     .filter(Boolean)
     .filter((n) => (reviews[n.id] ?? n.review) !== 'rejected')
+    .filter((n) => !hiddenNodeIds.has(n.id))
 
   const entityGraphNodes = visibleGraphNodes.filter((n) => n.kind !== 'event')
   const eventGraphNodes = visibleGraphNodes.filter((n) => n.kind === 'event')
@@ -668,7 +670,8 @@ useAppStore.subscribe((state, prev) => {
     state.eventReviews !== prev.eventReviews ||
     state.issues !== prev.issues ||
     state.graphNodes !== prev.graphNodes ||
-    state.graphEdges !== prev.graphEdges
+    state.graphEdges !== prev.graphEdges ||
+    state.hiddenGraphNodeIds !== prev.hiddenGraphNodeIds
   ) {
     useWorkspaceStore.getState().refreshFromApp()
   }

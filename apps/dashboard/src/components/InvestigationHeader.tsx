@@ -10,7 +10,9 @@ import {
   filterInvestigationEdges,
 } from '../lib/edge-review'
 import { clsx, kindLabel, statusLabel, verdictLabel } from '../lib/utils'
-import { Check, X } from 'lucide-react'
+import { Check, Eye, EyeOff, X } from 'lucide-react'
+
+const EMPTY_HIDDEN_NODE_IDS: string[] = []
 
 /** Compact investigation identity for the app header (between logo and actions). */
 export function InvestigationHeader({ investigationId }: { investigationId: string }) {
@@ -62,6 +64,10 @@ export function ContextTable({ investigationId }: { investigationId: string }) {
   const update = useAppStore((s) => s.updateInvestigation)
   const graphNodes = useAppStore((s) => s.graphNodes)
   const graphEdges = useAppStore((s) => s.graphEdges)
+  const hiddenGraphNodeIds = useAppStore(
+    (s) => s.hiddenGraphNodeIds[investigationId] ?? EMPTY_HIDDEN_NODE_IDS,
+  )
+  const toggleGraphNodeHidden = useAppStore((s) => s.toggleGraphNodeHidden)
 
   if (!inv) return null
 
@@ -163,7 +169,7 @@ export function ContextTable({ investigationId }: { investigationId: string }) {
                     </Chip>
                   </td>
                   <td className="px-3 py-2">
-                    {review === 'proposed' && (
+                    {review === 'proposed' ? (
                       <div className="flex gap-1">
                         <Button
                           size="sm"
@@ -192,6 +198,31 @@ export function ContextTable({ investigationId }: { investigationId: string }) {
                           <X className="h-3 w-3 text-critical" />
                         </Button>
                       </div>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        title={
+                          hiddenGraphNodeIds.includes(edge.target)
+                            ? 'Показать на графе'
+                            : 'Скрыть на графе'
+                        }
+                        aria-label={
+                          hiddenGraphNodeIds.includes(edge.target)
+                            ? 'Показать на графе'
+                            : 'Скрыть на графе'
+                        }
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          toggleGraphNodeHidden(investigationId, edge.target)
+                        }}
+                      >
+                        {hiddenGraphNodeIds.includes(edge.target) ? (
+                          <EyeOff className="h-3 w-3 text-fg-dim" />
+                        ) : (
+                          <Eye className="h-3 w-3 text-fg-muted" />
+                        )}
+                      </Button>
                     )}
                   </td>
                   <td className="max-w-[20rem] px-3 py-2 align-top">

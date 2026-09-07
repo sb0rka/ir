@@ -318,6 +318,8 @@ interface AppState {
   activeHypothesisId: Record<string, string | null>
   visibleHypothesisIds: Record<string, string[]>
   highlightedHypothesisIds: Record<string, string[]>
+  /** Graph node ids hidden per investigation (UI-only, not persisted). */
+  hiddenGraphNodeIds: Record<string, string[]>
   detailPanelOpen: boolean
 
   alerts: Record<string, AlertEvent>
@@ -428,6 +430,7 @@ interface AppState {
   addEventsToActiveHypothesis: (investigationId: string, eventIds: string[]) => Promise<void>
   toggleHypothesisNode: (investigationId: string, nodeId: string) => Promise<void>
   toggleHypothesisEdge: (investigationId: string, edgeId: string) => Promise<void>
+  toggleGraphNodeHidden: (investigationId: string, nodeId: string) => void
 
   runEnrichment: (investigationId: string, issueId: string) => Promise<void>
   createIssue: (
@@ -715,6 +718,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   activeHypothesisId: {},
   visibleHypothesisIds: {},
   highlightedHypothesisIds: {},
+  hiddenGraphNodeIds: {},
   detailPanelOpen: false,
 
   alerts: {},
@@ -2276,6 +2280,19 @@ export const useAppStore = create<AppState>((set, get) => ({
     } catch (err) {
       set({ lastError: errorMessage(err) })
     }
+  },
+
+  toggleGraphNodeHidden: (investigationId, nodeId) => {
+    const current = get().hiddenGraphNodeIds[investigationId] ?? []
+    const next = current.includes(nodeId)
+      ? current.filter((id) => id !== nodeId)
+      : [...current, nodeId]
+    set({
+      hiddenGraphNodeIds: {
+        ...get().hiddenGraphNodeIds,
+        [investigationId]: next,
+      },
+    })
   },
 }))
 
