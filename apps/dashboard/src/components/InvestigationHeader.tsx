@@ -83,20 +83,23 @@ export function ContextTable({ investigationId }: { investigationId: string }) {
     return `${node.label} · ${kind}`
   }
 
+  const clampCell =
+    'line-clamp-3 break-words [overflow-wrap:anywhere] [word-break:break-word]'
+
   return (
     <div className="flex h-full min-h-0 flex-col">
       <ContextQueueToolbar investigationId={investigationId} />
       <div className="min-h-0 flex-1 overflow-auto">
-        <table className="w-full min-w-[900px] border-collapse text-left">
+        <table className="w-full min-w-[900px] table-fixed border-collapse text-left">
           <thead className="sticky top-0 bg-surface-1 text-[11px] uppercase tracking-wider text-fg-dim">
             <tr className="border-b border-border">
+              <th className="w-[10rem] max-w-[10rem] px-3 py-2">Цель</th>
+              <th className="w-[8rem] px-3 py-2">Связь</th>
               <th className="px-3 py-2">Источник</th>
-              <th className="px-3 py-2">Связь</th>
-              <th className="px-3 py-2">Цель</th>
-              <th className="px-3 py-2">Происхождение</th>
-              <th className="min-w-[11rem] px-3 py-2">Статус</th>
-              <th className="px-3 py-2">Действия</th>
-              <th className="w-[41%] px-3 py-2">Обоснование</th>
+              <th className="w-[8rem] px-3 py-2">Происхождение</th>
+              <th className="w-[11rem] px-3 py-2">Статус</th>
+              <th className="w-[5rem] px-3 py-2">Действия</th>
+              <th className="w-[20rem] max-w-[20rem] px-3 py-2">Обоснование</th>
             </tr>
           </thead>
           <tbody>
@@ -126,17 +129,27 @@ export function ContextTable({ investigationId }: { investigationId: string }) {
                     })
                   }
                 >
-                  <td className="px-3 py-2 font-mono text-xs text-fg-muted">
-                    {nodeLabel(edge.source)}
-                  </td>
-                  <td className="px-3 py-2 font-mono text-xs text-proposed">{edge.relation}</td>
-                  <td className="px-3 py-2 font-mono text-xs text-fg-muted">
+                  <td className="max-w-[18rem] px-3 py-2 align-top font-mono text-xs text-fg-muted line-clamp-3">
                     {nodeLabel(edge.target)}
+                  </td>
+                  <td className="px-3 py-2 font-mono text-xs text-proposed">
+                    {edge.relation}
+                  </td>
+                  <td className="max-w-[18rem] px-3 py-2 align-top">
+                    <div
+                      className={clsx(
+                        clampCell,
+                        'font-mono text-xs text-fg-muted'
+                      )}
+                      title={nodeLabel(edge.source)}
+                    >
+                      {nodeLabel(edge.source)}
+                    </div>
                   </td>
                   <td className="px-3 py-2 text-xs text-fg-muted">
                     {statusLabel[origin] ?? origin}
                   </td>
-                  <td className="min-w-[11rem] px-3 py-2">
+                  <td className="px-3 py-2">
                     <Chip
                       tone={
                         review === 'proposed'
@@ -181,8 +194,13 @@ export function ContextTable({ investigationId }: { investigationId: string }) {
                       </div>
                     )}
                   </td>
-                  <td className="w-[41%] px-3 py-2 text-xs text-fg-dim">
-                    {edge.rationale ?? '—'}
+                  <td className="max-w-[20rem] px-3 py-2 align-top">
+                    <div
+                      className={clsx(clampCell, 'text-xs text-fg-dim')}
+                      title={edge.rationale ?? undefined}
+                    >
+                      {edge.rationale ?? '—'}
+                    </div>
                   </td>
                 </tr>
               )
