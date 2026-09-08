@@ -9,7 +9,7 @@ afterEach(() => {
   useAppStore.setState(initial, true)
 })
 
-it.each([true, false])('passes resolve=%s for findings and explicit events', async (resolve) => {
+it.each([true, false])('passes expandFindings=%s for findings and explicit events', async (resolve) => {
   const findingRef: NonNullable<AlertEvent['findingRef']> = {
     source_code: 'pt-maxpatrol-siem', record_type: 'siem_incident', external_id: 'incident-1',
     time_range: { from: '2026-09-01T00:00:00Z', to: '2026-09-02T00:00:00Z' },
@@ -24,7 +24,7 @@ it.each([true, false])('passes resolve=%s for findings and explicit events', asy
   useAppStore.setState({
     loadInvestigation: reload,
     contextQueue: { inv: {
-      ...emptyContextQueue, resolveFindings: resolve, selectedIds: ['finding', 'event'],
+      ...emptyContextQueue, expandFindings: resolve, selectedIds: ['finding', 'event'],
       alerts: {
         finding: alert,
         event: { ...alert, id: 'event', findingRef: undefined, sourceEventId: 'event-1' },
@@ -33,9 +33,9 @@ it.each([true, false])('passes resolve=%s for findings and explicit events', asy
   })
   await useAppStore.getState().addEventsToContext('inv', ['finding', 'event'])
   expect(add).toHaveBeenCalledWith('inv', {
-    resolve, findings: [findingRef],
+    expandFindings: resolve, findings: [findingRef],
     events: [{ source_code: 'pt-maxpatrol-siem', source_event_id: 'event-1' }],
   })
   expect(reload).toHaveBeenCalledWith('inv')
-  expect(useAppStore.getState().contextQueue.inv.resolveFindings).toBe(resolve)
+  expect(useAppStore.getState().contextQueue.inv.expandFindings).toBe(resolve)
 })

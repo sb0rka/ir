@@ -22,7 +22,7 @@ func TestRootOnlyFindingKeepsMetadataWithoutDanglingEntityReferences(t *testing.
 	}
 	resolve := false
 	refs := []gatewayclient.SourceObjectRef{response.Findings[0].Ref}
-	result, err := convertGatewayContext(response, gatewayclient.ResolveContextRequest{Findings: &refs, Resolve: &resolve})
+	result, err := convertGatewayContext(response, gatewayclient.ResolveContextRequest{Findings: &refs, ExpandFindings: &resolve})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -45,7 +45,7 @@ func TestContextImportForwardsResolve(t *testing.T) {
 				}
 				if mode != "omitted" {
 					value := mode == "true"
-					body.Resolve = &value
+					body.ExpandFindings = &value
 				}
 				gateway := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					if r.URL.Path != "/api/v1/context/resolve" || r.Header.Get("X-Project-ID") != "aabbccddee" {
@@ -55,8 +55,8 @@ func TestContextImportForwardsResolve(t *testing.T) {
 					if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 						t.Error(err)
 					}
-					if (request.Resolve == nil) != (body.Resolve == nil) || (request.Resolve != nil && *request.Resolve != *body.Resolve) {
-						t.Errorf("resolve was not forwarded")
+					if (request.ExpandFindings == nil) != (body.ExpandFindings == nil) || (request.ExpandFindings != nil && *request.ExpandFindings != *body.ExpandFindings) {
+						t.Errorf("expand_findings was not forwarded")
 					}
 					w.Header().Set("Content-Type", "application/json")
 					_, _ = w.Write([]byte(`{"findings":[{"ref":{"source_code":"pt-maxpatrol-siem","record_type":"siem_incident","external_id":"11111111-1111-4111-8111-111111111111","time_range":{"from":"2026-09-01T00:00:00Z","to":"2026-09-02T00:00:00Z"}},"kind":"siem_incident","title":"Incident","severity":"high","occurred_at":"2026-09-01T12:00:00Z","fetched_at":"2026-09-01T12:00:00Z"}],"events":[],"entities":[],"sessions":[],"relations":[],"resolutions":[],"source_errors":[]}`))

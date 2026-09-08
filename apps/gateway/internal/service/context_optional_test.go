@@ -71,7 +71,7 @@ func TestFindingContextExpansionIsOptional(t *testing.T) {
 				request := ResolveContextRequest{Findings: []domain.SourceObjectRef{ref}}
 				if mode != "omitted" {
 					value := mode == "true"
-					request.Resolve = &value
+					request.ExpandFindings = &value
 				}
 				result, err := service.ResolveContext(context.Background(), ProjectAccess{ProjectID: "aabbccddee", Bearer: "test"}, request)
 				if err != nil {

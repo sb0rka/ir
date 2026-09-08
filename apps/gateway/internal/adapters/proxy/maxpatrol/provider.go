@@ -192,14 +192,14 @@ func findingsMatchTotal(
 	}
 }
 
-func (provider *Provider) ResolveFinding(ctx context.Context, access capability.Access, ref domain.SourceObjectRef, resolve bool) (capability.ContextPage, error) {
+func (provider *Provider) ResolveFinding(ctx context.Context, access capability.Access, ref domain.SourceObjectRef, expandFindings bool) (capability.ContextPage, error) {
 	if err := validateFindingRef(ref); err != nil {
 		return capability.ContextPage{}, err
 	}
 	switch ref.RecordType {
 	case IncidentRecordType:
 		resolution, err := provider.client.ResolveIncident(ctx, Access{Cookie: access.Cookie}, IncidentResolveRequest{
-			SkipContext: !resolve,
+			SkipContext: !expandFindings,
 			ExternalID:  ref.ExternalID,
 			TimeRange:   TimeRange{From: ref.TimeRange.From, To: ref.TimeRange.To},
 		})
@@ -210,7 +210,7 @@ func (provider *Provider) ResolveFinding(ctx context.Context, access capability.
 		return page, retryableContextFailure(resolution.Errors)
 	case CorrelationRecordType:
 		resolution, err := provider.client.ResolveCorrelation(ctx, Access{Cookie: access.Cookie}, CorrelationResolveRequest{
-			SkipContext: !resolve,
+			SkipContext: !expandFindings,
 			ExternalID:  ref.ExternalID,
 			TimeRange:   TimeRange{From: ref.TimeRange.From, To: ref.TimeRange.To},
 		})
@@ -218,7 +218,7 @@ func (provider *Provider) ResolveFinding(ctx context.Context, access capability.
 			return capability.ContextPage{}, translateError(err)
 		}
 		page := provider.correlationContext(ref.TimeRange, resolution)
-		if !resolve {
+		if !expandFindings {
 			page.Events, page.Entities, page.Relations = nil, nil, nil
 		}
 		return page, retryableContextFailure(resolution.Errors)

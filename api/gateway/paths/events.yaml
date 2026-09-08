@@ -150,7 +150,7 @@ components:
       type: object
       description: Source records selected by a client for persistence in an investigation.
       properties:
-        resolve:
+        expand_findings:
           type: boolean
           description: >-
             Expand selected findings into child context. False returns only their

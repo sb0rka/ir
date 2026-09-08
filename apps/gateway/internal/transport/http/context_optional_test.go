@@ -23,7 +23,7 @@ func TestRootOnlyContextStillRequiresProjectAndSourceAccess(t *testing.T) {
 		{"1122334455", http.StatusForbidden},
 		{"aabbccddee", http.StatusForbidden},
 	} {
-		request := httptest.NewRequest(http.MethodPost, "/api/v1/context/resolve", strings.NewReader(`{"resolve":false,"events":[{"source_code":"pt-maxpatrol-siem","source_event_id":"event-1"}]}`))
+		request := httptest.NewRequest(http.MethodPost, "/api/v1/context/resolve", strings.NewReader(`{"expand_findings":false,"events":[{"source_code":"pt-maxpatrol-siem","source_event_id":"event-1"}]}`))
 		request.Header.Set("X-Project-ID", tc.project)
 		response := httptest.NewRecorder()
 		handler.ServeHTTP(response, request)
@@ -35,17 +35,17 @@ func TestRootOnlyContextStillRequiresProjectAndSourceAccess(t *testing.T) {
 
 func TestResolveContextRequestPreservesFalseAndExplicitEvents(t *testing.T) {
 	var body api.ResolveContextRequest
-	if err := json.Unmarshal([]byte(`{"resolve":false,"events":[{"source_code":"pt-maxpatrol-siem","source_event_id":"event-1"}]}`), &body); err != nil {
+	if err := json.Unmarshal([]byte(`{"expand_findings":false,"events":[{"source_code":"pt-maxpatrol-siem","source_event_id":"event-1"}]}`), &body); err != nil {
 		t.Fatal(err)
 	}
 	request, err := (&Server{}).resolveContextRequest(body)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if request.Resolve == nil || *request.Resolve || len(request.Events) != 1 || request.Events[0].SourceEventID != "event-1" {
+	if request.ExpandFindings == nil || *request.ExpandFindings || len(request.Events) != 1 || request.Events[0].SourceEventID != "event-1" {
 		t.Fatalf("unexpected request: %+v", request)
 	}
-	for _, payload := range []string{`{"resolve":false}`, `{"resolve":false,"events":[{"source_code":"","source_event_id":"event-1"}]}`} {
+	for _, payload := range []string{`{"expand_findings":false}`, `{"expand_findings":false,"events":[{"source_code":"","source_event_id":"event-1"}]}`} {
 		var invalid api.ResolveContextRequest
 		if err := json.Unmarshal([]byte(payload), &invalid); err != nil {
 			t.Fatal(err)

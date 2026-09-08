@@ -464,7 +464,7 @@ components:
         all four arrays is required; the server validates that aggregate rule.
       required: [findings, sessions, events, entities]
       properties:
-        resolve:
+        expand_findings:
           type: boolean
           description: >-
             Expand selected findings (incidents, correlations, attacks) into child

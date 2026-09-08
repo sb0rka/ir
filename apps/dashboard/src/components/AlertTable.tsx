@@ -722,8 +722,8 @@ export function AlertTable({ investigationId }: { investigationId?: string } = {
         <label className="flex shrink-0 items-center gap-2 border-b border-border px-4 py-2 text-xs text-fg-muted" title="Раскрывать инциденты, корреляции и атаки при добавлении в контекст">
           <input
             type="checkbox"
-            checked={queue?.resolveFindings ?? true}
-            onChange={(e) => setContextQueue(investigationId, { resolveFindings: e.target.checked })}
+            checked={queue?.expandFindings ?? true}
+            onChange={(e) => setContextQueue(investigationId, { expandFindings: e.target.checked })}
             className="accent-fg"
           />
           Добавлять вложенные события
