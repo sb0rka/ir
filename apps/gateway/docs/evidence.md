@@ -23,6 +23,8 @@ comparison uses `~`. Combine predicates with `AND`/`OR` or `&&`/`||`; AND binds
 more tightly. Text values require double quotes. IPs and numbers may be unquoted.
 No pipelines, arbitrary fields, single quotes/backslashes in values, or other
 operators. Unsupported syntax returns an explicit source `invalid_request` error.
+When all selected sources fail and one reports an invalid request, HTTP returns
+400 with that validation error rather than hiding it behind `all_sources_failed`.
 
 The adapter builds the same nested `EXISTS` predicates as the captured NAD UI,
 inside the time-bounded parent flow for attack searches, before sorting/limiting.
@@ -84,9 +86,40 @@ The parentheses in `(ChromeUpdate.exe)` are part of the captured filename. To fi
 variants, use `files.filename ~ "*ChromeUpdate.exe*"` instead.
 Session `mail_hints` contain from/to/subject/date; context adds `network.mail` events,
 email entities and the account from `credentials.login` or `credentials.user`.
+The date is read from either the flat field or the MIME `Date` header (including
+the parallel `headers.key` / `headers.value` representation). Quoted account
+strings are unquoted before normalization. Embedded files may omit `parent` when
+the enclosing flow ID matches the requested session; explicitly foreign or invalid
+children are excluded and the retained session is marked partial.
 Each mail event carries `parent_session_id`. No attachment-to-mail relationship is
 inferred solely from being in the same session. The Meterpreter alert exposes
 malware family, signature metadata and a payload reference.
+
+### Live verification on 2026-09-09
+
+Against stores 19 and 23, both Gateway HTTP and IR MCP returned two PSEXEC findings,
+one TCP/2222 shell session, one ChromeUpdate session and three IMAP sessions.
+The target IMAP context retained five files, its sender/recipient/subject/date and
+normalized account. A limit-one IMAP query still reported three vendor matches.
+
+Full exports were compared between HTTP and concatenated MCP Base64 chunks:
+
+| Evidence | Original bytes | SHA-256 |
+| --- | ---: | --- |
+| Shell banner | 116 | `3d9c61d64e2741fdd8bb3b9124d9169ae0932bf2d070da7cdd46bc304789905f` |
+| ChromeUpdate inside ZIP | 73802 | `c90c2cc6ee4bd2b892fb6651f30544f1b541d65a92ab0038a5bc455408401897` |
+| HTML attachment inside ZIP | 103 | `7a35fae98ef2b9384c9300d357843048362196d730d3f2b87adc8deffc227299` |
+| Meterpreter payload | 3000 | `b7fa96cfcbdb0e18fcaae8d8747b92de97978bc21120161abe6cba5cf814f268` |
+
+The production Gateway and IR API images were used with JWT validation enabled.
+A separate local test helper delivered `.env` cookies through the Secrets API
+contract; production Sb0rka secret storage/authentication was not tested by this
+run. Binary exports were kept only as local test artifacts, outside IR storage.
+
+PCAP remains unimplemented and unverified: the current lab account exposes
+`save_files`, `view_app_proto`, `view_flow`, and `view_auth_data`, but lacks
+`export_pcap`. Capture the real export sequence with an authorized account before
+implementing PCAP; file export success does not establish PCAP support.
 
 ### SIEM 2.5
 

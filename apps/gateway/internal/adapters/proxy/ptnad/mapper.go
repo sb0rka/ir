@@ -174,12 +174,18 @@ func mapFlowDetail(detail flowDetail, storeID int64, timeRange TimeRange, fetche
 	session.PCAPs = normalizedStrings(detail.PCAPs)
 	seenFiles := make(map[string]struct{}, len(detail.Files))
 	for index, raw := range detail.Files {
-		if err := validateChildParent("file", raw.Parent, detail.ID); err != nil {
-			return Session{}, fmt.Errorf("map file %d: %w", index, err)
+		// Embedded files may omit parent; the enclosing flow ID was checked by
+		// GetSession. An explicit foreign parent must never enter the context.
+		if raw.Parent != "" {
+			if err := validateChildParent("file", raw.Parent, detail.ID); err != nil {
+				session.ContextErrors = append(session.ContextErrors, fmt.Errorf("map file %d: %w", index, err))
+				continue
+			}
 		}
 		file, mapErr := mapFile(raw)
 		if mapErr != nil {
-			return Session{}, fmt.Errorf("map file %d: %w", index, mapErr)
+			session.ContextErrors = append(session.ContextErrors, fmt.Errorf("map file %d: %w", index, mapErr))
+			continue
 		}
 		if _, exists := seenFiles[file.ExternalID]; exists {
 			continue
@@ -191,11 +197,13 @@ func mapFlowDetail(detail flowDetail, storeID int64, timeRange TimeRange, fetche
 	seenAttacks := make(map[string]struct{}, len(detail.Alerts))
 	for index, raw := range detail.Alerts {
 		if err := validateChildParent("alert", raw.Parent, detail.ID); err != nil {
-			return Session{}, fmt.Errorf("map alert %d: %w", index, err)
+			session.ContextErrors = append(session.ContextErrors, fmt.Errorf("map alert %d: %w", index, err))
+			continue
 		}
 		attack, mapErr := mapAttackDetail(raw, storeID, timeRange, fetchedAt)
 		if mapErr != nil {
-			return Session{}, fmt.Errorf("map alert %d: %w", index, mapErr)
+			session.ContextErrors = append(session.ContextErrors, fmt.Errorf("map alert %d: %w", index, mapErr))
+			continue
 		}
 		if _, exists := seenAttacks[attack.SourceRef.Identity()]; exists {
 			continue
@@ -212,7 +220,7 @@ func mapFlowDetail(detail flowDetail, storeID int64, timeRange TimeRange, fetche
 		}
 	}
 	if err := mapProtocolHints(&session, detail); err != nil {
-		return Session{}, err
+		session.ContextErrors = append(session.ContextErrors, err)
 	}
 	session.Authentication = dedupeAuthentication(session.Authentication)
 	return session, nil
@@ -517,6 +525,9 @@ func normalizeHost(value string) string {
 }
 
 func normalizeAccount(value string) string {
+	if unquoted, err := strconv.Unquote(strings.TrimSpace(value)); err == nil {
+		value = unquoted
+	}
 	value = safeText(value)
 	if value == "[redacted]" {
 		return ""

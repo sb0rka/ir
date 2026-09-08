@@ -104,6 +104,10 @@ func (client *Client) SearchAttacks(ctx context.Context, request SearchRequest, 
 // GetAttack uses an exact, escaped ID predicate. It never obtains a broad page
 // and filters it client-side.
 func (client *Client) GetAttack(ctx context.Context, ref AttackRef, access Access) (Attack, error) {
+	return client.getAttack(ctx, ref, access, true)
+}
+
+func (client *Client) getAttack(ctx context.Context, ref AttackRef, access Access, enrich bool) (Attack, error) {
 	request, timeRange, err := validateAttackRef(ref)
 	if err != nil {
 		return Attack{}, err
@@ -114,6 +118,9 @@ func (client *Client) GetAttack(ctx context.Context, ref AttackRef, access Acces
 	}
 	for _, attack := range result.Attacks {
 		if attack.SourceRef.ExternalID == ref.ExternalID {
+			if !enrich {
+				return attack, nil
+			}
 			return client.enrichAttack(ctx, attack, ref, access), nil
 		}
 	}

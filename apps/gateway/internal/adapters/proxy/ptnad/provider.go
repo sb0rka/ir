@@ -139,9 +139,9 @@ func (provider *Provider) ResolveFinding(ctx context.Context, access capability.
 	if err != nil {
 		return capability.ContextPage{}, err
 	}
-	attack, err := provider.client.GetAttack(ctx, AttackRef{
+	attack, err := provider.client.getAttack(ctx, AttackRef{
 		StoreID: storeID, ExternalID: ref.ExternalID, TimeRange: timeRange,
-	}, Access{Cookie: access.Cookie})
+	}, Access{Cookie: access.Cookie}, expandFindings)
 	if err != nil {
 		return capability.ContextPage{}, canonicalProviderError(err)
 	}

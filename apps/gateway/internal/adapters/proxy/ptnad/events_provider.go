@@ -144,7 +144,7 @@ func (provider *Provider) ResolveContext(ctx context.Context, access capability.
 			resolved, getErr := provider.ResolveFinding(ctx, access, domain.SourceObjectRef{
 				SourceCode: SourceCode, SourceInstance: strconv.FormatInt(parsed.StoreID, 10), RecordType: AttackRecordType, ExternalID: parsed.ExternalID,
 				TimeRange: domain.TimeRange{From: timeRange.From, To: timeRange.To},
-			})
+			}, true)
 			page.Findings = append(page.Findings, resolved.Findings...)
 			page.Sessions = append(page.Sessions, resolved.Sessions...)
 			page.Events = append(page.Events, resolved.Events...)
