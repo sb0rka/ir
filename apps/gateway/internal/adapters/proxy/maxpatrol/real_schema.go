@@ -95,9 +95,10 @@ type Incident struct {
 }
 
 type IncidentSearchRequest struct {
-	TimeRange TimeRange
-	Limit     int
-	Offset    int
+	CreatedAtRange *TimeRange
+	TimeRange      TimeRange
+	Limit          int
+	Offset         int
 }
 
 type IncidentPage struct {
@@ -355,6 +356,7 @@ type incidentTimeFilter struct {
 }
 
 type incidentListFilter struct {
+	CreatedAt  *incidentTimeFilter   `json:"createdAt,omitempty"`
 	DetectedAt incidentTimeFilter    `json:"detectedAt"`
 	IsRemoved  incidentBooleanFilter `json:"isRemoved"`
 	IsArchived incidentBooleanFilter `json:"isArchived"`

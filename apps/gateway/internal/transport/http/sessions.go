@@ -32,7 +32,7 @@ func (server *Server) SearchSessions(w http.ResponseWriter, r *http.Request, _ a
 		return
 	}
 	result, err := server.service.SearchSessions(r.Context(), projectAccess(r), service.SearchSessionsRequest{
-		Sources: sources, TimeRange: timeRange, Limit: intValue(body.Limit), Cursor: stringValue(body.Cursor),
+		Sources: sources, TimeRange: timeRange, Limit: intValue(body.Limit), Cursor: stringValue(body.Cursor), Filter: stringValue(body.Filter),
 	})
 	if err != nil {
 		server.writeServiceError(w, err)

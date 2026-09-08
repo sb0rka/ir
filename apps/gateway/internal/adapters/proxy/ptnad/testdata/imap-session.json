@@ -1,0 +1,35 @@
+{
+  "id": "P8H9AvNOmgVjbVc4HAvvX0",
+  "start": "2023-06-10T09:58:03.678329",
+  "end": "2023-06-10T09:59:39.213456",
+  "src": {
+    "ip": "192.168.25.190",
+    "port": 52368,
+    "groups": [
+      "HOME_NET"
+    ]
+  },
+  "dst": {
+    "ip": "192.168.214.203",
+    "port": 143,
+    "groups": [
+      "HOME_NET"
+    ]
+  },
+  "app_proto": "imap",
+  "mail": [
+    {
+      "from": "attacker@mail.ru",
+      "to": [
+        "victim@ptpilot.local"
+      ],
+      "subject": "Очень срочное обновление",
+      "date": "10 Jun 2023 12:57:52 +0300"
+    }
+  ],
+  "credentials": [
+    {
+      "user": "victim@ptpilot.local"
+    }
+  ]
+}

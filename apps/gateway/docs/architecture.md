@@ -25,6 +25,26 @@ The bounded credential cache is keyed by `{project_id, source_code}` and seriali
 
 Finding and session identity is `{source_code, source_instance, record_type, external_id}`. The required time range is replay provenance and is not part of identity. SIEM uses an empty source instance; NAD uses a configured store ID.
 
-`Finding` and `Session` are first-class coarse objects. `Event`, `Entity`, and entity `Relation` remain granular evidence. Resolve retains a found root even when child context fails and marks that object `partial`; a missing root is not synthesized. Incident resolution includes correlation findings. Attack resolution includes its parent network session. Payloads, cookies, password/NTLM material, PCAP, downloaded files, and full vendor JSON stay behind the adapter boundary.
+`Finding` and `Session` are first-class coarse objects. `Event`, `Entity`, and entity `Relation` remain granular evidence. Resolve retains a found root even when child context fails and marks that object `partial`; a missing root is not synthesized. Incident resolution includes correlation findings. Attack resolution includes its parent network session. Ordinary object responses contain metadata and evidence references. Explicit evidence exports stream payload or file bytes; cookies, password/NTLM material and full vendor JSON stay behind the adapter boundary. PCAP export is not enabled until its vendor contract is verified.
 
 Canonical normalization covers IP, MAC, host, account, and hashes. Event entity mentions retain roles such as `src`, `dst`, `attacker`, and `victim`; flow direction never substitutes for attacker semantics.
+
+## Temporary evidence exports
+
+A bounded process-local registry owns up to 1024 export entries, keyed by an opaque
+Gateway UUID and project ID. Each entry expires one hour after creation. Expired
+metadata may remain for one additional hour to return `expired`; a Gateway restart
+loses all entries. This is not a shared or persistent evidence store. Multiple
+Gateway replicas need request affinity for an export's lifetime.
+
+Every status/content request rechecks the project and current source allowlist.
+Provider task IDs and download locations never leave the adapter/service boundary.
+Creation starts at most one vendor task per request and is not automatically retried;
+status GETs use the existing credential refresh/retry policy. Downloads propagate
+request cancellation and expiration, close the upstream body, and never retry after
+sending bytes. Stream failures abort the response instead of appending JSON.
+
+The HTTP content operation streams the full response or a bounded byte slice.
+IR MCP requests slices (16 KiB default, 64 KiB maximum) and returns Base64 with byte
+offsets and EOF. It does not add binary evidence to IR snapshots or its database.
+See [export contracts and case requests](evidence.md).

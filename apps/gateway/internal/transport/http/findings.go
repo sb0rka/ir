@@ -52,8 +52,17 @@ func (server *Server) SearchFindings(w http.ResponseWriter, r *http.Request, _ a
 			kinds = append(kinds, value)
 		}
 	}
+	var createdRange *domain.TimeRange
+	if body.CreatedAtRange != nil {
+		value, err := objectTimeRange(body.CreatedAtRange.From, body.CreatedAtRange.To)
+		if err != nil {
+			respondError(w, http.StatusBadRequest, "bad_request", err.Error())
+			return
+		}
+		createdRange = &value
+	}
 	result, err := server.service.SearchFindings(r.Context(), projectAccess(r), service.SearchFindingsRequest{
-		Sources: sources, Kinds: kinds, TimeRange: timeRange, Limit: intValue(body.Limit), Cursor: stringValue(body.Cursor),
+		Sources: sources, Kinds: kinds, TimeRange: timeRange, Limit: intValue(body.Limit), Cursor: stringValue(body.Cursor), Filter: stringValue(body.Filter), CreatedAtRange: createdRange,
 	})
 	if err != nil {
 		server.writeServiceError(w, err)

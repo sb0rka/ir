@@ -114,7 +114,7 @@ func (client *Client) GetAttack(ctx context.Context, ref AttackRef, access Acces
 	}
 	for _, attack := range result.Attacks {
 		if attack.SourceRef.ExternalID == ref.ExternalID {
-			return attack, nil
+			return client.enrichAttack(ctx, attack, ref, access), nil
 		}
 	}
 	if result.Total == 0 {
@@ -274,6 +274,9 @@ func (client *Client) doJSON(ctx context.Context, operation, method, relativePat
 	if method == http.MethodPost {
 		request.Header.Set("Accept", "application/json, text/plain, */*")
 		request.Header.Set("Content-Type", "text/plain")
+		if operation == "evidence export" {
+			request.Header.Set("Content-Type", "application/json")
+		}
 		if csrfToken, ok := cookieValue(cookie, "csrftoken"); ok {
 			request.Header.Set("X-CSRFToken", csrfToken)
 			request.Header.Set("Referer", client.baseURL.String())
@@ -347,6 +350,11 @@ func cookieValue(cookieHeader, name string) (string, bool) {
 }
 
 func validateSearchRequest(request SearchRequest) (SearchRequest, TimeRange, error) {
+	predicate, err := compileFilter(request.Filter)
+	if err != nil {
+		return SearchRequest{}, TimeRange{}, err
+	}
+	request.predicate = predicate
 	if request.StoreID <= 0 {
 		return SearchRequest{}, TimeRange{}, fmt.Errorf("PT NAD store ID must be positive")
 	}
@@ -428,10 +436,10 @@ FROM "flow"
 WHERE
     "end" >= %d AND
     "end" <= %d
-    
+    %s
 ORDER BY "start" desc
 LIMIT %d
-`, request.From.UnixMilli(), request.To.UnixMilli(), request.Limit)
+`, request.From.UnixMilli(), request.To.UnixMilli(), bqlAnd(request.predicate), request.Limit)
 }
 
 func attackListBQL(request SearchRequest, exactID string) string {
@@ -444,10 +452,10 @@ FROM "alert"
 WHERE
 %s    "ts" >= %d AND
     "ts" <= %d AND
-    EXISTS (SELECT * FROM "flow" WHERE "end" >= %d AND "end" <= %d )
+    EXISTS (SELECT * FROM "flow" WHERE "end" >= %d AND "end" <= %d %s )
 ORDER BY "ts" desc
 LIMIT %d
-`, exact, request.From.UnixMilli(), request.To.UnixMilli(), request.From.UnixMilli(), request.To.UnixMilli(), request.Limit)
+`, exact, request.From.UnixMilli(), request.To.UnixMilli(), request.From.UnixMilli(), request.To.UnixMilli(), bqlAnd(request.predicate), request.Limit)
 }
 
 func httpPageBQL(ref SessionRef, fromTxID int64) string {

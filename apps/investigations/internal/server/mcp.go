@@ -878,7 +878,7 @@ func buildEntityEventsBatch(
 				matched = true
 				roles := mention.Roles
 				if len(roles) == 0 {
-					roles = []gatewaycontract.EntityMentionRoles{gatewaycontract.Mentions}
+					roles = []gatewaycontract.EntityMentionRoles{gatewaycontract.EntityMentionRolesMentions}
 				}
 				for _, role := range roles {
 					batch.Edges = append(batch.Edges, investigations.AgentEdge{
@@ -915,7 +915,7 @@ func buildEntityEventsBatch(
 			partNode := participantRefs[partKey+"\x00node"]
 			roles := mention.Roles
 			if len(roles) == 0 {
-				roles = []gatewaycontract.EntityMentionRoles{gatewaycontract.Mentions}
+				roles = []gatewaycontract.EntityMentionRoles{gatewaycontract.EntityMentionRolesMentions}
 			}
 			for _, role := range roles {
 				batch.Edges = append(batch.Edges, investigations.AgentEdge{
@@ -931,7 +931,7 @@ func buildEntityEventsBatch(
 			// Still connect the target entity with a generic mentions edge so the
 			// search hit is not left as an isolated event node.
 			batch.Edges = append(batch.Edges, investigations.AgentEdge{
-				SourceRef: nodeRef, TargetRef: entityNodeRef, RelationCode: string(gatewaycontract.Mentions),
+				SourceRef: nodeRef, TargetRef: entityNodeRef, RelationCode: string(gatewaycontract.EntityMentionRolesMentions),
 				Why: fmt.Sprintf("entity %s matched search for event %s from %s at %s",
 					entity.Value, event.SourceEventId, event.SourceCode, event.OccurredAt.UTC().Format(time.RFC3339)),
 				Confidence:        &confidence,
@@ -964,7 +964,7 @@ func importEventNodeWhy(
 			continue
 		}
 		if len(mention.Roles) == 0 {
-			roles = append(roles, string(gatewaycontract.Mentions))
+			roles = append(roles, string(gatewaycontract.EntityMentionRolesMentions))
 			continue
 		}
 		for _, role := range mention.Roles {
@@ -972,7 +972,7 @@ func importEventNodeWhy(
 		}
 	}
 	if len(roles) == 0 {
-		roles = append(roles, string(gatewaycontract.Mentions))
+		roles = append(roles, string(gatewaycontract.EntityMentionRolesMentions))
 	}
 	return fmt.Sprintf(
 		"matched import_entity_events for %s %s in %s, window %s..%s, filter %s, sort %s, role %s",
@@ -1020,7 +1020,32 @@ func pickEntitySource(entity resolvedImportEntity, events []gatewaycontract.Even
 	return "", ""
 }
 
+type mcpEvidenceExportArgs struct {
+	ExportID string `json:"export_id" jsonschema:"Gateway export UUID, never a vendor task ID"`
+}
+type mcpEvidenceReadArgs struct {
+	ExportID string `json:"export_id" jsonschema:"Gateway export UUID"`
+	Offset   int64  `json:"offset,omitempty" jsonschema:"Byte offset, defaults to zero"`
+	Limit    int    `json:"limit,omitempty" jsonschema:"Chunk bytes, defaults to 16384, maximum 65536"`
+}
+
 func addGatewayTools(server *mcp.Server, s *Server) {
+	mcp.AddTool(server, mcpTool[gatewaycontract.EvidenceReference](
+		"gateway_create_evidence_export", "Explicitly request full payload or file evidence from a source object ref. Poll status until ready or partial. PCAP requires a verified vendor export contract. Exports expire after one hour and after a Gateway restart.",
+	), gatewayHandler(s, func(ctx context.Context, args gatewaycontract.EvidenceReference, scope socctx.Scope, bearer string) (json.RawMessage, error) {
+		return s.gateway.CreateEvidenceExport(ctx, scope.ProjectID, bearer, args)
+	}))
+	mcp.AddTool(server, mcpTool[mcpEvidenceExportArgs](
+		"gateway_get_evidence_export", "Get evidence preparation status, metadata and any partial-export error.",
+	), gatewayHandler(s, func(ctx context.Context, args mcpEvidenceExportArgs, scope socctx.Scope, bearer string) (json.RawMessage, error) {
+		return s.gateway.GetEvidenceExport(ctx, scope.ProjectID, bearer, args.ExportID)
+	}))
+	mcp.AddTool(server, mcpTool[mcpEvidenceReadArgs](
+		"gateway_read_evidence_content", "Read full evidence in Base64 chunks. Default 16 KiB, maximum 64 KiB. Follow next_offset until eof=true; concatenate decoded bytes. Partial exports remain partial even at EOF.",
+	), gatewayHandler(s, func(ctx context.Context, args mcpEvidenceReadArgs, scope socctx.Scope, bearer string) (json.RawMessage, error) {
+		return s.gateway.ReadEvidenceContent(ctx, scope.ProjectID, bearer, args.ExportID, args.Offset, args.Limit)
+	}))
+
 	mcp.AddTool(server, mcpTool[struct{}](
 		"gateway_list_sources", "List project-allowed Gateway sources and their capabilities. Use capabilities to pick SIEM vs NAD before searching.",
 	), gatewayHandler(s, func(ctx context.Context, _ struct{}, scope socctx.Scope, bearer string) (json.RawMessage, error) {
@@ -1068,7 +1093,7 @@ func addGatewayTools(server *mcp.Server, s *Server) {
 		return json.Marshal(value)
 	}))
 	mcp.AddTool(server, mcpTool[gatewaycontract.SearchFindingsRequest](
-		"gateway_search_findings", "Search source-native incidents, correlations, and attacks.",
+		"gateway_search_findings", "Search source-native incidents, correlations, and attacks. NAD filter is a restricted predicate, not raw BQL. SIEM created_at_range filters incident creation; time_range filters detection.",
 	), gatewayHandler(s, func(ctx context.Context, args gatewaycontract.SearchFindingsRequest, scope socctx.Scope, bearer string) (json.RawMessage, error) {
 		return s.gateway.SearchFindings(ctx, scope.ProjectID, bearer, args)
 	}))
@@ -1082,7 +1107,7 @@ func addGatewayTools(server *mcp.Server, s *Server) {
 		return s.gateway.GetFinding(ctx, scope.ProjectID, bearer, args)
 	}))
 	mcp.AddTool(server, mcpTool[gatewaycontract.SearchSessionsRequest](
-		"gateway_search_sessions", "Search source-native network sessions.",
+		"gateway_search_sessions", "Search source-native network sessions. Optional NAD filter supports allowed fields, ==, ~, AND/OR or &&/||, and parentheses before the result limit.",
 	), gatewayHandler(s, func(ctx context.Context, args gatewaycontract.SearchSessionsRequest, scope socctx.Scope, bearer string) (json.RawMessage, error) {
 		return s.gateway.SearchSessions(ctx, scope.ProjectID, bearer, args)
 	}))

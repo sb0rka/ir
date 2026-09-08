@@ -65,6 +65,7 @@ func (provider *Provider) RegistryProvider() registry.Provider {
 				domain.CapabilityEntityLookup,
 			},
 		},
+		Evidence:         provider,
 		CredentialSecret: CredentialSecretName,
 		Findings:         provider,
 		Sessions:         provider,
@@ -75,6 +76,9 @@ func (provider *Provider) RegistryProvider() registry.Provider {
 }
 
 func (provider *Provider) SearchFindings(ctx context.Context, access capability.Access, request capability.SearchFindingsRequest) (capability.FindingPage, error) {
+	if request.CreatedAtRange != nil {
+		return capability.FindingPage{}, invalidRequest("NAD does not support created_at_range")
+	}
 	if strings.TrimSpace(request.Cursor) != "" {
 		return capability.FindingPage{}, invalidRequest("PT NAD does not expose a confirmed finding cursor")
 	}
@@ -91,7 +95,7 @@ func (provider *Provider) SearchFindings(ctx context.Context, access capability.
 	}
 	results, partial, err := fanOutStores(ctx, provider, func(storeID int64) (AttackSearchResult, error) {
 		return provider.client.SearchAttacks(ctx, SearchRequest{
-			StoreID: storeID, From: request.TimeRange.From, To: request.TimeRange.To, Limit: limit,
+			StoreID: storeID, From: request.TimeRange.From, To: request.TimeRange.To, Limit: limit, Filter: request.Filter,
 		}, Access{Cookie: access.Cookie})
 	})
 	if err != nil {
@@ -146,6 +150,10 @@ func (provider *Provider) ResolveFinding(ctx context.Context, access capability.
 		Findings:    []domain.Finding{root},
 		Resolutions: []domain.ObjectResolution{{Ref: root.Ref, Status: "complete", Errors: []domain.SourceError{}}},
 	}
+	for _, detailErr := range attack.ContextErrors {
+		page.Resolutions[0].Status = "partial"
+		page.Resolutions[0].Errors = append(page.Resolutions[0].Errors, contextWarning("finding detail", detailErr))
+	}
 	if !expandFindings {
 		return page, nil
 	}
@@ -163,7 +171,7 @@ func (provider *Provider) ResolveFinding(ctx context.Context, access capability.
 	if err != nil {
 		page.Resolutions[0].Status = "partial"
 		warning := contextWarning("finding.session", err)
-		page.Resolutions[0].Errors = []domain.SourceError{warning}
+		page.Resolutions[0].Errors = append(page.Resolutions[0].Errors, warning)
 		appendAttackContext(&page, attack)
 		page = normalizeContextPage(page)
 		if warning.Retryable {
@@ -178,10 +186,12 @@ func (provider *Provider) ResolveFinding(ctx context.Context, access capability.
 	}
 	// Flow detail carries the reviewed rule metadata. Replace only the matching
 	// root snapshot while retaining the exact BQL root when the child omits it.
-	rootEnriched := false
+	rootEnriched := len(attack.ContextErrors) == 0
 	for _, related := range session.RelatedAttacks {
 		if related.SourceRef.Identity() == attack.SourceRef.Identity() {
-			page.Findings[0] = canonicalFinding(related)
+			if len(attack.ContextErrors) > 0 {
+				page.Findings[0] = canonicalFinding(related)
+			}
 			rootEnriched = true
 			break
 		}
@@ -192,6 +202,10 @@ func (provider *Provider) ResolveFinding(ctx context.Context, access capability.
 			Source: SourceCode, Code: "missing_flow_alert", Message: "finding flow detail is incomplete",
 		})
 	}
+	// Dedupe is last-wins. Keep the dedicated alert detail ahead of the
+	// reduced alert embedded in its flow, including payload metadata.
+	page.Findings = append(page.Findings, page.Findings[0])
+	appendAttackContext(&page, attack)
 	return normalizeContextPage(page), nil
 }
 
@@ -208,7 +222,7 @@ func (provider *Provider) SearchSessions(ctx context.Context, access capability.
 	}
 	results, partial, err := fanOutStores(ctx, provider, func(storeID int64) (SessionSearchResult, error) {
 		return provider.client.SearchSessions(ctx, SearchRequest{
-			StoreID: storeID, From: request.TimeRange.From, To: request.TimeRange.To, Limit: limit,
+			StoreID: storeID, From: request.TimeRange.From, To: request.TimeRange.To, Limit: limit, Filter: request.Filter,
 		}, Access{Cookie: access.Cookie})
 	})
 	if err != nil {

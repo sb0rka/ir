@@ -10,6 +10,7 @@ import (
 )
 
 type Provider struct {
+	Evidence         capability.EvidenceSource
 	Source           domain.Source
 	CredentialSecret string
 	Findings         capability.FindingSource

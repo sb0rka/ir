@@ -339,6 +339,8 @@ func decodeNullableValue[T any](raw json.RawMessage, target *T) error {
 }
 
 type flowDetail struct {
+	Mail                 []MailHint          `json:"mail"`
+	PCAPs                []string            `json:"pcaps"`
 	Index                string              `json:"_index"`
 	ID                   string              `json:"id"`
 	Start                string              `json:"start"`
@@ -407,6 +409,8 @@ type operatingSystemsDTO struct {
 }
 
 type alertDetail struct {
+	Payload       string      `json:"payload"`
+	MalwareFamily []string    `json:"malware_family"`
 	ID            string      `json:"id"`
 	Parent        string      `json:"parent"`
 	Timestamp     string      `json:"ts"`
@@ -454,6 +458,7 @@ type fileDetail struct {
 }
 
 type credentialDTO struct {
+	User  string `json:"user"`
 	Login string `json:"login"`
 	Valid *bool  `json:"valid"`
 }

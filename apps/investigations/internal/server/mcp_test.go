@@ -73,6 +73,7 @@ func TestMCPInitializeAndListTools(t *testing.T) {
 		"gateway_list_sources", "gateway_search_events", "gateway_aggregate_events",
 		"gateway_lookup_entity", "gateway_resolve_context", "gateway_search_findings", "gateway_get_finding",
 		"gateway_search_sessions", "gateway_get_session", "gateway_search_endpoints",
+		"gateway_create_evidence_export", "gateway_get_evidence_export", "gateway_read_evidence_content",
 	} {
 		if !strings.Contains(listed.Body.String(), name) {
 			t.Fatalf("tools/list missing %s: %s", name, listed.Body.String())
@@ -560,5 +561,50 @@ func TestNormalizeAccountBackslash(t *testing.T) {
 	}
 	if looksLikeBareUUID(`account:dkrylova\administrator`) {
 		t.Fatal("prefixed source id must not look like bare UUID")
+	}
+}
+
+func TestMCPEvidenceToolsForwardProjectAndReadDefaults(t *testing.T) {
+	calls := 0
+	gateway := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		if r.Header.Get("X-Project-ID") != "abcdef1234" || r.Header.Get("Authorization") != "Bearer user-access-jwt" {
+			t.Error("missing authenticated scope")
+		}
+		if strings.HasSuffix(r.URL.Path, "/content") {
+			if r.URL.Query().Get("offset") != "0" || r.URL.Query().Get("limit") != "16384" {
+				t.Error("wrong defaults", r.URL)
+			}
+			w.Header().Set("X-Evidence-EOF", "true")
+			w.Write([]byte{0, 255, 1})
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"export_id":"11111111-2222-4333-8444-555555555555","state":"ready"}`))
+	}))
+	defer gateway.Close()
+	server := &Server{gateway: gatewayclient.New(gatewayclient.Config{BaseURL: gateway.URL})}
+	args := map[string]string{
+		"gateway_create_evidence_export": `{"kind":"payload","ref":{"source_code":"pt-nad","record_type":"nad_attack","external_id":"alert","source_instance":"23","time_range":{"from":"2023-06-10T00:00:00Z","to":"2023-06-11T00:00:00Z"}}}`,
+		"gateway_get_evidence_export":    `{"export_id":"11111111-2222-4333-8444-555555555555"}`,
+		"gateway_read_evidence_content":  `{"export_id":"11111111-2222-4333-8444-555555555555"}`,
+	}
+	for name, body := range args {
+		request := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":42,"method":"tools/call","params":{"name":"`+name+`","arguments":`+body+`}}`))
+		request.Header.Set("Accept", "application/json, text/event-stream")
+		request.Header.Set("Content-Type", "application/json")
+		ctx := socctx.WithScope(request.Context(), socctx.Scope{ProjectID: "abcdef1234"})
+		ctx = socctx.WithBearer(ctx, "user-access-jwt")
+		recorder := httptest.NewRecorder()
+		server.MCPHandler().ServeHTTP(recorder, request.WithContext(ctx))
+		if recorder.Code != http.StatusOK || strings.Contains(recorder.Body.String(), `"isError":true`) || strings.Contains(recorder.Body.String(), `"error":`) {
+			t.Fatalf("%s: %d %s", name, recorder.Code, recorder.Body)
+		}
+		if name == "gateway_read_evidence_content" && (!strings.Contains(recorder.Body.String(), "AP8B") || !strings.Contains(recorder.Body.String(), "next_offset")) {
+			t.Fatal(recorder.Body)
+		}
+	}
+	if calls != 3 {
+		t.Fatal(calls)
 	}
 }

@@ -11,6 +11,8 @@ servers:
 security:
   - bearerAuth: []
 tags:
+  - name: evidence
+    description: Explicit source evidence exports.
   - name: health
     description: Gateway process health and readiness.
   - name: sources

@@ -57,7 +57,8 @@ func findingsToAPI(values []domain.Finding) []api.Finding {
 	result := make([]api.Finding, 0, len(values))
 	for _, value := range values {
 		item := api.Finding{
-			Ref: sourceObjectRefToAPI(value.Ref), Kind: api.FindingKind(value.Kind), Title: value.Title,
+			Evidence: evidenceToAPI(value.Evidence),
+			Ref:      sourceObjectRefToAPI(value.Ref), Kind: api.FindingKind(value.Kind), Title: value.Title,
 			Severity: api.FindingSeverity(value.Severity), OccurredAt: value.OccurredAt,
 			Entities: entityMentionsToAPI(value.Entities), FetchedAt: value.FetchedAt,
 		}
@@ -78,7 +79,7 @@ func findingsToAPI(values []domain.Finding) []api.Finding {
 		if value.Incident != nil {
 			item.Incident = &api.IncidentDetails{
 				Key: stringPointer(value.Incident.Key), ExternalKey: stringPointer(value.Incident.ExternalKey),
-				Type: stringPointer(value.Incident.Type),
+				Type:    stringPointer(value.Incident.Type),
 				Verdict: stringPointer(value.Incident.Verdict), Damage: stringPointer(value.Incident.Damage),
 				Recommendation: stringPointer(value.Incident.Recommendation), AssignedTo: stringPointer(value.Incident.AssignedTo),
 				ChangedAt: value.Incident.ChangedAt, Archived: boolPointer(value.Incident.Archived), Removed: boolPointer(value.Incident.Removed),
@@ -91,8 +92,12 @@ func findingsToAPI(values []domain.Finding) []api.Finding {
 		}
 		if value.NADAttack != nil {
 			item.NadAttack = &api.NADAttackDetails{
+				Signature: stringPointer(value.NADAttack.Signature), PayloadAvailable: value.NADAttack.PayloadAvailable,
 				Class: stringPointer(value.NADAttack.Class), Gid: intPointer(value.NADAttack.GID), Sid: intPointer(value.NADAttack.SID),
 				Revision: intPointer(value.NADAttack.Revision), RawPriority: intPointer(value.NADAttack.RawPriority), FalsePositive: value.NADAttack.FalsePositive,
+			}
+			if len(value.NADAttack.MalwareFamily) > 0 {
+				item.NadAttack.MalwareFamily = &value.NADAttack.MalwareFamily
 			}
 		}
 		result = append(result, item)
@@ -104,7 +109,8 @@ func sessionsToAPI(values []domain.Session) []api.Session {
 	result := make([]api.Session, 0, len(values))
 	for _, value := range values {
 		item := api.Session{
-			Ref: sourceObjectRefToAPI(value.Ref), Title: value.Title, Severity: api.SessionSeverity(value.Severity),
+			Evidence: evidenceToAPI(value.Evidence),
+			Ref:      sourceObjectRefToAPI(value.Ref), Title: value.Title, Severity: api.SessionSeverity(value.Severity),
 			AuthenticationHints: authenticationHintsToAPI(value.AuthenticationHints), FileHints: fileHintsToAPI(value.FileHints),
 			RawCriticality: value.RawCriticality, StartedAt: value.StartedAt, EndedAt: value.EndedAt,
 			DurationSeconds: value.DurationSeconds, SourceEndpoint: networkEndpointToAPI(value.SourceEndpoint),
@@ -112,6 +118,13 @@ func sessionsToAPI(values []domain.Session) []api.Session {
 			ApplicationProtocol: stringPointer(value.ApplicationProtocol), State: nonNilSlice(value.State),
 			FalsePositive: value.FalsePositive, HasFiles: value.HasFiles, Entities: entityMentionsToAPI(value.Entities),
 			RelatedFindings: sourceObjectRefsToAPI(value.RelatedFindings), SourceRef: stringPointer(value.SourceRef), FetchedAt: value.FetchedAt,
+		}
+		if len(value.MailHints) > 0 {
+			hints := make([]api.SessionMailHint, 0, len(value.MailHints))
+			for _, hint := range value.MailHints {
+				hints = append(hints, api.SessionMailHint{From: hint.From, To: nonNilSlice(hint.To), Subject: hint.Subject, Date: hint.Date})
+			}
+			item.MailHints = &hints
 		}
 		if value.Bytes != nil {
 			item.Bytes = trafficCountersToAPI(*value.Bytes)

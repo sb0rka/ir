@@ -48,6 +48,8 @@ type sourceStatusSnapshot struct {
 }
 
 type Service struct {
+	exportsMu       sync.Mutex
+	exports         map[string]*evidenceEntry
 	registry        *registry.Registry
 	secrets         SecretResolver
 	requestTimeout  time.Duration

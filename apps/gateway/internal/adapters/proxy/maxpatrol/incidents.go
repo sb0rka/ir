@@ -32,6 +32,12 @@ func (client *Client) SearchIncidents(ctx context.Context, access Access, reques
 		},
 		Sorting: []struct{}{},
 	}
+	if request.CreatedAtRange != nil {
+		if err := request.CreatedAtRange.validate(); err != nil {
+			return IncidentPage{}, err
+		}
+		payload.Filter.CreatedAt = &incidentTimeFilter{From: vendorTime(request.CreatedAtRange.From), To: vendorTime(request.CreatedAtRange.To)}
+	}
 	query := url.Values{
 		"limit":  []string{intQuery(request.Limit)},
 		"offset": []string{intQuery(request.Offset)},
