@@ -87,6 +87,7 @@ type Database interface {
 	DeleteGraphEdgeEvidence(ctx context.Context, projectID, investigationID, edgeID, eventID string) error
 	ReviewGraphEdges(ctx context.Context, request model.EdgeReviewRequest) (model.EdgeReviewResult, error)
 	AgentResultCounts(ctx context.Context, projectID, investigationID, somIssueID string) (nodes, edges int, err error)
+	IncrementAgentRuns(ctx context.Context, projectID, investigationID string) error
 
 	Reference(ctx context.Context) (model.Reference, error)
 }

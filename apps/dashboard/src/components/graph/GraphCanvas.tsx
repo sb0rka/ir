@@ -224,7 +224,7 @@ function GraphInner({ fitToken }: { fitToken: FitToken }) {
       onNodeDragStop={onNodeDragStop}
       onPaneClick={onPaneClick}
       nodesDraggable
-      minZoom={0.3}
+      minZoom={0.05}
       maxZoom={1.8}
       proOptions={{ hideAttribution: true }}
       colorMode={resolvedAppearance}

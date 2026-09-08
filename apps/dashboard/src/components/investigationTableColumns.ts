@@ -1,30 +1,38 @@
-/** Searchable columns of the investigations list table — single source for headers + search. */
+/** Columns of the investigations list table. Searchable subset drives the text filter. */
 export type InvestigationTableColumnId =
   | 'severity'
   | 'status'
+  | 'nodes'
+  | 'hypotheses'
+  | 'agents'
   | 'title'
-  | 'verdict'
   | 'createdAt'
   | 'updatedAt'
 
 export type InvestigationTableColumn = {
   id: InvestigationTableColumnId
   label: string
+  searchable?: boolean
 }
 
-export const INVESTIGATION_TABLE_SEARCH_COLUMNS: ReadonlyArray<InvestigationTableColumn> = [
-  { id: 'severity', label: 'Крит.' },
-  { id: 'status', label: 'Статус' },
-  { id: 'title', label: 'Название' },
-  { id: 'verdict', label: 'Вердикт' },
-  { id: 'createdAt', label: 'Создано' },
-  { id: 'updatedAt', label: 'Обновлено' },
+export const INVESTIGATION_TABLE_COLUMNS: ReadonlyArray<InvestigationTableColumn> = [
+  { id: 'severity', label: 'Крит.', searchable: true },
+  { id: 'status', label: 'Статус', searchable: true },
+  { id: 'title', label: 'Название', searchable: true },
+  { id: 'nodes', label: 'Ноды' },
+  { id: 'hypotheses', label: 'Гипотезы' },
+  { id: 'agents', label: 'Агенты' },
+  { id: 'createdAt', label: 'Создано', searchable: true },
+  { id: 'updatedAt', label: 'Обновлено', searchable: true },
 ]
+
+export const INVESTIGATION_TABLE_SEARCH_COLUMNS: ReadonlyArray<InvestigationTableColumn> =
+  INVESTIGATION_TABLE_COLUMNS.filter((column) => column.searchable)
 
 export const DEFAULT_INVESTIGATION_TABLE_SEARCH_COLUMN: InvestigationTableColumnId = 'title'
 
 export function investigationTableColumnLabel(id: InvestigationTableColumnId): string {
-  return INVESTIGATION_TABLE_SEARCH_COLUMNS.find((column) => column.id === id)?.label ?? id
+  return INVESTIGATION_TABLE_COLUMNS.find((column) => column.id === id)?.label ?? id
 }
 
 export function resolveInvestigationTableSearchColumn(

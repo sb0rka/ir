@@ -9,7 +9,7 @@ import {
   edgeReviewState,
   filterInvestigationEdges,
 } from '../lib/edge-review'
-import { clsx, kindLabel, statusLabel, verdictLabel } from '../lib/utils'
+import { clsx, kindLabel, statusLabel } from '../lib/utils'
 import { Check, Eye, EyeOff, X } from 'lucide-react'
 
 const EMPTY_HIDDEN_NODE_IDS: string[] = []
@@ -29,12 +29,6 @@ export function InvestigationHeader({ investigationId }: { investigationId: stri
 
   return (
     <div className="flex min-w-0 flex-1 items-baseline gap-2">
-      <span className="shrink-0 text-xs text-fg-muted">{statusLabel[inv.status]}</span>
-      {inv.verdict ? (
-        <span className="shrink-0 text-xs text-fg-dim">
-          {verdictLabel[inv.verdict] ?? inv.verdict}
-        </span>
-      ) : null}
       <h1 className="min-w-0 truncate text-xs font-medium">{inv.title}</h1>
       {running && (
         <span className="inline-flex shrink-0 items-center gap-1.5 text-xs text-proposed">
@@ -97,14 +91,14 @@ export function ContextTable({ investigationId }: { investigationId: string }) {
       <ContextQueueToolbar investigationId={investigationId} />
       <div className="min-h-0 flex-1 overflow-auto">
         <table className="w-full min-w-[900px] table-fixed border-collapse text-left">
-          <thead className="sticky top-0 bg-surface-1 text-[11px] uppercase tracking-wider text-fg-dim">
+          <thead className="sticky top-0 z-10 bg-surface-1 text-[11px] uppercase tracking-wider text-fg-muted">
             <tr className="border-b border-border">
               <th className="w-[10rem] max-w-[10rem] px-3 py-2">Цель</th>
               <th className="w-[8rem] px-3 py-2">Связь</th>
               <th className="px-3 py-2">Источник</th>
               <th className="w-[8rem] px-3 py-2">Происхождение</th>
               <th className="w-[11rem] px-3 py-2">Статус</th>
-              <th className="w-[5rem] px-3 py-2">Действия</th>
+              <th className="w-[5rem] px-3 py-2 text-center">Действия</th>
               <th className="w-[20rem] max-w-[20rem] px-3 py-2">Обоснование</th>
             </tr>
           </thead>
@@ -135,27 +129,24 @@ export function ContextTable({ investigationId }: { investigationId: string }) {
                     })
                   }
                 >
-                  <td className="max-w-[18rem] px-3 py-2 align-top font-mono text-xs text-fg-muted line-clamp-3">
+                  <td className="max-w-[18rem] px-3 py-2 align-middle text-xs text-fg line-clamp-3">
                     {nodeLabel(edge.target)}
                   </td>
-                  <td className="px-3 py-2 font-mono text-xs text-proposed">
+                  <td className="px-3 py-2 align-middle text-xs text-proposed">
                     {edge.relation}
                   </td>
-                  <td className="max-w-[18rem] px-3 py-2 align-top">
+                  <td className="max-w-[18rem] px-3 py-2 align-middle">
                     <div
-                      className={clsx(
-                        clampCell,
-                        'font-mono text-xs text-fg-muted'
-                      )}
+                      className={clsx(clampCell, 'text-xs text-fg')}
                       title={nodeLabel(edge.source)}
                     >
                       {nodeLabel(edge.source)}
                     </div>
                   </td>
-                  <td className="px-3 py-2 text-xs text-fg-muted">
+                  <td className="px-3 py-2 align-middle text-xs text-fg-muted">
                     {statusLabel[origin] ?? origin}
                   </td>
-                  <td className="px-3 py-2">
+                  <td className="px-3 py-2 align-middle">
                     <Chip
                       tone={
                         review === 'proposed'
@@ -168,9 +159,9 @@ export function ContextTable({ investigationId }: { investigationId: string }) {
                       {statusLabel[review]}
                     </Chip>
                   </td>
-                  <td className="px-3 py-2">
+                  <td className="px-3 py-2 align-middle text-center">
                     {review === 'proposed' ? (
-                      <div className="flex gap-1">
+                      <div className="flex justify-center gap-1">
                         <Button
                           size="sm"
                           variant="ghost"
@@ -225,13 +216,15 @@ export function ContextTable({ investigationId }: { investigationId: string }) {
                       </Button>
                     )}
                   </td>
-                  <td className="max-w-[20rem] px-3 py-2 align-top">
-                    <div
-                      className={clsx(clampCell, 'text-xs text-fg-dim')}
-                      title={edge.rationale ?? undefined}
-                    >
-                      {edge.rationale ?? '—'}
-                    </div>
+                  <td className="max-w-[20rem] px-3 py-2 align-middle">
+                    {edge.rationale ? (
+                      <div
+                        className={clsx(clampCell, 'text-xs text-fg-muted')}
+                        title={edge.rationale}
+                      >
+                        {edge.rationale}
+                      </div>
+                    ) : null}
                   </td>
                 </tr>
               )

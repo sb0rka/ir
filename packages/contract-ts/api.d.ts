@@ -2381,6 +2381,12 @@ export interface components {
                 entities: number;
                 /** @description Edges waiting for review. */
                 proposed_edges: number;
+                /** @description Graph nodes (event and entity) in this investigation. */
+                nodes: number;
+                /** @description Non-deleted hypotheses owned by this investigation. */
+                hypotheses: number;
+                /** @description Count of SOM agent workflow starts for this investigation. */
+                agents: number;
             };
             /**
              * Format: date-time

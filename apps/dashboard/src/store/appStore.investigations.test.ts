@@ -5,6 +5,7 @@ import {
   useAppStore,
 } from './appStore'
 import * as irApi from '../api/ir'
+import * as hypothesesApi from '../api/hypotheses'
 import * as searchApi from '../api/search'
 import * as workspaceTabs from '../api/workspace-tabs'
 
@@ -33,6 +34,9 @@ function investigation(overrides: Partial<Investigation> = {}): Investigation {
       events: 2,
       entities: 1,
       proposed_edges: 0,
+      nodes: 0,
+      hypotheses: 0,
+      agents: 0,
     },
     view: 'graph',
     selectedEntityIds: [],
@@ -152,6 +156,9 @@ describe('investigation catalog', () => {
         events: 1,
         entities: 0,
         proposed_edges: 0,
+        nodes: 0,
+        hypotheses: 0,
+        agents: 0,
       },
     })
     useAppStore.setState({
@@ -192,6 +199,34 @@ describe('investigation catalog', () => {
     expect(inv?.nodeIds).toEqual(['n1'])
     expect(inv?.view).toBe('table')
     expect(inv?.selectedEntityIds).toEqual(['e1'])
+  })
+
+  it('loadInvestigation keeps view switched while the bundle is in flight', async () => {
+    useAppStore.setState({
+      investigations: { 'inv-1': investigation({ view: 'graph' }) },
+    })
+    let resolveBundle: (value: Awaited<ReturnType<typeof irApi.loadInvestigationBundle>>) => void
+    vi.spyOn(irApi, 'loadInvestigationBundle').mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveBundle = resolve
+        }),
+    )
+    vi.spyOn(hypothesesApi, 'listHypotheses').mockResolvedValue([])
+
+    const loading = useAppStore.getState().loadInvestigation('inv-1')
+    useAppStore.getState().updateInvestigation('inv-1', { view: 'table' })
+    resolveBundle!({
+      investigation: investigation({ view: 'graph', eventIds: ['e1'] }),
+      events: {},
+      entities: {},
+      nodes: {},
+      edges: {},
+      findingSourceKeys: [],
+    })
+    await loading
+
+    expect(useAppStore.getState().investigations['inv-1']?.view).toBe('table')
   })
 
   it('deleteInvestigation removes the case, children and open tabs', async () => {
@@ -244,6 +279,9 @@ describe('investigation catalog', () => {
         events: 2,
         entities: 1,
         proposed_edges: 0,
+        nodes: 0,
+        hypotheses: 0,
+        agents: 0,
       },
     })
 
@@ -301,6 +339,9 @@ describe('investigation catalog', () => {
         events: 2,
         entities: 1,
         proposed_edges: 0,
+        nodes: 0,
+        hypotheses: 0,
+        agents: 0,
       },
     })
 

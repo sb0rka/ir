@@ -53,17 +53,17 @@ export const severityDot: Record<string, string> = {
 }
 
 export const verdictLabel: Record<string, string> = {
-  incident: 'инцидент',
-  false_positive: 'ложное',
-  not_affected: 'не затронуто',
-  inconclusive: 'неясно',
+  incident: 'подтвержденный инцидент',
+  false_positive: 'ложное срабатывание',
+  not_affected: 'легитимная активность',
+  inconclusive: 'недостаточно данных',
 }
 
 export const CLOSE_VERDICTS: { id: Verdict; label: string }[] = [
-  { id: 'incident', label: 'Инцидент' },
+  { id: 'incident', label: 'Подтвержденный инцидент' },
   { id: 'false_positive', label: 'Ложное срабатывание' },
-  { id: 'not_affected', label: 'Не затронуто' },
-  { id: 'inconclusive', label: 'Неясно' },
+  { id: 'not_affected', label: 'Легитимная активность' },
+  { id: 'inconclusive', label: 'Недостаточно данных' },
 ]
 
 export const statusLabel: Record<string, string> = {

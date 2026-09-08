@@ -45,6 +45,9 @@ type InvestigationCounters struct {
 	Events        int
 	Entities      int
 	ProposedEdges int
+	Nodes         int
+	Hypotheses    int
+	Agents        int
 }
 
 type InvestigationFilter struct {

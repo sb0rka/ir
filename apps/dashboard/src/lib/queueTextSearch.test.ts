@@ -59,6 +59,9 @@ const investigation: Investigation = {
     events: 0,
     entities: 0,
     proposed_edges: 0,
+    nodes: 0,
+    hypotheses: 0,
+    agents: 0,
   },
   view: 'graph',
   selectedEntityIds: [],
@@ -126,7 +129,6 @@ describe('investigation table search columns', () => {
       'Крит.',
       'Статус',
       'Название',
-      'Вердикт',
       'Создано',
       'Обновлено',
     ])

@@ -33,6 +33,9 @@ export interface InvestigationCounters {
   events: number
   entities: number
   proposed_edges: number
+  nodes: number
+  hypotheses: number
+  agents: number
 }
 
 export interface InvestigationListFilter {
@@ -230,7 +233,7 @@ export const DEFAULT_QUEUE_SOURCE: QueueSource = 'siem_incident'
 export const QUEUE_SOURCE_OPTIONS: { id: QueueSource; label: string }[] = [
   { id: 'siem_incident', label: 'Инциденты' },
   { id: 'siem_correlation', label: 'Корреляции' },
-  { id: 'nad_attack', label: 'Атаки NAD' },
+  { id: 'nad_attack', label: 'Атаки' },
   { id: 'events', label: 'События' },
   { id: 'entities', label: 'Сущности' },
 ]

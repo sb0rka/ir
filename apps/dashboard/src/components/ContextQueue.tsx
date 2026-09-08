@@ -4,30 +4,29 @@ import type { EventOrigin, ReviewState } from '../types'
 import { ContextQueryComposer } from './QueryComposer'
 import { AlertTable } from './AlertTable'
 import { EventGroupFilter } from './EventGroupFilter'
-import { Button } from './ui'
+import { Button, Select } from './ui'
 import {
   acceptEdgesWithNodes,
   filterInvestigationEdges,
   proposedInvestigationEdgeIds,
 } from '../lib/edge-review'
-import { clsx } from '../lib/utils'
 import { filterFingerprint } from '../lib/queryFingerprint'
-import { Check, Plus, X } from 'lucide-react'
+import { Check, X } from 'lucide-react'
 
-const ORIGIN_FILTERS: Array<{ id: EventOrigin | 'all'; label: string }> = [
-  { id: 'all', label: 'все' },
-  { id: 'seed', label: 'исходные' },
-  { id: 'agent', label: 'агент' },
-  { id: 'analyst', label: 'аналитик' },
-  { id: 'rule', label: 'правило' },
-]
+const ORIGIN_OPTIONS = [
+  { value: 'all', label: 'Все происхождения' },
+  { value: 'seed', label: 'Исходные' },
+  { value: 'agent', label: 'Агент' },
+  { value: 'analyst', label: 'Аналитик' },
+  { value: 'rule', label: 'Правило' },
+] as const satisfies ReadonlyArray<{ value: EventOrigin | 'all'; label: string }>
 
-const REVIEW_FILTERS: Array<{ id: ReviewState | 'all'; label: string }> = [
-  { id: 'all', label: 'все' },
-  { id: 'proposed', label: 'предложенные' },
-  { id: 'confirmed', label: 'подтвержденные' },
-  { id: 'rejected', label: 'отклоненные' },
-]
+const REVIEW_OPTIONS = [
+  { value: 'all', label: 'Все статусы' },
+  { value: 'proposed', label: 'Предложенные' },
+  { value: 'confirmed', label: 'Подтвержденные' },
+  { value: 'rejected', label: 'Отклоненные' },
+] as const satisfies ReadonlyArray<{ value: ReviewState | 'all'; label: string }>
 
 /** Filter/bulk-review toolbar shown above the context table view. */
 export function ContextQueueToolbar({ investigationId }: { investigationId: string }) {
@@ -39,7 +38,6 @@ export function ContextQueueToolbar({ investigationId }: { investigationId: stri
   const graphNodes = useAppStore((s) => s.graphNodes)
   const setContextQueue = useAppStore((s) => s.setContextQueue)
   const setReview = useAppStore((s) => s.setReview)
-  const update = useAppStore((s) => s.updateInvestigation)
 
   if (!inv) return null
 
@@ -58,53 +56,26 @@ export function ContextQueueToolbar({ investigationId }: { investigationId: stri
 
   return (
     <div className="flex flex-wrap items-center gap-3 border-b border-border bg-surface-1 px-3 py-2">
-      <div className="flex items-center gap-1.5 text-xs text-fg-dim">
-        происхождение:
-        <div className="flex rounded border border-border p-0.5">
-          {ORIGIN_FILTERS.map((f) => (
-            <button
-              key={f.id}
-              type="button"
-              className={clsx(
-                'rounded px-2 py-0.5 text-xs',
-                queue.originFilter === f.id
-                  ? 'bg-surface-3 text-fg'
-                  : 'text-fg-muted hover:text-fg',
-              )}
-              onClick={() => setContextQueue(investigationId, { originFilter: f.id })}
-            >
-              {f.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="flex items-center gap-1.5 text-xs text-fg-dim">
-        статус:
-        <div className="flex rounded border border-border p-0.5">
-          {REVIEW_FILTERS.map((f) => (
-            <button
-              key={f.id}
-              type="button"
-              className={clsx(
-                'rounded px-2 py-0.5 text-xs',
-                queue.reviewFilter === f.id
-                  ? 'bg-surface-3 text-fg'
-                  : 'text-fg-muted hover:text-fg',
-              )}
-              onClick={() => setContextQueue(investigationId, { reviewFilter: f.id })}
-            >
-              {f.label}
-            </button>
-          ))}
-        </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <Select
+          aria-label="Происхождение"
+          value={queue.originFilter}
+          options={ORIGIN_OPTIONS}
+          onChange={(originFilter) => setContextQueue(investigationId, { originFilter })}
+        />
+        <Select
+          aria-label="Статус"
+          value={queue.reviewFilter}
+          options={REVIEW_OPTIONS}
+          onChange={(reviewFilter) => setContextQueue(investigationId, { reviewFilter })}
+        />
       </div>
 
       <div className="ml-auto flex items-center gap-2">
         {visibleProposedIds.length > 0 && (
           <>
             <span className="text-xs text-proposed">
-              предложено: {visibleProposedIds.length}
+              Предложено: {visibleProposedIds.length}
             </span>
             <Button
               size="sm"
@@ -136,14 +107,6 @@ export function ContextQueueToolbar({ investigationId }: { investigationId: stri
             </Button>
           </>
         )}
-        <Button
-          size="sm"
-          variant="primary"
-          onClick={() => update(investigationId, { view: 'queue' })}
-        >
-          <Plus className="h-3.5 w-3.5" />
-          Добавить события
-        </Button>
       </div>
     </div>
   )

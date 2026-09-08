@@ -59,6 +59,9 @@ function irInvestigation(overrides: Partial<IrInvestigation> = {}): IrInvestigat
       events: 4,
       entities: 5,
       proposed_edges: 1,
+      nodes: 0,
+      hypotheses: 0,
+      agents: 0,
     },
     ...overrides,
   }
@@ -74,6 +77,9 @@ describe('mapIrInvestigation catalog fields', () => {
       events: 4,
       entities: 5,
       proposed_edges: 1,
+      nodes: 0,
+      hypotheses: 0,
+      agents: 0,
     })
     expect(mapped.updatedAt).toBe('2026-01-02T12:00:00Z')
     expect(mapped.verdict).toBe('incident')

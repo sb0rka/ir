@@ -154,3 +154,12 @@ body {
 .chip-flash-critical {
   animation: chip-flash-critical 0.28s ease-in-out 3;
 }
+
+@keyframes marquee-scroll {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}

@@ -413,6 +413,9 @@ type Investigation struct {
 
 	// Counters Size of the case at a glance, so the list does not need a query per row.
 	Counters struct {
+		// Agents Count of SOM agent workflow starts for this investigation.
+		Agents int `json:"agents"`
+
 		// Children Direct child investigations. Hypotheses are not counted here.
 		Children int `json:"children"`
 
@@ -424,6 +427,12 @@ type Investigation struct {
 
 		// Findings First-class incidents, correlations and attacks attached here.
 		Findings int `json:"findings"`
+
+		// Hypotheses Non-deleted hypotheses owned by this investigation.
+		Hypotheses int `json:"hypotheses"`
+
+		// Nodes Graph nodes (event and entity) in this investigation.
+		Nodes int `json:"nodes"`
 
 		// ProposedEdges Edges waiting for review.
 		ProposedEdges int `json:"proposed_edges"`
@@ -2431,6 +2440,9 @@ type GetInvestigationTree200JSONResponse []struct {
 
 	// Counters Size of the case at a glance, so the list does not need a query per row.
 	Counters struct {
+		// Agents Count of SOM agent workflow starts for this investigation.
+		Agents int `json:"agents"`
+
 		// Children Direct child investigations. Hypotheses are not counted here.
 		Children int `json:"children"`
 
@@ -2442,6 +2454,12 @@ type GetInvestigationTree200JSONResponse []struct {
 
 		// Findings First-class incidents, correlations and attacks attached here.
 		Findings int `json:"findings"`
+
+		// Hypotheses Non-deleted hypotheses owned by this investigation.
+		Hypotheses int `json:"hypotheses"`
+
+		// Nodes Graph nodes (event and entity) in this investigation.
+		Nodes int `json:"nodes"`
 
 		// ProposedEdges Edges waiting for review.
 		ProposedEdges int `json:"proposed_edges"`

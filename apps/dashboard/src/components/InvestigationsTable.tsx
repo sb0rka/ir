@@ -2,16 +2,17 @@ import { useState } from 'react'
 import { ChevronDown, ChevronRight, Loader2, Trash2 } from 'lucide-react'
 import { useAppStore } from '../store/appStore'
 import type { Investigation } from '../types'
-import { Button, Chip, SeverityBadge } from './ui'
+import { Button, Chip, MarqueeText, SeverityBadge } from './ui'
 import { clsx, formatTime, statusLabel, verdictLabel } from '../lib/utils'
 import { investigationMatchesText } from '../lib/investigationTextSearch'
 import {
-  INVESTIGATION_TABLE_SEARCH_COLUMNS,
+  INVESTIGATION_TABLE_COLUMNS,
   resolveInvestigationTableSearchColumn,
 } from './investigationTableColumns'
 
-const COL_FIT = 'w-px whitespace-nowrap'
-const COL_VERDICT = 'w-[11rem] min-w-[11rem] whitespace-nowrap'
+const COL_FIT = 'w-px whitespace-nowrap align-middle'
+const COL_TITLE = 'min-w-0 max-w-0 overflow-hidden align-middle'
+const COL_COUNT = 'w-px whitespace-nowrap align-middle text-center tabular-nums'
 
 function canExpand(inv: Investigation, loaded: string[] | undefined): boolean {
   if ((inv.counters?.children ?? 0) > 0) return true
@@ -38,6 +39,14 @@ function InvestigationRow({
   const [confirming, setConfirming] = useState(false)
   const expand = canExpand(investigation, loaded)
   const childCount = investigation.counters?.children ?? 0
+  const verdictText = investigation.verdict
+    ? (verdictLabel[investigation.verdict] ?? investigation.verdict)
+    : null
+  const verdictDisplay = verdictText
+    ? verdictText.charAt(0).toLocaleUpperCase('ru') + verdictText.slice(1)
+    : null
+  const reason = investigation.verdictReason?.trim()
+  const incident = investigation.verdict === 'incident'
 
   const closed = investigation.status === 'closed'
 
@@ -55,12 +64,12 @@ function InvestigationRow({
       <td className={clsx(COL_FIT, 'px-3 py-2')}>
         <Chip>{statusLabel[investigation.status] ?? investigation.status}</Chip>
       </td>
-      <td className="min-w-0 px-3 py-2">
-        <div className="flex min-w-0 items-start gap-1.5" style={{ paddingLeft: depth * 16 }}>
+      <td className={clsx(COL_TITLE, 'px-3 py-2')}>
+        <div className="flex min-w-0 items-center gap-1.5" style={{ paddingLeft: depth * 16 }}>
           {expand ? (
             <button
               type="button"
-              className="mt-0.5 shrink-0 text-fg-muted hover:text-fg"
+              className="shrink-0 text-fg-muted hover:text-fg"
               title={expanded ? 'Свернуть' : 'Развернуть'}
               onClick={(event) => {
                 event.stopPropagation()
@@ -76,20 +85,39 @@ function InvestigationRow({
               )}
             </button>
           ) : depth > 0 ? (
-            <span className="mt-0.5 text-fg-dim">↳</span>
+            <span className="text-fg-dim">↳</span>
           ) : null}
-          <div className="min-w-0">
-            <div className="truncate text-sm font-medium">{investigation.title}</div>
-            {investigation.description ? (
-              <div className="mt-0.5 truncate text-xs text-fg-dim">{investigation.description}</div>
+          <div className="min-w-0 overflow-hidden">
+            <MarqueeText text={investigation.title} className="text-sm font-medium" />
+            {verdictDisplay ? (
+              <div className="mt-0.5 flex min-w-0 items-baseline gap-1.5 overflow-hidden text-xs">
+                <span
+                  className={clsx(
+                    'shrink-0 whitespace-nowrap',
+                    incident ? 'text-critical' : 'text-fg-dim',
+                  )}
+                >
+                  {verdictDisplay}
+                </span>
+                {reason ? (
+                  <>
+                    <span className="shrink-0 text-fg-dim">—</span>
+                    <MarqueeText text={reason} className="min-w-0 flex-1 text-fg-dim" />
+                  </>
+                ) : null}
+              </div>
             ) : null}
           </div>
         </div>
       </td>
-      <td className={clsx(COL_VERDICT, 'px-3 py-2 text-sm text-fg-muted')}>
-        {investigation.verdict
-          ? (verdictLabel[investigation.verdict] ?? investigation.verdict)
-          : null}
+      <td className={clsx(COL_COUNT, 'px-3 py-2 font-mono text-xs text-fg-muted')}>
+        {investigation.counters?.nodes ?? 0}
+      </td>
+      <td className={clsx(COL_COUNT, 'px-3 py-2 font-mono text-xs text-fg-muted')}>
+        {investigation.counters?.hypotheses ?? 0}
+      </td>
+      <td className={clsx(COL_COUNT, 'px-3 py-2 font-mono text-xs text-fg-muted')}>
+        {investigation.counters?.agents ?? 0}
       </td>
       <td className={clsx(COL_FIT, 'px-3 py-2 font-mono text-xs text-fg-muted')}>
         {investigation.createdAt ? formatTime(investigation.createdAt) : null}
@@ -191,16 +219,18 @@ export function InvestigationsTable() {
     <div className="flex h-full min-h-0 flex-col">
       <div className="min-h-0 flex-1 overflow-auto">
         <table className="w-full border-collapse text-left">
-          <thead className="sticky top-0 z-10 bg-surface-1 text-[10px] uppercase tracking-wider text-fg-dim">
+          <thead className="sticky top-0 z-10 bg-surface-1 text-[11px] uppercase tracking-wider text-fg-dim">
             <tr className="border-b border-border">
-              {INVESTIGATION_TABLE_SEARCH_COLUMNS.map((column) => (
+              {INVESTIGATION_TABLE_COLUMNS.map((column) => (
                 <th
                   key={column.id}
                   className={clsx(
                     column.id === 'title'
-                      ? 'px-3 py-2'
-                      : column.id === 'verdict'
-                        ? clsx(COL_VERDICT, 'px-3 py-2')
+                      ? clsx(COL_TITLE, 'px-3 py-2')
+                      : column.id === 'nodes' ||
+                          column.id === 'hypotheses' ||
+                          column.id === 'agents'
+                        ? clsx(COL_COUNT, 'px-3 py-2')
                         : clsx(COL_FIT, 'px-3 py-2'),
                   )}
                 >

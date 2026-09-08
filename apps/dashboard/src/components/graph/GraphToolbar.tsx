@@ -85,7 +85,7 @@ export function GraphToolbar() {
         type="button"
         onClick={resetGraphFilters}
         disabled={!filtered}
-        className="ml-auto inline-flex items-center gap-1 rounded-md border border-[var(--border)] bg-transparent px-2 py-1 text-[11px] text-[var(--text-muted)] transition-colors hover:border-[var(--border-strong)] hover:text-[var(--text)] disabled:opacity-35"
+        className="ml-auto inline-flex items-center gap-1 rounded-md border border-[var(--border)] bg-transparent px-2 py-1 text-xs text-[var(--text-muted)] transition-colors hover:border-[var(--border-strong)] hover:text-[var(--text)] disabled:opacity-35"
       >
         <RotateCcw size={12} /> Сбросить фильтры
       </button>
@@ -102,7 +102,7 @@ function FilterGroup({
 }) {
   return (
     <div className="flex items-center gap-1">
-      <span className="mr-1 text-[10px] uppercase tracking-wide text-[var(--text-dim)]">
+      <span className="mr-1 text-xs uppercase tracking-wide text-[var(--text-dim)]">
         {label}
       </span>
       {children}
@@ -125,7 +125,7 @@ function Chip({
     <button
       type="button"
       onClick={onClick}
-      className="rounded-md border px-1.5 py-0.5 text-[10px] transition-colors"
+      className="rounded-md border px-1.5 py-0.5 text-xs transition-colors"
       style={{
         borderColor: active
           ? (accent ?? 'var(--border-strong)')
