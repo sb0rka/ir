@@ -63,6 +63,8 @@ func (provider *Provider) RegistryProvider() registry.Provider {
 				domain.CapabilitySessions,
 				domain.CapabilityEvents,
 				domain.CapabilityEntityLookup,
+				domain.CapabilityEvidencePayload,
+				domain.CapabilityEvidenceFile,
 			},
 		},
 		Evidence:         provider,

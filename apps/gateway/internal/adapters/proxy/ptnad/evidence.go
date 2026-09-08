@@ -200,7 +200,7 @@ func (provider *Provider) OpenEvidence(ctx context.Context, access capability.Ac
 		return nil, err
 	}
 	request.Header.Set("Cookie", cookie)
-	response, err := provider.client.http.Do(request)
+	response, err := provider.client.downloadHTTP.Do(request)
 	if err != nil {
 		return nil, canonicalProviderError(&TransportError{Operation: "evidence download"})
 	}

@@ -2357,6 +2357,8 @@ components:
         - endpoints
         - response_catalog
         - account_userinfo
+        - evidence_payload
+        - evidence_file
     Source:
       type: object
       description: External security product registered in the Gateway.

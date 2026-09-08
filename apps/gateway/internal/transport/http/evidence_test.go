@@ -21,6 +21,31 @@ import (
 	"github.com/sb0rka/ir/apps/gateway/internal/service"
 )
 
+type deadlineRecorder struct {
+	*httptest.ResponseRecorder
+	deadline time.Time
+}
+
+func (w *deadlineRecorder) SetWriteDeadline(deadline time.Time) error {
+	w.deadline = deadline
+	return nil
+}
+
+func TestEvidenceHTTPUsesExportWriteDeadline(t *testing.T) {
+	h, _ := exportHTTP(t, &exportProvider{state: "ready", content: []byte("content")})
+	path := registerExport(t, h)
+	r := httptest.NewRequest("GET", path+"/content", nil)
+	r.Header.Set("X-Project-ID", "aabbccddee")
+	w := &deadlineRecorder{ResponseRecorder: httptest.NewRecorder()}
+	h.ServeHTTP(w, r)
+	if w.Code != 200 || w.Body.String() != "content" {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	if w.deadline.Before(time.Now().Add(59*time.Minute)) || w.deadline.After(time.Now().Add(time.Hour)) {
+		t.Fatal("write deadline:", w.deadline)
+	}
+}
+
 type exportSecrets struct{}
 
 func (exportSecrets) Resolve(context.Context, string, string, ...string) (map[string]string, error) {

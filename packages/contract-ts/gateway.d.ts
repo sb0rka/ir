@@ -1013,7 +1013,7 @@ export interface components {
          * @description Operation that a source can perform through the Gateway.
          * @enum {string}
          */
-        Capability: "findings" | "sessions" | "events" | "entity_lookup" | "artifact_analysis" | "endpoints" | "response_catalog" | "account_userinfo";
+        Capability: "findings" | "sessions" | "events" | "entity_lookup" | "artifact_analysis" | "endpoints" | "response_catalog" | "account_userinfo" | "evidence_payload" | "evidence_file";
         /** @description External security product registered in the Gateway. */
         Source: {
             /** @description Stable source identifier used in requests and provenance. */

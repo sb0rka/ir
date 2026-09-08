@@ -54,6 +54,17 @@ func (service *Service) StartEvidence(ctx context.Context, access ProjectAccess,
 		}
 	}
 	if len(service.exports) >= maxEvidenceExports {
+		// Retain expired metadata when possible, but never let it block a new export.
+		for key, value := range service.exports {
+			if now.After(value.expires) {
+				delete(service.exports, key)
+				if len(service.exports) < maxEvidenceExports {
+					break
+				}
+			}
+		}
+	}
+	if len(service.exports) >= maxEvidenceExports {
 		service.exportsMu.Unlock()
 		return EvidenceExport{}, &domain.RequestError{Code: "source_unavailable", Message: "evidence export capacity reached"}
 	}

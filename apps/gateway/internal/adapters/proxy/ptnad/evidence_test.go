@@ -19,6 +19,48 @@ import (
 	"github.com/sb0rka/ir/apps/gateway/internal/domain"
 )
 
+func TestEvidenceDownloadOutlivesJSONTimeout(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("first"))
+		w.(http.Flusher).Flush()
+		time.Sleep(150 * time.Millisecond)
+		w.Write([]byte("last"))
+	}))
+	defer upstream.Close()
+	httpClient := upstream.Client()
+	httpClient.Timeout = 50 * time.Millisecond
+	client, err := NewClient(Config{BaseURL: upstream.URL, HTTPClient: httpClient})
+	if err != nil {
+		t.Fatal(err)
+	}
+	provider, err := NewProvider(client, []int64{23})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	reader, err := provider.OpenEvidence(ctx, capability.Access{Cookie: "csrftoken=test"}, capability.EvidenceHandle{Reference: domain.EvidenceReference{Kind: "file"}, TaskID: "11111111-2222-4333-8444-555555555555"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reader.Close()
+	raw, err := io.ReadAll(reader)
+	if err != nil || string(raw) != "firstlast" {
+		t.Fatalf("download: %q %v", raw, err)
+	}
+	if client.http.Timeout != httpClient.Timeout {
+		t.Fatal("JSON timeout changed")
+	}
+	transport := client.downloadHTTP.Transport.(*http.Transport)
+	if transport.ResponseHeaderTimeout != httpClient.Timeout {
+		t.Fatal("header timeout lost")
+	}
+	registered := provider.RegistryProvider()
+	if !slices.Contains(registered.Source.Capabilities, domain.CapabilityEvidencePayload) || !slices.Contains(registered.Source.Capabilities, domain.CapabilityEvidenceFile) {
+		t.Fatal("export capabilities missing")
+	}
+}
+
 func fixture(t *testing.T, name string, target any) []byte {
 	t.Helper()
 	raw, err := os.ReadFile("testdata/" + name)

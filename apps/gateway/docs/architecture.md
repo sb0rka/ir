@@ -34,7 +34,8 @@ Canonical normalization covers IP, MAC, host, account, and hashes. Event entity 
 A bounded process-local registry owns up to 1024 export entries, keyed by an opaque
 Gateway UUID and project ID. Each entry expires one hour after creation. Expired
 metadata may remain for one additional hour to return `expired`; a Gateway restart
-loses all entries. This is not a shared or persistent evidence store. Multiple
+loses all entries. At capacity, expired metadata is evicted first, so it cannot
+block a new export; an evicted ID returns 404. This is not a shared or persistent evidence store. Multiple
 Gateway replicas need request affinity for an export's lifetime.
 
 Every status/content request rechecks the project and current source allowlist.
@@ -43,6 +44,12 @@ Creation starts at most one vendor task per request and is not automatically ret
 status GETs use the existing credential refresh/retry policy. Downloads propagate
 request cancellation and expiration, close the upstream body, and never retry after
 sending bytes. Stream failures abort the response instead of appending JSON.
+
+NAD advertises `evidence_payload` and `evidence_file` through source capabilities.
+PCAP references are provenance only; PCAP export is not advertised or implemented.
+File streams use the export expiry deadline for body reads and HTTP writes, with
+the source timeout retained for upstream response headers. JSON calls keep their
+ordinary timeout. Cookie handling remains the existing temporary pilot mechanism.
 
 The HTTP content operation streams the full response or a bounded byte slice.
 IR MCP requests slices (16 KiB default, 64 KiB maximum) and returns Base64 with byte

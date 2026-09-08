@@ -40,6 +40,8 @@ const (
 	CapabilityEndpoints        Capability = "endpoints"
 	CapabilityEntityLookup     Capability = "entity_lookup"
 	CapabilityEvents           Capability = "events"
+	CapabilityEvidenceFile     Capability = "evidence_file"
+	CapabilityEvidencePayload  Capability = "evidence_payload"
 	CapabilityFindings         Capability = "findings"
 	CapabilityResponseCatalog  Capability = "response_catalog"
 	CapabilitySessions         Capability = "sessions"
@@ -57,6 +59,10 @@ func (e Capability) Valid() bool {
 	case CapabilityEntityLookup:
 		return true
 	case CapabilityEvents:
+		return true
+	case CapabilityEvidenceFile:
+		return true
+	case CapabilityEvidencePayload:
 		return true
 	case CapabilityFindings:
 		return true

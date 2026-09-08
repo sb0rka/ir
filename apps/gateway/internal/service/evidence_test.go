@@ -122,6 +122,30 @@ func TestEvidencePostNotRetriedAndErrorSanitized(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+func TestEvidenceCapacityReclaimsExpiredEntries(t *testing.T) {
+	f := &evidenceFake{state: "ready"}
+	s := evidenceService(t, f)
+	access := ProjectAccess{ProjectID: "aabbccddee", Bearer: "test"}
+	ref := domain.EvidenceReference{Ref: domain.SourceObjectRef{SourceCode: "nad"}}
+	for i := 0; i < maxEvidenceExports; i++ {
+		if _, err := s.StartEvidence(context.Background(), access, ref); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := s.StartEvidence(context.Background(), access, ref); err == nil {
+		t.Fatal("active capacity exceeded")
+	}
+	for _, entry := range s.exports {
+		entry.expires = time.Now().Add(-time.Minute)
+	}
+	if _, err := s.StartEvidence(context.Background(), access, ref); err != nil {
+		t.Fatal("expired entries blocked export:", err)
+	}
+	if len(s.exports) > maxEvidenceExports {
+		t.Fatal("registry exceeded bound")
+	}
+}
+
 func TestSearchCursorBindsNewControls(t *testing.T) {
 	window := domain.TimeRange{From: time.Unix(1, 0), To: time.Unix(2, 0)}
 	legacy := objectFingerprint([]string{"nad"}, []string{"nad_session"}, window)

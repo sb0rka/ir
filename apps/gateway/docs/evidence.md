@@ -185,6 +185,13 @@ only while it remains valid. Payload detail retains the existing bounded JSON
 response limit; oversized responses fail explicitly rather than returning a
 silently truncated payload.
 
+For the pilot, repeated downloads are intentional; no binary storage or cache is
+introduced. File downloads are bounded by the export expiry and request cancellation,
+not the short JSON timeout; upstream response headers still use the source timeout.
+Source discovery advertises `evidence_payload` and `evidence_file` for NAD. PCAP
+metadata does not mean that PCAP export is supported. At registry capacity, expired
+metadata can be evicted before its additional retention hour, returning 404 thereafter.
+
 ## Verification
 
 `task gen` regenerates OpenAPI, Go server/client and TypeScript contracts.

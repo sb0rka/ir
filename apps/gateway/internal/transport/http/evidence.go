@@ -11,6 +11,7 @@ import (
 	"github.com/sb0rka/ir/apps/gateway/api"
 	"github.com/sb0rka/ir/apps/gateway/internal/domain"
 	"github.com/sb0rka/ir/apps/gateway/internal/service"
+	coretransport "github.com/sb0rka/sb0rka/packages/core/transport"
 )
 
 func evidenceRefToAPI(ref domain.EvidenceReference) api.EvidenceReference {
@@ -96,6 +97,15 @@ func (server *Server) GetEvidenceContent(w http.ResponseWriter, r *http.Request,
 	}
 	started := false
 	err := server.service.ReadEvidence(r.Context(), projectAccess(r), id.String(), func(export service.EvidenceExport, reader io.Reader) error {
+		// Replace the server's ordinary API write timeout only for this download.
+		writer := w
+		// core v0.0.2 Recorder has no Unwrap; keep its identity for panic recovery.
+		if recorder, ok := w.(*coretransport.Recorder); ok {
+			writer = recorder.ResponseWriter
+		}
+		if err := http.NewResponseController(writer).SetWriteDeadline(export.ExpiresAt); err != nil && !errors.Is(err, http.ErrNotSupported) {
+			return err
+		}
 		if offset > 0 {
 			if _, err := io.CopyN(io.Discard, reader, offset); err != nil {
 				if errors.Is(err, io.EOF) {
