@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Button } from './ui'
 import { CLOSE_VERDICTS, clsx } from '../lib/utils'
 import type { Verdict } from '../types'
@@ -26,7 +27,8 @@ export function CloseInvestigationModal({
     return () => window.removeEventListener('keydown', onKey)
   }, [busy, onClose])
 
-  return (
+  // Escape WorkspaceSidebar's z-10 stacking context so sticky table headers stay under the dim.
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/60" onClick={busy ? undefined : onClose} />
       <form
@@ -67,16 +69,14 @@ export function CloseInvestigationModal({
             </div>
           </div>
           <label className="block space-y-1.5">
-            <span className="text-[10px] uppercase tracking-wider text-fg-dim">
-              Обоснование (необязательно)
-            </span>
+            <span className="text-[10px] uppercase tracking-wider text-fg-dim">Обоснование</span>
             <textarea
               className="w-full resize-none rounded border border-border bg-surface-0 px-2 py-1.5 text-sm outline-none focus:border-fg/30"
               rows={3}
               disabled={busy}
               value={reason}
               onChange={(event) => setReason(event.target.value)}
-              placeholder="Почему кейс закрывается с этим вердиктом"
+              placeholder="Детальная информация по расследованию"
             />
           </label>
         </div>
@@ -90,6 +90,7 @@ export function CloseInvestigationModal({
           </Button>
         </div>
       </form>
-    </div>
+    </div>,
+    document.body,
   )
 }

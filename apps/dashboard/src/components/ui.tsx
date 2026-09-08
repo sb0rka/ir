@@ -1,7 +1,113 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { ChevronDown } from 'lucide-react'
 import type { Severity } from '../types'
 import { clsx, severityDot } from '../lib/utils'
+
+/** Truncates long text; on hover scrolls as a marquee when content overflows. */
+export function MarqueeText({ text, className }: { text: string; className?: string }) {
+  const ref = useRef<HTMLDivElement>(null)
+  const [overflowing, setOverflowing] = useState(false)
+  const [hovering, setHovering] = useState(false)
+
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (!el || hovering) return
+    const measure = () => {
+      setOverflowing(el.scrollWidth > el.clientWidth + 1)
+    }
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [text, hovering])
+
+  const run = hovering && overflowing
+  // ~10 chars/sec, clamped so short overflows still read and long ones finish in time
+  const durationSec = Math.min(Math.max(text.length / 10, 3), 24)
+
+  return (
+    <div
+      ref={ref}
+      className={clsx('min-w-0 overflow-hidden whitespace-nowrap', !run && 'truncate', className)}
+      title={run ? undefined : text}
+      onMouseEnter={() => setHovering(true)}
+      onMouseLeave={() => setHovering(false)}
+    >
+      {run ? (
+        <span
+          className="inline-block will-change-transform"
+          style={{ animation: `marquee-scroll ${durationSec}s linear infinite` }}
+        >
+          <span className="inline-block pr-10">{text}</span>
+          <span className="inline-block pr-10" aria-hidden>
+            {text}
+          </span>
+        </span>
+      ) : (
+        text
+      )}
+    </div>
+  )
+}
+
+export type SegmentedControlOption<T extends string = string> = {
+  id: T
+  label: string
+}
+
+/** Labeled segmented control in QueueSourceToggle chrome. */
+export function SegmentedControl<T extends string>({
+  label,
+  value,
+  options,
+  onChange,
+  size = 'md',
+  'aria-label': ariaLabel,
+}: {
+  label?: string
+  value: T
+  options: ReadonlyArray<SegmentedControlOption<T>>
+  onChange: (value: T) => void
+  size?: 'sm' | 'md'
+  'aria-label'?: string
+}) {
+  const segmentClass = clsx(
+    'inline-flex h-full items-center leading-none',
+    size === 'sm' ? 'px-2 text-xs' : 'px-2.5 text-xs',
+  )
+
+  return (
+    <div
+      className={clsx(
+        'inline-flex items-stretch overflow-hidden rounded border border-border bg-surface-0',
+        size === 'sm' ? 'h-6' : 'h-9',
+      )}
+      role="group"
+      aria-label={ariaLabel ?? label}
+    >
+      {label ? (
+        <span className={clsx(segmentClass, 'bg-surface-1 uppercase tracking-wide text-fg-dim')}>
+          {label}
+        </span>
+      ) : null}
+      {options.map((option, index) => (
+        <button
+          key={option.id}
+          type="button"
+          aria-pressed={value === option.id}
+          onClick={() => onChange(option.id)}
+          className={clsx(
+            segmentClass,
+            (label != null || index > 0) && 'border-l border-border',
+            value === option.id ? 'bg-surface-3 text-fg' : 'text-fg-muted hover:text-fg',
+          )}
+        >
+          {option.label}
+        </button>
+      ))}
+    </div>
+  )
+}
 
 export function SeverityBadge({ severity, label }: { severity: Severity; label?: string }) {
   return (

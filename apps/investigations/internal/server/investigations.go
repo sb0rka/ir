@@ -929,6 +929,9 @@ func convertInvestigation(inv model.Investigation) (investigations.Investigation
 	out.Counters.Events = inv.Counters.Events
 	out.Counters.Entities = inv.Counters.Entities
 	out.Counters.ProposedEdges = inv.Counters.ProposedEdges
+	out.Counters.Nodes = inv.Counters.Nodes
+	out.Counters.Hypotheses = inv.Counters.Hypotheses
+	out.Counters.Agents = inv.Counters.Agents
 	if inv.ParentID != nil {
 		id, err := dbUUID(*inv.ParentID)
 		if err != nil {

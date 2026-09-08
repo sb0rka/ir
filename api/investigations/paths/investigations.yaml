@@ -397,7 +397,7 @@ components:
           description: >-
             Size of the case at a glance, so the list does not need a query per
             row.
-          required: [children, findings, sessions, events, entities, proposed_edges]
+          required: [children, findings, sessions, events, entities, proposed_edges, nodes, hypotheses, agents]
           properties:
             children:
               type: integer
@@ -417,6 +417,15 @@ components:
             proposed_edges:
               type: integer
               description: Edges waiting for review.
+            nodes:
+              type: integer
+              description: Graph nodes (event and entity) in this investigation.
+            hypotheses:
+              type: integer
+              description: Non-deleted hypotheses owned by this investigation.
+            agents:
+              type: integer
+              description: Count of SOM agent workflow starts for this investigation.
         created_at:
           type: string
           format: date-time

@@ -1046,7 +1046,9 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ investigationLoading: true, lastError: null })
     try {
       const bundle = await loadInvestigationBundle(id, keep)
-      set({ ...applyBundle(get, bundle, keep), investigationLoading: false })
+      // Re-read after await: view/selection can change while the bundle is in flight.
+      const latest = get().investigations[id] ?? keep
+      set({ ...applyBundle(get, bundle, latest), investigationLoading: false })
       void get().loadHypotheses(id)
     } catch (err) {
       set({ investigationLoading: false, lastError: errorMessage(err) })
@@ -1802,11 +1804,24 @@ export const useAppStore = create<AppState>((set, get) => ({
       const timeZone = activeTimeZone(get().displayTimeZone, get().workingTimeZone)
       const run = await runSomIssue(issueDef.id, investigationId, { timeZone })
       const localEnvironmentId = run.local_environment_id
+      const afterRun = get().investigations[investigationId]
       set({
         issues: {
           ...get().issues,
           [issue.id]: { ...get().issues[issue.id]!, localEnvironmentId },
         },
+        investigations: afterRun?.counters
+          ? {
+              ...get().investigations,
+              [investigationId]: {
+                ...afterRun,
+                counters: {
+                  ...afterRun.counters,
+                  agents: afterRun.counters.agents + 1,
+                },
+              },
+            }
+          : get().investigations,
       })
 
       const poll = async () => {

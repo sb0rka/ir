@@ -1,4 +1,4 @@
--- Migration: 81cde9c33b72
+-- Migration: 202609030001
 
 BEGIN;
 
@@ -103,6 +103,8 @@ CREATE TABLE IF NOT EXISTS investigations (
         CHECK (origin IN ('analyst', 'rule', 'agent')),
     origin_ref VARCHAR,
     version INTEGER DEFAULT 1 NOT NULL,
+    agent_runs INTEGER DEFAULT 0 NOT NULL
+        CHECK (agent_runs >= 0),
     is_deleted BOOLEAN DEFAULT false NOT NULL,
 
     created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,

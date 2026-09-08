@@ -1,5 +1,5 @@
 import { DndContext, PointerSensor, useSensor, useSensors } from '@dnd-kit/core'
-import { useEffect, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Braces, Check, Eye, EyeOff, History, Loader2, Pencil, Play, Plus, Search } from 'lucide-react'
 import {
   addFieldToPdql,
@@ -33,7 +33,7 @@ import {
   intervalButtonLabel,
   type TimeInterval,
 } from './time-interval'
-import { Button, Chip } from './ui'
+import { Button, Chip, SegmentedControl } from './ui'
 
 const DEMO_DAY_LABEL = '23.10.2025 весь день'
 const SECTION_LABELS: { id: ActiveSection; label: string }[] = [
@@ -51,9 +51,26 @@ function parseErrorText(result: ParseResult): string | null {
   return null
 }
 
+/** Caret index inside the empty quotes of a newly added `field = ""` filter. */
+function emptyFilterValueCaret(pdql: string, field: string): number | null {
+  const needle = `${field} = ""`
+  const idx = pdql.lastIndexOf(needle)
+  if (idx < 0) return null
+  return idx + field.length + 4 // after ` = "`
+}
+
 function queueSourceLabel(source: QueueSource | undefined): string | undefined {
   return QUEUE_SOURCE_OPTIONS.find((option) => option.id === source)?.label
 }
+
+const QUEUE_SOURCE_GROUPS: Array<{
+  category?: string
+  ids: QueueSource[]
+}> = [
+  { category: 'SIEM', ids: ['siem_incident', 'siem_correlation'] },
+  { category: 'NAD', ids: ['nad_attack'] },
+  { ids: ['events', 'entities'] },
+]
 
 function QueueSourceToggle({
   value,
@@ -63,24 +80,23 @@ function QueueSourceToggle({
   onChange: (value: QueueSource) => void
 }) {
   return (
-    <div
-      className="inline-flex min-h-9 overflow-hidden rounded border border-border bg-surface-0"
-      role="group"
-      aria-label="Тип сущности"
-    >
-      {QUEUE_SOURCE_OPTIONS.map((option) => (
-        <button
-          key={option.id}
-          type="button"
-          onClick={() => onChange(option.id)}
-          className={clsx(
-            'px-2.5 py-1.5 text-xs',
-            value === option.id ? 'bg-surface-3 text-fg' : 'text-fg-muted hover:text-fg',
-          )}
-        >
-          {option.label}
-        </button>
-      ))}
+    <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Тип сущности">
+      {QUEUE_SOURCE_GROUPS.map((group) => {
+        const options = group.ids
+          .map((id) => QUEUE_SOURCE_OPTIONS.find((option) => option.id === id))
+          .filter((option): option is (typeof QUEUE_SOURCE_OPTIONS)[number] => option != null)
+
+        return (
+          <SegmentedControl
+            key={group.category ?? group.ids.join('-')}
+            label={group.category}
+            value={value}
+            options={options}
+            onChange={onChange}
+            aria-label={group.category ?? 'Тип сущности'}
+          />
+        )
+      })}
     </div>
   )
 }
@@ -221,6 +237,8 @@ export function QueryComposer({
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(pdql)
   const [editError, setEditError] = useState<string | null>(null)
+  const [focusCaret, setFocusCaret] = useState<number | null>(null)
+  const draftInputRef = useRef<HTMLInputElement>(null)
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }))
 
   useEffect(() => {
@@ -230,6 +248,19 @@ export function QueryComposer({
   useEffect(() => {
     if (!editing) setDraft(pdql)
   }, [editing, pdql])
+
+  useLayoutEffect(() => {
+    if (!editing || focusCaret == null) return
+    const el = draftInputRef.current
+    if (!el) return
+    const pos = focusCaret
+    // Defer past input autoFocus so the caret stays between the empty quotes.
+    const id = requestAnimationFrame(() => {
+      el.focus()
+      el.setSelectionRange(pos, pos)
+    })
+    return () => cancelAnimationFrame(id)
+  }, [editing, draft, focusCaret])
 
   const parsed = parseQueuePdql(pdql)
   const chips = parsed.ok ? pdqlToChips(parsed.ast) : []
@@ -250,9 +281,16 @@ export function QueryComposer({
   }
 
   const addField = (name: string) => {
-    onPdqlChange(addFieldToPdql(pdql, name, addSection, fields))
+    const next = addFieldToPdql(pdql, name, addSection, fields)
+    onPdqlChange(next)
     setAddOpen(false)
     setAddQuery('')
+    if (addSection !== 'filter') return
+    const caret = emptyFilterValueCaret(next, name)
+    setDraft(next)
+    setEditError(null)
+    setFocusCaret(caret)
+    setEditing(true)
   }
 
   const exitEdit = () => {
@@ -263,6 +301,7 @@ export function QueryComposer({
     }
     onPdqlChange(serialize(result.ast))
     setEditError(null)
+    setFocusCaret(null)
     setEditing(false)
   }
 
@@ -451,18 +490,21 @@ export function QueryComposer({
       <div className="mt-2 flex items-center gap-2">
         {editing ? (
           <input
+            ref={draftInputRef}
             autoFocus
             value={draft}
             spellCheck={false}
             onChange={(e) => {
               setDraft(e.target.value)
               setEditError(null)
+              setFocusCaret(null)
             }}
             onKeyDown={(e) => {
               if (e.key === 'Enter') exitEdit()
               if (e.key === 'Escape') {
                 setDraft(pdql)
                 setEditError(null)
+                setFocusCaret(null)
                 setEditing(false)
               }
             }}
@@ -487,6 +529,7 @@ export function QueryComposer({
             }
             setDraft(pdql)
             setEditError(null)
+            setFocusCaret(null)
             setEditing(true)
           }}
         >

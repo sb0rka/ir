@@ -24,13 +24,21 @@ function investigationColumnText(
       ' ',
     )
   }
-  if (column === 'verdict') {
-    if (!investigation.verdict) return ''
-    return [verdictLabel[investigation.verdict] ?? investigation.verdict, investigation.verdict].join(
-      ' ',
-    )
-  }
-  return [investigation.title, investigation.description].filter(Boolean).join(' ')
+  if (column === 'nodes') return String(investigation.counters?.nodes ?? 0)
+  if (column === 'hypotheses') return String(investigation.counters?.hypotheses ?? 0)
+  if (column === 'agents') return String(investigation.counters?.agents ?? 0)
+  const verdict = investigation.verdict
+    ? (verdictLabel[investigation.verdict] ?? investigation.verdict)
+    : null
+  return [
+    investigation.title,
+    investigation.description,
+    verdict,
+    investigation.verdict,
+    investigation.verdictReason,
+  ]
+    .filter(Boolean)
+    .join(' ')
 }
 
 export function investigationMatchesText(

@@ -264,6 +264,10 @@ func (s *Server) RunSomIssue(ctx context.Context, request som.RunSomIssueRequest
 		"model_id", exec.ModelID,
 		"variant", exec.Variant)
 
+	if err := s.db.IncrementAgentRuns(ctx, scope.ProjectID, investigationID); err != nil {
+		return nil, storeError(err)
+	}
+
 	return som.RunSomIssue201JSONResponse(som.SomIssueRunResult{
 		IssueId:            request.IssueId,
 		BoardId:            boardID,

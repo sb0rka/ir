@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useAppStore, emptyContextQueue } from '../store/appStore'
 import type { AlertEvent, CorrelationGroup, Entity, QueueItem } from '../types'
-import { Chip, SeverityBadge } from './ui'
+import { Chip, MarqueeText, SeverityBadge } from './ui'
 import { clsx, formatTime, kindLabel } from '../lib/utils'
 import { hasGroupValueSelection, incidentTypeLabelRu, parseQueuePdql, queueSelectFields } from '../lib/pdql'
 import { alertIsInContext, contextEventKeys } from '../lib/queueContext'
@@ -17,8 +17,8 @@ import {
 } from './alertTableColumns'
 import { ChevronDown, ChevronRight, Layers } from 'lucide-react'
 
-const COL_FIT = 'max-w-0 overflow-hidden whitespace-nowrap'
-const COL_TITLE = 'min-w-0 max-w-0 overflow-hidden'
+const COL_FIT = 'max-w-0 overflow-hidden whitespace-nowrap align-middle'
+const COL_TITLE = 'min-w-0 max-w-0 overflow-hidden align-middle'
 const TABLE_CLASS = 'border-collapse table-fixed text-left'
 
 const COL_WIDTHS_STORAGE_KEY = 'ir.alertTable.colWidths'
@@ -307,20 +307,17 @@ function AlertRow({
         <span className="block truncate">{formatTime(alert.time)}</span>
       </td>
       <td className={clsx(COL_TITLE, 'px-3 py-2')}>
-        <div
-          className={clsx('min-w-0 truncate text-sm', inContext && 'text-fg-muted')}
-          title={alert.title}
-        >
-          {alert.title}
-        </div>
-        {subtitle ? (
-          <div className="truncate text-xs text-fg-dim" title={subtitle}>
-            {subtitle}
-          </div>
-        ) : null}
+        <MarqueeText
+          text={alert.title}
+          className={clsx('text-sm', inContext && 'text-fg-muted')}
+        />
+        {subtitle ? <MarqueeText text={subtitle} className="text-xs text-fg-dim" /> : null}
       </td>
       {showCategory && (
-        <td className="max-w-0 overflow-hidden px-3 py-2 align-top" title={categoryLabel || categoryCode}>
+        <td
+          className="max-w-0 overflow-hidden px-3 py-2 align-middle"
+          title={categoryLabel || categoryCode}
+        >
           <span className="line-clamp-2 text-xs leading-snug text-fg-muted">
             {categoryLabel || <span className="text-fg-dim">&nbsp;</span>}
           </span>
@@ -391,10 +388,10 @@ function CorrelationRow({
           <span className="block truncate">{formatTime(group.time)}</span>
         </td>
         <td className={clsx(COL_TITLE, 'px-3 py-2.5')}>
-          <div className="flex min-w-0 items-start gap-2 text-left">
+          <div className="flex min-w-0 items-center gap-2 text-left">
             <button
               type="button"
-              className="mt-0.5 shrink-0 text-fg-muted hover:text-fg"
+              className="shrink-0 text-fg-muted hover:text-fg"
               title={expanded ? 'Свернуть' : 'Развернуть'}
               onClick={(ev) => {
                 ev.stopPropagation()
@@ -410,16 +407,12 @@ function CorrelationRow({
             <div className="min-w-0 flex-1 overflow-hidden">
               <div className="flex min-w-0 items-center gap-2 text-sm font-medium">
                 <Layers className="h-3.5 w-3.5 shrink-0 text-proposed" />
-                <span className="min-w-0 truncate" title={group.title}>
-                  {group.title}
-                </span>
+                <MarqueeText text={group.title} className="min-w-0 flex-1" />
                 <Chip>
                   {eventCount} соб. / {sourceCount} ист.
                 </Chip>
               </div>
-              <div className="mt-0.5 truncate text-xs text-fg-dim" title={group.reason}>
-                {group.reason}
-              </div>
+              <MarqueeText text={group.reason} className="mt-0.5 text-xs text-fg-dim" />
             </div>
           </div>
         </td>

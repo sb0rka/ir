@@ -23,7 +23,10 @@ const investigationSelect = `
 	       (SELECT count(*)::int FROM investigation_sessions s WHERE s.investigation_id=i.id),
 	       (SELECT count(*)::int FROM investigation_events ie WHERE ie.investigation_id=i.id),
 	       (SELECT count(*)::int FROM investigation_entities ie WHERE ie.investigation_id=i.id),
-	       (SELECT count(*)::int FROM edges e WHERE e.investigation_id=i.id AND e.status='proposed')
+	       (SELECT count(*)::int FROM edges e WHERE e.investigation_id=i.id AND e.status='proposed'),
+	       (SELECT count(*)::int FROM graph_nodes n WHERE n.investigation_id=i.id),
+	       (SELECT count(*)::int FROM hypotheses h WHERE h.investigation_id=i.id AND h.is_deleted=false),
+	       i.agent_runs
 	  FROM investigations i`
 
 func scanInvestigation(row pgx.Row) (model.Investigation, error) {
@@ -32,7 +35,8 @@ func scanInvestigation(row pgx.Row) (model.Investigation, error) {
 		&out.Status, &out.Severity, &out.Verdict, &out.VerdictReason, &out.Confidence,
 		&out.Origin, &out.OriginRef, &out.Version, &out.CreatedAt, &out.UpdatedAt, &out.ClosedAt,
 		&out.WorkspaceIDs, &out.Counters.Children, &out.Counters.Findings, &out.Counters.Sessions, &out.Counters.Events,
-		&out.Counters.Entities, &out.Counters.ProposedEdges)
+		&out.Counters.Entities, &out.Counters.ProposedEdges, &out.Counters.Nodes, &out.Counters.Hypotheses,
+		&out.Counters.Agents)
 	return out, err
 }
 
@@ -269,6 +273,20 @@ func (d *DB) DeleteInvestigation(ctx context.Context, projectID, investigationID
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit investigation delete: %w", err)
+	}
+	return nil
+}
+
+func (d *DB) IncrementAgentRuns(ctx context.Context, projectID, investigationID string) error {
+	tag, err := d.Pgx().Exec(ctx, `
+		UPDATE investigations SET agent_runs = agent_runs + 1
+		 WHERE id=$1::uuid AND project_id=$2 AND is_deleted=false`,
+		investigationID, projectID)
+	if err != nil {
+		return fmt.Errorf("increment agent runs: %w", mapConstraint(err))
+	}
+	if tag.RowsAffected() == 0 {
+		return store.ErrInvestigationNotFound
 	}
 	return nil
 }
