@@ -23,7 +23,7 @@ import {
   queueSelectFields,
   timeIntervalFromAst,
 } from './toSearch'
-import { addFieldToAst, addFieldToPdql, setGroupAggregate } from './ast'
+import { addFieldToAst, addFieldToPdql, removeGroup, setGroupAggregate } from './ast'
 import { appendCondition, findingUuidQuery } from './append'
 import { collectConditions, ungroupFilter, wrapFilterAdjacent } from './filterTree'
 import { relatedFieldColumns } from './relatedFields'
@@ -337,11 +337,11 @@ describe('pdqlToChips', () => {
     expect(serializeWithoutChip(ast, host!.id)).toBe('filter(action = "login") | select(time)')
   })
 
-  it('removing a group chip restores the field as a column', () => {
+  it('removing a group chip does not keep the field as a column', () => {
     const ast = mustParse('group(action) | select(action, count(time))')
     const group = ast.groups[0]
     expect(group).toBeTruthy()
-    expect(serializeWithoutChip(ast, group!.id)).toBe('select(action, time)')
+    expect(serializeWithoutChip(ast, group!.id)).toBe('select(time)')
   })
 
   it('hides group count() from chips and restores it as time', () => {
@@ -349,7 +349,7 @@ describe('pdqlToChips', () => {
     expect(pdqlToChips(ast).map((chip) => chip.label)).toEqual(['group action'])
     const group = ast.groups[0]
     expect(group).toBeTruthy()
-    expect(serializeWithoutChip(ast, group!.id)).toBe('select(action, time) | sort(time desc)')
+    expect(serializeWithoutChip(ast, group!.id)).toBe('select(time) | sort(time desc)')
   })
 
   it('toggling a sorted column chip flips direction', () => {
@@ -493,7 +493,17 @@ describe('addFieldToPdql', () => {
     const ast = addFieldToAst(defaultQuery(), 'action', 'groups')
     expect(serialize(ast)).toBe('group(action) | select(action, count(), time) | sort(time desc) | limit(100)')
     expect(serializeWithoutChip(ast, ast.groups[0]!.id)).toBe(
-      'select(action, time) | sort(time desc) | limit(100)',
+      'select(time) | sort(time desc) | limit(100)',
+    )
+  })
+
+  it('removing a group does not move the field into columns', () => {
+    const grouped = addFieldToAst(addFieldToAst(defaultQuery(), 'action', 'groups'), 'event_src.host', 'groups')
+    const next = removeGroup(grouped, grouped.groups[0]!.id)
+    expect(next.groups.map((group) => group.field)).toEqual(['event_src.host'])
+    expect(next.columns.some((column) => column.field === 'action' && !column.aggregate)).toBe(false)
+    expect(serialize(next)).toBe(
+      'group(event_src.host) | select(event_src.host, count(), time) | sort(time desc) | limit(100)',
     )
   })
 })
@@ -607,6 +617,18 @@ describe('alignGroupValues', () => {
   it('drops values when groups are removed from the query', () => {
     const ast = mustParse('select(time)')
     expect(alignGroupValues(ast, ['dc01'])).toEqual([])
+  })
+
+  it('drops the selection when grouping fields change', () => {
+    const ast = mustParse('group(action) | select(time)')
+    expect(alignGroupValues(ast, ['dc01'], ['event_src.host'])).toEqual([])
+    expect(alignGroupValues(ast, ['login'], ['action'])).toEqual(['login'])
+  })
+
+  it('keeps a matching prefix when a deeper group is added', () => {
+    const ast = mustParse('group(event_src.host, action) | select(time)')
+    expect(alignGroupValues(ast, ['dc01'], ['event_src.host'])).toEqual(['dc01'])
+    expect(alignGroupValues(ast, ['dc01', 'login'], ['action', 'event_src.host'])).toEqual([])
   })
 })
 

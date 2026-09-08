@@ -254,20 +254,38 @@ function isDefaultSort(sort: { field: string; direction: 'asc' | 'desc' }[]): bo
   return sort.length === 1 && sort[0]?.field === 'time' && sort[0]?.direction === 'desc'
 }
 
+function groupFieldNames(ast: QueryAst): string[] {
+  return ast.groups.map((group) => group.field)
+}
+
+function matchingGroupPrefixLength(previous: string[], next: string[]): number {
+  const limit = Math.min(previous.length, next.length)
+  let index = 0
+  while (index < limit && previous[index] === next[index]) index += 1
+  return index
+}
+
 /**
  * Align selected group values to the current PDQL groups.
  * A missing or empty slot means "not chosen yet". JSON null is the source
  * null group ("Нет данных") and must be kept as an explicit selection.
+ * When `previousGroupFields` is passed, values past the unchanged group prefix
+ * are dropped so a new grouping does not keep the old selection as a filter.
  */
 export function alignGroupValues(
   ast: QueryAst,
   values: (string | null)[] | undefined,
+  previousGroupFields?: string[],
 ): (string | null)[] {
   if (ast.groups.length === 0) return []
+  const allowed =
+    previousGroupFields === undefined
+      ? values
+      : (values ?? []).slice(0, matchingGroupPrefixLength(previousGroupFields, groupFieldNames(ast)))
   const aligned: (string | null)[] = []
   for (let index = 0; index < ast.groups.length; index++) {
-    if (index >= (values?.length ?? 0)) break
-    const value = values![index]
+    if (index >= (allowed?.length ?? 0)) break
+    const value = allowed![index]
     if (value === '') break
     aligned.push(value ?? null)
   }

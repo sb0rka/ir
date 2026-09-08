@@ -176,6 +176,50 @@ describe('appendPdqlFilter entity fields', () => {
   })
 })
 
+describe('group selection vs PDQL grouping', () => {
+  it('clears the selected group when grouping fields change', () => {
+    useAppStore.setState({
+      queuePdql: 'group(event_src.host) | select(event_src.host, count(), time)',
+      groupValues: ['dc01'],
+    })
+
+    useAppStore.getState().setQueuePdql('group(action) | select(action, count(), time)')
+
+    expect(useAppStore.getState().groupValues).toEqual([])
+  })
+
+  it('keeps the selected group when only filters change', () => {
+    useAppStore.setState({
+      queuePdql: 'group(event_src.host) | select(event_src.host, count(), time)',
+      groupValues: ['dc01'],
+    })
+
+    useAppStore.getState().setQueuePdql(
+      'filter(action = "login") | group(event_src.host) | select(event_src.host, count(), time)',
+    )
+
+    expect(useAppStore.getState().groupValues).toEqual(['dc01'])
+  })
+
+  it('clears the context queue selection when grouping fields change', () => {
+    useAppStore.setState({
+      contextQueue: {
+        'inv-1': {
+          ...emptyContextQueue,
+          pdql: 'group(event_src.host) | select(event_src.host, count(), time)',
+          groupValues: ['dc01'],
+        },
+      },
+    })
+
+    useAppStore.getState().setContextQueue('inv-1', {
+      pdql: 'group(action) | select(action, count(), time)',
+    })
+
+    expect(useAppStore.getState().contextQueue['inv-1']?.groupValues).toEqual([])
+  })
+})
+
 describe('queue source result cache', () => {
   it('restores prior results when switching sources without refetch', () => {
     const incidentAlert = alertStub('inc-1')

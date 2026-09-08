@@ -75,10 +75,9 @@ export function removeGroup(query: QueryAst, id: string): QueryAst {
   const removed = query.groups.find((group) => group.id === id)
   if (!removed) return query
   const groups = query.groups.filter((group) => group.id !== id)
-  const hasColumn = query.columns.some((column) => column.field === removed.field && !column.aggregate)
-  const columns = hasColumn
-    ? query.columns
-    : [{ id: newId('col'), field: removed.field }, ...query.columns]
+  const columns = query.columns.filter(
+    (column) => column.field !== removed.field || Boolean(column.aggregate),
+  )
   return applyGroupInvariant({ ...query, groups, columns })
 }
 

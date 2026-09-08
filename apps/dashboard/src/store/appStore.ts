@@ -271,6 +271,11 @@ function keepRowsOnEventsSource<T extends {
   }
 }
 
+function groupFieldsFromPdql(pdql: string): string[] | undefined {
+  const parsed = parseQueuePdql(pdql)
+  return parsed.ok ? parsed.ast.groups.map((group) => group.field) : undefined
+}
+
 function pushQueryHistory(
   history: QueryHistoryEntry[],
   entry: QueryHistoryEntry,
@@ -788,7 +793,9 @@ export const useAppStore = create<AppState>((set, get) => ({
     const parsed = parseQueuePdql(queuePdql)
     set({
       queuePdql,
-      groupValues: parsed.ok ? alignGroupValues(parsed.ast, get().groupValues) : get().groupValues,
+      groupValues: parsed.ok
+        ? alignGroupValues(parsed.ast, get().groupValues, groupFieldsFromPdql(get().queuePdql))
+        : get().groupValues,
     })
   },
   setQueueTextFilter: (queueTextFilter) => set({ queueTextFilter }),
@@ -1417,7 +1424,13 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
     if (patch.pdql != null && patch.groupValues == null) {
       const parsed = parseQueuePdql(next.pdql)
-      if (parsed.ok) next.groupValues = alignGroupValues(parsed.ast, next.groupValues)
+      if (parsed.ok) {
+        next.groupValues = alignGroupValues(
+          parsed.ast,
+          next.groupValues,
+          groupFieldsFromPdql(cur.pdql),
+        )
+      }
     }
     set({
       contextQueue: {
