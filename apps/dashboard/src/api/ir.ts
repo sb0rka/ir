@@ -196,6 +196,7 @@ export async function addContext(
     events?: EventSourceRef[]
     findings?: SourceObjectRef[]
     seed?: boolean
+    resolve?: boolean
   },
 ): Promise<Ir['schemas']['ContextImportResult'] | undefined> {
   const events = input.events ?? []
@@ -204,7 +205,7 @@ export async function addContext(
   return throwIfError(
     await irClient.POST('/investigations/{investigation_id}/context', {
       params: { ...projectParams(), path: { investigation_id: investigationId } },
-      body: { findings, sessions: [], events, entities: [], seed: input.seed ?? false },
+      body: { findings, sessions: [], events, entities: [], seed: input.seed ?? false, resolve: input.resolve ?? true },
     }),
   )
 }

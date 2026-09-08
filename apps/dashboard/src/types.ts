@@ -276,6 +276,7 @@ export type AddedFilter = 'all' | 'hide_added' | 'only_added'
 
 /** Per-investigation state of the context event queue (search + filters). */
 export interface ContextQueueState {
+  resolveFindings: boolean
   /** Last executed entity chips used to filter the table. */
   chips: FilterChip[]
   pdql: string

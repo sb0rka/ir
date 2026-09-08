@@ -362,6 +362,9 @@ type ContextSelection struct {
 	Events   []EventSourceRef  `json:"events"`
 	Findings []SourceObjectRef `json:"findings"`
 
+	// Resolve Expand selected findings (incidents, correlations, attacks) into child context. Set false to import only their root snapshots, without derived findings, sessions, events or entities. Explicitly selected sessions, events and entities are still resolved normally. Omitted means true.
+	Resolve *bool `json:"resolve,omitempty"`
+
 	// Seed Marks directly selected events as the seed evidence that opened the investigation. Derived events are never marked as seed.
 	Seed     *bool             `json:"seed,omitempty"`
 	Sessions []SourceObjectRef `json:"sessions"`

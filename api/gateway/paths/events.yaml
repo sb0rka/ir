@@ -150,6 +150,14 @@ components:
       type: object
       description: Source records selected by a client for persistence in an investigation.
       properties:
+        resolve:
+          type: boolean
+          description: >-
+            Expand selected findings into child context. False returns only their
+            root snapshots, without derived findings, sessions, events or entities.
+            Explicit sessions, events and entities are still resolved normally.
+            Omitted means true. Resolution status describes completeness of the
+            requested scope.
         findings:
           type: array
           maxItems: 100

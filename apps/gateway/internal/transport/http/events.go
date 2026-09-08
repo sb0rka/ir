@@ -130,6 +130,7 @@ func (server *Server) resolveContextRequest(body api.ResolveContextRequest) (ser
 		return service.ResolveContextRequest{}, fmt.Errorf("context selection exceeds its item limit")
 	}
 	request := service.ResolveContextRequest{
+		Resolve: body.Resolve,
 		Findings: make([]domain.SourceObjectRef, 0, len(findings)), Sessions: make([]domain.SourceObjectRef, 0, len(sessions)),
 		Events: make([]domain.EventSourceRef, 0, len(events)), Entities: make([]domain.EntitySourceRef, 0, len(entities)),
 	}
