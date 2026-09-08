@@ -718,17 +718,6 @@ export function AlertTable({ investigationId }: { investigationId?: string } = {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      {investigationId && (
-        <label className="flex shrink-0 items-center gap-2 border-b border-border px-4 py-2 text-xs text-fg-muted" title="Раскрывать инциденты, корреляции и атаки при добавлении в контекст">
-          <input
-            type="checkbox"
-            checked={queue?.expandFindings ?? true}
-            onChange={(e) => setContextQueue(investigationId, { expandFindings: e.target.checked })}
-            className="accent-fg"
-          />
-          Добавлять вложенные события
-        </label>
-      )}
       <div className="relative flex shrink-0 border-b border-border bg-surface-1">
         <div
           ref={headerWrapRef}

@@ -108,7 +108,6 @@ const DEFAULT_TIME_INTERVAL = demoDayInterval()
 const HISTORY_LIMIT = 8
 
 export const emptyContextQueue: ContextQueueState = {
-  expandFindings: true,
   chips: [],
   pdql: DEFAULT_QUEUE_PDQL,
   timeInterval: DEFAULT_TIME_INTERVAL,
@@ -1489,7 +1488,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     )
     if (refs.events.length === 0 && refs.findings.length === 0) return
     try {
-      await addContext(investigationId, { ...refs, expandFindings: queue?.expandFindings ?? true })
+      await addContext(investigationId, refs)
       const cur = get().contextQueue[investigationId] ?? emptyContextQueue
       set({
         contextQueue: {
