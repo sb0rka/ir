@@ -89,6 +89,27 @@ function emptyResolve(events: GwEvent[] = []) {
   }
 }
 
+function expectResolveFindingsOnly(recordType: string, uuid: string) {
+  expect(gatewayPost).toHaveBeenCalledWith(
+    '/api/v1/context/resolve',
+    expect.objectContaining({
+      body: expect.objectContaining({
+        findings: [
+          expect.objectContaining({
+            source_code: 'pt-maxpatrol-siem',
+            record_type: recordType,
+            external_id: uuid,
+          }),
+        ],
+      }),
+    }),
+  )
+  const body = gatewayPost.mock.calls.find((call) => call[0] === '/api/v1/context/resolve')?.[1]?.body as
+    | { events?: unknown }
+    | undefined
+  expect(body?.events).toBeUndefined()
+}
+
 beforeEach(() => {
   projectIdRef.current = 'project-1'
   clearFindingResolveCache()
@@ -130,21 +151,7 @@ describe('searchQueue uuid resolve', () => {
       'events',
     )
 
-    expect(gatewayPost).toHaveBeenCalledWith(
-      '/api/v1/context/resolve',
-      expect.objectContaining({
-        body: expect.objectContaining({
-          findings: [
-            expect.objectContaining({
-              source_code: 'pt-maxpatrol-siem',
-              record_type: 'siem_correlation',
-              external_id: 'corr-1',
-            }),
-          ],
-          events: [{ source_code: 'pt-maxpatrol-siem', source_event_id: 'corr-1' }],
-        }),
-      }),
-    )
+    expectResolveFindingsOnly('siem_correlation', 'corr-1')
     expect(result.queueOrder.map((item) => item.id)).toEqual(['pt-maxpatrol-siem/evt-2'])
   })
 
@@ -189,21 +196,7 @@ describe('searchQueue uuid resolve', () => {
       'events',
     )
 
-    expect(gatewayPost).toHaveBeenCalledWith(
-      '/api/v1/context/resolve',
-      expect.objectContaining({
-        body: expect.objectContaining({
-          findings: [
-            expect.objectContaining({
-              source_code: 'pt-maxpatrol-siem',
-              record_type: 'siem_correlation',
-              external_id: 'corr-1',
-            }),
-          ],
-          events: [{ source_code: 'pt-maxpatrol-siem', source_event_id: 'corr-1' }],
-        }),
-      }),
-    )
+    expectResolveFindingsOnly('siem_correlation', 'corr-1')
   })
 
   it('falls back to events search when resolve returns no children', async () => {
@@ -256,14 +249,7 @@ describe('searchQueue uuid resolve', () => {
       'events',
     )
 
-    expect(gatewayPost).toHaveBeenCalledWith(
-      '/api/v1/context/resolve',
-      expect.objectContaining({
-        body: expect.objectContaining({
-          findings: [expect.objectContaining({ record_type: 'siem_incident', external_id: 'inc-1' })],
-        }),
-      }),
-    )
+    expectResolveFindingsOnly('siem_incident', 'inc-1')
     expect(gatewayPost.mock.calls.map((call) => call[0])).toEqual(['/api/v1/context/resolve'])
     expect(result.queueOrder.map((item) => item.id)).toEqual(['pt-maxpatrol-siem/evt-9'])
   })
@@ -318,6 +304,81 @@ describe('searchQueue uuid resolve', () => {
 
     expect(gatewayPost.mock.calls.map((call) => call[0])).toEqual(['/api/v1/context/resolve'])
     expect(result.queueOrder).toEqual([])
+  })
+
+  it('reuses the finding resolve cache across uuid searches', async () => {
+    gatewayPost.mockImplementation(async (path: string) => {
+      if (path === '/api/v1/context/resolve') {
+        return emptyResolve([
+          gwEvent('corr-1'),
+          gwEvent('evt-2', { parent_source_event_id: 'corr-1', relation_type: 'subevent_of' }),
+        ])
+      }
+      throw new Error(`unexpected ${path}`)
+    })
+    const ast = mustParse(findingUuidQuery('corr-1', 'siem_correlation'))
+    const interval = demoDayInterval('UTC')
+    const first = await searchQueue(ast, interval, 'events')
+    const second = await searchQueue(ast, interval, 'events')
+    expect(gatewayPost.mock.calls.map((call) => call[0])).toEqual(['/api/v1/context/resolve'])
+    expect(second.queueOrder).toEqual(first.queueOrder)
+  })
+
+  it('reuses a card resolve when the table searches the same uuid', async () => {
+    gatewayPost.mockImplementation(async (path: string) => {
+      if (path === '/api/v1/context/resolve') {
+        return emptyResolve([
+          gwEvent('corr-1'),
+          gwEvent('evt-2', { parent_source_event_id: 'corr-1', relation_type: 'subevent_of' }),
+        ])
+      }
+      throw new Error(`unexpected ${path}`)
+    })
+    const interval = demoDayInterval('UTC')
+    await resolveFindingEvents({
+      source_code: 'pt-maxpatrol-siem',
+      record_type: 'siem_correlation',
+      external_id: 'corr-1',
+      // Card sends findingRef timestamps without millis; the table uses toISOString().
+      time_range: { from: '2025-10-22T21:00:00Z', to: '2025-10-23T20:59:59Z' },
+    })
+    expect(gatewayPost).toHaveBeenCalledTimes(1)
+    const result = await searchQueue(
+      mustParse(findingUuidQuery('corr-1', 'siem_correlation')),
+      interval,
+      'events',
+    )
+    expect(gatewayPost).toHaveBeenCalledTimes(1)
+    expect(result.queueOrder.map((item) => item.id)).toEqual(['pt-maxpatrol-siem/evt-2'])
+  })
+
+  it('applies extra entity filters using resolved event mentions', async () => {
+    gatewayPost.mockImplementation(async (path: string) => {
+      if (path === '/api/v1/context/resolve') {
+        return emptyResolve([
+          gwEvent('inc-1'),
+          {
+            ...gwEvent('evt-9', { parent_finding_id: 'inc-1', action: 'login' }),
+            entities: [{ type: 'host', value: 'dc01', roles: ['src'] }],
+          },
+          {
+            ...gwEvent('evt-8', { parent_finding_id: 'inc-1', action: 'login' }),
+            entities: [{ type: 'host', value: 'other', roles: ['src'] }],
+          },
+        ])
+      }
+      throw new Error(`unexpected ${path}`)
+    })
+
+    const result = await searchQueue(
+      mustParse(
+        'filter(siem_incident = "inc-1" and event_src.host = "dc01") | select(time) | sort(time desc)',
+      ),
+      demoDayInterval('UTC'),
+      'events',
+    )
+
+    expect(result.queueOrder.map((item) => item.id)).toEqual(['pt-maxpatrol-siem/evt-9'])
   })
 })
 
@@ -482,6 +543,19 @@ describe('resolveFindingEvents session cache', () => {
     expect(second).toEqual(first)
     expect(first.accounts).toEqual(['alice'])
     expect(first.hosts).toEqual([{ value: 'host-1', roles: ['src'] }])
+  })
+
+  it('reuses cache when time_range ISO strings differ', async () => {
+    gatewayPost.mockResolvedValue(resolveOk())
+    await resolveFindingEvents({
+      ...key,
+      time_range: { from: '2025-10-22T21:00:00Z', to: '2025-10-23T20:59:59Z' },
+    })
+    await resolveFindingEvents({
+      ...key,
+      time_range: { from: '2025-10-22T21:00:00.000Z', to: '2025-10-23T20:59:59.000Z' },
+    })
+    expect(gatewayPost).toHaveBeenCalledTimes(1)
   })
 
   it('refetches when force is set', async () => {

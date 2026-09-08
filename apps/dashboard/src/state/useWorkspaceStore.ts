@@ -69,6 +69,8 @@ function defaultFilters(windowStart: string, windowEnd: string): GraphSessionFil
   }
 }
 
+const TIMELINE_MIN_PAD_MS = 5 * 60_000
+
 function collectTimes(values: Array<string | undefined>): number[] {
   const times: number[] = []
   for (const value of values) {
@@ -77,6 +79,34 @@ function collectTimes(values: Array<string | undefined>): number[] {
     if (Number.isFinite(t)) times.push(t)
   }
   return times
+}
+
+/** Axis bounds from context event timestamps: earliest–latest, no entity span. */
+export function contextTimelineWindow(
+  timestamps: Array<string | undefined>,
+  now = Date.now(),
+): { windowStart: string; windowEnd: string } {
+  const times = collectTimes(timestamps)
+  // Empty graph (list stub before bundle load) must not clamp to "now":
+  // bind preserves filters, and a now±5min window hides every real node.
+  if (times.length === 0) {
+    return {
+      windowStart: new Date(0 - TIMELINE_MIN_PAD_MS).toISOString(),
+      windowEnd: new Date(now + TIMELINE_MIN_PAD_MS).toISOString(),
+    }
+  }
+  const minT = Math.min(...times)
+  const maxT = Math.max(...times)
+  if (minT === maxT) {
+    return {
+      windowStart: new Date(minT - TIMELINE_MIN_PAD_MS).toISOString(),
+      windowEnd: new Date(maxT + TIMELINE_MIN_PAD_MS).toISOString(),
+    }
+  }
+  return {
+    windowStart: new Date(minT).toISOString(),
+    windowEnd: new Date(maxT).toISOString(),
+  }
 }
 
 function isSeedEvent(
@@ -222,17 +252,9 @@ function buildFromApp(inv: Investigation): GraphInvestigation {
       }
     })
 
-  const times = collectTimes([
-    ...events.map((e) => e.event_ts),
-    ...entities.flatMap((e) => [e.first_seen, e.last_seen]),
-    ...alerts.map((a) => a.event_ts),
-  ])
-  // Empty graph (list stub before bundle load) must not clamp to "now":
-  // bind preserves filters, and a now±5min window hides every real node.
-  const minT = times.length ? Math.min(...times) : 0
-  const maxT = times.length ? Math.max(...times) : Date.now()
-  const windowStart = new Date(minT - 5 * 60_000).toISOString()
-  const windowEnd = new Date(maxT + 5 * 60_000).toISOString()
+  const { windowStart, windowEnd } = contextTimelineWindow(
+    events.map((e) => e.event_ts),
+  )
 
   const running = inv.issueIds.some(
     (id) => useAppStore.getState().issues[id]?.status === 'running',

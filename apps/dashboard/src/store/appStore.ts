@@ -45,6 +45,10 @@ import {
 import { resolveInvestigationTableSearchColumn } from '../components/investigationTableColumns'
 import { readWorkspaceTabs, writeWorkspaceTabs } from '../api/workspace-tabs'
 import {
+  readEventQueueSnapshot,
+  rememberEventQueueSnapshots,
+} from '../api/eventQueueSnapshots'
+import {
   addContext,
   countProposedAgentEdges,
   createEntity,
@@ -252,6 +256,21 @@ function swapContextQueueSource(
   }
 }
 
+/** Switch to events for a finding UUID chip without blanking the visible table. */
+function keepRowsOnEventsSource<T extends {
+  alerts: Record<string, AlertEvent>
+  queueOrder: QueueItem[]
+}>(
+  previous: { alerts: T['alerts']; queueOrder: T['queueOrder'] },
+  swapped: T,
+): T {
+  return {
+    ...swapped,
+    alerts: previous.alerts,
+    queueOrder: previous.queueOrder,
+  }
+}
+
 function pushQueryHistory(
   history: QueryHistoryEntry[],
   entry: QueryHistoryEntry,
@@ -363,6 +382,7 @@ interface AppState {
   setAlertSelection: (ids: string[]) => void
   toggleCorrelationExpand: (id: string) => void
   inspectQueueItem: (item: QueueItem | null) => void
+  rememberQueueAlerts: (events: AlertEvent[], investigationId?: string) => void
 
   setActiveTab: (tab: TabId) => void
   closeTab: (tab: TabId) => void
@@ -390,6 +410,10 @@ interface AppState {
   addContextChip: (investigationId: string, field: FilterField, value: string) => void
   executeContextQuery: (investigationId: string) => Promise<boolean>
   addEventsToContext: (investigationId: string, eventIds: string[]) => Promise<void>
+  restoreEventQueue: (
+    investigationId: string,
+    event: { source?: string; sourceEventId?: string },
+  ) => boolean
   appendPdqlFilter: (investigationId: string | null, field: string, value: string) => void
   filterByFindingUuid: (
     investigationId: string | null,
@@ -496,6 +520,27 @@ function contextRefsFromIds(
     pushEvent(a.source, a.sourceEventId, a.id)
   }
   return { events, findings }
+}
+
+function snapshotEventsForIds(
+  ids: string[],
+  alerts: Record<string, AlertEvent>,
+  correlations: Record<string, CorrelationGroup>,
+  contextEvents: Record<string, ContextEvent>,
+): Array<{ source?: string; sourceEventId?: string }> {
+  const events: Array<{ source?: string; sourceEventId?: string }> = []
+  for (const id of ids) {
+    if (correlations[id]) {
+      for (const eid of correlations[id].eventIds) {
+        const a = alerts[eid] ?? contextEvents[eid]
+        if (a) events.push(a)
+      }
+      continue
+    }
+    const a = alerts[id] ?? contextEvents[id]
+    if (a) events.push(a)
+  }
+  return events
 }
 
 function applyBundle(
@@ -857,6 +902,23 @@ export const useAppStore = create<AppState>((set, get) => ({
   clearAlertSelection: () => set({ selectedAlertIds: [] }),
   setAlertSelection: (selectedAlertIds) => set({ selectedAlertIds }),
   inspectQueueItem: (item) => set({ inspectedQueueItem: item }),
+  rememberQueueAlerts: (events, investigationId) => {
+    if (events.length === 0) return
+    const incoming = Object.fromEntries(events.map((event) => [event.id, event]))
+    const contextQueue = get().contextQueue
+    const cur = investigationId ? (contextQueue[investigationId] ?? emptyContextQueue) : null
+    set({
+      alerts: { ...get().alerts, ...incoming },
+      ...(cur && investigationId
+        ? {
+            contextQueue: {
+              ...contextQueue,
+              [investigationId]: { ...cur, alerts: { ...cur.alerts, ...incoming } },
+            },
+          }
+        : {}),
+    })
+  },
   toggleCorrelationExpand: (id) => {
     const cur = get().expandedCorrelationIds
     set({
@@ -1126,8 +1188,19 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       const created = await createInvestigation({ title: trimmed, severity })
       const refs = contextRefsFromIds(ids, alerts, correlations, get().contextEvents)
-      if (refs.events.length || refs.findings.length)
+      if (refs.events.length || refs.findings.length) {
+        rememberEventQueueSnapshots(
+          created.id,
+          snapshotEventsForIds(ids, alerts, correlations, get().contextEvents),
+          {
+            pdql: get().queuePdql,
+            timeInterval: get().timeInterval,
+            queueSource: get().queueSource,
+            groupValues: get().groupValues,
+          },
+        )
         await addContext(created.id, { ...refs, seed: true })
+      }
       const bundle = await loadInvestigationBundle(created.id, {
         seedEventIds: ids,
         view: 'graph',
@@ -1462,13 +1535,22 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   addEventsToContext: async (investigationId, eventIds) => {
     const queue = get().contextQueue[investigationId]
-    const refs = contextRefsFromIds(
-      eventIds,
-      { ...get().alerts, ...queue?.alerts },
-      get().correlations,
-      get().contextEvents,
-    )
+    const alerts = { ...get().alerts, ...queue?.alerts }
+    const correlations = get().correlations
+    const contextEvents = get().contextEvents
+    const refs = contextRefsFromIds(eventIds, alerts, correlations, contextEvents)
     if (refs.events.length === 0 && refs.findings.length === 0) return
+    const snapshotQueue = queue ?? emptyContextQueue
+    rememberEventQueueSnapshots(
+      investigationId,
+      snapshotEventsForIds(eventIds, alerts, correlations, contextEvents),
+      {
+        pdql: snapshotQueue.pdql,
+        timeInterval: snapshotQueue.timeInterval,
+        queueSource: snapshotQueue.queueSource,
+        groupValues: snapshotQueue.groupValues,
+      },
+    )
     try {
       await addContext(investigationId, refs)
       const cur = get().contextQueue[investigationId] ?? emptyContextQueue
@@ -1482,6 +1564,19 @@ export const useAppStore = create<AppState>((set, get) => ({
     } catch (err) {
       set({ lastError: errorMessage(err) })
     }
+  },
+
+  restoreEventQueue: (investigationId, event) => {
+    const entry = readEventQueueSnapshot(investigationId, event)
+    if (!entry) return false
+    get().setContextQueue(investigationId, {
+      pdql: entry.pdql,
+      timeInterval: entry.timeInterval,
+      queueSource: entry.queueSource ?? DEFAULT_QUEUE_SOURCE,
+      groupValues: entry.groupValues ?? [],
+    })
+    get().updateInvestigation(investigationId, { view: 'queue' })
+    return true
   },
 
   appendPdqlFilter: (investigationId, field, value) => {
@@ -1552,23 +1647,34 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (!value) return
     const pdql = findingUuidQuery(value, recordType)
     if (!investigationId) {
+      const state = get()
+      const swapped = swapGlobalQueueSource(state, 'events')
+      const kept = keepRowsOnEventsSource(state, swapped)
       set({
-        ...swapGlobalQueueSource(get(), 'events'),
+        ...kept,
         queuePdql: pdql,
         groupValues: [],
         eventGroups: [],
+        queueTotal: state.queueTotal,
+        correlations: state.correlations,
+        inspectedQueueItem: state.inspectedQueueItem,
+        selectedAlertIds: state.selectedAlertIds,
+        expandedCorrelationIds: state.expandedCorrelationIds,
       })
       return
     }
     const cur = get().contextQueue[investigationId] ?? emptyContextQueue
+    const swapped = swapContextQueueSource(cur, 'events')
     set({
       contextQueue: {
         ...get().contextQueue,
         [investigationId]: {
-          ...swapContextQueueSource(cur, 'events'),
+          ...keepRowsOnEventsSource(cur, swapped),
           pdql,
           groupValues: [],
           eventGroups: [],
+          total: cur.total,
+          selectedIds: cur.selectedIds,
         },
       },
     })

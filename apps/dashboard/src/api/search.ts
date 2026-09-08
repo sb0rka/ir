@@ -12,7 +12,7 @@ import {
 import { getProjectId, resolveTimeRange } from './env'
 import { gatewayClient } from './clients'
 import { unwrapError } from './error'
-import { mapGatewayEntity, mapGatewayEvent, mapGatewayFinding } from './adapters'
+import { mapEntityKind, mapGatewayEntity, mapGatewayEvent, mapGatewayFinding } from './adapters'
 import {
   findingResolveCache,
   findingResolveCacheKey,
@@ -386,6 +386,25 @@ function entitiesFromGateway(events: Gw['schemas']['Event'][], extra: Gw['schema
   return { alertList, entities }
 }
 
+function entitiesFromResolvedEvents(events: AlertEvent[]): Record<string, Entity> {
+  const entities: Record<string, Entity> = {}
+  for (const event of events) {
+    for (const id of event.entityIds) {
+      if (entities[id]) continue
+      const sep = id.indexOf(':')
+      if (sep <= 0) continue
+      entities[id] = {
+        id,
+        kind: mapEntityKind(id.slice(0, sep)),
+        label: id.slice(sep + 1),
+        attributes: {},
+        source: event.source,
+      }
+    }
+  }
+  return entities
+}
+
 async function resolveUuidFindingQueue(
   ast: QueryAst,
   uuid: string,
@@ -398,30 +417,20 @@ async function resolveUuidFindingQueue(
   const keys = findingUuidResolveKeys(uuid, time_range, allowedSources, recordType)
   if (keys.length === 0) return null
 
-  const { data, error, response } = await gatewayClient.POST('/api/v1/context/resolve', {
-    params: projectHeader(),
-    body: {
-      findings: keys.map(findingRefBody),
-      events: keys.map((key) => ({
-        source_code: key.source_code,
-        source_event_id: uuid,
-      })),
-    },
-  })
-  if (error || !data) throw unwrapError(error, response.status)
-
-  const { alertList, entities } = entitiesFromGateway(data.events ?? [], data.entities ?? [])
+  const resolved = await Promise.all(
+    keys.map(async (key) => ({ key, result: await resolveFindingEvents(key) })),
+  )
   let picked: AlertEvent[] = []
-  let usedKey: FindingResolveKey | null = null
-  for (const key of keys) {
-    const children = pickFindingChildEvents(alertList, key)
-    if (children.length > picked.length) {
-      picked = children
-      usedKey = key
+  let errors: string[] = []
+  for (const { result } of resolved) {
+    if (result.events.length > picked.length) {
+      picked = result.events
+      errors = result.errors
     }
   }
-  if (picked.length === 0 || !usedKey) return null
+  if (picked.length === 0) return null
 
+  const entities = entitiesFromResolvedEvents(picked)
   return finishQueue(
     picked.filter(
       (event) => inResolvedInterval(event.time, time_range) && alertMatchesPdql(event, ast, entities),
@@ -429,7 +438,7 @@ async function resolveUuidFindingQueue(
     entities,
     [],
     undefined,
-    contextErrorMessagesForKey(data, usedKey),
+    errors,
     availableSources,
     astToEventSearch(ast).sort,
   )
@@ -715,26 +724,6 @@ function contextErrorMessages(data: Gw['schemas']['ResolveContextResponse']): st
     out.push(`${err.source}: ${err.message}`)
   }
   for (const resolution of data.resolutions ?? []) {
-    for (const err of resolution.errors ?? []) {
-      out.push(`${err.source}: ${err.message}`)
-    }
-  }
-  return [...new Set(out)]
-}
-
-function contextErrorMessagesForKey(
-  data: Gw['schemas']['ResolveContextResponse'],
-  key: FindingResolveKey,
-): string[] {
-  const out: string[] = []
-  for (const resolution of data.resolutions ?? []) {
-    if (
-      resolution.ref.source_code !== key.source_code ||
-      resolution.ref.record_type !== key.record_type ||
-      resolution.ref.external_id !== key.external_id
-    ) {
-      continue
-    }
     for (const err of resolution.errors ?? []) {
       out.push(`${err.source}: ${err.message}`)
     }

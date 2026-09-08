@@ -25,6 +25,7 @@ export function QueueDetailPanel({
   const item = useAppStore((s) => s.inspectedQueueItem)
   const inspect = useAppStore((s) => s.inspectQueueItem)
   const start = useAppStore((s) => s.startInvestigation)
+  const rememberQueueAlerts = useAppStore((s) => s.rememberQueueAlerts)
   const addEventsToContext = useAppStore((s) => s.addEventsToContext)
   const addEventsToActiveHypothesis = useAppStore((s) => s.addEventsToActiveHypothesis)
   const createHypothesisFromEvents = useAppStore((s) => s.createHypothesisFromEvents)
@@ -53,6 +54,11 @@ export function QueueDetailPanel({
   const correlations = useAppStore((s) => s.correlations)
   const loading = useAppStore((s) => s.investigationLoading)
   const [naming, setNaming] = useState(false)
+  const [activeAlert, setActiveAlert] = useState<AlertEvent | null>(null)
+
+  useEffect(() => {
+    setActiveAlert(null)
+  }, [item?.id])
 
   useEffect(() => {
     if (!item) return
@@ -72,13 +78,26 @@ export function QueueDetailPanel({
   if (!alert && !group && !entity) return null
 
   const timeInterval = queue?.timeInterval ?? globalTime
+  const actionAlert = activeAlert ?? alert
+  const actionId = actionAlert?.id ?? item.id
   const eventKeys = inv ? contextEventKeys(inv.eventIds, contextEvents) : new Set<string>()
   const inContext = Boolean(
-    investigationId && alert && alertIsInContext(alert, inv?.findingSourceKeys ?? [], eventKeys),
+    investigationId &&
+      actionAlert &&
+      alertIsInContext(actionAlert, inv?.findingSourceKeys ?? [], eventKeys),
   )
   const canAddToHypothesis = Boolean(
-    alert && activeHypothesis && isHypothesisWritable(activeHypothesis.status),
+    actionAlert && activeHypothesis && isHypothesisWritable(activeHypothesis.status),
   )
+  const rememberActiveAlert = (next: AlertEvent) => {
+    setActiveAlert(next)
+    rememberQueueAlerts([next], investigationId)
+  }
+  const commitActionAlert = (): AlertEvent | null => {
+    if (!actionAlert) return null
+    rememberQueueAlerts([actionAlert], investigationId)
+    return actionAlert
+  }
   const addToHypothesisTitle = !activeHypothesis
     ? 'Сначала выберите гипотезу'
     : activeHypothesis.status === 'resolved'
@@ -120,6 +139,8 @@ export function QueueDetailPanel({
           {alert && (
             <AlertDetails
               alert={alert}
+              eventInContext={inContext}
+              onActiveAlertChange={rememberActiveAlert}
               onAddFilter={(field, value) =>
                 appendPdqlFilter(investigationId ?? null, field, value)
               }
@@ -163,14 +184,18 @@ export function QueueDetailPanel({
                   size="md"
                   variant="primary"
                   className="w-full"
-                  disabled={loading || !alert}
-                  onClick={() => void addEventsToContext(investigationId, [item.id])}
+                  disabled={loading || !actionAlert}
+                  onClick={() => {
+                    const target = commitActionAlert()
+                    if (!target) return
+                    void addEventsToContext(investigationId, [target.id])
+                  }}
                 >
                   <Plus className="h-3.5 w-3.5" />
                   Добавить в расследование
                 </Button>
               )}
-              {alert && (
+              {actionAlert && (
                 <>
                   <Button
                     size="md"
@@ -178,7 +203,11 @@ export function QueueDetailPanel({
                     className="w-full"
                     disabled={loading || !canAddToHypothesis}
                     title={addToHypothesisTitle}
-                    onClick={() => void addEventsToActiveHypothesis(investigationId, [item.id])}
+                    onClick={() => {
+                      const target = commitActionAlert()
+                      if (!target) return
+                      void addEventsToActiveHypothesis(investigationId, [target.id])
+                    }}
                   >
                     <Lightbulb className="h-3.5 w-3.5" />
                     Добавить в текущую гипотезу
@@ -188,7 +217,11 @@ export function QueueDetailPanel({
                     variant="ghost"
                     className="w-full"
                     disabled={loading}
-                    onClick={() => void createHypothesisFromEvents(investigationId, [item.id])}
+                    onClick={() => {
+                      const target = commitActionAlert()
+                      if (!target) return
+                      void createHypothesisFromEvents(investigationId, [target.id])
+                    }}
                   >
                     <Lightbulb className="h-3.5 w-3.5" />
                     Создать гипотезу
@@ -216,11 +249,12 @@ export function QueueDetailPanel({
     </ResizablePanelFrame>
     {naming && (
       <StartInvestigationModal
-        eventTitles={titlesForQueueIds([item.id], alerts, correlations)}
+        eventTitles={titlesForQueueIds([actionId], alerts, correlations)}
         busy={loading}
         onClose={() => setNaming(false)}
         onConfirm={async (title) => {
-          const createdId = await start([item.id], title)
+          if (actionAlert) rememberQueueAlerts([actionAlert], investigationId)
+          const createdId = await start([actionId], title)
           if (createdId) setNaming(false)
         }}
       />
@@ -231,6 +265,8 @@ export function QueueDetailPanel({
 
 function AlertDetails({
   alert,
+  eventInContext,
+  onActiveAlertChange,
   onAddFilter,
   onFilterFindingUuid,
   timeInterval,
@@ -238,6 +274,8 @@ function AlertDetails({
   onTimeExecute,
 }: {
   alert: AlertEvent
+  eventInContext: boolean
+  onActiveAlertChange: (alert: AlertEvent) => void
   onAddFilter: (field: string, value: string) => void
   onFilterFindingUuid: (uuid: string, recordType: 'siem_incident' | 'siem_correlation') => void
   timeInterval: TimeInterval
@@ -249,11 +287,14 @@ function AlertDetails({
       <span className="text-xs text-fg-dim">{statusLabel[alert.status]}</span>
       <EventCard
         event={eventCardModelFromAlert(alert)}
+        sourceAlert={alert}
+        eventInContext={eventInContext}
         timeInterval={timeInterval}
         onTimeChange={onTimeChange}
         onTimeExecute={onTimeExecute}
         onAddFilter={onAddFilter}
         onFilterFindingUuid={onFilterFindingUuid}
+        onActiveAlertChange={onActiveAlertChange}
       />
     </>
   )

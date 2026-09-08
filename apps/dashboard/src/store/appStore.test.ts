@@ -1,8 +1,10 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { findingUuidQuery, pdqlToChips, parseQueuePdql } from '../lib/pdql'
 import { filterFingerprint } from '../lib/queryFingerprint'
 import { emptyContextQueue, useAppStore } from './appStore'
-import type { AlertEvent, QueueItem } from '../types'
+import type { AlertEvent, Investigation, QueueItem } from '../types'
+import * as irApi from '../api/ir'
+import * as snapshots from '../api/eventQueueSnapshots'
 
 const initial = {
   queuePdql: useAppStore.getState().queuePdql,
@@ -16,9 +18,11 @@ const initial = {
   queueOrder: useAppStore.getState().queueOrder,
   mockSources: useAppStore.getState().mockSources,
   contextQueue: useAppStore.getState().contextQueue,
+  investigations: useAppStore.getState().investigations,
 }
 
 afterEach(() => {
+  vi.restoreAllMocks()
   useAppStore.setState(initial)
 })
 
@@ -70,6 +74,56 @@ describe('filterByFindingUuid', () => {
     expect(queue?.pdql).toBe(findingUuidQuery('inc-9', 'siem_incident'))
     expect(queue?.groupValues).toEqual([])
     expect(queue?.timeInterval).toEqual(emptyContextQueue.timeInterval)
+  })
+
+  it('keeps current table rows when switching to events for a uuid chip', () => {
+    const incidentAlert = alertStub('inc-1')
+    const incidentOrder: QueueItem[] = [{ kind: 'alert', id: 'inc-1' }]
+    useAppStore.setState({
+      queueSource: 'siem_incident',
+      alerts: { 'inc-1': incidentAlert },
+      queueOrder: incidentOrder,
+      inspectedQueueItem: { kind: 'alert', id: 'inc-1' },
+      selectedAlertIds: ['inc-1'],
+      executedFingerprint: 'stale-fp',
+    })
+
+    useAppStore.getState().filterByFindingUuid(null, 'inc-1', 'siem_incident')
+
+    const state = useAppStore.getState()
+    expect(state.queueSource).toBe('events')
+    expect(state.queueOrder).toEqual(incidentOrder)
+    expect(state.alerts['inc-1']?.id).toBe('inc-1')
+    expect(state.inspectedQueueItem).toEqual({ kind: 'alert', id: 'inc-1' })
+    expect(state.selectedAlertIds).toEqual(['inc-1'])
+    expect(state.executedFingerprint).toBeNull()
+    expect(state.queueSourceCache.siem_incident?.queueOrder).toEqual(incidentOrder)
+  })
+
+  it('keeps context queue rows when switching to events for a uuid chip', () => {
+    const incidentAlert = alertStub('ctx-inc')
+    useAppStore.setState({
+      contextQueue: {
+        'inv-1': {
+          ...emptyContextQueue,
+          queueSource: 'siem_incident',
+          alerts: { 'ctx-inc': incidentAlert },
+          queueOrder: [{ kind: 'alert', id: 'ctx-inc' }],
+          selectedIds: ['ctx-inc'],
+          executedFingerprint: 'stale-fp',
+        },
+      },
+    })
+
+    useAppStore.getState().filterByFindingUuid('inv-1', 'inc-9', 'siem_incident')
+
+    const queue = useAppStore.getState().contextQueue['inv-1']
+    expect(queue?.queueSource).toBe('events')
+    expect(queue?.queueOrder).toEqual([{ kind: 'alert', id: 'ctx-inc' }])
+    expect(queue?.alerts['ctx-inc']?.id).toBe('ctx-inc')
+    expect(queue?.selectedIds).toEqual(['ctx-inc'])
+    expect(queue?.executedFingerprint).toBeNull()
+    expect(queue?.sourceResults.siem_incident?.queueOrder).toEqual([{ kind: 'alert', id: 'ctx-inc' }])
   })
 
   it('appends extra filters while a finding chip is set', () => {
@@ -206,5 +260,180 @@ describe('queue source result cache', () => {
     expect(queue?.queueOrder).toEqual([{ kind: 'alert', id: 'ctx-inc' }])
     expect(queue?.executedFingerprint).toBeNull()
     expect(queue?.sourceResults.siem_incident?.executedFingerprint).toBe(fp)
+  })
+})
+
+describe('rememberQueueAlerts', () => {
+  it('merges nested events into the global queue so actions can resolve them', () => {
+    const nested = alertStub('pt-maxpatrol-siem/evt-9')
+    useAppStore.setState({ alerts: { 'inc-1': alertStub('inc-1') } })
+
+    useAppStore.getState().rememberQueueAlerts([nested])
+
+    expect(useAppStore.getState().alerts['inc-1']?.id).toBe('inc-1')
+    expect(useAppStore.getState().alerts[nested.id]).toEqual(nested)
+  })
+
+  it('also merges into the investigation context queue', () => {
+    const nested = alertStub('pt-maxpatrol-siem/evt-9')
+    useAppStore.setState({
+      contextQueue: {
+        'inv-1': {
+          ...emptyContextQueue,
+          alerts: { 'inc-1': alertStub('inc-1') },
+        },
+      },
+    })
+
+    useAppStore.getState().rememberQueueAlerts([nested], 'inv-1')
+
+    expect(useAppStore.getState().alerts[nested.id]).toEqual(nested)
+    expect(useAppStore.getState().contextQueue['inv-1']?.alerts[nested.id]).toEqual(nested)
+    expect(useAppStore.getState().contextQueue['inv-1']?.alerts['inc-1']?.id).toBe('inc-1')
+  })
+})
+
+function investigationStub(overrides: Partial<Investigation> = {}): Investigation {
+  return {
+    id: 'inv-1',
+    title: 'Case',
+    severity: 'high',
+    status: 'open',
+    assignee: 'аналитик',
+    seedEventIds: [],
+    eventIds: [],
+    entityIds: [],
+    nodeIds: [],
+    edgeIds: [],
+    findingIds: [],
+    findingSourceKeys: [],
+    issueIds: [],
+    hypothesisIds: [],
+    createdAt: '2026-01-01T00:00:00Z',
+    view: 'graph',
+    selectedEntityIds: [],
+    ...overrides,
+  }
+}
+
+describe('event queue snapshots', () => {
+  it('remembers the current context queue when adding events', async () => {
+    const remember = vi.spyOn(snapshots, 'rememberEventQueueSnapshots')
+    vi.spyOn(irApi, 'addContext').mockResolvedValue(undefined)
+    vi.spyOn(irApi, 'loadInvestigationBundle').mockResolvedValue({
+      investigation: investigationStub({ eventIds: ['evt-1'] }),
+      events: {},
+      entities: {},
+      nodes: {},
+      edges: {},
+      findingSourceKeys: [],
+    })
+    const alert = alertStub('evt-1')
+    const pdql = 'filter(action = "login") | select(time) | sort(time desc)'
+    useAppStore.setState({
+      contextQueue: {
+        'inv-1': {
+          ...emptyContextQueue,
+          pdql,
+          queueSource: 'events',
+          groupValues: ['host-a'],
+          alerts: { 'evt-1': alert },
+        },
+      },
+    })
+
+    await useAppStore.getState().addEventsToContext('inv-1', ['evt-1'])
+
+    expect(remember).toHaveBeenCalledWith(
+      'inv-1',
+      [alert],
+      expect.objectContaining({
+        pdql,
+        queueSource: 'events',
+        groupValues: ['host-a'],
+      }),
+    )
+  })
+
+  it('does not remember when there is nothing to add', async () => {
+    const remember = vi.spyOn(snapshots, 'rememberEventQueueSnapshots')
+    const addContext = vi.spyOn(irApi, 'addContext')
+
+    await useAppStore.getState().addEventsToContext('inv-1', ['missing'])
+
+    expect(remember).not.toHaveBeenCalled()
+    expect(addContext).not.toHaveBeenCalled()
+  })
+
+  it('restores saved queue settings and switches the investigation to queue view', () => {
+    vi.spyOn(snapshots, 'readEventQueueSnapshot').mockReturnValue({
+      pdql: 'filter(action = "login") | select(time) | sort(time desc)',
+      timeInterval: emptyContextQueue.timeInterval,
+      queueSource: 'events',
+      groupValues: ['host-a'],
+    })
+    useAppStore.setState({
+      investigations: { 'inv-1': investigationStub() },
+      contextQueue: { 'inv-1': { ...emptyContextQueue, pdql: 'select(time)' } },
+    })
+
+    const restored = useAppStore.getState().restoreEventQueue('inv-1', {
+      source: 'pt-maxpatrol-siem',
+      sourceEventId: 'evt-1',
+    })
+
+    expect(restored).toBe(true)
+    const queue = useAppStore.getState().contextQueue['inv-1']
+    expect(queue?.pdql).toBe('filter(action = "login") | select(time) | sort(time desc)')
+    expect(queue?.queueSource).toBe('events')
+    expect(queue?.groupValues).toEqual(['host-a'])
+    expect(useAppStore.getState().investigations['inv-1']?.view).toBe('queue')
+  })
+
+  it('returns false when no snapshot exists', () => {
+    vi.spyOn(snapshots, 'readEventQueueSnapshot').mockReturnValue(null)
+    useAppStore.setState({ investigations: { 'inv-1': investigationStub() } })
+
+    expect(
+      useAppStore.getState().restoreEventQueue('inv-1', {
+        source: 'pt-maxpatrol-siem',
+        sourceEventId: 'evt-1',
+      }),
+    ).toBe(false)
+    expect(useAppStore.getState().investigations['inv-1']?.view).toBe('graph')
+  })
+
+  it('remembers the global queue when starting an investigation from events', async () => {
+    const remember = vi.spyOn(snapshots, 'rememberEventQueueSnapshots')
+    vi.spyOn(irApi, 'createInvestigation').mockResolvedValue(investigationStub({ id: 'inv-new' }))
+    vi.spyOn(irApi, 'addContext').mockResolvedValue(undefined)
+    vi.spyOn(irApi, 'loadInvestigationBundle').mockResolvedValue({
+      investigation: investigationStub({ id: 'inv-new', eventIds: ['evt-1'] }),
+      events: {},
+      entities: {},
+      nodes: {},
+      edges: {},
+      findingSourceKeys: [],
+    })
+    const alert = alertStub('evt-1')
+    const pdql = 'filter(host = "dc01") | select(time) | sort(time desc)'
+    useAppStore.setState({
+      alerts: { 'evt-1': alert },
+      queuePdql: pdql,
+      queueSource: 'events',
+      groupValues: ['dc01'],
+    })
+
+    await useAppStore.getState().startInvestigation(['evt-1'], 'Case')
+
+    expect(remember).toHaveBeenCalledWith(
+      'inv-new',
+      [alert],
+      expect.objectContaining({
+        pdql,
+        queueSource: 'events',
+        groupValues: ['dc01'],
+      }),
+    )
   })
 })

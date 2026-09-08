@@ -16,6 +16,11 @@ export function clearFindingResolveCache(): void {
   findingResolveCache.clear()
 }
 
+/**
+ * Identity of a finding in this project. time_range stays on the wire but is
+ * not part of the key: the card sends findingRef timestamps (often without
+ * millis) while uuid search uses the UI interval (Date.toISOString).
+ */
 export function findingResolveCacheKey(
   projectId: string,
   key: FindingResolveKey,
@@ -26,7 +31,6 @@ export function findingResolveCacheKey(
     source_instance: key.source_instance ?? null,
     record_type: key.record_type,
     external_id: key.external_id,
-    time_range: key.time_range,
   })
 }
 

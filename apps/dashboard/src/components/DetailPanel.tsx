@@ -1,4 +1,5 @@
 import { useAppStore, emptyContextQueue } from '../store/appStore'
+import { readEventQueueSnapshot } from '../api/eventQueueSnapshots'
 import { Button, Chip, Panel } from './ui'
 import { formatTime, kindLabel, statusLabel } from '../lib/utils'
 import { EventCard } from './event-card'
@@ -36,6 +37,7 @@ export function DetailPanel({ investigationId }: { investigationId: string }) {
   const appendPdqlFilter = useAppStore((s) => s.appendPdqlFilter)
   const filterByFindingUuid = useAppStore((s) => s.filterByFindingUuid)
   const addFieldToContext = useAppStore((s) => s.addFieldToContext)
+  const restoreEventQueue = useAppStore((s) => s.restoreEventQueue)
   const setContextQueue = useAppStore((s) => s.setContextQueue)
   const executeContextQuery = useAppStore((s) => s.executeContextQuery)
   const contextQueue = useAppStore((s) => s.contextQueue[investigationId]) ?? emptyContextQueue
@@ -377,6 +379,13 @@ export function DetailPanel({ investigationId }: { investigationId: string }) {
                   eventId: event.id,
                   includeEvent,
                 })
+              }
+              onShowQueue={
+                readEventQueueSnapshot(investigationId, event)
+                  ? () => {
+                      restoreEventQueue(investigationId, event)
+                    }
+                  : undefined
               }
             />
           </>
