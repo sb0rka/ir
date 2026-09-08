@@ -10,7 +10,6 @@ const initial = {
   queueSourceCache: useAppStore.getState().queueSourceCache,
   groupValues: useAppStore.getState().groupValues,
   eventGroups: useAppStore.getState().eventGroups,
-  findingFilterWarnAt: useAppStore.getState().findingFilterWarnAt,
   executedFingerprint: useAppStore.getState().executedFingerprint,
   alerts: useAppStore.getState().alerts,
   correlations: useAppStore.getState().correlations,
@@ -73,16 +72,26 @@ describe('filterByFindingUuid', () => {
     expect(queue?.timeInterval).toEqual(emptyContextQueue.timeInterval)
   })
 
-  it('rejects extra filters and warns while a finding chip is set', () => {
+  it('appends extra filters while a finding chip is set', () => {
     useAppStore.getState().filterByFindingUuid(null, 'inc-1', 'siem_incident')
-    const pdql = useAppStore.getState().queuePdql
-    const before = useAppStore.getState().findingFilterWarnAt
 
     useAppStore.getState().appendPdqlFilter(null, 'action', 'login')
 
     const state = useAppStore.getState()
-    expect(state.queuePdql).toBe(pdql)
-    expect(state.findingFilterWarnAt).toBeGreaterThan(before)
+    expect(state.queueSource).toBe('events')
+    expect(state.queuePdql).toContain('siem_incident = "inc-1"')
+    expect(state.queuePdql).toContain('action = "login"')
+  })
+
+  it('keeps events source when appending a host filter beside a finding chip', () => {
+    useAppStore.getState().filterByFindingUuid(null, 'inc-1', 'siem_incident')
+
+    useAppStore.getState().appendPdqlFilter(null, 'host', 'aamelina')
+
+    const state = useAppStore.getState()
+    expect(state.queueSource).toBe('events')
+    expect(state.queuePdql).toContain('siem_incident = "inc-1"')
+    expect(state.queuePdql).toContain('host = "aamelina"')
   })
 })
 

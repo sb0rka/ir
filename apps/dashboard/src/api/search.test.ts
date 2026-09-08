@@ -148,6 +148,64 @@ describe('searchQueue uuid resolve', () => {
     expect(result.queueOrder.map((item) => item.id)).toEqual(['pt-maxpatrol-siem/evt-2'])
   })
 
+  it('does not send SIEM finding refs to NAD when resolving a uuid chip', async () => {
+    gatewayGet.mockResolvedValue({
+      data: {
+        items: [
+          {
+            code: 'pt-maxpatrol-siem',
+            name: 'MaxPatrol SIEM',
+            kind: 'siem',
+            mode: 'proxy',
+            status: 'online',
+            capabilities: ['events', 'findings'],
+          },
+          {
+            code: 'pt-nad',
+            name: 'PT NAD',
+            kind: 'network',
+            mode: 'proxy',
+            status: 'online',
+            capabilities: ['events', 'findings'],
+          },
+        ],
+      },
+      error: undefined,
+      response: { status: 200 },
+    })
+    gatewayPost.mockImplementation(async (path: string) => {
+      if (path === '/api/v1/context/resolve') {
+        return emptyResolve([
+          gwEvent('corr-1'),
+          gwEvent('evt-2', { parent_source_event_id: 'corr-1', relation_type: 'subevent_of' }),
+        ])
+      }
+      throw new Error(`unexpected ${path}`)
+    })
+
+    await searchQueue(
+      mustParse(findingUuidQuery('corr-1', 'siem_correlation')),
+      demoDayInterval('UTC'),
+      'events',
+    )
+
+    expect(gatewayPost).toHaveBeenCalledWith(
+      '/api/v1/context/resolve',
+      expect.objectContaining({
+        body: expect.objectContaining({
+          findings: [
+            expect.objectContaining({
+              source_code: 'pt-maxpatrol-siem',
+              record_type: 'siem_correlation',
+              external_id: 'corr-1',
+            }),
+          ],
+          events: [{ source_code: 'pt-maxpatrol-siem', source_event_id: 'corr-1' }],
+        }),
+      }),
+    )
+  })
+
   it('falls back to events search when resolve returns no children', async () => {
     gatewayPost.mockImplementation(async (path: string) => {
       if (path === '/api/v1/context/resolve') return emptyResolve([])
@@ -180,12 +238,13 @@ describe('searchQueue uuid resolve', () => {
     expect(result.queueOrder.map((item) => item.id)).toEqual(['pt-maxpatrol-siem/plain-1'])
   })
 
-  it('resolves a finding chip even when extra filters are present', async () => {
+  it('resolves a finding chip and applies extra filters on the client', async () => {
     gatewayPost.mockImplementation(async (path: string) => {
       if (path === '/api/v1/context/resolve') {
         return emptyResolve([
           gwEvent('inc-1'),
-          gwEvent('evt-9', { parent_finding_id: 'inc-1' }),
+          gwEvent('evt-9', { parent_finding_id: 'inc-1', action: 'login' }),
+          gwEvent('evt-8', { parent_finding_id: 'inc-1', action: 'logout' }),
         ])
       }
       throw new Error(`unexpected ${path}`)
@@ -205,6 +264,7 @@ describe('searchQueue uuid resolve', () => {
         }),
       }),
     )
+    expect(gatewayPost.mock.calls.map((call) => call[0])).toEqual(['/api/v1/context/resolve'])
     expect(result.queueOrder.map((item) => item.id)).toEqual(['pt-maxpatrol-siem/evt-9'])
   })
 

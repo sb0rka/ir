@@ -577,6 +577,20 @@ describe('astToEventSearch', () => {
       hasControls: true,
     })
   })
+
+  it('drops finding UUID chips from the SIEM wire filter', () => {
+    expect(astToEventSearch(mustParse(findingUuidQuery('inc-1', 'siem_incident')))).toEqual({
+      hasControls: true,
+    })
+    expect(
+      astToEventSearch(
+        mustParse('filter(siem_incident = "inc-1" and action = "login") | select(time) | sort(time desc)'),
+      ),
+    ).toEqual({
+      filter: 'action = "login"',
+      hasControls: true,
+    })
+  })
 })
 
 describe('alignGroupValues', () => {

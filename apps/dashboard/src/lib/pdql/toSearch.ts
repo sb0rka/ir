@@ -338,7 +338,7 @@ export function astToEventAggregate(ast: QueryAst): EventAggregateParts | undefi
   return parts
 }
 
-/** Finding resolve chip, even when other filters are also present (they are ignored). */
+/** Finding resolve chip. Extra filters stay in the AST and are applied client-side after resolve. */
 export function findingUuidFromAst(ast: QueryAst): {
   uuid: string
   recordType: FindingFilterField
@@ -358,7 +358,11 @@ export function astToEventSearch(
 ): EventSearchParts {
   // Entity predicates go in gateway `entities`, not MaxPatrol PDQL `filter`
   // (bare `host = "…"` is invalid SIEM syntax and fails all sources).
-  const kept = pruneFilterBy(filterListOf(ast), isMappedEntity)
+  // Finding UUID chips select context/resolve and are not valid SIEM PDQL.
+  const kept = pruneFilterBy(
+    filterListOf(ast),
+    (condition) => isMappedEntity(condition) || isFindingFilterField(condition.field),
+  )
   const filter = formatCondition(withFilterList(ast, kept)).trim()
   const sort = ast.columns
     .filter((column) => column.sort && column.field && !column.aggregate)
@@ -376,7 +380,11 @@ export function astToEventSearch(
   }
   const entityParts = pdqlToSearchParts(ast)
   parts.hasControls = Boolean(
-    parts.filter || parts.sort || parts.group_by || entityParts.entities.length > 0,
+    parts.filter ||
+      parts.sort ||
+      parts.group_by ||
+      entityParts.entities.length > 0 ||
+      findingUuidFromAst(ast),
   )
   return parts
 }

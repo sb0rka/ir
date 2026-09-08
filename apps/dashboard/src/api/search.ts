@@ -22,12 +22,14 @@ import {
 import { pickFindingAccounts, pickFindingChildEvents, pickFindingHosts, type FindingResolveKey } from '../lib/correlationSubevents'
 import { matchesChips } from '../lib/filters'
 import {
+  alertMatchesPdql,
   astToEventAggregate,
   astToEventSearch,
   astToFilterChips,
   DEFAULT_QUEUE_LIMIT,
   effectiveQueueLimit,
   findingUuidFromAst,
+  isSiemSource,
   pdqlToSearchParts,
   timeIntervalFromAst,
   type QueryAst,
@@ -324,12 +326,14 @@ function findingUuidResolveKeys(
   sources: string[],
   recordType: FindingResolveKey['record_type'],
 ): FindingResolveKey[] {
-  return sources.map((source_code) => ({
-    source_code,
-    record_type: recordType,
-    external_id: uuid,
-    time_range: timeRange,
-  }))
+  return sources
+    .filter((source_code) => isSiemSource(source_code))
+    .map((source_code) => ({
+      source_code,
+      record_type: recordType,
+      external_id: uuid,
+      time_range: timeRange,
+    }))
 }
 
 function findingRefBody(key: FindingResolveKey): Gw['schemas']['SourceObjectRef'] {
@@ -383,6 +387,7 @@ function entitiesFromGateway(events: Gw['schemas']['Event'][], extra: Gw['schema
 }
 
 async function resolveUuidFindingQueue(
+  ast: QueryAst,
   uuid: string,
   recordType: FindingResolveKey['record_type'],
   timeInterval: TimeInterval,
@@ -397,8 +402,8 @@ async function resolveUuidFindingQueue(
     params: projectHeader(),
     body: {
       findings: keys.map(findingRefBody),
-      events: allowedSources.map((source_code) => ({
-        source_code,
+      events: keys.map((key) => ({
+        source_code: key.source_code,
         source_event_id: uuid,
       })),
     },
@@ -418,12 +423,15 @@ async function resolveUuidFindingQueue(
   if (picked.length === 0 || !usedKey) return null
 
   return finishQueue(
-    picked.filter((alert) => inResolvedInterval(alert.time, time_range)),
+    picked.filter(
+      (event) => inResolvedInterval(event.time, time_range) && alertMatchesPdql(event, ast, entities),
+    ),
     entities,
     [],
     undefined,
     contextErrorMessagesForKey(data, usedKey),
     availableSources,
+    astToEventSearch(ast).sort,
   )
 }
 
@@ -584,6 +592,7 @@ async function searchEventsQueue(
   const finding = findingUuidFromAst(ast)
   if (finding) {
     const resolved = await resolveUuidFindingQueue(
+      ast,
       finding.uuid,
       finding.recordType,
       timeInterval,

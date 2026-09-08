@@ -1,3 +1,4 @@
+import { Check, Copy } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { entityKindForField, relatedFieldColumns } from '../../lib/pdql'
 import { kindLabel } from '../../lib/utils'
@@ -26,7 +27,18 @@ export function EventFieldModal({
   const [addEntity, setAddEntity] = useState(Boolean(entityKind && investigationId))
   const [includeEvent, setIncludeEvent] = useState(!eventInContext)
   const [busy, setBusy] = useState(false)
+  const [copied, setCopied] = useState(false)
   const canContext = Boolean(investigationId && onAddToContext && entityKind)
+
+  const copyValue = async () => {
+    try {
+      await navigator.clipboard.writeText(value)
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 1200)
+    } catch {
+      /* ignore */
+    }
+  }
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -58,9 +70,23 @@ export function EventFieldModal({
         className="relative w-full max-w-lg overflow-hidden rounded border border-border bg-surface-1 shadow-xl"
       >
         <div className="border-b border-border px-4 py-3">
-          <div className="text-[10px] uppercase tracking-wider text-fg-dim">{field}</div>
-          <div className="mt-0.5 break-all font-mono text-sm text-fg" title={value}>
-            {value}
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0 flex-1">
+              <div className="text-[10px] uppercase tracking-wider text-fg-dim">{field}</div>
+              <div className="mt-0.5 break-all font-mono text-sm text-fg" title={value}>
+                {value}
+              </div>
+            </div>
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-7 w-7 shrink-0"
+              title={copied ? 'Скопировано' : 'Копировать значение'}
+              aria-label={copied ? 'Скопировано' : 'Копировать значение'}
+              onClick={() => void copyValue()}
+            >
+              {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+            </Button>
           </div>
         </div>
 

@@ -31,6 +31,7 @@ export {
   toggleChipSort,
 } from './chips'
 export type { PdqlChip, PdqlChipKind } from './chips'
+export { alertMatchesPdql } from './matchEvent'
 export {
   alignGroupValues,
   astToEventAggregate,

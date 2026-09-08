@@ -285,8 +285,6 @@ export interface ContextQueueState {
   eventGroups: EventGroupItem[]
   executedFingerprint: string | null
   queryHistory: QueryHistoryEntry[]
-  /** Bumped when a finding resolve chip blocks adding another filter. */
-  findingFilterWarnAt: number
   selectedIds: string[]
   /** Filter rows by whether they are already in the investigation context. */
   addedFilter: AddedFilter

@@ -116,7 +116,6 @@ export const emptyContextQueue: ContextQueueState = {
   eventGroups: [],
   executedFingerprint: null,
   queryHistory: [],
-  findingFilterWarnAt: 0,
   selectedIds: [],
   addedFilter: 'all',
   originFilter: 'all',
@@ -287,7 +286,6 @@ interface AppState {
   eventGroups: EventGroupItem[]
   executedFingerprint: string | null
   queryHistory: QueryHistoryEntry[]
-  findingFilterWarnAt: number
   selectedAlertIds: string[]
   expandedCorrelationIds: string[]
   inspectedQueueItem: QueueItem | null
@@ -398,7 +396,6 @@ interface AppState {
     uuid: string,
     recordType: FindingFilterField,
   ) => void
-  warnFindingFilterExclusive: (investigationId: string | null) => void
   addFieldToContext: (
     investigationId: string,
     input: { field: string; value: string; eventId: string; includeEvent: boolean },
@@ -684,7 +681,6 @@ export const useAppStore = create<AppState>((set, get) => ({
   eventGroups: [],
   executedFingerprint: null,
   queryHistory: [],
-  findingFilterWarnAt: 0,
   selectedAlertIds: [],
   expandedCorrelationIds: [],
   inspectedQueueItem: null,
@@ -739,11 +735,6 @@ export const useAppStore = create<AppState>((set, get) => ({
   somCatalog: null,
 
   addChip: (field, value) => {
-    const parsed = parseQueuePdql(get().queuePdql)
-    if (parsed.ok && findingUuidFromAst(parsed.ast)) {
-      get().warnFindingFilterExclusive(null)
-      return
-    }
     set({
       queuePdql: appendCondition(get().queuePdql, pdqlFieldForFilterField(field), '=', value),
     })
@@ -1365,11 +1356,6 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   addContextChip: (investigationId, field, value) => {
     const cur = get().contextQueue[investigationId] ?? emptyContextQueue
-    const parsed = parseQueuePdql(cur.pdql)
-    if (parsed.ok && findingUuidFromAst(parsed.ast)) {
-      get().warnFindingFilterExclusive(investigationId)
-      return
-    }
     set({
       contextQueue: {
         ...get().contextQueue,
@@ -1506,10 +1492,6 @@ export const useAppStore = create<AppState>((set, get) => ({
       ? (get().contextQueue[investigationId] ?? emptyContextQueue).queueSource
       : get().queueSource
     const parsed = parseQueuePdql(pdql)
-    if (parsed.ok && findingUuidFromAst(parsed.ast)) {
-      get().warnFindingFilterExclusive(investigationId)
-      return
-    }
     if (queueSource === 'events' && parsed.ok && parsed.ast.groups.some((group) => group.field === field)) {
       get().drillGroupValue(investigationId, field, value)
       return
@@ -1523,7 +1505,9 @@ export const useAppStore = create<AppState>((set, get) => ({
       value,
     )
     // Involved host/account filters belong on the entities queue, not SIEM PDQL events.
-    const switchToEntities = isEntityQueueField(field)
+    // Keep events when a finding resolve chip is active — extras are client-side.
+    const switchToEntities =
+      isEntityQueueField(field) && !(parsed.ok && findingUuidFromAst(parsed.ast))
     if (!investigationId) {
       if (switchToEntities) {
         set({
@@ -1586,21 +1570,6 @@ export const useAppStore = create<AppState>((set, get) => ({
           groupValues: [],
           eventGroups: [],
         },
-      },
-    })
-  },
-
-  warnFindingFilterExclusive: (investigationId) => {
-    const now = Date.now()
-    if (!investigationId) {
-      set({ findingFilterWarnAt: now })
-      return
-    }
-    const cur = get().contextQueue[investigationId] ?? emptyContextQueue
-    set({
-      contextQueue: {
-        ...get().contextQueue,
-        [investigationId]: { ...cur, findingFilterWarnAt: now },
       },
     })
   },
