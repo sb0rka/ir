@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { Clock } from 'lucide-react'
 import type { Severity } from '../../types'
 import { useAppStore } from '../../store/appStore'
@@ -16,12 +16,14 @@ export function EventTimeButton({
   onChange,
   onExecute,
   severity,
+  extra,
 }: {
   time: string
   current: TimeInterval
   onChange: (value: TimeInterval) => void
   onExecute: (value: TimeInterval) => void
   severity?: Severity
+  extra?: ReactNode
 }) {
   const [open, setOpen] = useState(false)
   const display = useAppStore((s) => s.displayTimeZone)
@@ -43,7 +45,10 @@ export function EventTimeButton({
         <Clock className="h-3 w-3 text-fg-dim" />
         {formatEventTime(time)}
       </button>
-      {severity ? <SeverityBadge severity={severity} /> : null}
+      <div className="flex items-center gap-1.5">
+        {extra}
+        {severity ? <SeverityBadge severity={severity} /> : null}
+      </div>
       {open && (
         <TimeIntervalPopover
           value={intervalAroundInstant(time, current)}

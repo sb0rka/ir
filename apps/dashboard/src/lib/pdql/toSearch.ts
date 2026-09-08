@@ -1,7 +1,14 @@
 import { isFindingFilterField, type FindingFilterField } from './append'
 import type { FilterChip } from '../../types'
-import type { Condition, QueryAst } from './model'
-import { formatCondition } from './serialize'
+import { isFilterGroup, type Condition, type FilterNode, type QueryAst } from './model'
+import {
+  collectConditions,
+  filterListOf,
+  pruneFilterBy,
+  walkConditions,
+  withFilterList,
+} from './filterTree'
+import { formatCondition, formatFilterList } from './serialize'
 import {
   defaultWorkingTimeZone,
   parseTimestamp,
@@ -46,32 +53,6 @@ export function isEntityQueueField(field: string): boolean {
   return field === 'host' || field === 'account' || field === 'user' || field === 'ip' || field === 'process'
 }
 
-function quote(value: string): string {
-  return `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`
-}
-
-function isNumericLiteral(value: string): boolean {
-  return /^-?\d+(\.\d+)?$/.test(value)
-}
-
-function formatValue(value: string): string {
-  return isNumericLiteral(value) ? value : quote(value)
-}
-
-function formatPredicate(condition: Condition): string {
-  const prefix = condition.negated ? 'not ' : ''
-  switch (condition.op) {
-    case 'is_null':
-      return `${prefix}${condition.field} is null`
-    case 'is_not_null':
-      return `${prefix}${condition.field} is not null`
-    case 'in':
-      return `${prefix}${condition.field} in (${condition.values.map(formatValue).join(', ')})`
-    default:
-      return `${prefix}${condition.field} ${condition.op} ${formatValue(condition.value)}`
-  }
-}
-
 function isMappedEntity(condition: Condition): boolean {
   if (condition.negated) return false
   if (condition.op !== '=' && condition.op !== 'in') return false
@@ -94,30 +75,22 @@ function conditionValues(condition: Condition): string[] {
   return condition.value ? [condition.value] : []
 }
 
+function nodeHasTime(node: FilterNode): boolean {
+  if (isFilterGroup(node)) return node.children.some(nodeHasTime)
+  return node.field === 'time'
+}
+
 export function pdqlToSearchParts(ast: QueryAst): PdqlSearchParts {
   const entities: PdqlSearchEntity[] = []
-  const queryBits: string[] = []
-
-  ast.filter.forEach((condition, index) => {
-    if (isMappedEntity(condition)) {
-      const type = ENTITY_FIELDS[condition.field]
-      for (const value of conditionValues(condition)) {
-        entities.push({ type, value })
-      }
-      return
+  walkConditions(ast.filter, (condition) => {
+    if (!isMappedEntity(condition)) return
+    const type = ENTITY_FIELDS[condition.field]!
+    for (const value of conditionValues(condition)) {
+      entities.push({ type, value })
     }
-    // Time bounds go to gateway time_range (findings) / SIEM filter (events), not title text search.
-    if (isTimeBound(condition)) return
-    const predicate = formatPredicate(condition)
-    if (queryBits.length === 0) {
-      queryBits.push(predicate)
-      return
-    }
-    const joiner = ast.joiners[index - 1] ?? 'and'
-    queryBits.push(`${joiner} ${predicate}`)
   })
-
-  return { entities, query: queryBits.join(' ') }
+  const pruned = pruneFilterBy(filterListOf(ast), (condition) => isMappedEntity(condition) || isTimeBound(condition))
+  return { entities, query: formatFilterList(pruned.nodes, pruned.joiners).trim() }
 }
 
 const SECOND_MS = 1000
@@ -130,24 +103,37 @@ export type TimeIntervalFromAstResult = {
 }
 
 function assertSingleTimeWindow(ast: QueryAst): void {
-  for (let index = 0; index < ast.filter.length; index++) {
-    const condition = ast.filter[index]!
-    if (condition.field !== 'time') continue
-    if (condition.negated) {
+  assertTimeList(filterListOf(ast))
+}
+
+function assertTimeList(list: { nodes: FilterNode[]; joiners: QueryAst['joiners'] }): void {
+  for (let index = 0; index < list.nodes.length; index++) {
+    const node = list.nodes[index]!
+    if (nodeHasTime(node)) {
+      if (isFilterGroup(node) && node.negated) {
+        throw new Error('NOT time в PDQL не поддерживается для окна времени')
+      }
+      if (index > 0 && (list.joiners[index - 1] ?? 'and') === 'or') {
+        throw new Error(
+          'Несколько окон времени в PDQL не поддерживаются — используйте одно AND-окно (time >= … and time <= …)',
+        )
+      }
+      if (index < list.nodes.length - 1 && (list.joiners[index] ?? 'and') === 'or') {
+        throw new Error(
+          'Несколько окон времени в PDQL не поддерживаются — используйте одно AND-окно (time >= … and time <= …)',
+        )
+      }
+    }
+    if (isFilterGroup(node)) {
+      assertTimeList({ nodes: node.children, joiners: node.joiners })
+      continue
+    }
+    if (node.field !== 'time') continue
+    if (node.negated) {
       throw new Error('NOT time в PDQL не поддерживается для окна времени')
     }
-    if (!isTimeBound(condition)) {
-      throw new Error(`Оператор time ${condition.op} не поддерживается для окна времени`)
-    }
-    if (index > 0 && (ast.joiners[index - 1] ?? 'and') === 'or') {
-      throw new Error(
-        'Несколько окон времени в PDQL не поддерживаются — используйте одно AND-окно (time >= … and time <= …)',
-      )
-    }
-    if (index < ast.filter.length - 1 && (ast.joiners[index] ?? 'and') === 'or') {
-      throw new Error(
-        'Несколько окон времени в PDQL не поддерживаются — используйте одно AND-окно (time >= … and time <= …)',
-      )
+    if (!isTimeBound(node)) {
+      throw new Error(`Оператор time ${node.op} не поддерживается для окна времени`)
     }
   }
 }
@@ -169,7 +155,7 @@ export function timeIntervalFromAst(
   let toMs = Date.parse(fallbackRange.to)
   let touched = false
 
-  for (const condition of ast.filter) {
+  for (const condition of collectConditions(ast.filter)) {
     if (!isTimeBound(condition)) continue
     const iso = parseTimestamp(condition.value.trim(), timeZone)
     if (!iso) {
@@ -268,20 +254,38 @@ function isDefaultSort(sort: { field: string; direction: 'asc' | 'desc' }[]): bo
   return sort.length === 1 && sort[0]?.field === 'time' && sort[0]?.direction === 'desc'
 }
 
+function groupFieldNames(ast: QueryAst): string[] {
+  return ast.groups.map((group) => group.field)
+}
+
+function matchingGroupPrefixLength(previous: string[], next: string[]): number {
+  const limit = Math.min(previous.length, next.length)
+  let index = 0
+  while (index < limit && previous[index] === next[index]) index += 1
+  return index
+}
+
 /**
  * Align selected group values to the current PDQL groups.
  * A missing or empty slot means "not chosen yet". JSON null is the source
  * null group ("Нет данных") and must be kept as an explicit selection.
+ * When `previousGroupFields` is passed, values past the unchanged group prefix
+ * are dropped so a new grouping does not keep the old selection as a filter.
  */
 export function alignGroupValues(
   ast: QueryAst,
   values: (string | null)[] | undefined,
+  previousGroupFields?: string[],
 ): (string | null)[] {
   if (ast.groups.length === 0) return []
+  const allowed =
+    previousGroupFields === undefined
+      ? values
+      : (values ?? []).slice(0, matchingGroupPrefixLength(previousGroupFields, groupFieldNames(ast)))
   const aligned: (string | null)[] = []
   for (let index = 0; index < ast.groups.length; index++) {
-    if (index >= (values?.length ?? 0)) break
-    const value = values![index]
+    if (index >= (allowed?.length ?? 0)) break
+    const value = allowed![index]
     if (value === '') break
     aligned.push(value ?? null)
   }
@@ -352,12 +356,12 @@ export function astToEventAggregate(ast: QueryAst): EventAggregateParts | undefi
   return parts
 }
 
-/** Finding resolve chip, even when other filters are also present (they are ignored). */
+/** Finding resolve chip. Extra filters stay in the AST and are applied client-side after resolve. */
 export function findingUuidFromAst(ast: QueryAst): {
   uuid: string
   recordType: FindingFilterField
 } | null {
-  for (const condition of ast.filter) {
+  for (const condition of collectConditions(ast.filter)) {
     if (!isFindingFilterField(condition.field) || condition.op !== '=' || condition.negated) continue
     const value = condition.value.trim()
     if (!value) continue
@@ -372,15 +376,12 @@ export function astToEventSearch(
 ): EventSearchParts {
   // Entity predicates go in gateway `entities`, not MaxPatrol PDQL `filter`
   // (bare `host = "…"` is invalid SIEM syntax and fails all sources).
-  const kept: Condition[] = []
-  const joiners: QueryAst['joiners'] = []
-  for (let index = 0; index < ast.filter.length; index++) {
-    const condition = ast.filter[index]!
-    if (isMappedEntity(condition)) continue
-    if (kept.length > 0) joiners.push(ast.joiners[index - 1] ?? 'and')
-    kept.push(condition)
-  }
-  const filter = formatCondition({ ...ast, filter: kept, joiners }).trim()
+  // Finding UUID chips select context/resolve and are not valid SIEM PDQL.
+  const kept = pruneFilterBy(
+    filterListOf(ast),
+    (condition) => isMappedEntity(condition) || isFindingFilterField(condition.field),
+  )
+  const filter = formatCondition(withFilterList(ast, kept)).trim()
   const sort = ast.columns
     .filter((column) => column.sort && column.field && !column.aggregate)
     .slice()
@@ -397,7 +398,11 @@ export function astToEventSearch(
   }
   const entityParts = pdqlToSearchParts(ast)
   parts.hasControls = Boolean(
-    parts.filter || parts.sort || parts.group_by || entityParts.entities.length > 0,
+    parts.filter ||
+      parts.sort ||
+      parts.group_by ||
+      entityParts.entities.length > 0 ||
+      findingUuidFromAst(ast),
   )
   return parts
 }

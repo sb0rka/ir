@@ -3,6 +3,7 @@ import {
   DEFAULT_QUEUE_LIMIT,
   defaultQuery,
   effectiveQueueLimit,
+  isFilterGroup,
   withExplicitLimit,
   withoutIds,
   type QueryAst,
@@ -22,8 +23,9 @@ import {
   queueSelectFields,
   timeIntervalFromAst,
 } from './toSearch'
-import { addFieldToAst, addFieldToPdql, setGroupAggregate } from './ast'
+import { addFieldToAst, addFieldToPdql, removeGroup, setGroupAggregate } from './ast'
 import { appendCondition, findingUuidQuery } from './append'
+import { collectConditions, ungroupFilter, wrapFilterAdjacent } from './filterTree'
 import { relatedFieldColumns } from './relatedFields'
 
 function mustParse(text: string): QueryAst {
@@ -163,6 +165,44 @@ describe('parse', () => {
     expect(result.error.message).toMatch(/стадия/)
   })
 
+  it('parses a parenthesized or-group and round-trips', () => {
+    const text =
+      'filter(event_src.host = "dkrylova.plat.form" and (object.process.chain contains "splunkd.exe" or subject.process.chain contains "splunkd.exe")) | select(time)'
+    expect(serialize(mustParse(text))).toBe(text)
+    roundTrip(mustParse(text))
+  })
+
+  it('accepts parentheses after and that previously failed as a field name', () => {
+    const result = parse(
+      'filter(event_src.host = "dkrylova.plat.form" and (object.process.chain contains "splunkd.exe" or subject.process.chain contains "splunkd.exe"))',
+    )
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.ast.filter).toHaveLength(2)
+    expect(isFilterGroup(result.ast.filter[1]!)).toBe(true)
+  })
+
+  it('parses not wrapping a group', () => {
+    const text = 'filter(not (action = "login" or status = "fail")) | select(time)'
+    expect(serialize(mustParse(text))).toBe(text)
+  })
+
+  it('unwraps redundant outer parentheses', () => {
+    expect(serialize(mustParse('filter((action = "login" or status = "fail"))'))).toBe(
+      'filter(action = "login" or status = "fail")',
+    )
+  })
+
+  it('keeps in-lists distinct from grouping parentheses', () => {
+    expect(
+      serialize(
+        mustParse(
+          'filter(src.ip in ("10.0.0.1", "10.0.0.2") and (action = "login" or action = "logout"))',
+        ),
+      ),
+    ).toBe('filter(src.ip in ("10.0.0.1", "10.0.0.2") and (action = "login" or action = "logout"))')
+  })
+
   it('caps a SIEM limit and accepts a repeated sort after grouping', () => {
     const text =
       'filter(event_src.host = "dkrylova.plat.form") | select(time, event_src.host, text, object.process.cmdline) | sort(time asc) | group(key: [action], agg: COUNT(*) as Cnt) | sort(Cnt desc) | limit(10000)'
@@ -179,6 +219,28 @@ describe('parse', () => {
 
   it('treats group(key) as a field name', () => {
     expect(serialize(mustParse('group(key) | select(key, count())'))).toBe('group(key) | select(key, count())')
+  })
+})
+
+describe('filter groups', () => {
+  it('wraps two adjacent conditions into a parenthesized group', () => {
+    const ast = mustParse(
+      'filter(event_src.host = "dkrylova.plat.form" and object.process.chain contains "splunkd.exe" or subject.process.chain contains "splunkd.exe")',
+    )
+    expect(serialize(wrapFilterAdjacent(ast, null, 1))).toBe(
+      'filter(event_src.host = "dkrylova.plat.form" and (object.process.chain contains "splunkd.exe" or subject.process.chain contains "splunkd.exe"))',
+    )
+  })
+
+  it('ungroups a parenthesized pair back to a flat list', () => {
+    const ast = mustParse(
+      'filter(event_src.host = "dkrylova.plat.form" and (object.process.chain contains "splunkd.exe" or subject.process.chain contains "splunkd.exe"))',
+    )
+    const group = ast.filter.find(isFilterGroup)
+    expect(group).toBeTruthy()
+    expect(serialize(ungroupFilter(ast, group!.id))).toBe(
+      'filter(event_src.host = "dkrylova.plat.form" and object.process.chain contains "splunkd.exe" or subject.process.chain contains "splunkd.exe")',
+    )
   })
 })
 
@@ -233,6 +295,17 @@ describe('pdqlToSearchParts', () => {
       query: 'action = "login"',
     })
   })
+
+  it('keeps parentheses when stripping a mapped entity outside a group', () => {
+    const ast = mustParse(
+      'filter(event_src.host = "dc01" and (action = "login" or text contains "fail")) | select(time)',
+    )
+    expect(pdqlToSearchParts(ast)).toEqual({
+      entities: [{ type: 'host', value: 'dc01' }],
+      query: '(action = "login" or text contains "fail")',
+    })
+    expect(astToEventSearch(ast).filter).toBe('(action = "login" or text contains "fail")')
+  })
 })
 
 describe('pdqlToChips', () => {
@@ -259,16 +332,16 @@ describe('pdqlToChips', () => {
 
   it('removing a filter chip keeps the remaining query', () => {
     const ast = mustParse('filter(action = "login" and event_src.host = "dc01") | select(time)')
-    const host = ast.filter.find((condition) => condition.field === 'event_src.host')
+    const host = collectConditions(ast.filter).find((condition) => condition.field === 'event_src.host')
     expect(host).toBeTruthy()
     expect(serializeWithoutChip(ast, host!.id)).toBe('filter(action = "login") | select(time)')
   })
 
-  it('removing a group chip restores the field as a column', () => {
+  it('removing a group chip does not keep the field as a column', () => {
     const ast = mustParse('group(action) | select(action, count(time))')
     const group = ast.groups[0]
     expect(group).toBeTruthy()
-    expect(serializeWithoutChip(ast, group!.id)).toBe('select(action, time)')
+    expect(serializeWithoutChip(ast, group!.id)).toBe('select(time)')
   })
 
   it('hides group count() from chips and restores it as time', () => {
@@ -276,7 +349,7 @@ describe('pdqlToChips', () => {
     expect(pdqlToChips(ast).map((chip) => chip.label)).toEqual(['group action'])
     const group = ast.groups[0]
     expect(group).toBeTruthy()
-    expect(serializeWithoutChip(ast, group!.id)).toBe('select(action, time) | sort(time desc)')
+    expect(serializeWithoutChip(ast, group!.id)).toBe('select(time) | sort(time desc)')
   })
 
   it('toggling a sorted column chip flips direction', () => {
@@ -394,9 +467,12 @@ describe('addFieldToPdql', () => {
     expect(serialize(ast)).toBe('group(action) | select(action, count(), time)')
   })
 
-  it('keeps extra measure columns and changes the group aggregate', () => {
+  it('keeps plain select columns and changes the group aggregate', () => {
     expect(addFieldToPdql('select(time, src.ip)', 'action', 'groups')).toBe(
-      'group(action) | select(action, count(), time, count(src.ip))',
+      'group(action) | select(action, count(), time, src.ip)',
+    )
+    expect(addFieldToPdql('select(time, object.process.cmdline)', 'importance', 'groups')).toBe(
+      'group(importance) | select(importance, count(), time, object.process.cmdline)',
     )
     const ast = addFieldToAst(
       {
@@ -417,7 +493,17 @@ describe('addFieldToPdql', () => {
     const ast = addFieldToAst(defaultQuery(), 'action', 'groups')
     expect(serialize(ast)).toBe('group(action) | select(action, count(), time) | sort(time desc) | limit(100)')
     expect(serializeWithoutChip(ast, ast.groups[0]!.id)).toBe(
-      'select(action, time) | sort(time desc) | limit(100)',
+      'select(time) | sort(time desc) | limit(100)',
+    )
+  })
+
+  it('removing a group does not move the field into columns', () => {
+    const grouped = addFieldToAst(addFieldToAst(defaultQuery(), 'action', 'groups'), 'event_src.host', 'groups')
+    const next = removeGroup(grouped, grouped.groups[0]!.id)
+    expect(next.groups.map((group) => group.field)).toEqual(['event_src.host'])
+    expect(next.columns.some((column) => column.field === 'action' && !column.aggregate)).toBe(false)
+    expect(serialize(next)).toBe(
+      'group(event_src.host) | select(event_src.host, count(), time) | sort(time desc) | limit(100)',
     )
   })
 })
@@ -501,6 +587,20 @@ describe('astToEventSearch', () => {
       hasControls: true,
     })
   })
+
+  it('drops finding UUID chips from the SIEM wire filter', () => {
+    expect(astToEventSearch(mustParse(findingUuidQuery('inc-1', 'siem_incident')))).toEqual({
+      hasControls: true,
+    })
+    expect(
+      astToEventSearch(
+        mustParse('filter(siem_incident = "inc-1" and action = "login") | select(time) | sort(time desc)'),
+      ),
+    ).toEqual({
+      filter: 'action = "login"',
+      hasControls: true,
+    })
+  })
 })
 
 describe('alignGroupValues', () => {
@@ -517,6 +617,18 @@ describe('alignGroupValues', () => {
   it('drops values when groups are removed from the query', () => {
     const ast = mustParse('select(time)')
     expect(alignGroupValues(ast, ['dc01'])).toEqual([])
+  })
+
+  it('drops the selection when grouping fields change', () => {
+    const ast = mustParse('group(action) | select(time)')
+    expect(alignGroupValues(ast, ['dc01'], ['event_src.host'])).toEqual([])
+    expect(alignGroupValues(ast, ['login'], ['action'])).toEqual(['login'])
+  })
+
+  it('keeps a matching prefix when a deeper group is added', () => {
+    const ast = mustParse('group(event_src.host, action) | select(time)')
+    expect(alignGroupValues(ast, ['dc01'], ['event_src.host'])).toEqual(['dc01'])
+    expect(alignGroupValues(ast, ['dc01', 'login'], ['action', 'event_src.host'])).toEqual([])
   })
 })
 

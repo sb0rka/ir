@@ -7,6 +7,7 @@ import {
   isGroupCountColumn,
   newId,
 } from './model'
+import { appendFilterNode } from './filterTree'
 import { parse } from './parse'
 import { serialize } from './serialize'
 
@@ -35,13 +36,8 @@ export function applyGroupInvariant(query: QueryAst): QueryAst {
   if (!columns.some(isGroupCountColumn)) {
     columns = [{ id: newId('col'), field: '', aggregate: 'count' as const }, ...columns]
   }
-  return {
-    ...query,
-    columns: columns.map((column) => {
-      if (column.aggregate || column.field === 'time') return column
-      return { ...column, aggregate: 'count' as const }
-    }),
-  }
+  // Keep plain select fields as-is; grouping only requires a measure column (count()).
+  return { ...query, columns }
 }
 
 export function setGroupAggregate(query: QueryAst, aggregate: AggregateFn): QueryAst {
@@ -64,9 +60,7 @@ export function setGroupAggregate(query: QueryAst, aggregate: AggregateFn): Quer
 
 export function addColumn(query: QueryAst, field: string): QueryAst {
   if (query.columns.some((column) => column.field === field && !column.aggregate)) return query
-  const groupFields = new Set(query.groups.map((group) => group.field))
-  const aggregate = query.groups.length > 0 && !groupFields.has(field) ? ('count' as const) : undefined
-  return { ...query, columns: [...query.columns, { id: newId('col'), field, aggregate }] }
+  return { ...query, columns: [...query.columns, { id: newId('col'), field }] }
 }
 
 export function addGroup(query: QueryAst, field: string): QueryAst {
@@ -81,30 +75,30 @@ export function removeGroup(query: QueryAst, id: string): QueryAst {
   const removed = query.groups.find((group) => group.id === id)
   if (!removed) return query
   const groups = query.groups.filter((group) => group.id !== id)
-  const hasColumn = query.columns.some((column) => column.field === removed.field && !column.aggregate)
-  const columns = hasColumn
-    ? query.columns
-    : [{ id: newId('col'), field: removed.field }, ...query.columns]
+  const columns = query.columns.filter(
+    (column) => column.field !== removed.field || Boolean(column.aggregate),
+  )
   return applyGroupInvariant({ ...query, groups, columns })
 }
 
-export function addFilter(query: QueryAst, field: string, fields: EventFieldDef[] = []): QueryAst {
-  const joiners = query.filter.length === 0 ? query.joiners : [...query.joiners, 'and' as const]
-  return {
-    ...query,
-    filter: [
-      ...query.filter,
-      {
-        id: newId('cond'),
-        field,
-        op: defaultOpForType(fieldType(fields, field)),
-        value: '',
-        values: [],
-        negated: false,
-      },
-    ],
-    joiners,
-  }
+export function addFilter(
+  query: QueryAst,
+  field: string,
+  fields: EventFieldDef[] = [],
+  parentId: string | null = null,
+): QueryAst {
+  return appendFilterNode(
+    query,
+    {
+      id: newId('cond'),
+      field,
+      op: defaultOpForType(fieldType(fields, field)),
+      value: '',
+      values: [],
+      negated: false,
+    },
+    parentId,
+  )
 }
 
 export function addFieldToAst(
@@ -112,8 +106,9 @@ export function addFieldToAst(
   name: string,
   section: ActiveSection,
   fields: EventFieldDef[] = [],
+  parentId: string | null = null,
 ): QueryAst {
-  if (section === 'filter') return addFilter(query, name, fields)
+  if (section === 'filter') return addFilter(query, name, fields, parentId)
   if (section === 'columns') return addColumn(query, name)
   return addGroup(query, name)
 }

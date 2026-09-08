@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ChevronLeft, RefreshCw } from 'lucide-react'
+import { ChevronLeft, List, RefreshCw } from 'lucide-react'
 import { resolveFindingEvents } from '../../api/search'
 import { errorMessage } from '../../api/error'
 import { findingResolveKey } from '../../lib/correlationSubevents'
@@ -54,6 +54,7 @@ function SectionRetryButton({
 
 export function EventCard({
   event,
+  sourceAlert,
   investigationId,
   eventInContext = false,
   timeInterval,
@@ -62,8 +63,11 @@ export function EventCard({
   onAddFilter,
   onFilterFindingUuid,
   onAddToContext,
+  onActiveAlertChange,
+  onShowQueue,
 }: {
   event: EventCardModel
+  sourceAlert?: AlertEvent
   investigationId?: string
   eventInContext?: boolean
   timeInterval: TimeInterval
@@ -72,9 +76,11 @@ export function EventCard({
   onAddFilter: (field: string, value: string) => void
   onFilterFindingUuid?: (uuid: string, recordType: 'siem_incident' | 'siem_correlation') => void
   onAddToContext?: (field: string, value: string, includeEvent: boolean) => Promise<void>
+  onActiveAlertChange?: (alert: AlertEvent) => void
+  onShowQueue?: () => void
 }) {
   const [picked, setPicked] = useState<{ field: string; value: string } | null>(null)
-  const [openSubevent, setOpenSubevent] = useState<EventCardModel | null>(null)
+  const [openSubevent, setOpenSubevent] = useState<AlertEvent | null>(null)
   const raw = event.raw ?? {}
   const findingRecordType =
     event.findingRef?.record_type === 'siem_incident' ||
@@ -106,14 +112,18 @@ export function EventCard({
         <button
           type="button"
           className="inline-flex max-w-full items-center gap-1 text-xs text-fg-muted hover:text-fg"
-          onClick={() => setOpenSubevent(null)}
+          onClick={() => {
+            setOpenSubevent(null)
+            if (sourceAlert) onActiveAlertChange?.(sourceAlert)
+          }}
           title={backLabel}
         >
           <ChevronLeft className="h-3.5 w-3.5 shrink-0" />
           <span className="truncate">{backLabel}</span>
         </button>
         <EventCard
-          event={openSubevent}
+          event={eventCardModelFromAlert(openSubevent)}
+          sourceAlert={openSubevent}
           investigationId={investigationId}
           eventInContext={eventInContext}
           timeInterval={timeInterval}
@@ -122,6 +132,7 @@ export function EventCard({
           onAddFilter={onAddFilter}
           onFilterFindingUuid={onFilterFindingUuid}
           onAddToContext={onAddToContext}
+          onActiveAlertChange={onActiveAlertChange}
         />
       </div>
     )
@@ -136,6 +147,19 @@ export function EventCard({
           onChange={onTimeChange}
           onExecute={onTimeExecute}
           severity={event.severity}
+          extra={
+            onShowQueue ? (
+              <button
+                type="button"
+                title="Показать очередь"
+                aria-label="Показать очередь"
+                className="inline-flex shrink-0 items-center justify-center rounded p-0.5 text-fg-muted hover:text-fg"
+                onClick={onShowQueue}
+              >
+                <List className="h-3.5 w-3.5" />
+              </button>
+            ) : undefined
+          }
         />
         <div className="text-sm font-medium leading-snug">{event.title}</div>
         {event.description && event.description !== event.title && (
@@ -150,7 +174,10 @@ export function EventCard({
       <CorrelationSubevents
         event={event}
         timeInterval={timeInterval}
-        onOpen={(subevent) => setOpenSubevent(eventCardModelFromAlert(subevent))}
+        onOpen={(subevent) => {
+          setOpenSubevent(subevent)
+          onActiveAlertChange?.(subevent)
+        }}
         onValueClick={onValueClick}
       />
       {picked && (

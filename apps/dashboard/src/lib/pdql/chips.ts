@@ -1,5 +1,6 @@
 import { FINDING_FILTER_LABELS, isFindingFilterField } from './append'
 import { removeGroup } from './ast'
+import { collectConditions, removeFilterNode } from './filterTree'
 import { isGroupCountColumn, isGroupDimensionColumn, type QueryAst, type SortDir } from './model'
 import { formatConditionLabel, serialize } from './serialize'
 
@@ -35,7 +36,7 @@ function formatSelectLabel(ast: QueryAst, columnId: string): string {
 }
 
 export function pdqlToChips(ast: QueryAst): PdqlChip[] {
-  const chips: PdqlChip[] = ast.filter.map((condition) => ({
+  const chips: PdqlChip[] = collectConditions(ast.filter).map((condition) => ({
     id: condition.id,
     kind: 'filter',
     field: condition.field,
@@ -71,14 +72,8 @@ export function toggleChipSort(ast: QueryAst, id: string): QueryAst {
 }
 
 export function removePdqlChip(ast: QueryAst, id: string): QueryAst {
-  const filterIndex = ast.filter.findIndex((item) => item.id === id)
-  if (filterIndex >= 0) {
-    const filter = ast.filter.filter((item) => item.id !== id)
-    const joiners = ast.joiners.filter((_, joinerIndex) =>
-      filterIndex === 0 ? joinerIndex !== 0 : joinerIndex !== filterIndex - 1,
-    )
-    return { ...ast, filter, joiners }
-  }
+  const next = removeFilterNode(ast, id)
+  if (next !== ast) return next
   if (ast.groups.some((group) => group.id === id)) {
     return removeGroup(ast, id)
   }

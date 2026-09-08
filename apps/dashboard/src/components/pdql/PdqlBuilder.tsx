@@ -31,11 +31,11 @@ export function PdqlBuilder({ onClose }: { onClose: () => void }) {
     if (!over) return
     const activeData = active.data.current as
       | { type: 'field'; name: string }
-      | { type: 'row'; section: 'filter' | 'columns' | 'groups'; index: number }
+      | { type: 'row'; section: 'filter' | 'columns' | 'groups'; index: number; parentId?: string | null }
       | undefined
     const overData = over.data.current as
       | { type: 'section'; section: 'filter' | 'columns' | 'groups' }
-      | { type: 'row'; section: 'filter' | 'columns' | 'groups'; index: number }
+      | { type: 'row'; section: 'filter' | 'columns' | 'groups'; index: number; parentId?: string | null }
       | undefined
     if (activeData?.type === 'field') {
       const section =
@@ -57,7 +57,15 @@ export function PdqlBuilder({ onClose }: { onClose: () => void }) {
       activeData.section === overData.section &&
       active.id !== over.id
     ) {
-      reorder(activeData.section, activeData.index, overData.index)
+      if (activeData.section === 'filter' && (activeData.parentId ?? null) !== (overData.parentId ?? null)) {
+        return
+      }
+      reorder(
+        activeData.section,
+        activeData.index,
+        overData.index,
+        activeData.section === 'filter' ? (activeData.parentId ?? null) : null,
+      )
     }
   }
 
