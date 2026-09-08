@@ -58,3 +58,4 @@ task db:down
 Группировка entities/events в рамках дерева расследования, API и frontend handoff —
 в [docs/grouping.md](docs/grouping.md). Dashboard пока использует прежний raw graph.
 Правила разработки — в [AGENTS.md](AGENTS.md).
+Добавление находок без вложенных событий — в [docs/context-import.md](docs/context-import.md).

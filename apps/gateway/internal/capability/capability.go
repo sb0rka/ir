@@ -30,7 +30,7 @@ type FindingPage struct {
 
 type FindingSource interface {
 	SearchFindings(context.Context, Access, SearchFindingsRequest) (FindingPage, error)
-	ResolveFinding(context.Context, Access, domain.SourceObjectRef) (ContextPage, error)
+	ResolveFinding(context.Context, Access, domain.SourceObjectRef, bool) (ContextPage, error)
 }
 
 type SearchSessionsRequest struct {

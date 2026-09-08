@@ -12,10 +12,11 @@ import (
 )
 
 type ResolveContextRequest struct {
-	Findings []domain.SourceObjectRef
-	Sessions []domain.SourceObjectRef
-	Events   []domain.EventSourceRef
-	Entities []domain.EntitySourceRef
+	ExpandFindings *bool
+	Findings       []domain.SourceObjectRef
+	Sessions       []domain.SourceObjectRef
+	Events         []domain.EventSourceRef
+	Entities       []domain.EntitySourceRef
 }
 
 type ResolveContextResult struct {
@@ -104,7 +105,7 @@ func (service *Service) ResolveContext(ctx context.Context, access ProjectAccess
 				var page capability.ContextPage
 				err := service.callProvider(requestCtx, access, provider, func(attemptCtx context.Context, providerAccess capability.Access) error {
 					var innerErr error
-					page, innerErr = provider.Findings.ResolveFinding(attemptCtx, providerAccess, ref)
+					page, innerErr = provider.Findings.ResolveFinding(attemptCtx, providerAccess, ref, request.ExpandFindings == nil || *request.ExpandFindings)
 					return innerErr
 				})
 				if err != nil {
