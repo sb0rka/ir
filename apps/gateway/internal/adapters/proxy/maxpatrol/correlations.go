@@ -138,6 +138,9 @@ func (client *Client) ResolveCorrelation(ctx context.Context, access Access, req
 	if err != nil {
 		return CorrelationResolution{}, err
 	}
+	if request.SkipContext {
+		return CorrelationResolution{Correlation: correlation, Complete: true}, nil
+	}
 	return client.resolveCorrelationRecord(ctx, access, request.TimeRange, correlation), nil
 }
 

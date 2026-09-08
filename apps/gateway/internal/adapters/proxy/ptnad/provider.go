@@ -130,7 +130,7 @@ func (provider *Provider) SearchFindings(ctx context.Context, access capability.
 	return page, nil
 }
 
-func (provider *Provider) ResolveFinding(ctx context.Context, access capability.Access, ref domain.SourceObjectRef) (capability.ContextPage, error) {
+func (provider *Provider) ResolveFinding(ctx context.Context, access capability.Access, ref domain.SourceObjectRef, expandFindings bool) (capability.ContextPage, error) {
 	storeID, timeRange, err := provider.validateObjectRef(ref, AttackRecordType)
 	if err != nil {
 		return capability.ContextPage{}, err
@@ -145,6 +145,9 @@ func (provider *Provider) ResolveFinding(ctx context.Context, access capability.
 	page := capability.ContextPage{
 		Findings:    []domain.Finding{root},
 		Resolutions: []domain.ObjectResolution{{Ref: root.Ref, Status: "complete", Errors: []domain.SourceError{}}},
+	}
+	if !expandFindings {
+		return page, nil
 	}
 	if attack.ParentSession == nil {
 		page.Resolutions[0].Status = "partial"

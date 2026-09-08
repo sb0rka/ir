@@ -884,8 +884,11 @@ type Relation struct {
 type ResolveContextRequest struct {
 	Entities *[]EntitySourceRef `json:"entities,omitempty"`
 	Events   *[]EventSourceRef  `json:"events,omitempty"`
-	Findings *[]SourceObjectRef `json:"findings,omitempty"`
-	Sessions *[]SourceObjectRef `json:"sessions,omitempty"`
+
+	// ExpandFindings Expand selected findings into child context. False returns only their root snapshots, without derived findings, sessions, events or entities. Explicit sessions, events and entities are still resolved normally. Omitted means true. Resolution status describes completeness of the requested scope.
+	ExpandFindings *bool              `json:"expand_findings,omitempty"`
+	Findings       *[]SourceObjectRef `json:"findings,omitempty"`
+	Sessions       *[]SourceObjectRef `json:"sessions,omitempty"`
 }
 
 // ResolveContextResponse Normalized records and relationships resolved from source-owned identifiers.

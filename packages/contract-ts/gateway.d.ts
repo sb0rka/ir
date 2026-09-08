@@ -588,6 +588,8 @@ export interface components {
         };
         /** @description Source records selected by a client for persistence in an investigation. */
         ResolveContextRequest: {
+            /** @description Expand selected findings into child context. False returns only their root snapshots, without derived findings, sessions, events or entities. Explicit sessions, events and entities are still resolved normally. Omitted means true. Resolution status describes completeness of the requested scope. */
+            expand_findings?: boolean;
             findings?: components["schemas"]["SourceObjectRef"][];
             sessions?: components["schemas"]["SourceObjectRef"][];
             events?: components["schemas"]["EventSourceRef"][];

@@ -313,8 +313,9 @@ type CorrelationPage struct {
 }
 
 type CorrelationResolveRequest struct {
-	ExternalID string
-	TimeRange  TimeRange
+	SkipContext bool
+	ExternalID  string
+	TimeRange   TimeRange
 }
 
 type CorrelationResolution struct {
@@ -325,8 +326,9 @@ type CorrelationResolution struct {
 }
 
 type IncidentResolveRequest struct {
-	ExternalID string
-	TimeRange  TimeRange
+	SkipContext bool
+	ExternalID  string
+	TimeRange   TimeRange
 }
 
 type IncidentResolution struct {

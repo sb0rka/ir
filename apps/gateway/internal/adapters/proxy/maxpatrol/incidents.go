@@ -98,6 +98,9 @@ func (client *Client) ResolveIncident(ctx context.Context, access Access, reques
 		return IncidentResolution{}, err
 	}
 	result := IncidentResolution{Incident: root, Complete: true}
+	if request.SkipContext {
+		return result, nil
+	}
 
 	events, truncated, err := fetchIncidentPages(client, ctx, access, root.ID, "events", func(page incidentChildrenEnvelope) []IncidentEvent { return page.Events })
 	if err != nil {

@@ -2412,6 +2412,8 @@ export interface components {
         };
         /** @description Source-owned identifiers selected in Gateway. At least one item across all four arrays is required; the server validates that aggregate rule. */
         ContextSelection: {
+            /** @description Expand selected findings (incidents, correlations, attacks) into child context. Set false to import only their root snapshots, without derived findings, sessions, events or entities. Explicitly selected sessions, events and entities are still resolved normally. Omitted means true. */
+            expand_findings?: boolean;
             /**
              * @description Marks directly selected events as the seed evidence that opened the investigation. Derived events are never marked as seed.
              * @default false

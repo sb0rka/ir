@@ -145,7 +145,7 @@ func (service *Service) GetFinding(ctx context.Context, access ProjectAccess, re
 	var page capability.ContextPage
 	err := service.callProvider(requestCtx, access, provider, func(attemptCtx context.Context, providerAccess capability.Access) error {
 		var innerErr error
-		page, innerErr = provider.Findings.ResolveFinding(attemptCtx, providerAccess, ref)
+		page, innerErr = provider.Findings.ResolveFinding(attemptCtx, providerAccess, ref, true)
 		return innerErr
 	})
 	if err != nil {

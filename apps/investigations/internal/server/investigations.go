@@ -136,7 +136,7 @@ func (s *Server) AddInvestigationContext(ctx context.Context, request investigat
 	if _, err := s.db.GetInvestigation(ctx, scope.ProjectID, request.InvestigationId.String()); err != nil {
 		return nil, storeError(err)
 	}
-	gatewayRequest := gatewayclient.ResolveContextRequest{}
+	gatewayRequest := gatewayclient.ResolveContextRequest{ExpandFindings: request.Body.ExpandFindings}
 	for _, ref := range request.Body.Findings {
 		converted, err := gatewaySourceObjectRef(ref)
 		if err != nil {
@@ -557,8 +557,12 @@ func convertGatewayContext(input gatewayclient.ResolveContextResponse, request g
 			Normalized: normalized, Provenance: provenance, ContextStatus: contextStatus,
 			ContextErrors: contextErrors, Direct: direct,
 		}
-		for _, entity := range finding.Entities {
-			item.EntitySnapshotIDs = append(item.EntitySnapshotIDs, entityKey(entity.Type, entity.Value))
+		// Root-only snapshots retain participant metadata without importing those
+		// participants, so they must not create references to absent entities.
+		if request.ExpandFindings == nil || *request.ExpandFindings || !direct {
+			for _, entity := range finding.Entities {
+				item.EntitySnapshotIDs = append(item.EntitySnapshotIDs, entityKey(entity.Type, entity.Value))
+			}
 		}
 		if finding.RelatedFindings != nil {
 			for _, related := range *finding.RelatedFindings {
@@ -1055,7 +1059,7 @@ func (s *Server) AddHypothesisContext(ctx context.Context, request investigation
 	if hypothesis.Status == "resolved" {
 		return nil, hypothesisStoreError(&store.ConflictError{IDs: []string{hypothesisID}})
 	}
-	gatewayRequest := gatewayclient.ResolveContextRequest{}
+	gatewayRequest := gatewayclient.ResolveContextRequest{ExpandFindings: request.Body.ExpandFindings}
 	for _, ref := range request.Body.Findings {
 		converted, err := gatewaySourceObjectRef(ref)
 		if err != nil {
