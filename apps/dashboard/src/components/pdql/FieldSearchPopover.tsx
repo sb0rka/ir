@@ -5,7 +5,13 @@ import type { ActiveSection } from '../../lib/pdql'
 import { Button } from '../ui'
 import { FieldSearchList } from './FieldSearchList'
 
-export function FieldSearchPopover({ section }: { section: ActiveSection }) {
+export function FieldSearchPopover({
+  section,
+  parentId = null,
+}: {
+  section: ActiveSection
+  parentId?: string | null
+}) {
   const fields = usePdqlStore((s) => s.fields)
   const fieldFreq = usePdqlStore((s) => s.fieldFreq)
   const addField = usePdqlStore((s) => s.addField)
@@ -52,11 +58,11 @@ export function FieldSearchPopover({ section }: { section: ActiveSection }) {
                 freq={fieldFreq}
                 query={query}
                 onChoose={(name) => {
-                  addField(name, section)
+                  addField(name, section, parentId)
                   setOpen(false)
                 }}
                 onActivate={(name) => {
-                  addField(name, section)
+                  addField(name, section, parentId)
                   setOpen(false)
                 }}
               />

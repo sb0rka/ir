@@ -1,11 +1,14 @@
 import {
   clampQueueLimit,
   emptyQuery,
+  isFilterGroup,
   newId,
   type AggregateFn,
   type Column,
   type CompareOp,
   type Condition,
+  type FilterGroup,
+  type FilterNode,
   type LogicalJoiner,
   type ParseResult,
   type QueryAst,
@@ -145,15 +148,49 @@ class Parser {
   }
 
   private parseFilter(ast: QueryAst) {
-    ast.filter.push(this.parseCondition())
-    while (this.peekKeyword('and') || this.peekKeyword('or')) {
-      ast.joiners.push(this.take().value.toLowerCase() as LogicalJoiner)
-      ast.filter.push(this.parseCondition())
+    if (this.peekPunct(')')) return
+    const list = this.parseFilterList()
+    const only = list.children.length === 1 ? list.children[0] : undefined
+    if (only && isFilterGroup(only) && !only.negated) {
+      ast.filter = only.children
+      ast.joiners = only.joiners
+      return
     }
+    ast.filter = list.children
+    ast.joiners = list.joiners
+  }
+
+  private parseFilterList(): { children: FilterNode[]; joiners: LogicalJoiner[] } {
+    const children = [this.parseTerm()]
+    const joiners: LogicalJoiner[] = []
+    while (this.peekKeyword('and') || this.peekKeyword('or')) {
+      joiners.push(this.take().value.toLowerCase() as LogicalJoiner)
+      children.push(this.parseTerm())
+    }
+    return { children, joiners }
+  }
+
+  private parseTerm(): FilterNode {
+    const negated = this.tryKeyword('not')
+    if (this.tryPunct('(')) {
+      const inner = this.parseFilterList()
+      this.expectPunct(')', 'ожидалась ) после группы')
+      if (inner.children.length === 1 && !negated) return inner.children[0]!
+      const group: FilterGroup = {
+        kind: 'group',
+        id: newId('fgrp'),
+        negated,
+        children: inner.children,
+        joiners: inner.joiners,
+      }
+      return group
+    }
+    const condition = this.parseCondition()
+    condition.negated = negated
+    return condition
   }
 
   private parseCondition(): Condition {
-    const negated = this.tryKeyword('not')
     const field = this.expectIdent('ожидалось имя поля')
     if (this.tryKeyword('is')) {
       const notNull = this.tryKeyword('not')
@@ -164,7 +201,7 @@ class Parser {
         op: notNull ? 'is_not_null' : 'is_null',
         value: '',
         values: [],
-        negated,
+        negated: false,
       }
     }
     if (this.tryKeyword('in')) {
@@ -175,11 +212,11 @@ class Parser {
         while (this.tryPunct(',')) values.push(this.parseLiteral())
       }
       this.expectPunct(')', 'ожидалась ) после списка in')
-      return { id: newId('cond'), field, op: 'in', value: '', values, negated }
+      return { id: newId('cond'), field, op: 'in', value: '', values, negated: false }
     }
     const op = this.parseCompareOp()
     const value = this.parseLiteral()
-    return { id: newId('cond'), field, op, value, values: [], negated }
+    return { id: newId('cond'), field, op, value, values: [], negated: false }
   }
 
   private parseCompareOp(): CompareOp {

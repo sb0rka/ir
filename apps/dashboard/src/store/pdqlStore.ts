@@ -7,10 +7,18 @@ import {
   fetchEventFields,
   groupCountColumn,
   loadFieldFreq,
+  moveFilterNode,
   parse,
+  removeFilterNode,
   removeGroup as removeGroupFromQuery,
+  reorderFilterNodes,
   serialize,
+  setFilterJoiner,
   setGroupAggregate as setGroupAggregateOnQuery,
+  toggleFilterGroupNegated,
+  ungroupFilter,
+  updateCondition as updateConditionInTree,
+  wrapFilterAdjacent,
   type ActiveSection,
   type AggregateFn,
   type Column,
@@ -46,20 +54,23 @@ interface PdqlState {
   defaultDatetimeIso: string
   loadFields: () => Promise<void>
   setActiveSection: (section: ActiveSection) => void
-  addField: (name: string, section?: ActiveSection) => void
+  addField: (name: string, section?: ActiveSection, parentId?: string | null) => void
   removeCondition: (id: string) => void
   updateCondition: (id: string, patch: Partial<Condition>) => void
-  setJoiner: (index: number, joiner: LogicalJoiner) => void
+  setJoiner: (parentId: string | null, index: number, joiner: LogicalJoiner) => void
+  wrapAdjacent: (parentId: string | null, joinerIndex: number) => void
+  ungroup: (groupId: string) => void
+  toggleGroupNegated: (groupId: string) => void
   removeColumn: (id: string) => void
   setColumnSort: (id: string, sort: Column['sort'] | undefined) => void
   setColumnAggregate: (id: string, aggregate: AggregateFn | undefined) => void
   setGroupAggregate: (aggregate: AggregateFn) => void
   setGroupSort: (sort: Column['sort'] | undefined) => void
   removeGroup: (id: string) => void
-  moveCondition: (index: number, delta: number) => void
+  moveCondition: (parentId: string | null, index: number, delta: number) => void
   moveColumn: (index: number, delta: number) => void
   moveGroup: (index: number, delta: number) => void
-  reorder: (section: ActiveSection, from: number, to: number) => void
+  reorder: (section: ActiveSection, from: number, to: number, parentId?: string | null) => void
   setPdqlDraft: (text: string) => void
   applyPdql: () => boolean
   initFrom: (pdql: string, defaultDatetimeIso?: string) => void
@@ -89,10 +100,10 @@ export const usePdqlStore = create<PdqlState>((set, get) => ({
 
   setActiveSection: (activeSection) => set({ activeSection }),
 
-  addField: (name, section) => {
+  addField: (name, section, parentId) => {
     const target = section ?? get().activeSection
     const { query, fields, fieldFreq } = get()
-    const next = addFieldToAst(query, name, target, fields)
+    const next = addFieldToAst(query, name, target, fields, parentId ?? null)
     set({
       ...commit(next),
       activeSection: target,
@@ -101,30 +112,27 @@ export const usePdqlStore = create<PdqlState>((set, get) => ({
   },
 
   removeCondition: (id) => {
-    const { query } = get()
-    const index = query.filter.findIndex((item) => item.id === id)
-    if (index < 0) return
-    const filter = query.filter.filter((item) => item.id !== id)
-    const joiners = query.joiners.filter((_, joinerIndex) =>
-      index === 0 ? joinerIndex !== 0 : joinerIndex !== index - 1,
-    )
-    set(commit({ ...query, filter, joiners }))
+    set(commit(removeFilterNode(get().query, id)))
   },
 
   updateCondition: (id, patch) => {
-    set(
-      commit({
-        ...get().query,
-        filter: get().query.filter.map((item) => (item.id === id ? { ...item, ...patch } : item)),
-      }),
-    )
+    set(commit(updateConditionInTree(get().query, id, patch)))
   },
 
-  setJoiner: (index, joiner) => {
-    const joiners = get().query.joiners.slice()
-    if (!joiners[index]) return
-    joiners[index] = joiner
-    set(commit({ ...get().query, joiners }))
+  setJoiner: (parentId, index, joiner) => {
+    set(commit(setFilterJoiner(get().query, parentId, index, joiner)))
+  },
+
+  wrapAdjacent: (parentId, joinerIndex) => {
+    set(commit(wrapFilterAdjacent(get().query, parentId, joinerIndex)))
+  },
+
+  ungroup: (groupId) => {
+    set(commit(ungroupFilter(get().query, groupId)))
+  },
+
+  toggleGroupNegated: (groupId) => {
+    set(commit(toggleFilterGroupNegated(get().query, groupId)))
   },
 
   removeColumn: (id) => {
@@ -196,11 +204,8 @@ export const usePdqlStore = create<PdqlState>((set, get) => ({
     set(commit(removeGroupFromQuery(get().query, id)))
   },
 
-  moveCondition: (index, delta) => {
-    const query = get().query
-    const filter = moveItem(query.filter, index, delta)
-    if (filter === query.filter) return
-    set(commit({ ...query, filter }))
+  moveCondition: (parentId, index, delta) => {
+    set(commit(moveFilterNode(get().query, parentId, index, delta)))
   },
 
   moveColumn: (index, delta) => {
@@ -217,13 +222,10 @@ export const usePdqlStore = create<PdqlState>((set, get) => ({
     set(commit({ ...query, groups }))
   },
 
-  reorder: (section, from, to) => {
+  reorder: (section, from, to, parentId) => {
     const query = get().query
     if (section === 'filter') {
-      const filter = query.filter.slice()
-      const [item] = filter.splice(from, 1)
-      filter.splice(to, 0, item)
-      set(commit({ ...query, filter }))
+      set(commit(reorderFilterNodes(query, parentId ?? null, from, to)))
       return
     }
     if (section === 'columns') {

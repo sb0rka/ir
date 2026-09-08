@@ -21,43 +21,48 @@ export function GroupsSection() {
           Нет группировки. При добавлении поля события будут считаться через count().
         </div>
       )}
+      {query.groups.length > 0 && countCol && (
+        <div className="mb-1 flex flex-wrap items-center gap-1.5 rounded border border-border/60 bg-surface-1/40 px-2 py-1.5">
+          <select
+            value={countCol.aggregate ?? 'count'}
+            onChange={(e) => setGroupAggregate(e.target.value as (typeof AGGREGATES)[number])}
+            className="rounded border border-border bg-surface-1 px-1.5 py-0.5 font-mono text-[11px] text-fg"
+          >
+            {AGGREGATES.map((fn) => (
+              <option key={fn} value={fn}>
+                {fn}
+              </option>
+            ))}
+          </select>
+          <span className="font-mono text-xs text-fg-muted">()</span>
+          <button
+            type="button"
+            title="Сортировка по мере"
+            onClick={() => {
+              if (!countCol.sort) {
+                setGroupSort({ dir: 'desc', priority: 99 })
+                return
+              }
+              if (countCol.sort.dir === 'desc') {
+                setGroupSort({ dir: 'asc', priority: countCol.sort.priority })
+                return
+              }
+              setGroupSort(undefined)
+            }}
+            className="inline-flex items-center gap-1 rounded border border-border px-1.5 py-0.5 text-[11px] text-fg-muted hover:text-fg"
+          >
+            {!countCol.sort && <ArrowUpDown className="h-3 w-3" />}
+            {countCol.sort?.dir === 'desc' && <ArrowDown className="h-3 w-3" />}
+            {countCol.sort?.dir === 'asc' && <ArrowUp className="h-3 w-3" />}
+            {countCol.sort ? (countCol.sort.dir === 'desc' ? 'desc' : 'asc') : 'sort'}
+          </button>
+        </div>
+      )}
       <SortableContext items={query.groups.map((item) => item.id)} strategy={verticalListSortingStrategy}>
         {query.groups.map((group, index) => (
           <SortableRow key={group.id} id={group.id} section="groups" index={index}>
             <div className="flex flex-wrap items-center gap-1.5">
-              <select
-                value={countCol?.aggregate ?? 'count'}
-                onChange={(e) => setGroupAggregate(e.target.value as (typeof AGGREGATES)[number])}
-                className="rounded border border-border bg-surface-1 px-1.5 py-0.5 font-mono text-[11px] text-fg"
-              >
-                {AGGREGATES.map((fn) => (
-                  <option key={fn} value={fn}>
-                    {fn}
-                  </option>
-                ))}
-              </select>
               <span className="font-mono text-xs text-fg">{group.field}</span>
-              <button
-                type="button"
-                title="Сортировка"
-                onClick={() => {
-                  if (!countCol?.sort) {
-                    setGroupSort({ dir: 'desc', priority: 99 })
-                    return
-                  }
-                  if (countCol.sort.dir === 'desc') {
-                    setGroupSort({ dir: 'asc', priority: countCol.sort.priority })
-                    return
-                  }
-                  setGroupSort(undefined)
-                }}
-                className="inline-flex items-center gap-1 rounded border border-border px-1.5 py-0.5 text-[11px] text-fg-muted hover:text-fg"
-              >
-                {!countCol?.sort && <ArrowUpDown className="h-3 w-3" />}
-                {countCol?.sort?.dir === 'desc' && <ArrowDown className="h-3 w-3" />}
-                {countCol?.sort?.dir === 'asc' && <ArrowUp className="h-3 w-3" />}
-                {countCol?.sort ? (countCol.sort.dir === 'desc' ? 'desc' : 'asc') : 'sort'}
-              </button>
               <div className="ml-auto flex items-center gap-0.5">
                 <Button size="sm" variant="ghost" title="Вверх" onClick={() => moveGroup(index, -1)}>
                   <ChevronUp className="h-3.5 w-3.5" />

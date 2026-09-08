@@ -1,4 +1,5 @@
 import { defaultQuery, emptyQuery, newId, type CompareOp, type Condition } from './model'
+import { appendFilterNode } from './filterTree'
 import { parse } from './parse'
 import { serialize } from './serialize'
 
@@ -20,11 +21,7 @@ export function appendCondition(
     values: [],
     negated: false,
   }
-  return serialize({
-    ...ast,
-    filter: [...ast.filter, condition],
-    joiners: ast.filter.length > 0 ? [...ast.joiners, 'and'] : [...ast.joiners],
-  })
+  return serialize(appendFilterNode(ast, condition))
 }
 
 export type FindingFilterField = 'siem_incident' | 'siem_correlation'

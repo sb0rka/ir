@@ -1,5 +1,5 @@
 export { parse } from './parse'
-export { formatCondition, formatConditionLabel, serialize } from './serialize'
+export { formatCondition, formatConditionLabel, formatFilterList, serialize } from './serialize'
 export { appendCondition, FINDING_FILTER_LABELS, findingUuidQuery, isFindingFilterField } from './append'
 export type { FindingFilterField } from './append'
 export {
@@ -62,6 +62,7 @@ export {
   emptyQuery,
   fieldPrefix,
   groupCountColumn,
+  isFilterGroup,
   isGroupCountColumn,
   isGroupDimensionColumn,
   MAX_QUEUE_LIMIT,
@@ -78,6 +79,8 @@ export type {
   Condition,
   EventFieldDef,
   FieldType,
+  FilterGroup,
+  FilterNode,
   Group,
   LogicalJoiner,
   ParseError,
@@ -93,3 +96,15 @@ export {
   saveFieldFreq,
   sortFields,
 } from './catalog'
+export {
+  appendFilterNode,
+  collectConditions,
+  moveFilterNode,
+  removeFilterNode,
+  reorderFilterNodes,
+  setFilterJoiner,
+  toggleFilterGroupNegated,
+  ungroupFilter,
+  updateCondition,
+  wrapFilterAdjacent,
+} from './filterTree'

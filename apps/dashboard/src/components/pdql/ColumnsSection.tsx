@@ -24,16 +24,23 @@ export function ColumnsSection() {
       )}
       <SortableContext items={visibleColumns.map(({ column }) => column.id)} strategy={verticalListSortingStrategy}>
         {visibleColumns.map(({ column, index }) => {
-          const needsAggregate = grouped
           return (
             <SortableRow key={column.id} id={column.id} section="columns" index={index}>
               <div className="flex flex-wrap items-center gap-1.5">
-                {needsAggregate && (
+                {grouped && (
                   <select
-                    value={column.aggregate ?? 'count'}
-                    onChange={(e) => setColumnAggregate(column.id, e.target.value as (typeof AGGREGATES)[number])}
+                    value={column.aggregate ?? ''}
+                    onChange={(e) => {
+                      const value = e.target.value
+                      setColumnAggregate(
+                        column.id,
+                        value === '' ? undefined : (value as (typeof AGGREGATES)[number]),
+                      )
+                    }}
                     className="rounded border border-border bg-surface-1 px-1.5 py-0.5 font-mono text-[11px] text-fg"
+                    title="Агрегат (необязательно)"
                   >
+                    <option value="">—</option>
                     {AGGREGATES.map((fn) => (
                       <option key={fn} value={fn}>
                         {fn}

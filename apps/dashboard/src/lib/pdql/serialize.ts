@@ -1,9 +1,12 @@
 import {
   clampQueueLimit,
+  isFilterGroup,
   isGroupDimensionColumn,
   type Column,
   type CompareOp,
   type Condition,
+  type FilterNode,
+  type LogicalJoiner,
   type QueryAst,
 } from './model'
 
@@ -26,14 +29,26 @@ function formatSelectItem(column: Column): string {
   return column.field
 }
 
-export function formatCondition(ast: QueryAst): string {
-  return ast.filter
-    .map((condition, index) => {
-      const body = formatConditionLabel(condition)
-      const joiner = index === 0 ? '' : ` ${ast.joiners[index - 1] ?? 'and'} `
-      return `${joiner}${body}`
+export function formatFilterList(nodes: FilterNode[], joiners: LogicalJoiner[]): string {
+  return nodes
+    .map((node, index) => {
+      const joiner = index === 0 ? '' : ` ${joiners[index - 1] ?? 'and'} `
+      return `${joiner}${formatFilterNode(node)}`
     })
     .join('')
+}
+
+function formatFilterNode(node: FilterNode): string {
+  if (isFilterGroup(node)) {
+    const inner = formatFilterList(node.children, node.joiners)
+    const body = `(${inner})`
+    return node.negated ? `not ${body}` : body
+  }
+  return formatConditionLabel(node)
+}
+
+export function formatCondition(ast: QueryAst): string {
+  return formatFilterList(ast.filter, ast.joiners)
 }
 
 export function formatConditionLabel(condition: Condition): string {

@@ -8,16 +8,18 @@ export function SortableRow({
   id,
   section,
   index,
+  parentId = null,
   children,
 }: {
   id: string
   section: 'filter' | 'columns' | 'groups'
   index: number
+  parentId?: string | null
   children: ReactNode
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id,
-    data: { type: 'row', section, index },
+    data: { type: 'row', section, index, parentId },
   })
   return (
     <div

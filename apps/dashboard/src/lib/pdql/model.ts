@@ -32,6 +32,20 @@ export interface Condition {
   negated: boolean
 }
 
+export interface FilterGroup {
+  kind: 'group'
+  id: string
+  negated: boolean
+  children: FilterNode[]
+  joiners: LogicalJoiner[]
+}
+
+export type FilterNode = Condition | FilterGroup
+
+export function isFilterGroup(node: FilterNode): node is FilterGroup {
+  return (node as FilterGroup).kind === 'group'
+}
+
 export interface Column {
   id: string
   field: string
@@ -45,7 +59,7 @@ export interface Group {
 }
 
 export interface QueryAst {
-  filter: Condition[]
+  filter: FilterNode[]
   joiners: LogicalJoiner[]
   columns: Column[]
   groups: Group[]
@@ -138,15 +152,27 @@ export function groupCountColumn(query: QueryAst): Column | undefined {
   return query.columns.find(isGroupCountColumn)
 }
 
+function withoutFilterNode(node: FilterNode): unknown {
+  if (isFilterGroup(node)) {
+    return {
+      kind: 'group',
+      negated: node.negated,
+      children: node.children.map(withoutFilterNode),
+      joiners: node.joiners,
+    }
+  }
+  return {
+    field: node.field,
+    op: node.op,
+    value: node.value,
+    values: node.values,
+    negated: node.negated,
+  }
+}
+
 export function withoutIds(ast: QueryAst): unknown {
   return {
-    filter: ast.filter.map(({ field, op, value, values, negated }) => ({
-      field,
-      op,
-      value,
-      values,
-      negated,
-    })),
+    filter: ast.filter.map(withoutFilterNode),
     joiners: ast.joiners,
     columns: ast.columns.map(({ field, aggregate, sort }) => ({ field, aggregate, sort })),
     groups: ast.groups.map(({ field }) => ({ field })),
