@@ -661,6 +661,7 @@ export function layoutGraph(
 export function mapGraphNode(node: IrNode): GraphNode {
   const isEvent = node.node_type === 'event'
   const review: ReviewState = node.origin === 'analyst' ? 'confirmed' : 'proposed'
+  const why = node.why?.trim()
   return {
     id: node.id,
     kind: isEvent ? 'event' : mapEntityKind(node.type_code),
@@ -671,6 +672,7 @@ export function mapGraphNode(node: IrNode): GraphNode {
     y: 0,
     origin: mapOrigin(node.origin),
     occurredAt: node.occurred_at ?? undefined,
+    ...(why ? { why } : {}),
   }
 }
 

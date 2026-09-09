@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { findingUuidQuery, pdqlToChips, parseQueuePdql } from '../lib/pdql'
 import { filterFingerprint } from '../lib/queryFingerprint'
 import { emptyContextQueue, useAppStore } from './appStore'
-import type { AlertEvent, Investigation, QueueItem } from '../types'
+import type { AlertEvent, ContextEvent, Investigation, QueueItem } from '../types'
 import * as irApi from '../api/ir'
 import * as snapshots from '../api/eventQueueSnapshots'
 
@@ -19,6 +19,7 @@ const initial = {
   mockSources: useAppStore.getState().mockSources,
   contextQueue: useAppStore.getState().contextQueue,
   investigations: useAppStore.getState().investigations,
+  contextEvents: useAppStore.getState().contextEvents,
 }
 
 afterEach(() => {
@@ -479,5 +480,195 @@ describe('event queue snapshots', () => {
         groupValues: ['dc01'],
       }),
     )
+  })
+})
+
+function findingAlert(id: string): AlertEvent {
+  return {
+    ...alertStub(id),
+    findingRef: {
+      source_code: 'pt-maxpatrol-siem',
+      record_type: 'siem_incident',
+      external_id: id,
+      time_range: { from: '2026-01-01T00:00:00Z', to: '2026-01-02T00:00:00Z' },
+    },
+  }
+}
+
+function contextEventStub(id: string, entityIds: string[]): ContextEvent {
+  return {
+    id,
+    time: '2026-01-01T00:00:00Z',
+    severity: 'high',
+    title: id,
+    type: 'event',
+    source: 'pt-maxpatrol-siem',
+    entityIds,
+    origin: 'analyst',
+    isSeed: false,
+    review: 'confirmed',
+    description: '',
+    sourceEventId: `src-${id}`,
+  }
+}
+
+describe('context import options', () => {
+  it('forwards expandFindings and why when adding findings', async () => {
+    const addContext = vi.spyOn(irApi, 'addContext').mockResolvedValue(undefined)
+    vi.spyOn(irApi, 'loadInvestigationBundle').mockResolvedValue({
+      investigation: investigationStub({ eventIds: [] }),
+      events: {},
+      entities: {},
+      nodes: {},
+      edges: {},
+      findingSourceKeys: [],
+    })
+    const alert = findingAlert('inc-1')
+    useAppStore.setState({
+      contextQueue: {
+        'inv-1': { ...emptyContextQueue, alerts: { 'inc-1': alert } },
+      },
+    })
+
+    await useAppStore.getState().addEventsToContext('inv-1', ['inc-1'], {
+      expandFindings: false,
+      why: 'only the card',
+    })
+
+    expect(addContext).toHaveBeenCalledWith(
+      'inv-1',
+      expect.objectContaining({
+        findings: [
+          expect.objectContaining({
+            source_code: 'pt-maxpatrol-siem',
+            record_type: 'siem_incident',
+            external_id: 'inc-1',
+          }),
+        ],
+        expandFindings: false,
+        why: 'only the card',
+      }),
+    )
+  })
+
+  it('omits expandFindings for ordinary events and still sends why', async () => {
+    const addContext = vi.spyOn(irApi, 'addContext').mockResolvedValue(undefined)
+    vi.spyOn(irApi, 'loadInvestigationBundle').mockResolvedValue({
+      investigation: investigationStub({ eventIds: ['evt-1'] }),
+      events: {},
+      entities: {},
+      nodes: {},
+      edges: {},
+      findingSourceKeys: [],
+    })
+    useAppStore.setState({
+      contextQueue: {
+        'inv-1': { ...emptyContextQueue, alerts: { 'evt-1': alertStub('evt-1') } },
+      },
+    })
+
+    await useAppStore.getState().addEventsToContext('inv-1', ['evt-1'], { why: 'suspicious login' })
+
+    expect(addContext).toHaveBeenCalledWith('inv-1', {
+      events: [{ source_code: 'pt-maxpatrol-siem', source_event_id: 'evt-1' }],
+      findings: [],
+      why: 'suspicious login',
+    })
+  })
+
+  it('imports a correlation queue event as a finding so expandFindings applies', async () => {
+    const addContext = vi.spyOn(irApi, 'addContext').mockResolvedValue(undefined)
+    vi.spyOn(irApi, 'loadInvestigationBundle').mockResolvedValue({
+      investigation: investigationStub({ eventIds: [] }),
+      events: {},
+      entities: {},
+      nodes: {},
+      edges: {},
+      findingSourceKeys: [],
+    })
+    const range = { from: '2025-10-23T00:00:00.000Z', to: '2025-10-24T00:00:00.000Z' }
+    useAppStore.setState({
+      contextQueue: {
+        'inv-1': {
+          ...emptyContextQueue,
+          timeInterval: { kind: 'range', from: range.from, to: range.to },
+          alerts: {
+            'corr-1': {
+              ...alertStub('corr-1'),
+              raw: { correlation_name: 'WMI remote' },
+            },
+          },
+        },
+      },
+    })
+
+    await useAppStore.getState().addEventsToContext('inv-1', ['corr-1'], {
+      expandFindings: true,
+      why: 'load nested',
+    })
+
+    expect(addContext).toHaveBeenCalledWith(
+      'inv-1',
+      expect.objectContaining({
+        events: [],
+        findings: [
+          expect.objectContaining({
+            source_code: 'pt-maxpatrol-siem',
+            record_type: 'siem_correlation',
+            external_id: 'corr-1',
+            time_range: range,
+          }),
+        ],
+        expandFindings: true,
+        why: 'load nested',
+      }),
+    )
+  })
+
+  it('forwards expandFindings when starting an investigation from a finding', async () => {
+    const addContext = vi.spyOn(irApi, 'addContext').mockResolvedValue(undefined)
+    vi.spyOn(irApi, 'createInvestigation').mockResolvedValue(investigationStub({ id: 'inv-new' }))
+    vi.spyOn(irApi, 'loadInvestigationBundle').mockResolvedValue({
+      investigation: investigationStub({ id: 'inv-new' }),
+      events: {},
+      entities: {},
+      nodes: {},
+      edges: {},
+      findingSourceKeys: [],
+    })
+    useAppStore.setState({ alerts: { 'inc-1': findingAlert('inc-1') } })
+
+    await useAppStore.getState().startInvestigation(['inc-1'], 'Case', { expandFindings: true, why: 'seed' })
+
+    expect(addContext).toHaveBeenCalledWith(
+      'inv-new',
+      expect.objectContaining({ expandFindings: true, seed: true, why: 'seed' }),
+    )
+  })
+
+  it('does not send expandFindings when creating a child investigation', async () => {
+    const addContext = vi.spyOn(irApi, 'addContext').mockResolvedValue(undefined)
+    vi.spyOn(irApi, 'createInvestigation').mockResolvedValue(investigationStub({ id: 'inv-child' }))
+    vi.spyOn(irApi, 'loadInvestigationBundle').mockResolvedValue({
+      investigation: investigationStub({ id: 'inv-child' }),
+      events: {},
+      entities: {},
+      nodes: {},
+      edges: {},
+      findingSourceKeys: [],
+    })
+    useAppStore.setState({
+      investigations: {
+        'inv-1': investigationStub({ eventIds: ['evt-1'], entityIds: ['ent-1'] }),
+      },
+      contextEvents: { 'evt-1': contextEventStub('evt-1', ['ent-1']) },
+    })
+
+    await useAppStore.getState().createChildInvestigation('inv-1', ['ent-1'])
+
+    expect(addContext).toHaveBeenCalledWith('inv-child', {
+      events: [{ source_code: 'pt-maxpatrol-siem', source_event_id: 'src-evt-1' }],
+      findings: [],
+    })
   })
 })

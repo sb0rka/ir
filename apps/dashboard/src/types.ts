@@ -135,6 +135,8 @@ export interface GraphNode {
   y: number
   origin?: EventOrigin
   occurredAt?: string
+  /** Analyst import or agent rationale from IR. */
+  why?: string
 }
 
 export interface GraphEdge {

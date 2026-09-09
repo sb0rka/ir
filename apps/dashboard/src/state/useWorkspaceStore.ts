@@ -17,6 +17,7 @@ import type {
   Severity,
 } from '../components/graph/types'
 import { layoutGraph } from '../api/adapters'
+import { eventNodeLabel } from '../api/analystWhy'
 import { persistGraphLayout, persistNodePosition, useAppStore } from '../store/appStore'
 import type { Investigation } from '../types'
 
@@ -177,7 +178,10 @@ function buildFromApp(inv: Investigation): GraphInvestigation {
     return {
       id: n.id,
       event_id: n.refId,
-      title: ev?.title ?? n.label,
+      title: eventNodeLabel({
+        why: n.why,
+        fallback: ev?.title ?? n.label,
+      }),
       severity: mapSeverity(ev?.severity ?? 'low'),
       event_ts: ev?.time ?? n.occurredAt ?? '',
       source: ev?.source ?? '',
@@ -214,7 +218,7 @@ function buildFromApp(inv: Investigation): GraphInvestigation {
     .filter((e) => canvasIds.has(e.source_id) && canvasIds.has(e.target_id))
 
   const entityNodeByRef = new Map(entityGraphNodes.map((n) => [n.refId, n.id]))
-  const eventNodeByRef = new Map(eventGraphNodes.map((n) => [n.refId, n.id]))
+  const eventNodeByRef = new Map(eventGraphNodes.map((n) => [n.refId, n]))
 
   const entityCanvasIds = new Set(entities.map((e) => e.id))
 
@@ -223,7 +227,8 @@ function buildFromApp(inv: Investigation): GraphInvestigation {
     .filter(Boolean)
     .filter((ev) => (eventReviews[ev.id] ?? ev.review) !== 'rejected')
     .map((ev) => {
-      const alertId = eventNodeByRef.get(ev.id)
+      const eventNode = eventNodeByRef.get(ev.id)
+      const alertId = eventNode?.id
       const entityIds = new Set(
         ev.entityIds
           .map((id) => entityNodeByRef.get(id))
@@ -245,7 +250,12 @@ function buildFromApp(inv: Investigation): GraphInvestigation {
         source_event_id: ev.id,
         event_class: mapEventClass(ev.type),
         event_ts: ev.time,
-        title: ev.title,
+        title: eventNode
+          ? eventNodeLabel({
+              why: eventNode.why,
+              fallback: ev.title,
+            })
+          : ev.title,
         severity: mapSeverity(ev.severity),
         summary: ev.description,
         entity_ids: [...entityIds],

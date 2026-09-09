@@ -295,6 +295,77 @@ describe('hypothesis store', () => {
     expect(useAppStore.getState().hypothesisMembership.h1?.nodeIds).toEqual(['n-evt'])
   })
 
+  it('forwards expandFindings when importing a finding into the active hypothesis', async () => {
+    addHypothesisContext.mockResolvedValue({
+      findings: 1,
+      sessions: 0,
+      events: 0,
+      entities: 0,
+      nodes: 1,
+      edges: 0,
+      warnings: [],
+    })
+    getHypothesisGraph.mockResolvedValue({
+      hypothesis_id: 'h1',
+      investigation_id: 'inv-1',
+      nodes: [{ id: 'n-finding' }],
+      edges: [],
+    })
+    vi.spyOn(irApi, 'loadInvestigationBundle').mockResolvedValue({
+      investigation: investigation({ eventIds: [], hypothesisIds: ['h1'] }),
+      events: {},
+      entities: {},
+      nodes: {},
+      edges: {},
+      findingSourceKeys: [],
+    })
+    useAppStore.setState({
+      hypotheses: { h1: hypothesis({ status: 'active' }) },
+      activeHypothesisId: { 'inv-1': 'h1' },
+      contextQueue: {
+        'inv-1': {
+          ...emptyContextQueue,
+          alerts: {
+            'inc-1': {
+              id: 'inc-1',
+              time: '2026-01-01T00:00:00Z',
+              severity: 'high',
+              title: 'incident',
+              rule: 'r',
+              source: 'pt-maxpatrol-siem',
+              status: 'new',
+              entityIds: [],
+              description: '',
+              findingRef: {
+                source_code: 'pt-maxpatrol-siem',
+                record_type: 'siem_incident',
+                external_id: 'inc-1',
+                time_range: { from: '2026-01-01T00:00:00Z', to: '2026-01-02T00:00:00Z' },
+              },
+            },
+          },
+        },
+      },
+    })
+
+    await useAppStore.getState().addEventsToActiveHypothesis('inv-1', ['inc-1'], {
+      expandFindings: false,
+      why: 'hypothesis card',
+    })
+
+    expect(addHypothesisContext).toHaveBeenCalledWith('inv-1', 'h1', {
+      events: [],
+      findings: [
+        expect.objectContaining({
+          record_type: 'siem_incident',
+          external_id: 'inc-1',
+        }),
+      ],
+      expandFindings: false,
+      why: 'hypothesis card',
+    })
+  })
+
   it('does not import into a resolved or missing hypothesis', async () => {
     useAppStore.setState({
       hypotheses: { h1: hypothesis({ status: 'resolved' }) },

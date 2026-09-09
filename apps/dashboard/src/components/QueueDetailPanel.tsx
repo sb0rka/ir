@@ -9,11 +9,16 @@ import { emptyContextQueue, useAppStore } from '../store/appStore'
 import type { AlertEvent, CorrelationGroup } from '../types'
 import { Button, Chip, Panel, SeverityBadge } from './ui'
 import { ResizablePanelFrame } from './ResizablePanelFrame'
-import { StartInvestigationModal } from './StartInvestigationModal'
+import { AddContextModal, type AddContextModalMode } from './AddContextModal'
 import { isHypothesisWritable } from '../lib/hypotheses'
 import { titlesForQueueIds } from '../lib/investigationTitle'
 import { formatTime, statusLabel } from '../lib/utils'
-import { alertIsInContext, contextEventKeys } from '../lib/queueContext'
+import {
+  alertIsInContext,
+  contextEventKeys,
+  contextImportOptions,
+  selectionHasFindings,
+} from '../lib/queueContext'
 import { EventCard, eventCardModelFromAlert } from './event-card'
 import type { TimeInterval } from './time-interval'
 
@@ -53,7 +58,11 @@ export function QueueDetailPanel({
   const contextEvents = useAppStore((s) => s.contextEvents)
   const correlations = useAppStore((s) => s.correlations)
   const loading = useAppStore((s) => s.investigationLoading)
-  const [naming, setNaming] = useState(false)
+  const [contextModal, setContextModal] = useState<{
+    mode: AddContextModalMode
+    ids: string[]
+  } | null>(null)
+  const [modalBusy, setModalBusy] = useState(false)
   const [activeAlert, setActiveAlert] = useState<AlertEvent | null>(null)
 
   useEffect(() => {
@@ -188,7 +197,7 @@ export function QueueDetailPanel({
                   onClick={() => {
                     const target = commitActionAlert()
                     if (!target) return
-                    void addEventsToContext(investigationId, [target.id])
+                    setContextModal({ mode: 'add', ids: [target.id] })
                   }}
                 >
                   <Plus className="h-3.5 w-3.5" />
@@ -206,7 +215,7 @@ export function QueueDetailPanel({
                     onClick={() => {
                       const target = commitActionAlert()
                       if (!target) return
-                      void addEventsToActiveHypothesis(investigationId, [target.id])
+                      setContextModal({ mode: 'hypothesis', ids: [target.id] })
                     }}
                   >
                     <Lightbulb className="h-3.5 w-3.5" />
@@ -220,7 +229,7 @@ export function QueueDetailPanel({
                     onClick={() => {
                       const target = commitActionAlert()
                       if (!target) return
-                      void createHypothesisFromEvents(investigationId, [target.id])
+                      setContextModal({ mode: 'create-hypothesis', ids: [target.id] })
                     }}
                   >
                     <Lightbulb className="h-3.5 w-3.5" />
@@ -236,7 +245,7 @@ export function QueueDetailPanel({
                 variant="primary"
                 className="w-full"
                 disabled={loading}
-                onClick={() => setNaming(true)}
+                onClick={() => setContextModal({ mode: 'start', ids: [actionId] })}
               >
                 <Play className="h-3.5 w-3.5" />
                 Начать расследование
@@ -247,15 +256,43 @@ export function QueueDetailPanel({
       </div>
     </Panel>
     </ResizablePanelFrame>
-    {naming && (
-      <StartInvestigationModal
-        eventTitles={titlesForQueueIds([actionId], alerts, correlations)}
-        busy={loading}
-        onClose={() => setNaming(false)}
-        onConfirm={async (title) => {
-          if (actionAlert) rememberQueueAlerts([actionAlert], investigationId)
-          const createdId = await start([actionId], title)
-          if (createdId) setNaming(false)
+    {contextModal && (
+      <AddContextModal
+        mode={contextModal.mode}
+        eventTitles={titlesForQueueIds(contextModal.ids, alerts, correlations)}
+        hasFindings={selectionHasFindings(contextModal.ids, alerts)}
+        busy={loading || modalBusy}
+        onClose={() => {
+          if (loading || modalBusy) return
+          setContextModal(null)
+        }}
+        onConfirm={async ({ title, why, expandFindings }) => {
+          const options = contextImportOptions(selectionHasFindings(contextModal.ids, alerts), {
+            why,
+            expandFindings,
+          })
+          if (contextModal.mode === 'start') {
+            if (actionAlert) rememberQueueAlerts([actionAlert], investigationId)
+            const createdId = await start(contextModal.ids, title ?? '', options)
+            if (createdId) setContextModal(null)
+            return
+          }
+          if (!investigationId) return
+          setModalBusy(true)
+          try {
+            if (contextModal.mode === 'add') {
+              const ok = await addEventsToContext(investigationId, contextModal.ids, options)
+              if (ok) setContextModal(null)
+            } else if (contextModal.mode === 'hypothesis') {
+              const ok = await addEventsToActiveHypothesis(investigationId, contextModal.ids, options)
+              if (ok) setContextModal(null)
+            } else {
+              const created = await createHypothesisFromEvents(investigationId, contextModal.ids, options)
+              if (created) setContextModal(null)
+            }
+          } finally {
+            setModalBusy(false)
+          }
         }}
       />
     )}

@@ -35,10 +35,12 @@ import {
 import { appendCondition, alignGroupValues, astToFilterChips, defaultQuery, drillGroupValues, entityKindForField, findingUuidFromAst, findingUuidQuery, isEntityQueueField, parseQueuePdql, serialize, withExplicitLimit, type FindingFilterField } from '../lib/pdql'
 import { pdqlFieldForFilterField } from '../lib/filters'
 import { filterFingerprint } from '../lib/queryFingerprint'
+import { findingRefForImport } from '../lib/queueContext'
 import {
   activeTimeZone,
   defaultWorkingTimeZone,
   demoDayInterval,
+  resolve,
   type DisplayZone,
   type TimeInterval,
 } from '../components/time-interval'
@@ -92,6 +94,11 @@ import {
 import type { components as Ir } from '@ir/contract'
 
 export type SidebarSectionId = 'agent' | 'hypotheses'
+
+export type AddContextOptions = {
+  expandFindings?: boolean
+  why?: string
+}
 
 export type TabId = 'queue' | 'investigations' | string
 
@@ -394,7 +401,11 @@ interface AppState {
   setActiveTab: (tab: TabId) => void
   closeTab: (tab: TabId) => void
   openInvestigationTab: (id: string) => void
-  startInvestigation: (alertOrCorrIds: string[], title: string) => Promise<string>
+  startInvestigation: (
+    alertOrCorrIds: string[],
+    title: string,
+    options?: AddContextOptions,
+  ) => Promise<string>
   createChildInvestigation: (parentId: string, entityIds: string[]) => Promise<string>
   updateInvestigation: (id: string, patch: Partial<Investigation>) => void
   persistInvestigation: (id: string, patch: Partial<Investigation>) => Promise<boolean>
@@ -416,7 +427,11 @@ interface AppState {
   setContextQueue: (investigationId: string, patch: Partial<ContextQueueState>) => void
   addContextChip: (investigationId: string, field: FilterField, value: string) => void
   executeContextQuery: (investigationId: string) => Promise<boolean>
-  addEventsToContext: (investigationId: string, eventIds: string[]) => Promise<void>
+  addEventsToContext: (
+    investigationId: string,
+    eventIds: string[],
+    options?: AddContextOptions,
+  ) => Promise<boolean>
   restoreEventQueue: (
     investigationId: string,
     event: { source?: string; sourceEventId?: string },
@@ -442,7 +457,11 @@ interface AppState {
     investigationId: string,
     input: { statement: string; description?: string; includeSelection?: boolean },
   ) => Promise<Hypothesis | null>
-  createHypothesisFromEvents: (investigationId: string, eventIds: string[]) => Promise<Hypothesis | null>
+  createHypothesisFromEvents: (
+    investigationId: string,
+    eventIds: string[],
+    options?: AddContextOptions,
+  ) => Promise<Hypothesis | null>
   patchHypothesis: (
     investigationId: string,
     hypothesisId: string,
@@ -453,7 +472,11 @@ interface AppState {
   toggleHypothesisVisible: (investigationId: string, itemId: string, solo?: boolean) => void
   toggleHypothesisHighlight: (investigationId: string, itemId: string, solo?: boolean) => void
   addSelectionToHypothesis: (investigationId: string, hypothesisId: string) => Promise<void>
-  addEventsToActiveHypothesis: (investigationId: string, eventIds: string[]) => Promise<void>
+  addEventsToActiveHypothesis: (
+    investigationId: string,
+    eventIds: string[],
+    options?: AddContextOptions,
+  ) => Promise<boolean>
   toggleHypothesisNode: (investigationId: string, nodeId: string) => Promise<void>
   toggleHypothesisEdge: (investigationId: string, edgeId: string) => Promise<void>
   toggleGraphNodeHidden: (investigationId: string, nodeId: string) => void
@@ -483,6 +506,7 @@ function contextRefsFromIds(
   alerts: Record<string, AlertEvent>,
   correlations: Record<string, CorrelationGroup>,
   contextEvents: Record<string, ContextEvent>,
+  fallbackRange: { from: string; to: string },
 ): { events: Ir['schemas']['EventSourceRef'][]; findings: Ir['schemas']['SourceObjectRef'][] } {
   const events: Ir['schemas']['EventSourceRef'][] = []
   const findings: Ir['schemas']['SourceObjectRef'][] = []
@@ -498,17 +522,16 @@ function contextRefsFromIds(
     seenEvents.add(key)
     events.push({ source_code, source_event_id })
   }
-  const pushFinding = (alert: AlertEvent) => {
-    if (!alert.findingRef) return
-    const key = `${alert.findingRef.source_code}/${alert.findingRef.record_type}/${alert.findingRef.external_id}`
+  const pushFinding = (ref: NonNullable<AlertEvent['findingRef']>) => {
+    const key = `${ref.source_code}/${ref.record_type}/${ref.external_id}`
     if (seenFindings.has(key)) return
     seenFindings.add(key)
     findings.push({
-      source_code: alert.findingRef.source_code,
-      source_instance: alert.findingRef.source_instance,
-      record_type: alert.findingRef.record_type,
-      external_id: alert.findingRef.external_id,
-      time_range: alert.findingRef.time_range,
+      source_code: ref.source_code,
+      source_instance: ref.source_instance,
+      record_type: ref.record_type,
+      external_id: ref.external_id,
+      time_range: ref.time_range,
     })
   }
   for (const id of ids) {
@@ -521,13 +544,26 @@ function contextRefsFromIds(
     }
     const a = alerts[id] ?? contextEvents[id]
     if (!a) continue
-    if ('findingRef' in a && a.findingRef) {
-      pushFinding(a as AlertEvent)
+    const queueAlert = alerts[id]
+    const findingRef = queueAlert ? findingRefForImport(queueAlert, fallbackRange) : undefined
+    if (findingRef) {
+      pushFinding(findingRef)
       continue
     }
     pushEvent(a.source, a.sourceEventId, a.id)
   }
   return { events, findings }
+}
+
+function contextRequestOptions(options?: AddContextOptions): {
+  expandFindings?: boolean
+  why?: string
+} {
+  const why = options?.why?.trim()
+  return {
+    ...(options?.expandFindings !== undefined ? { expandFindings: options.expandFindings } : {}),
+    ...(why ? { why } : {}),
+  }
 }
 
 function snapshotEventsForIds(
@@ -1184,7 +1220,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
-  startInvestigation: async (ids, title) => {
+  startInvestigation: async (ids, title, options) => {
     const trimmed = title.trim().slice(0, 255)
     if (!trimmed) return ''
     const { alerts, correlations } = get()
@@ -1200,7 +1236,13 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ investigationLoading: true, lastError: null })
     try {
       const created = await createInvestigation({ title: trimmed, severity })
-      const refs = contextRefsFromIds(ids, alerts, correlations, get().contextEvents)
+      const refs = contextRefsFromIds(
+        ids,
+        alerts,
+        correlations,
+        get().contextEvents,
+        resolve(get().timeInterval),
+      )
       if (refs.events.length || refs.findings.length) {
         rememberEventQueueSnapshots(
           created.id,
@@ -1212,7 +1254,7 @@ export const useAppStore = create<AppState>((set, get) => ({
             groupValues: get().groupValues,
           },
         )
-        await addContext(created.id, { ...refs, seed: true })
+        await addContext(created.id, { ...refs, seed: true, ...contextRequestOptions(options) })
       }
       const bundle = await loadInvestigationBundle(created.id, {
         seedEventIds: ids,
@@ -1265,6 +1307,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         get().alerts,
         get().correlations,
         get().contextEvents,
+        resolve(get().contextQueue[parentId]?.timeInterval ?? get().timeInterval),
       )
       if (refs.events.length || refs.findings.length) await addContext(created.id, refs)
       const bundle = await loadInvestigationBundle(created.id, {
@@ -1552,13 +1595,19 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
-  addEventsToContext: async (investigationId, eventIds) => {
+  addEventsToContext: async (investigationId, eventIds, options) => {
     const queue = get().contextQueue[investigationId]
     const alerts = { ...get().alerts, ...queue?.alerts }
     const correlations = get().correlations
     const contextEvents = get().contextEvents
-    const refs = contextRefsFromIds(eventIds, alerts, correlations, contextEvents)
-    if (refs.events.length === 0 && refs.findings.length === 0) return
+    const refs = contextRefsFromIds(
+      eventIds,
+      alerts,
+      correlations,
+      contextEvents,
+      resolve(queue?.timeInterval ?? get().timeInterval),
+    )
+    if (refs.events.length === 0 && refs.findings.length === 0) return false
     const snapshotQueue = queue ?? emptyContextQueue
     rememberEventQueueSnapshots(
       investigationId,
@@ -1571,7 +1620,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       },
     )
     try {
-      await addContext(investigationId, refs)
+      await addContext(investigationId, { ...refs, ...contextRequestOptions(options) })
       const cur = get().contextQueue[investigationId] ?? emptyContextQueue
       set({
         contextQueue: {
@@ -1580,8 +1629,10 @@ export const useAppStore = create<AppState>((set, get) => ({
         },
       })
       await get().loadInvestigation(investigationId)
+      return true
     } catch (err) {
       set({ lastError: errorMessage(err) })
+      return false
     }
   },
 
@@ -2150,7 +2201,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
-  createHypothesisFromEvents: async (investigationId, eventIds) => {
+  createHypothesisFromEvents: async (investigationId, eventIds, options) => {
     const queue = get().contextQueue[investigationId]
     const alerts = { ...get().alerts, ...queue?.alerts }
     const first = eventIds
@@ -2159,7 +2210,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const statement = (first?.title ?? '').trim().slice(0, 255) || 'Новая гипотеза'
     const created = await get().createHypothesis(investigationId, { statement })
     if (!created) return null
-    await get().addEventsToActiveHypothesis(investigationId, eventIds)
+    await get().addEventsToActiveHypothesis(investigationId, eventIds, options)
     return created
   },
 
@@ -2276,21 +2327,25 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
-  addEventsToActiveHypothesis: async (investigationId, eventIds) => {
+  addEventsToActiveHypothesis: async (investigationId, eventIds, options) => {
     const hypothesisId = get().activeHypothesisId[investigationId]
     const hypothesis = hypothesisId ? get().hypotheses[hypothesisId] : null
-    if (!hypothesisId || !hypothesis || hypothesis.status === 'resolved') return
+    if (!hypothesisId || !hypothesis || hypothesis.status === 'resolved') return false
     const queue = get().contextQueue[investigationId]
     const refs = contextRefsFromIds(
       eventIds,
       { ...get().alerts, ...queue?.alerts },
       get().correlations,
       get().contextEvents,
+      resolve(queue?.timeInterval ?? get().timeInterval),
     )
-    if (refs.events.length === 0 && refs.findings.length === 0) return
+    if (refs.events.length === 0 && refs.findings.length === 0) return false
     set({ lastError: null })
     try {
-      await addHypothesisContext(investigationId, hypothesisId, refs)
+      await addHypothesisContext(investigationId, hypothesisId, {
+        ...refs,
+        ...contextRequestOptions(options),
+      })
       const cur = get().contextQueue[investigationId] ?? emptyContextQueue
       set({
         contextQueue: {
@@ -2306,8 +2361,10 @@ export const useAppStore = create<AppState>((set, get) => ({
           [hypothesisId]: membershipFromGraph(graph),
         },
       })
+      return true
     } catch (err) {
       set({ lastError: errorMessage(err) })
+      return false
     }
   },
 
