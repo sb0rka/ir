@@ -261,8 +261,10 @@ type ImportRequest struct {
 	Edges                   []AgentEdge
 	Warnings                []string
 	Seed                    bool
-	EntityGroupProposals    []GroupProposal
-	EventGroupProposals     []GroupProposal
+	// Why is set for analyst context imports and written onto newly created graph nodes.
+	Why                  *string
+	EntityGroupProposals []GroupProposal
+	EventGroupProposals  []GroupProposal
 }
 
 type ImportStats struct {
