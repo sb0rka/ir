@@ -37,6 +37,8 @@ const (
 	CapabilityEndpoints        Capability = "endpoints"
 	CapabilityEntityLookup     Capability = "entity_lookup"
 	CapabilityEvents           Capability = "events"
+	CapabilityEvidenceFile     Capability = "evidence_file"
+	CapabilityEvidencePayload  Capability = "evidence_payload"
 	CapabilityFindings         Capability = "findings"
 	CapabilityResponseCatalog  Capability = "response_catalog"
 	CapabilitySessions         Capability = "sessions"
@@ -54,6 +56,10 @@ func (e Capability) Valid() bool {
 	case CapabilityEntityLookup:
 		return true
 	case CapabilityEvents:
+		return true
+	case CapabilityEvidenceFile:
+		return true
+	case CapabilityEvidencePayload:
 		return true
 	case CapabilityFindings:
 		return true
@@ -89,37 +95,37 @@ func (e EndpointStatus) Valid() bool {
 
 // Defines values for EntityMentionRoles.
 const (
-	Account  EntityMentionRoles = "account"
-	Actor    EntityMentionRoles = "actor"
-	Attacker EntityMentionRoles = "attacker"
-	Dst      EntityMentionRoles = "dst"
-	File     EntityMentionRoles = "file"
-	Mentions EntityMentionRoles = "mentions"
-	Object   EntityMentionRoles = "object"
-	Src      EntityMentionRoles = "src"
-	Victim   EntityMentionRoles = "victim"
+	EntityMentionRolesAccount  EntityMentionRoles = "account"
+	EntityMentionRolesActor    EntityMentionRoles = "actor"
+	EntityMentionRolesAttacker EntityMentionRoles = "attacker"
+	EntityMentionRolesDst      EntityMentionRoles = "dst"
+	EntityMentionRolesFile     EntityMentionRoles = "file"
+	EntityMentionRolesMentions EntityMentionRoles = "mentions"
+	EntityMentionRolesObject   EntityMentionRoles = "object"
+	EntityMentionRolesSrc      EntityMentionRoles = "src"
+	EntityMentionRolesVictim   EntityMentionRoles = "victim"
 )
 
 // Valid indicates whether the value is a known member of the EntityMentionRoles enum.
 func (e EntityMentionRoles) Valid() bool {
 	switch e {
-	case Account:
+	case EntityMentionRolesAccount:
 		return true
-	case Actor:
+	case EntityMentionRolesActor:
 		return true
-	case Attacker:
+	case EntityMentionRolesAttacker:
 		return true
-	case Dst:
+	case EntityMentionRolesDst:
 		return true
-	case File:
+	case EntityMentionRolesFile:
 		return true
-	case Mentions:
+	case EntityMentionRolesMentions:
 		return true
-	case Object:
+	case EntityMentionRolesObject:
 		return true
-	case Src:
+	case EntityMentionRolesSrc:
 		return true
-	case Victim:
+	case EntityMentionRolesVictim:
 		return true
 	default:
 		return false
@@ -168,6 +174,54 @@ func (e EventSortDirection) Valid() bool {
 	case Asc:
 		return true
 	case Desc:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for EvidenceExportState.
+const (
+	EvidenceExportStateExpired EvidenceExportState = "expired"
+	EvidenceExportStateFailed  EvidenceExportState = "failed"
+	EvidenceExportStatePartial EvidenceExportState = "partial"
+	EvidenceExportStatePending EvidenceExportState = "pending"
+	EvidenceExportStateReady   EvidenceExportState = "ready"
+)
+
+// Valid indicates whether the value is a known member of the EvidenceExportState enum.
+func (e EvidenceExportState) Valid() bool {
+	switch e {
+	case EvidenceExportStateExpired:
+		return true
+	case EvidenceExportStateFailed:
+		return true
+	case EvidenceExportStatePartial:
+		return true
+	case EvidenceExportStatePending:
+		return true
+	case EvidenceExportStateReady:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for EvidenceReferenceKind.
+const (
+	EvidenceReferenceKindFile    EvidenceReferenceKind = "file"
+	EvidenceReferenceKindPayload EvidenceReferenceKind = "payload"
+	EvidenceReferenceKindPcap    EvidenceReferenceKind = "pcap"
+)
+
+// Valid indicates whether the value is a known member of the EvidenceReferenceKind enum.
+func (e EvidenceReferenceKind) Valid() bool {
+	switch e {
+	case EvidenceReferenceKindFile:
+		return true
+	case EvidenceReferenceKindPayload:
+		return true
+	case EvidenceReferenceKindPcap:
 		return true
 	default:
 		return false
@@ -716,16 +770,48 @@ type EventSourceRef struct {
 	SourceEventId string `json:"source_event_id"`
 }
 
+// EvidenceExport defines model for EvidenceExport.
+type EvidenceExport struct {
+	ContentType *string `json:"content_type,omitempty"`
+
+	// Error Safe explanation; never vendor URLs or raw responses.
+	Error     *string             `json:"error,omitempty"`
+	Evidence  EvidenceReference   `json:"evidence"`
+	ExpiresAt time.Time           `json:"expires_at"`
+	ExportId  openapi_types.UUID  `json:"export_id"`
+	Filename  *string             `json:"filename,omitempty"`
+	Size      *int64              `json:"size,omitempty"`
+	State     EvidenceExportState `json:"state"`
+}
+
+// EvidenceExportState defines model for EvidenceExport.State.
+type EvidenceExportState string
+
+// EvidenceReference defines model for EvidenceReference.
+type EvidenceReference struct {
+	Kind EvidenceReferenceKind `json:"kind"`
+
+	// ObjectId File ID from session file_hints; required for file, omitted otherwise. Payload uses an alert ref; PCAP uses a session ref.
+	ObjectId *string `json:"object_id,omitempty"`
+
+	// Ref Stable source-owned object identity plus the bounded time window needed to resolve it again.
+	Ref SourceObjectRef `json:"ref"`
+}
+
+// EvidenceReferenceKind defines model for EvidenceReference.Kind.
+type EvidenceReferenceKind string
+
 // Finding A source-native coarse security object; never a renamed raw event.
 type Finding struct {
-	Correlation *CorrelationDetails `json:"correlation,omitempty"`
-	Description *string             `json:"description,omitempty"`
-	Entities    []EntityMention     `json:"entities"`
-	FetchedAt   time.Time           `json:"fetched_at"`
-	Incident    *IncidentDetails    `json:"incident,omitempty"`
-	Kind        FindingKind         `json:"kind"`
-	NadAttack   *NADAttackDetails   `json:"nad_attack,omitempty"`
-	OccurredAt  time.Time           `json:"occurred_at"`
+	Correlation *CorrelationDetails  `json:"correlation,omitempty"`
+	Description *string              `json:"description,omitempty"`
+	Entities    []EntityMention      `json:"entities"`
+	Evidence    *[]EvidenceReference `json:"evidence,omitempty"`
+	FetchedAt   time.Time            `json:"fetched_at"`
+	Incident    *IncidentDetails     `json:"incident,omitempty"`
+	Kind        FindingKind          `json:"kind"`
+	NadAttack   *NADAttackDetails    `json:"nad_attack,omitempty"`
+	OccurredAt  time.Time            `json:"occurred_at"`
 
 	// Ref Stable source-owned object identity plus the bounded time window needed to resolve it again.
 	Ref             SourceObjectRef    `json:"ref"`
@@ -810,12 +896,15 @@ type LookupEntityResponse struct {
 
 // NADAttackDetails defines model for NADAttackDetails.
 type NADAttackDetails struct {
-	Class         *string `json:"class,omitempty"`
-	FalsePositive *bool   `json:"false_positive,omitempty"`
-	Gid           *int    `json:"gid,omitempty"`
-	RawPriority   *int    `json:"raw_priority,omitempty"`
-	Revision      *int    `json:"revision,omitempty"`
-	Sid           *int    `json:"sid,omitempty"`
+	Class            *string   `json:"class,omitempty"`
+	FalsePositive    *bool     `json:"false_positive,omitempty"`
+	Gid              *int      `json:"gid,omitempty"`
+	MalwareFamily    *[]string `json:"malware_family,omitempty"`
+	PayloadAvailable *bool     `json:"payload_available,omitempty"`
+	RawPriority      *int      `json:"raw_priority,omitempty"`
+	Revision         *int      `json:"revision,omitempty"`
+	Sid              *int      `json:"sid,omitempty"`
+	Signature        *string   `json:"signature,omitempty"`
 }
 
 // NetworkEndpoint defines model for NetworkEndpoint.
@@ -1004,7 +1093,12 @@ type SearchEventsResponse struct {
 
 // SearchFindingsRequest defines model for SearchFindingsRequest.
 type SearchFindingsRequest struct {
-	Cursor  *string        `json:"cursor,omitempty"`
+	// CreatedAtRange Optional incident creation time; supported only for SIEM incident searches.
+	CreatedAtRange *TimeRange `json:"created_at_range,omitempty"`
+	Cursor         *string    `json:"cursor,omitempty"`
+
+	// Filter Bounded NAD predicate; supported fields and operators are documented in Gateway providers.
+	Filter  *string        `json:"filter,omitempty"`
 	Kinds   *[]FindingKind `json:"kinds,omitempty"`
 	Limit   *int           `json:"limit,omitempty"`
 	Sources *[]string      `json:"sources,omitempty"`
@@ -1026,7 +1120,10 @@ type SearchFindingsResponse struct {
 
 // SearchSessionsRequest defines model for SearchSessionsRequest.
 type SearchSessionsRequest struct {
-	Cursor  *string   `json:"cursor,omitempty"`
+	Cursor *string `json:"cursor,omitempty"`
+
+	// Filter Bounded NAD predicate; supported fields and operators are documented in Gateway providers.
+	Filter  *string   `json:"filter,omitempty"`
 	Limit   *int      `json:"limit,omitempty"`
 	Sources *[]string `json:"sources,omitempty"`
 
@@ -1054,10 +1151,12 @@ type Session struct {
 	DurationSeconds     *float64                    `json:"duration_seconds,omitempty"`
 	EndedAt             *time.Time                  `json:"ended_at,omitempty"`
 	Entities            []EntityMention             `json:"entities"`
+	Evidence            *[]EvidenceReference        `json:"evidence,omitempty"`
 	FalsePositive       *bool                       `json:"false_positive,omitempty"`
 	FetchedAt           time.Time                   `json:"fetched_at"`
 	FileHints           []SessionFileHint           `json:"file_hints"`
 	HasFiles            *bool                       `json:"has_files,omitempty"`
+	MailHints           *[]SessionMailHint          `json:"mail_hints,omitempty"`
 	Packets             *TrafficCounters            `json:"packets,omitempty"`
 	RawCriticality      *int                        `json:"raw_criticality,omitempty"`
 
@@ -1088,7 +1187,7 @@ type SessionAuthenticationHint struct {
 	Valid          *bool   `json:"valid,omitempty"`
 }
 
-// SessionFileHint Safe metadata for a file observed in the session; file content and full vendor records are never returned.
+// SessionFileHint Safe metadata for a file observed in the session; file content is available only through an explicit evidence export.
 type SessionFileHint struct {
 	Direction  *string `json:"direction,omitempty"`
 	ExternalId string  `json:"external_id"`
@@ -1098,6 +1197,15 @@ type SessionFileHint struct {
 	Sha256     *string `json:"sha256,omitempty"`
 	Size       int64   `json:"size"`
 	State      *string `json:"state,omitempty"`
+}
+
+// SessionMailHint defines model for SessionMailHint.
+type SessionMailHint struct {
+	// Date Original mail date header
+	Date    string   `json:"date"`
+	From    string   `json:"from"`
+	Subject string   `json:"subject"`
+	To      []string `json:"to"`
 }
 
 // Source External security product registered in the Gateway.
@@ -1206,6 +1314,9 @@ type Verdict struct {
 // VerdictValue Normalized assessment of the object.
 type VerdictValue string
 
+// ExportId defines model for ExportId.
+type ExportId = openapi_types.UUID
+
 // ProjectId defines model for ProjectId.
 type ProjectId = string
 
@@ -1284,6 +1395,29 @@ type SearchEventsParams struct {
 	XProjectID ProjectId `json:"X-Project-ID"`
 }
 
+// CreateEvidenceExportParams defines parameters for CreateEvidenceExport.
+type CreateEvidenceExportParams struct {
+	// XProjectID Sb0rka project whose integration allowlist is used.
+	XProjectID ProjectId `json:"X-Project-ID"`
+}
+
+// GetEvidenceExportParams defines parameters for GetEvidenceExport.
+type GetEvidenceExportParams struct {
+	// XProjectID Sb0rka project whose integration allowlist is used.
+	XProjectID ProjectId `json:"X-Project-ID"`
+}
+
+// GetEvidenceContentParams defines parameters for GetEvidenceContent.
+type GetEvidenceContentParams struct {
+	Offset *int64 `form:"offset,omitempty" json:"offset,omitempty"`
+
+	// Limit Optional byte slice length for MCP; omitted streams the full content.
+	Limit *int `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// XProjectID Sb0rka project whose integration allowlist is used.
+	XProjectID ProjectId `json:"X-Project-ID"`
+}
+
 // SearchFindingsParams defines parameters for SearchFindings.
 type SearchFindingsParams struct {
 	// XProjectID Sb0rka project whose integration allowlist is used.
@@ -1358,6 +1492,9 @@ type AggregateEventsJSONRequestBody = AggregateEventsRequest
 // SearchEventsJSONRequestBody defines body for SearchEvents for application/json ContentType.
 type SearchEventsJSONRequestBody = SearchEventsRequest
 
+// CreateEvidenceExportJSONRequestBody defines body for CreateEvidenceExport for application/json ContentType.
+type CreateEvidenceExportJSONRequestBody = EvidenceReference
+
 // SearchFindingsJSONRequestBody defines body for SearchFindings for application/json ContentType.
 type SearchFindingsJSONRequestBody = SearchFindingsRequest
 
@@ -1387,6 +1524,15 @@ type ServerInterface interface {
 	// SearchEvents Search normalized events
 	// (POST /api/v1/events/search)
 	SearchEvents(w http.ResponseWriter, r *http.Request, params SearchEventsParams)
+	// CreateEvidenceExport Prepare selected source evidence for download
+	// (POST /api/v1/evidence/exports)
+	CreateEvidenceExport(w http.ResponseWriter, r *http.Request, params CreateEvidenceExportParams)
+	// GetEvidenceExport Read project-owned evidence export status
+	// (GET /api/v1/evidence/exports/{export_id})
+	GetEvidenceExport(w http.ResponseWriter, r *http.Request, exportId ExportId, params GetEvidenceExportParams)
+	// GetEvidenceContent Stream source evidence or a bounded byte slice
+	// (GET /api/v1/evidence/exports/{export_id}/content)
+	GetEvidenceContent(w http.ResponseWriter, r *http.Request, exportId ExportId, params GetEvidenceContentParams)
 	// SearchFindings Search source-native security findings
 	// (POST /api/v1/findings/search)
 	SearchFindings(w http.ResponseWriter, r *http.Request, params SearchFindingsParams)
@@ -1740,6 +1886,185 @@ func (siw *ServerInterfaceWrapper) SearchEvents(w http.ResponseWriter, r *http.R
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.SearchEvents(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateEvidenceExport operation middleware
+func (siw *ServerInterfaceWrapper) CreateEvidenceExport(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params CreateEvidenceExportParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "X-Project-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Project-ID")]; found {
+		var XProjectID ProjectId
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Project-ID", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Project-ID", valueList[0], &XProjectID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Project-ID", Err: err})
+			return
+		}
+
+		params.XProjectID = XProjectID
+
+	} else {
+		err := fmt.Errorf("Header parameter X-Project-ID is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Project-ID", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateEvidenceExport(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetEvidenceExport operation middleware
+func (siw *ServerInterfaceWrapper) GetEvidenceExport(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "export_id" -------------
+	var exportId ExportId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "export_id", r.PathValue("export_id"), &exportId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "export_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetEvidenceExportParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "X-Project-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Project-ID")]; found {
+		var XProjectID ProjectId
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Project-ID", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Project-ID", valueList[0], &XProjectID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Project-ID", Err: err})
+			return
+		}
+
+		params.XProjectID = XProjectID
+
+	} else {
+		err := fmt.Errorf("Header parameter X-Project-ID is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Project-ID", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetEvidenceExport(w, r, exportId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetEvidenceContent operation middleware
+func (siw *ServerInterfaceWrapper) GetEvidenceContent(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "export_id" -------------
+	var exportId ExportId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "export_id", r.PathValue("export_id"), &exportId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "export_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetEvidenceContentParams
+
+	// ------------- Optional query parameter "offset" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "offset", r.URL.Query(), &params.Offset, runtime.BindQueryParameterOptions{Type: "integer", Format: "int64"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "offset"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "offset", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	headers := r.Header
+
+	// ------------- Required header parameter "X-Project-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Project-ID")]; found {
+		var XProjectID ProjectId
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Project-ID", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Project-ID", valueList[0], &XProjectID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Project-ID", Err: err})
+			return
+		}
+
+		params.XProjectID = XProjectID
+
+	} else {
+		err := fmt.Errorf("Header parameter X-Project-ID is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Project-ID", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetEvidenceContent(w, r, exportId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -2384,6 +2709,9 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/events/search", wrapper.SearchEvents)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/events/aggregate", wrapper.AggregateEvents)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/context/resolve", wrapper.ResolveContext)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/evidence/exports", wrapper.CreateEvidenceExport)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/evidence/exports/{export_id}", wrapper.GetEvidenceExport)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/evidence/exports/{export_id}/content", wrapper.GetEvidenceContent)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/findings/search", wrapper.SearchFindings)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/sources/{source}/findings/{kind}/{external_id}", wrapper.GetFinding)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/healthz", wrapper.Healthz)

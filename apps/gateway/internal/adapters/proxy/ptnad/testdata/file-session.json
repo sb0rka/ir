@@ -1,0 +1,60 @@
+{
+  "id": "P8H9F5zUMIAFzrmsj6~mk1",
+  "start": "2023-06-10T09:58:20.393172",
+  "end": "2023-06-10T09:58:20.553699",
+  "src": {
+    "groups": [
+      "HOME_NET"
+    ],
+    "ip": "192.168.25.190",
+    "mac": "00:50:56:83:B1:84",
+    "port": 52393
+  },
+  "dst": {
+    "geo": {
+      "asn": 7018,
+      "country": "US",
+      "org": "ATT-INTERNET4",
+      "location": [
+        37.751,
+        -97.822
+      ]
+    },
+    "groups": [
+      "EXTERNAL_NET"
+    ],
+    "ip": "32.17.0.10",
+    "mac": "00:50:56:83:24:03",
+    "port": 8090
+  },
+  "app_proto": "http",
+  "files": [
+    {
+      "_index": "offline-000023",
+      "_ndx": "offline-000023",
+      "file_id": 8,
+      "filename": "(ChromeUpdate.exe)",
+      "filepath": "/",
+      "id": "LRwE4Z4BaLX3hldUPkj8",
+      "magic": "PE32 executable",
+      "md5": "e066f4083fa6c4a9967794649ea90eda",
+      "mime": "application/x-dosexec",
+      "offset": 0,
+      "parent": "P8H9F5zUMIAFzrmsj6~mk1",
+      "sha256": "c90c2cc6ee4bd2b892fb6651f30544f1b541d65a92ab0038a5bc455408401897",
+      "size": 73802,
+      "stag": "Case_2.6",
+      "state": "closed",
+      "to_client": true,
+      "tx_id": 0,
+      "_type": {
+        "name": "files",
+        "parent": "P8H9F5zUMIAFzrmsj6~mk1"
+      },
+      "_parent_id": "P8H9F5zUMIAFzrmsj6~mk1"
+    }
+  ],
+  "pcaps": [
+    "431716116524895232"
+  ]
+}

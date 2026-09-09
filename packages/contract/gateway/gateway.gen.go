@@ -40,6 +40,8 @@ const (
 	CapabilityEndpoints        Capability = "endpoints"
 	CapabilityEntityLookup     Capability = "entity_lookup"
 	CapabilityEvents           Capability = "events"
+	CapabilityEvidenceFile     Capability = "evidence_file"
+	CapabilityEvidencePayload  Capability = "evidence_payload"
 	CapabilityFindings         Capability = "findings"
 	CapabilityResponseCatalog  Capability = "response_catalog"
 	CapabilitySessions         Capability = "sessions"
@@ -57,6 +59,10 @@ func (e Capability) Valid() bool {
 	case CapabilityEntityLookup:
 		return true
 	case CapabilityEvents:
+		return true
+	case CapabilityEvidenceFile:
+		return true
+	case CapabilityEvidencePayload:
 		return true
 	case CapabilityFindings:
 		return true
@@ -92,37 +98,37 @@ func (e EndpointStatus) Valid() bool {
 
 // Defines values for EntityMentionRoles.
 const (
-	Account  EntityMentionRoles = "account"
-	Actor    EntityMentionRoles = "actor"
-	Attacker EntityMentionRoles = "attacker"
-	Dst      EntityMentionRoles = "dst"
-	File     EntityMentionRoles = "file"
-	Mentions EntityMentionRoles = "mentions"
-	Object   EntityMentionRoles = "object"
-	Src      EntityMentionRoles = "src"
-	Victim   EntityMentionRoles = "victim"
+	EntityMentionRolesAccount  EntityMentionRoles = "account"
+	EntityMentionRolesActor    EntityMentionRoles = "actor"
+	EntityMentionRolesAttacker EntityMentionRoles = "attacker"
+	EntityMentionRolesDst      EntityMentionRoles = "dst"
+	EntityMentionRolesFile     EntityMentionRoles = "file"
+	EntityMentionRolesMentions EntityMentionRoles = "mentions"
+	EntityMentionRolesObject   EntityMentionRoles = "object"
+	EntityMentionRolesSrc      EntityMentionRoles = "src"
+	EntityMentionRolesVictim   EntityMentionRoles = "victim"
 )
 
 // Valid indicates whether the value is a known member of the EntityMentionRoles enum.
 func (e EntityMentionRoles) Valid() bool {
 	switch e {
-	case Account:
+	case EntityMentionRolesAccount:
 		return true
-	case Actor:
+	case EntityMentionRolesActor:
 		return true
-	case Attacker:
+	case EntityMentionRolesAttacker:
 		return true
-	case Dst:
+	case EntityMentionRolesDst:
 		return true
-	case File:
+	case EntityMentionRolesFile:
 		return true
-	case Mentions:
+	case EntityMentionRolesMentions:
 		return true
-	case Object:
+	case EntityMentionRolesObject:
 		return true
-	case Src:
+	case EntityMentionRolesSrc:
 		return true
-	case Victim:
+	case EntityMentionRolesVictim:
 		return true
 	default:
 		return false
@@ -171,6 +177,54 @@ func (e EventSortDirection) Valid() bool {
 	case Asc:
 		return true
 	case Desc:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for EvidenceExportState.
+const (
+	EvidenceExportStateExpired EvidenceExportState = "expired"
+	EvidenceExportStateFailed  EvidenceExportState = "failed"
+	EvidenceExportStatePartial EvidenceExportState = "partial"
+	EvidenceExportStatePending EvidenceExportState = "pending"
+	EvidenceExportStateReady   EvidenceExportState = "ready"
+)
+
+// Valid indicates whether the value is a known member of the EvidenceExportState enum.
+func (e EvidenceExportState) Valid() bool {
+	switch e {
+	case EvidenceExportStateExpired:
+		return true
+	case EvidenceExportStateFailed:
+		return true
+	case EvidenceExportStatePartial:
+		return true
+	case EvidenceExportStatePending:
+		return true
+	case EvidenceExportStateReady:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for EvidenceReferenceKind.
+const (
+	EvidenceReferenceKindFile    EvidenceReferenceKind = "file"
+	EvidenceReferenceKindPayload EvidenceReferenceKind = "payload"
+	EvidenceReferenceKindPcap    EvidenceReferenceKind = "pcap"
+)
+
+// Valid indicates whether the value is a known member of the EvidenceReferenceKind enum.
+func (e EvidenceReferenceKind) Valid() bool {
+	switch e {
+	case EvidenceReferenceKindFile:
+		return true
+	case EvidenceReferenceKindPayload:
+		return true
+	case EvidenceReferenceKindPcap:
 		return true
 	default:
 		return false
@@ -719,16 +773,48 @@ type EventSourceRef struct {
 	SourceEventId string `json:"source_event_id"`
 }
 
+// EvidenceExport defines model for EvidenceExport.
+type EvidenceExport struct {
+	ContentType *string `json:"content_type,omitempty"`
+
+	// Error Safe explanation; never vendor URLs or raw responses.
+	Error     *string             `json:"error,omitempty"`
+	Evidence  EvidenceReference   `json:"evidence"`
+	ExpiresAt time.Time           `json:"expires_at"`
+	ExportId  openapi_types.UUID  `json:"export_id"`
+	Filename  *string             `json:"filename,omitempty"`
+	Size      *int64              `json:"size,omitempty"`
+	State     EvidenceExportState `json:"state"`
+}
+
+// EvidenceExportState defines model for EvidenceExport.State.
+type EvidenceExportState string
+
+// EvidenceReference defines model for EvidenceReference.
+type EvidenceReference struct {
+	Kind EvidenceReferenceKind `json:"kind"`
+
+	// ObjectId File ID from session file_hints; required for file, omitted otherwise. Payload uses an alert ref; PCAP uses a session ref.
+	ObjectId *string `json:"object_id,omitempty"`
+
+	// Ref Stable source-owned object identity plus the bounded time window needed to resolve it again.
+	Ref SourceObjectRef `json:"ref"`
+}
+
+// EvidenceReferenceKind defines model for EvidenceReference.Kind.
+type EvidenceReferenceKind string
+
 // Finding A source-native coarse security object; never a renamed raw event.
 type Finding struct {
-	Correlation *CorrelationDetails `json:"correlation,omitempty"`
-	Description *string             `json:"description,omitempty"`
-	Entities    []EntityMention     `json:"entities"`
-	FetchedAt   time.Time           `json:"fetched_at"`
-	Incident    *IncidentDetails    `json:"incident,omitempty"`
-	Kind        FindingKind         `json:"kind"`
-	NadAttack   *NADAttackDetails   `json:"nad_attack,omitempty"`
-	OccurredAt  time.Time           `json:"occurred_at"`
+	Correlation *CorrelationDetails  `json:"correlation,omitempty"`
+	Description *string              `json:"description,omitempty"`
+	Entities    []EntityMention      `json:"entities"`
+	Evidence    *[]EvidenceReference `json:"evidence,omitempty"`
+	FetchedAt   time.Time            `json:"fetched_at"`
+	Incident    *IncidentDetails     `json:"incident,omitempty"`
+	Kind        FindingKind          `json:"kind"`
+	NadAttack   *NADAttackDetails    `json:"nad_attack,omitempty"`
+	OccurredAt  time.Time            `json:"occurred_at"`
 
 	// Ref Stable source-owned object identity plus the bounded time window needed to resolve it again.
 	Ref             SourceObjectRef    `json:"ref"`
@@ -813,12 +899,15 @@ type LookupEntityResponse struct {
 
 // NADAttackDetails defines model for NADAttackDetails.
 type NADAttackDetails struct {
-	Class         *string `json:"class,omitempty"`
-	FalsePositive *bool   `json:"false_positive,omitempty"`
-	Gid           *int    `json:"gid,omitempty"`
-	RawPriority   *int    `json:"raw_priority,omitempty"`
-	Revision      *int    `json:"revision,omitempty"`
-	Sid           *int    `json:"sid,omitempty"`
+	Class            *string   `json:"class,omitempty"`
+	FalsePositive    *bool     `json:"false_positive,omitempty"`
+	Gid              *int      `json:"gid,omitempty"`
+	MalwareFamily    *[]string `json:"malware_family,omitempty"`
+	PayloadAvailable *bool     `json:"payload_available,omitempty"`
+	RawPriority      *int      `json:"raw_priority,omitempty"`
+	Revision         *int      `json:"revision,omitempty"`
+	Sid              *int      `json:"sid,omitempty"`
+	Signature        *string   `json:"signature,omitempty"`
 }
 
 // NetworkEndpoint defines model for NetworkEndpoint.
@@ -1007,7 +1096,12 @@ type SearchEventsResponse struct {
 
 // SearchFindingsRequest defines model for SearchFindingsRequest.
 type SearchFindingsRequest struct {
-	Cursor  *string        `json:"cursor,omitempty"`
+	// CreatedAtRange Optional incident creation time; supported only for SIEM incident searches.
+	CreatedAtRange *TimeRange `json:"created_at_range,omitempty"`
+	Cursor         *string    `json:"cursor,omitempty"`
+
+	// Filter Bounded NAD predicate; supported fields and operators are documented in Gateway providers.
+	Filter  *string        `json:"filter,omitempty"`
 	Kinds   *[]FindingKind `json:"kinds,omitempty"`
 	Limit   *int           `json:"limit,omitempty"`
 	Sources *[]string      `json:"sources,omitempty"`
@@ -1029,7 +1123,10 @@ type SearchFindingsResponse struct {
 
 // SearchSessionsRequest defines model for SearchSessionsRequest.
 type SearchSessionsRequest struct {
-	Cursor  *string   `json:"cursor,omitempty"`
+	Cursor *string `json:"cursor,omitempty"`
+
+	// Filter Bounded NAD predicate; supported fields and operators are documented in Gateway providers.
+	Filter  *string   `json:"filter,omitempty"`
 	Limit   *int      `json:"limit,omitempty"`
 	Sources *[]string `json:"sources,omitempty"`
 
@@ -1057,10 +1154,12 @@ type Session struct {
 	DurationSeconds     *float64                    `json:"duration_seconds,omitempty"`
 	EndedAt             *time.Time                  `json:"ended_at,omitempty"`
 	Entities            []EntityMention             `json:"entities"`
+	Evidence            *[]EvidenceReference        `json:"evidence,omitempty"`
 	FalsePositive       *bool                       `json:"false_positive,omitempty"`
 	FetchedAt           time.Time                   `json:"fetched_at"`
 	FileHints           []SessionFileHint           `json:"file_hints"`
 	HasFiles            *bool                       `json:"has_files,omitempty"`
+	MailHints           *[]SessionMailHint          `json:"mail_hints,omitempty"`
 	Packets             *TrafficCounters            `json:"packets,omitempty"`
 	RawCriticality      *int                        `json:"raw_criticality,omitempty"`
 
@@ -1091,7 +1190,7 @@ type SessionAuthenticationHint struct {
 	Valid          *bool   `json:"valid,omitempty"`
 }
 
-// SessionFileHint Safe metadata for a file observed in the session; file content and full vendor records are never returned.
+// SessionFileHint Safe metadata for a file observed in the session; file content is available only through an explicit evidence export.
 type SessionFileHint struct {
 	Direction  *string `json:"direction,omitempty"`
 	ExternalId string  `json:"external_id"`
@@ -1101,6 +1200,15 @@ type SessionFileHint struct {
 	Sha256     *string `json:"sha256,omitempty"`
 	Size       int64   `json:"size"`
 	State      *string `json:"state,omitempty"`
+}
+
+// SessionMailHint defines model for SessionMailHint.
+type SessionMailHint struct {
+	// Date Original mail date header
+	Date    string   `json:"date"`
+	From    string   `json:"from"`
+	Subject string   `json:"subject"`
+	To      []string `json:"to"`
 }
 
 // Source External security product registered in the Gateway.
@@ -1209,6 +1317,9 @@ type Verdict struct {
 // VerdictValue Normalized assessment of the object.
 type VerdictValue string
 
+// ExportId defines model for ExportId.
+type ExportId = openapi_types.UUID
+
 // ProjectId defines model for ProjectId.
 type ProjectId = string
 
@@ -1287,6 +1398,29 @@ type SearchEventsParams struct {
 	XProjectID ProjectId `json:"X-Project-ID"`
 }
 
+// CreateEvidenceExportParams defines parameters for CreateEvidenceExport.
+type CreateEvidenceExportParams struct {
+	// XProjectID Sb0rka project whose integration allowlist is used.
+	XProjectID ProjectId `json:"X-Project-ID"`
+}
+
+// GetEvidenceExportParams defines parameters for GetEvidenceExport.
+type GetEvidenceExportParams struct {
+	// XProjectID Sb0rka project whose integration allowlist is used.
+	XProjectID ProjectId `json:"X-Project-ID"`
+}
+
+// GetEvidenceContentParams defines parameters for GetEvidenceContent.
+type GetEvidenceContentParams struct {
+	Offset *int64 `form:"offset,omitempty" json:"offset,omitempty"`
+
+	// Limit Optional byte slice length for MCP; omitted streams the full content.
+	Limit *int `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// XProjectID Sb0rka project whose integration allowlist is used.
+	XProjectID ProjectId `json:"X-Project-ID"`
+}
+
 // SearchFindingsParams defines parameters for SearchFindings.
 type SearchFindingsParams struct {
 	// XProjectID Sb0rka project whose integration allowlist is used.
@@ -1360,6 +1494,9 @@ type AggregateEventsJSONRequestBody = AggregateEventsRequest
 
 // SearchEventsJSONRequestBody defines body for SearchEvents for application/json ContentType.
 type SearchEventsJSONRequestBody = SearchEventsRequest
+
+// CreateEvidenceExportJSONRequestBody defines body for CreateEvidenceExport for application/json ContentType.
+type CreateEvidenceExportJSONRequestBody = EvidenceReference
 
 // SearchFindingsJSONRequestBody defines body for SearchFindings for application/json ContentType.
 type SearchFindingsJSONRequestBody = SearchFindingsRequest
@@ -1529,6 +1666,34 @@ type ClientInterface interface {
 	//
 	// Corresponds with POST /api/v1/events/search (the `SearchEvents` operationId).
 	SearchEvents(ctx context.Context, params *SearchEventsParams, body SearchEventsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CreateEvidenceExportWithBody Prepare selected source evidence for download
+	//
+	// Explicit payload or selected-file download. Pilot checks must not download malware or suspicious attachments; use supplied dumps or synthetic content. NAD session PCAP export remains unsupported and is separate from reading a supplied dump.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /api/v1/evidence/exports (the `CreateEvidenceExport` operationId).
+	CreateEvidenceExportWithBody(ctx context.Context, params *CreateEvidenceExportParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CreateEvidenceExport Prepare selected source evidence for download
+	//
+	// Explicit payload or selected-file download. Pilot checks must not download malware or suspicious attachments; use supplied dumps or synthetic content. NAD session PCAP export remains unsupported and is separate from reading a supplied dump.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /api/v1/evidence/exports (the `CreateEvidenceExport` operationId).
+	CreateEvidenceExport(ctx context.Context, params *CreateEvidenceExportParams, body CreateEvidenceExportJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetEvidenceExport Read project-owned evidence export status
+	//
+	// Corresponds with GET /api/v1/evidence/exports/{export_id} (the `GetEvidenceExport` operationId).
+	GetEvidenceExport(ctx context.Context, exportId ExportId, params *GetEvidenceExportParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetEvidenceContent Stream source evidence or a bounded byte slice
+	//
+	// Corresponds with GET /api/v1/evidence/exports/{export_id}/content (the `GetEvidenceContent` operationId).
+	GetEvidenceContent(ctx context.Context, exportId ExportId, params *GetEvidenceContentParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// SearchFindingsWithBody Search source-native security findings
 	//
@@ -1807,6 +1972,74 @@ func (c *Client) SearchEventsWithBody(ctx context.Context, params *SearchEventsP
 // Corresponds with POST /api/v1/events/search (the `SearchEvents` operationId).
 func (c *Client) SearchEvents(ctx context.Context, params *SearchEventsParams, body SearchEventsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewSearchEventsRequest(c.Server, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// CreateEvidenceExportWithBody Prepare selected source evidence for download
+//
+// Explicit payload or selected-file download. Pilot checks must not download malware or suspicious attachments; use supplied dumps or synthetic content. NAD session PCAP export remains unsupported and is separate from reading a supplied dump.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /api/v1/evidence/exports (the `CreateEvidenceExport` operationId).
+func (c *Client) CreateEvidenceExportWithBody(ctx context.Context, params *CreateEvidenceExportParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateEvidenceExportRequestWithBody(c.Server, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// CreateEvidenceExport Prepare selected source evidence for download
+//
+// Explicit payload or selected-file download. Pilot checks must not download malware or suspicious attachments; use supplied dumps or synthetic content. NAD session PCAP export remains unsupported and is separate from reading a supplied dump.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /api/v1/evidence/exports (the `CreateEvidenceExport` operationId).
+func (c *Client) CreateEvidenceExport(ctx context.Context, params *CreateEvidenceExportParams, body CreateEvidenceExportJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateEvidenceExportRequest(c.Server, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetEvidenceExport Read project-owned evidence export status
+//
+// Corresponds with GET /api/v1/evidence/exports/{export_id} (the `GetEvidenceExport` operationId).
+func (c *Client) GetEvidenceExport(ctx context.Context, exportId ExportId, params *GetEvidenceExportParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetEvidenceExportRequest(c.Server, exportId, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetEvidenceContent Stream source evidence or a bounded byte slice
+//
+// Corresponds with GET /api/v1/evidence/exports/{export_id}/content (the `GetEvidenceContent` operationId).
+func (c *Client) GetEvidenceContent(ctx context.Context, exportId ExportId, params *GetEvidenceContentParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetEvidenceContentRequest(c.Server, exportId, params)
 	if err != nil {
 		return nil, err
 	}
@@ -2342,6 +2575,192 @@ func NewSearchEventsRequestWithBody(server string, params *SearchEventsParams, c
 	}
 
 	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "X-Project-ID", params.XProjectID, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("X-Project-ID", headerParam0)
+
+	}
+
+	return req, nil
+}
+
+// NewCreateEvidenceExportRequest calls the generic CreateEvidenceExport builder with application/json body
+func NewCreateEvidenceExportRequest(server string, params *CreateEvidenceExportParams, body CreateEvidenceExportJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewCreateEvidenceExportRequestWithBody(server, params, "application/json", bodyReader)
+}
+
+// NewCreateEvidenceExportRequestWithBody constructs an http.Request for the CreateEvidenceExport method, with any body, and a specified content type
+func NewCreateEvidenceExportRequestWithBody(server string, params *CreateEvidenceExportParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/evidence/exports")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "X-Project-ID", params.XProjectID, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("X-Project-ID", headerParam0)
+
+	}
+
+	return req, nil
+}
+
+// NewGetEvidenceExportRequest constructs an http.Request for the GetEvidenceExport method
+func NewGetEvidenceExportRequest(server string, exportId ExportId, params *GetEvidenceExportParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "export_id", exportId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/evidence/exports/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "X-Project-ID", params.XProjectID, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("X-Project-ID", headerParam0)
+
+	}
+
+	return req, nil
+}
+
+// NewGetEvidenceContentRequest constructs an http.Request for the GetEvidenceContent method
+func NewGetEvidenceContentRequest(server string, exportId ExportId, params *GetEvidenceContentParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "export_id", exportId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/evidence/exports/%s/content", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Offset != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "offset", *params.Offset, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: "int64"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
 
 	if params != nil {
 
@@ -3018,6 +3437,38 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with POST /api/v1/events/search (the `SearchEvents` operationId).
 	SearchEventsWithResponse(ctx context.Context, params *SearchEventsParams, body SearchEventsJSONRequestBody, reqEditors ...RequestEditorFn) (*SearchEventsClientResponse, error)
+
+	// CreateEvidenceExportWithBodyWithResponse Prepare selected source evidence for download
+	//
+	// Explicit payload or selected-file download. Pilot checks must not download malware or suspicious attachments; use supplied dumps or synthetic content. NAD session PCAP export remains unsupported and is separate from reading a supplied dump.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/evidence/exports (the `CreateEvidenceExport` operationId).
+	CreateEvidenceExportWithBodyWithResponse(ctx context.Context, params *CreateEvidenceExportParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateEvidenceExportClientResponse, error)
+
+	// CreateEvidenceExportWithResponse Prepare selected source evidence for download
+	//
+	// Explicit payload or selected-file download. Pilot checks must not download malware or suspicious attachments; use supplied dumps or synthetic content. NAD session PCAP export remains unsupported and is separate from reading a supplied dump.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/evidence/exports (the `CreateEvidenceExport` operationId).
+	CreateEvidenceExportWithResponse(ctx context.Context, params *CreateEvidenceExportParams, body CreateEvidenceExportJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateEvidenceExportClientResponse, error)
+
+	// GetEvidenceExportWithResponse Read project-owned evidence export status
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /api/v1/evidence/exports/{export_id} (the `GetEvidenceExport` operationId).
+	GetEvidenceExportWithResponse(ctx context.Context, exportId ExportId, params *GetEvidenceExportParams, reqEditors ...RequestEditorFn) (*GetEvidenceExportClientResponse, error)
+
+	// GetEvidenceContentWithResponse Stream source evidence or a bounded byte slice
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /api/v1/evidence/exports/{export_id}/content (the `GetEvidenceContent` operationId).
+	GetEvidenceContentWithResponse(ctx context.Context, exportId ExportId, params *GetEvidenceContentParams, reqEditors ...RequestEditorFn) (*GetEvidenceContentClientResponse, error)
 
 	// SearchFindingsWithBodyWithResponse Search source-native security findings
 	//
@@ -3809,6 +4260,235 @@ func (r SearchEventsClientResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r SearchEventsClientResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type CreateEvidenceExportClientResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *EvidenceExport
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *ErrorResponse
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *ErrorResponse
+	// JSON422 the response for an HTTP 422 `application/json` response
+	JSON422 *ErrorResponse
+	// JSONDefault the response for an HTTP default `application/json` response
+	JSONDefault *ErrorResponse
+}
+
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r CreateEvidenceExportClientResponse) GetJSON202() *EvidenceExport {
+	return r.JSON202
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r CreateEvidenceExportClientResponse) GetJSON400() *ErrorResponse {
+	return r.JSON400
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r CreateEvidenceExportClientResponse) GetJSON404() *ErrorResponse {
+	return r.JSON404
+}
+
+// GetJSON422 returns the response for an HTTP 422 `application/json` response
+func (r CreateEvidenceExportClientResponse) GetJSON422() *ErrorResponse {
+	return r.JSON422
+}
+
+// GetJSONDefault returns the response for an HTTP default `application/json` response
+func (r CreateEvidenceExportClientResponse) GetJSONDefault() *ErrorResponse {
+	return r.JSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r CreateEvidenceExportClientResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r CreateEvidenceExportClientResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r CreateEvidenceExportClientResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r CreateEvidenceExportClientResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GetEvidenceExportClientResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *EvidenceExport
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *ErrorResponse
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *ErrorResponse
+	// JSON422 the response for an HTTP 422 `application/json` response
+	JSON422 *ErrorResponse
+	// JSONDefault the response for an HTTP default `application/json` response
+	JSONDefault *ErrorResponse
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetEvidenceExportClientResponse) GetJSON200() *EvidenceExport {
+	return r.JSON200
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r GetEvidenceExportClientResponse) GetJSON400() *ErrorResponse {
+	return r.JSON400
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r GetEvidenceExportClientResponse) GetJSON404() *ErrorResponse {
+	return r.JSON404
+}
+
+// GetJSON422 returns the response for an HTTP 422 `application/json` response
+func (r GetEvidenceExportClientResponse) GetJSON422() *ErrorResponse {
+	return r.JSON422
+}
+
+// GetJSONDefault returns the response for an HTTP default `application/json` response
+func (r GetEvidenceExportClientResponse) GetJSONDefault() *ErrorResponse {
+	return r.JSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r GetEvidenceExportClientResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetEvidenceExportClientResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetEvidenceExportClientResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetEvidenceExportClientResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// GetEvidenceContentClientResponse200Headers the declared response headers of an HTTP 200 response for GetEvidenceContent
+type GetEvidenceContentClientResponse200Headers struct {
+	ContentDisposition *string
+	XEvidenceEOF       *bool
+}
+
+type GetEvidenceContentClientResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *ErrorResponse
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *ErrorResponse
+	// JSON409 the response for an HTTP 409 `application/json` response
+	JSON409 *ErrorResponse
+	// JSON410 the response for an HTTP 410 `application/json` response
+	JSON410 *ErrorResponse
+	// JSON416 the response for an HTTP 416 `application/json` response
+	JSON416 *ErrorResponse
+	// JSON422 the response for an HTTP 422 `application/json` response
+	JSON422 *ErrorResponse
+	// JSONDefault the response for an HTTP default `application/json` response
+	JSONDefault *ErrorResponse
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *GetEvidenceContentClientResponse200Headers
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r GetEvidenceContentClientResponse) GetJSON400() *ErrorResponse {
+	return r.JSON400
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r GetEvidenceContentClientResponse) GetJSON404() *ErrorResponse {
+	return r.JSON404
+}
+
+// GetJSON409 returns the response for an HTTP 409 `application/json` response
+func (r GetEvidenceContentClientResponse) GetJSON409() *ErrorResponse {
+	return r.JSON409
+}
+
+// GetJSON410 returns the response for an HTTP 410 `application/json` response
+func (r GetEvidenceContentClientResponse) GetJSON410() *ErrorResponse {
+	return r.JSON410
+}
+
+// GetJSON416 returns the response for an HTTP 416 `application/json` response
+func (r GetEvidenceContentClientResponse) GetJSON416() *ErrorResponse {
+	return r.JSON416
+}
+
+// GetJSON422 returns the response for an HTTP 422 `application/json` response
+func (r GetEvidenceContentClientResponse) GetJSON422() *ErrorResponse {
+	return r.JSON422
+}
+
+// GetJSONDefault returns the response for an HTTP default `application/json` response
+func (r GetEvidenceContentClientResponse) GetJSONDefault() *ErrorResponse {
+	return r.JSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r GetEvidenceContentClientResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetEvidenceContentClientResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetEvidenceContentClientResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetEvidenceContentClientResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -4701,6 +5381,62 @@ func (c *ClientWithResponses) SearchEventsWithResponse(ctx context.Context, para
 	return ParseSearchEventsClientResponse(rsp)
 }
 
+// CreateEvidenceExportWithBodyWithResponse Prepare selected source evidence for download
+//
+// Explicit payload or selected-file download. Pilot checks must not download malware or suspicious attachments; use supplied dumps or synthetic content. NAD session PCAP export remains unsupported and is separate from reading a supplied dump.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/evidence/exports (the `CreateEvidenceExport` operationId).
+func (c *ClientWithResponses) CreateEvidenceExportWithBodyWithResponse(ctx context.Context, params *CreateEvidenceExportParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateEvidenceExportClientResponse, error) {
+	rsp, err := c.CreateEvidenceExportWithBody(ctx, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateEvidenceExportClientResponse(rsp)
+}
+
+// CreateEvidenceExportWithResponse Prepare selected source evidence for download
+//
+// Explicit payload or selected-file download. Pilot checks must not download malware or suspicious attachments; use supplied dumps or synthetic content. NAD session PCAP export remains unsupported and is separate from reading a supplied dump.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/evidence/exports (the `CreateEvidenceExport` operationId).
+func (c *ClientWithResponses) CreateEvidenceExportWithResponse(ctx context.Context, params *CreateEvidenceExportParams, body CreateEvidenceExportJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateEvidenceExportClientResponse, error) {
+	rsp, err := c.CreateEvidenceExport(ctx, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateEvidenceExportClientResponse(rsp)
+}
+
+// GetEvidenceExportWithResponse Read project-owned evidence export status
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /api/v1/evidence/exports/{export_id} (the `GetEvidenceExport` operationId).
+func (c *ClientWithResponses) GetEvidenceExportWithResponse(ctx context.Context, exportId ExportId, params *GetEvidenceExportParams, reqEditors ...RequestEditorFn) (*GetEvidenceExportClientResponse, error) {
+	rsp, err := c.GetEvidenceExport(ctx, exportId, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetEvidenceExportClientResponse(rsp)
+}
+
+// GetEvidenceContentWithResponse Stream source evidence or a bounded byte slice
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /api/v1/evidence/exports/{export_id}/content (the `GetEvidenceContent` operationId).
+func (c *ClientWithResponses) GetEvidenceContentWithResponse(ctx context.Context, exportId ExportId, params *GetEvidenceContentParams, reqEditors ...RequestEditorFn) (*GetEvidenceContentClientResponse, error) {
+	rsp, err := c.GetEvidenceContent(ctx, exportId, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetEvidenceContentClientResponse(rsp)
+}
+
 // SearchFindingsWithBodyWithResponse Search source-native security findings
 //
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
@@ -5452,6 +6188,202 @@ func ParseSearchEventsClientResponse(rsp *http.Response) (*SearchEventsClientRes
 		}
 		response.JSONDefault = &dest
 
+	}
+
+	return response, nil
+}
+
+// ParseCreateEvidenceExportClientResponse parses an HTTP response from a CreateEvidenceExportWithResponse call
+func ParseCreateEvidenceExportClientResponse(rsp *http.Response) (*CreateEvidenceExportClientResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &CreateEvidenceExportClientResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest EvidenceExport
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON422 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetEvidenceExportClientResponse parses an HTTP response from a GetEvidenceExportWithResponse call
+func ParseGetEvidenceExportClientResponse(rsp *http.Response) (*GetEvidenceExportClientResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetEvidenceExportClientResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest EvidenceExport
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON422 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetEvidenceContentClientResponse parses an HTTP response from a GetEvidenceContentWithResponse call
+func ParseGetEvidenceContentClientResponse(rsp *http.Response) (*GetEvidenceContentClientResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetEvidenceContentClientResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 410:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON410 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 416:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON416 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON422 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		var headers GetEvidenceContentClientResponse200Headers
+		if values := rsp.Header.Values("Content-Disposition"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Disposition", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentDisposition = &value
+		}
+		if values := rsp.Header.Values("X-Evidence-EOF"); len(values) > 0 {
+			var value bool
+			if err := runtime.BindStyledParameterWithOptions("simple", "X-Evidence-EOF", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "boolean", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.XEvidenceEOF = &value
+		}
+		response.Headers200 = &headers
 	}
 
 	return response, nil

@@ -29,10 +29,12 @@ type TimeRange struct {
 }
 
 type SearchRequest struct {
-	StoreID int64
-	From    time.Time
-	To      time.Time
-	Limit   int
+	Filter    string
+	predicate string
+	StoreID   int64
+	From      time.Time
+	To        time.Time
+	Limit     int
 }
 
 type SessionRef struct {
@@ -91,8 +93,10 @@ type Counters struct {
 }
 
 type Session struct {
-	SourceRef SourceRef `json:"source_ref"`
-	FetchedAt time.Time `json:"fetched_at"`
+	Mail      []MailHint `json:"mail,omitempty"`
+	PCAPs     []string   `json:"pcaps,omitempty"`
+	SourceRef SourceRef  `json:"source_ref"`
+	FetchedAt time.Time  `json:"fetched_at"`
 	// ContextErrors keeps a usable root session while making failed bounded
 	// child enrichment visible through ObjectResolution.
 	ContextErrors        []error              `json:"-"`
@@ -130,29 +134,33 @@ type Session struct {
 }
 
 type Attack struct {
-	SourceRef      SourceRef  `json:"source_ref"`
-	FetchedAt      time.Time  `json:"fetched_at"`
-	Title          string     `json:"title"`
-	Description    string     `json:"description,omitempty"`
-	Recommendation string     `json:"recommendation,omitempty"`
-	Class          string     `json:"class,omitempty"`
-	OccurredAt     time.Time  `json:"occurred_at"`
-	Severity       string     `json:"severity"`
-	RawPriority    *int64     `json:"raw_priority,omitempty"`
-	GID            int64      `json:"gid,omitempty"`
-	SID            int64      `json:"sid,omitempty"`
-	Revision       int64      `json:"revision,omitempty"`
-	FalsePositive  *bool      `json:"false_positive,omitempty"`
-	Attacker       Endpoint   `json:"attacker"`
-	Victim         Endpoint   `json:"victim"`
-	ParentSession  *SourceRef `json:"parent_session,omitempty"`
-	RuleVendor     string     `json:"rule_vendor,omitempty"`
-	AttackTarget   string     `json:"attack_target,omitempty"`
-	AttackFlag     *bool      `json:"attack_flag,omitempty"`
-	RuleDisabled   *bool      `json:"rule_disabled,omitempty"`
-	MatchType      string     `json:"match_type,omitempty"`
-	ATTACK         []string   `json:"attack,omitempty"`
-	Direction      string     `json:"direction,omitempty"`
+	SignatureName    string     `json:"signature_name,omitempty"`
+	MalwareFamily    []string   `json:"malware_family,omitempty"`
+	PayloadAvailable bool       `json:"payload_available"`
+	ContextErrors    []error    `json:"-"`
+	SourceRef        SourceRef  `json:"source_ref"`
+	FetchedAt        time.Time  `json:"fetched_at"`
+	Title            string     `json:"title"`
+	Description      string     `json:"description,omitempty"`
+	Recommendation   string     `json:"recommendation,omitempty"`
+	Class            string     `json:"class,omitempty"`
+	OccurredAt       time.Time  `json:"occurred_at"`
+	Severity         string     `json:"severity"`
+	RawPriority      *int64     `json:"raw_priority,omitempty"`
+	GID              int64      `json:"gid,omitempty"`
+	SID              int64      `json:"sid,omitempty"`
+	Revision         int64      `json:"revision,omitempty"`
+	FalsePositive    *bool      `json:"false_positive,omitempty"`
+	Attacker         Endpoint   `json:"attacker"`
+	Victim           Endpoint   `json:"victim"`
+	ParentSession    *SourceRef `json:"parent_session,omitempty"`
+	RuleVendor       string     `json:"rule_vendor,omitempty"`
+	AttackTarget     string     `json:"attack_target,omitempty"`
+	AttackFlag       *bool      `json:"attack_flag,omitempty"`
+	RuleDisabled     *bool      `json:"rule_disabled,omitempty"`
+	MatchType        string     `json:"match_type,omitempty"`
+	ATTACK           []string   `json:"attack,omitempty"`
+	Direction        string     `json:"direction,omitempty"`
 }
 
 type FileHint struct {
@@ -303,4 +311,12 @@ type ProtocolError struct {
 
 func (err *ProtocolError) Error() string {
 	return fmt.Sprintf("PT NAD %s response is invalid", err.Operation)
+}
+
+type MailHint struct {
+	ID      string   `json:"id"`
+	From    string   `json:"from"`
+	To      []string `json:"to"`
+	Subject string   `json:"subject"`
+	Date    string   `json:"date"`
 }

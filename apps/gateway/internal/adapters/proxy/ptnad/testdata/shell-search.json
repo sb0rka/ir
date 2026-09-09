@@ -1,0 +1,45 @@
+{
+  "total": 1,
+  "result": [
+    [
+      null,
+      null,
+      "192.168.25.202",
+      "Attempt to gain administrator privileges",
+      null,
+      "vRwB4Z4BaLX3hldUvkZ1",
+      "SHELL [PTsecurity] CMD.EXE Shell banner",
+      2,
+      2,
+      10006379,
+      null,
+      "2023-06-08T11:02:08.718426",
+      null,
+      null,
+      "192.168.214.203",
+      [
+        [
+          "",
+          "192.168.214.203",
+          2222,
+          "2023-06-08T11:03:52.809630",
+          null,
+          false,
+          "P86qC9cOOElv1RPc~lYyC2",
+          null,
+          null,
+          null,
+          null,
+          null,
+          "192.168.25.202",
+          63050,
+          "2023-06-08T11:02:08.630712",
+          [
+            "ESTABLISHED",
+            "FINISHED"
+          ]
+        ]
+      ]
+    ]
+  ]
+}

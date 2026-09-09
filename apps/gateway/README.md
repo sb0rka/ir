@@ -55,3 +55,15 @@ Gateway builds the vendor query itself and always fetches the canonical identity
 MaxPatrol uses its reviewed `/api/events/v3/events/aggregation` operation. The adapter owns the required `select`, `group`, count alias, tie-break sorting, and limit pipeline. PT NAD remains an event source for normalized search and context, but reports `unsupported_event_aggregation` for this narrower operation. To drill into one returned group, call `/api/v1/events/search` with the same `group_by` and aligned `group_values`.
 
 See [architecture](docs/architecture.md), [provider mappings](docs/providers.md), and the [OpenAPI contract](../../api/gateway/openapi.yaml).
+
+## NAD case context and evidence
+
+Findings/sessions accept restricted NAD `filter` predicates; SIEM incidents also
+accept `created_at_range`. Session details include mail metadata and account hints.
+Full payload and selected-file bytes use explicit evidence exports and bounded MCP
+reads. See [case requests, lifecycle and verification](docs/evidence.md).
+
+File download support is retained. Pilot checks use supplied dumps or synthetic
+content and do not download malware or suspicious attachments. PCAP supplied by
+the course is analyzed separately; NAD session-PCAP export remains unsupported.
+Local contract tests do not establish live case coverage.

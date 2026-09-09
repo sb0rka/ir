@@ -98,6 +98,9 @@ components:
       description: A source-native coarse security object; never a renamed raw event.
       required: [ref, kind, title, severity, occurred_at, entities, fetched_at]
       properties:
+        evidence:
+          type: array
+          items: { $ref: './evidence.yaml#/components/schemas/EvidenceReference' }
         ref: { $ref: '../shared/schemas.yaml#/SourceObjectRef' }
         kind: { $ref: '#/components/schemas/FindingKind' }
         title: { type: string }
@@ -146,6 +149,11 @@ components:
     NADAttackDetails:
       type: object
       properties:
+        malware_family:
+          type: array
+          items: { type: string }
+        signature: { type: string }
+        payload_available: { type: boolean }
         class: { type: string }
         gid: { type: integer }
         sid: { type: integer }
@@ -157,6 +165,14 @@ components:
       type: object
       required: [time_range]
       properties:
+        created_at_range:
+          description: Optional incident creation time; supported only for SIEM incident searches.
+          allOf:
+            - $ref: '../shared/schemas.yaml#/TimeRange'
+        filter:
+          type: string
+          maxLength: 4096
+          description: Bounded NAD predicate; supported fields and operators are documented in Gateway providers.
         sources:
           type: array
           uniqueItems: true

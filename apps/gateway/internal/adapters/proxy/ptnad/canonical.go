@@ -19,6 +19,7 @@ func canonicalFinding(value Attack) domain.Finding {
 	mentions = append(mentions, endpointMentions(value.Victim, "victim", value.SourceRef.SourceInstance)...)
 	mentions = normalizeMentions(mentions)
 	details := &domain.NADAttackDetails{
+		MalwareFamily: value.MalwareFamily, Signature: firstNonEmpty(value.SignatureName, value.Title),
 		Class: value.Class, GID: int(value.GID), SID: int(value.SID), Revision: int(value.Revision),
 		FalsePositive: cloneBool(value.FalsePositive),
 	}
@@ -38,6 +39,11 @@ func canonicalFinding(value Attack) domain.Finding {
 			ID:   fmt.Sprintf("%d:%d:%d", value.GID, value.SID, value.Revision),
 			Name: value.Title,
 		}
+	}
+	if value.PayloadAvailable {
+		available := true
+		details.PayloadAvailable = &available
+		finding.Evidence = []domain.EvidenceReference{{Kind: "payload", Ref: ref}}
 	}
 	return finding
 }
@@ -74,6 +80,21 @@ func canonicalSession(value Session) domain.Session {
 	}
 	for _, attack := range value.RelatedAttacks {
 		item.RelatedFindings = append(item.RelatedFindings, canonicalRef(attack.SourceRef))
+	}
+	for _, file := range value.Files {
+		item.Evidence = append(item.Evidence, domain.EvidenceReference{Kind: "file", Ref: ref, ObjectID: file.ExternalID})
+	}
+	if len(value.PCAPs) > 0 {
+		item.Evidence = append(item.Evidence, domain.EvidenceReference{Kind: "pcap", Ref: ref})
+	}
+	for _, mail := range value.Mail {
+		hint := domain.SessionMailHint{From: mailAddress(mail.From), To: []string{}, Subject: safeText(mail.Subject), Date: safeText(mail.Date)}
+		for _, recipient := range mail.To {
+			if address := mailAddress(recipient); address != "" {
+				hint.To = append(hint.To, address)
+			}
+		}
+		item.MailHints = append(item.MailHints, hint)
 	}
 	item.RelatedFindings = normalizeObjectRefs(item.RelatedFindings)
 	return item
@@ -159,6 +180,11 @@ func decomposeSession(value Session) ([]domain.Event, []domain.Entity, []domain.
 		for _, endpoint := range []Endpoint{attack.Attacker, attack.Victim} {
 			relations = append(relations, endpointIdentifierRelations(endpoint, attack.SourceRef.SourceInstance, attack.OccurredAt, event.Provenance)...)
 		}
+	}
+	for index, mail := range value.Mail {
+		event := mailEvent(value, mail, index)
+		events = append(events, event)
+		entities = append(entities, entitiesForEvent(event, value.SourceRef.SourceInstance)...)
 	}
 	for _, file := range value.Files {
 		event := fileEvent(value, file)

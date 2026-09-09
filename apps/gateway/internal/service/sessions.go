@@ -10,6 +10,7 @@ import (
 )
 
 type SearchSessionsRequest struct {
+	Filter    string
 	Sources   []string
 	TimeRange domain.TimeRange
 	Limit     int
@@ -30,7 +31,7 @@ func (service *Service) SearchSessions(ctx context.Context, access ProjectAccess
 		return SearchSessionsResult{}, err
 	}
 	limit := normalizeLimit(request.Limit)
-	fingerprint := objectFingerprint(request.Sources, []string{"nad_session"}, request.TimeRange)
+	fingerprint := objectFingerprint(request.Sources, []string{"nad_session"}, request.TimeRange, request.Filter)
 	state, err := decodeCursor(request.Cursor, fingerprint)
 	if err != nil {
 		return SearchSessionsResult{}, err
@@ -57,7 +58,7 @@ func (service *Service) SearchSessions(ctx context.Context, access ProjectAccess
 			callErr := service.callProvider(requestCtx, access, provider, func(attemptCtx context.Context, providerAccess capability.Access) error {
 				var innerErr error
 				page, innerErr = provider.Sessions.SearchSessions(attemptCtx, providerAccess, capability.SearchSessionsRequest{
-					TimeRange: request.TimeRange, Limit: limit, Cursor: positions[provider.Source.Code],
+					TimeRange: request.TimeRange, Limit: limit, Cursor: positions[provider.Source.Code], Filter: request.Filter,
 				})
 				return innerErr
 			})

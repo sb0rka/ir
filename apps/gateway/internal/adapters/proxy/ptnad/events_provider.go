@@ -141,24 +141,19 @@ func (provider *Provider) ResolveContext(ctx context.Context, access capability.
 			}
 			appendSessionContext(&page, session)
 		case AttackRecordType:
-			attack, getErr := provider.client.GetAttack(ctx, AttackRef{
-				StoreID: parsed.StoreID, ExternalID: parsed.ExternalID, TimeRange: timeRange,
-			}, Access{Cookie: access.Cookie})
+			resolved, getErr := provider.ResolveFinding(ctx, access, domain.SourceObjectRef{
+				SourceCode: SourceCode, SourceInstance: strconv.FormatInt(parsed.StoreID, 10), RecordType: AttackRecordType, ExternalID: parsed.ExternalID,
+				TimeRange: domain.TimeRange{From: timeRange.From, To: timeRange.To},
+			}, true)
+			page.Findings = append(page.Findings, resolved.Findings...)
+			page.Sessions = append(page.Sessions, resolved.Sessions...)
+			page.Events = append(page.Events, resolved.Events...)
+			page.Entities = append(page.Entities, resolved.Entities...)
+			page.Relations = append(page.Relations, resolved.Relations...)
+			page.Resolutions = append(page.Resolutions, resolved.Resolutions...)
 			if getErr != nil {
-				return capability.ContextPage{}, canonicalProviderError(getErr)
+				return normalizeContextPage(page), getErr
 			}
-			if attack.ParentSession == nil {
-				appendAttackContext(&page, attack)
-				break
-			}
-			session, getErr := provider.client.GetSession(ctx, SessionRef{
-				StoreID: parsed.StoreID, ExternalID: attack.ParentSession.ExternalID, TimeRange: timeRange,
-			}, Access{Cookie: access.Cookie})
-			if getErr != nil {
-				appendAttackContext(&page, attack)
-				break
-			}
-			appendSessionContext(&page, session)
 		default:
 			if parsed.ParentID == "" {
 				return capability.ContextPage{}, invalidRequest("PT NAD source event ID is invalid")

@@ -1,0 +1,67 @@
+{
+  "id": "P8H9AvNOmgVjbVc4HAvvX0",
+  "app_proto": "imap",
+  "src": {
+    "ip": "192.168.25.190",
+    "port": 52368,
+    "groups": [
+      "HOME_NET"
+    ]
+  },
+  "dst": {
+    "ip": "192.168.214.203",
+    "port": 143,
+    "groups": [
+      "HOME_NET"
+    ]
+  },
+  "start": "2023-06-10T09:58:03.678329",
+  "end": "2023-06-10T09:59:39.213456",
+  "credentials": [
+    {
+      "user": "victim@ptpilot.local"
+    }
+  ],
+  "mail": [
+    {
+      "from": "attacker@mail.ru",
+      "to": [
+        "victim@ptpilot.local"
+      ],
+      "subject": "Очень срочное обновление",
+      "date": "10 Jun 2023 12:57:52 +0300"
+    }
+  ],
+  "files": [
+    {
+      "filename": "mail_id_1_348.eml",
+      "id": "WRwE4Z4BaLX3hldUP0i1",
+      "size": 348,
+      "md5": "52ee380732d40819636c763b97ccddad"
+    },
+    {
+      "filename": "mail_id_1_1357.eml",
+      "id": "WhwE4Z4BaLX3hldUP0i1",
+      "size": 1357,
+      "md5": "4470bfef9b299798922a754572c2ca95"
+    },
+    {
+      "filename": "Срочное_обновление.html",
+      "id": "WxwE4Z4BaLX3hldUP0i1",
+      "size": 103,
+      "md5": "27b9ae95359fbe32be04cb1bf022238a"
+    },
+    {
+      "filename": "Срочное_обновление.html",
+      "id": "XBwE4Z4BaLX3hldUP0i1",
+      "size": 103,
+      "md5": "27b9ae95359fbe32be04cb1bf022238a"
+    },
+    {
+      "filename": "mail_id_1_93.eml",
+      "id": "XRwE4Z4BaLX3hldUP0i1",
+      "size": 919,
+      "md5": "eaa8f8895d9e660a8c3d8bbe094a75c4"
+    }
+  ]
+}

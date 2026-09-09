@@ -1,0 +1,42 @@
+{
+  "id": "vRwB4Z4BaLX3hldUvkZ1",
+  "parent": "P86qC9cOOElv1RPc~lYyC2",
+  "ts": "2023-06-08T11:02:08.718426",
+  "msg": "SHELL [PTsecurity] CMD.EXE Shell banner",
+  "pr": 2,
+  "payload": "TWljcm9zb2Z0IFdpbmRvd3MgW1ZlcnNpb24gMTAuMC4xOTA0NC4yMTMwXQ0KKGMpIE1pY3Jvc29mdCBDb3Jwb3JhdGlvbi4gQWxsIHJpZ2h0cyByZXNlcnZlZC4NCg0KQzpcV2luZG93c1xzeXN0ZW0zMj4=",
+  "signature": {
+    "description": {
+      "affected_os": [
+        "Windows"
+      ],
+      "affected_soft": [],
+      "att&ck": null,
+      "attack_flag": true,
+      "attack_target": "server",
+      "creation_date": null,
+      "description": "A Windows command interpreter (cmd.exe) banner has been detected. This may indicate that an adversary has obtained access to the operating system.",
+      "disabled": false,
+      "last_modified_date": null,
+      "malware_family": null,
+      "name": null,
+      "performance_impact": null,
+      "recommendation": "Find out the cause of this event. If the interpreter banner is sent by your internal or DMZ host to the internet in an unintended manner (for example, via an HTTP response), this host may be compromised. Check similar requests and responses of the host.",
+      "ruleset": null
+    },
+    "rule": "alert tcp any any -> any any (sid:10006379; rev:2; msg:\"SHELL [PTsecurity] CMD.EXE Shell banner\"; classtype:attempted-admin; content:\"Microsoft Windows [Version \"; flow:no_stream; depth:27; stream_size:either, <, 10; metadata:created_at 2020_12_24; metadata:updated_at 2024_01_19; metadata:attack_target server; reference:playbook,9203703051;)",
+    "vendor": "PTSecurity"
+  },
+  "attacker": {
+    "groups": [
+      "HOME_NET"
+    ],
+    "ip": "192.168.25.202"
+  },
+  "victim": {
+    "groups": [
+      "HOME_NET"
+    ],
+    "ip": "192.168.214.203"
+  }
+}

@@ -122,6 +122,15 @@ func (server *Server) writeServiceError(w http.ResponseWriter, err error) {
 		status, code, message = http.StatusNotFound, "not_found", err.Error()
 	case errors.Is(err, domain.ErrAllSourcesFailed):
 		status, code, message = http.StatusBadGateway, "all_sources_failed", "all selected sources failed"
+		var sourcesErr *service.AllSourcesError
+		if errors.As(err, &sourcesErr) {
+			for _, item := range sourcesErr.Items {
+				if item.Code == "invalid_request" {
+					status, code, message = http.StatusBadRequest, item.Code, item.Message
+					break
+				}
+			}
+		}
 	case errors.Is(err, context.DeadlineExceeded):
 		status, code, message = http.StatusGatewayTimeout, "timeout", "request timed out"
 	default:

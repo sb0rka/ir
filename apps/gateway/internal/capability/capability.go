@@ -14,10 +14,12 @@ type Access struct {
 }
 
 type SearchFindingsRequest struct {
-	TimeRange domain.TimeRange
-	Kinds     []string
-	Limit     int
-	Cursor    string
+	Filter         string
+	CreatedAtRange *domain.TimeRange
+	TimeRange      domain.TimeRange
+	Kinds          []string
+	Limit          int
+	Cursor         string
 }
 
 type FindingPage struct {
@@ -34,6 +36,7 @@ type FindingSource interface {
 }
 
 type SearchSessionsRequest struct {
+	Filter    string
 	TimeRange domain.TimeRange
 	Limit     int
 	Cursor    string

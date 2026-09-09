@@ -160,6 +160,60 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/evidence/exports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Prepare selected source evidence for download
+         * @description Explicit payload or selected-file download. Pilot checks must not download malware or suspicious attachments; use supplied dumps or synthetic content. NAD session PCAP export remains unsupported and is separate from reading a supplied dump.
+         */
+        post: operations["createEvidenceExport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/evidence/exports/{export_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read project-owned evidence export status */
+        get: operations["getEvidenceExport"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/evidence/exports/{export_id}/content": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Stream source evidence or a bounded byte slice */
+        get: operations["getEvidenceContent"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/findings/search": {
         parameters: {
             query?: never;
@@ -748,6 +802,13 @@ export interface components {
             /** @description Original entity identifier assigned by that source. */
             source_entity_id: string;
         };
+        EvidenceReference: {
+            /** @enum {string} */
+            kind: "payload" | "file" | "pcap";
+            ref: components["schemas"]["SourceObjectRef"];
+            /** @description File ID from session file_hints; required for file, omitted otherwise. Payload uses an alert ref; PCAP uses a session ref. */
+            object_id?: string;
+        };
         /** @enum {string} */
         FindingKind: "siem_incident" | "siem_correlation" | "nad_attack";
         /** @description Bounded rule metadata observed on a finding. */
@@ -774,6 +835,9 @@ export interface components {
             subevent_count?: number;
         };
         NADAttackDetails: {
+            malware_family?: string[];
+            signature?: string;
+            payload_available?: boolean;
             class?: string;
             gid?: number;
             sid?: number;
@@ -783,6 +847,7 @@ export interface components {
         };
         /** @description A source-native coarse security object; never a renamed raw event. */
         Finding: {
+            evidence?: components["schemas"]["EvidenceReference"][];
             ref: components["schemas"]["SourceObjectRef"];
             kind: components["schemas"]["FindingKind"];
             title: string;
@@ -818,7 +883,7 @@ export interface components {
             /** Format: int64 */
             total?: number;
         };
-        /** @description Safe metadata for a file observed in the session; file content and full vendor records are never returned. */
+        /** @description Safe metadata for a file observed in the session; file content is available only through an explicit evidence export. */
         SessionFileHint: {
             external_id: string;
             name?: string;
@@ -829,6 +894,13 @@ export interface components {
             sha256?: string;
             state?: string;
             direction?: string;
+        };
+        SessionMailHint: {
+            from: string;
+            to: string[];
+            subject: string;
+            /** @description Original mail date header */
+            date: string;
         };
         /** @description Non-secret authentication metadata; proofs, session keys, passwords, and protocol payloads are excluded. */
         SessionAuthenticationHint: {
@@ -842,6 +914,7 @@ export interface components {
             server_host?: string;
         };
         Session: {
+            evidence?: components["schemas"]["EvidenceReference"][];
             ref: components["schemas"]["SourceObjectRef"];
             title: string;
             /** @enum {string} */
@@ -863,6 +936,7 @@ export interface components {
             false_positive?: boolean | null;
             has_files?: boolean;
             file_hints: components["schemas"]["SessionFileHint"][];
+            mail_hints?: components["schemas"]["SessionMailHint"][];
             authentication_hints: components["schemas"]["SessionAuthenticationHint"][];
             tcp_flags?: string[];
             entities: components["schemas"]["EntityMention"][];
@@ -872,7 +946,26 @@ export interface components {
             /** Format: date-time */
             fetched_at: string;
         };
+        EvidenceExport: {
+            /** Format: uuid */
+            export_id: string;
+            evidence: components["schemas"]["EvidenceReference"];
+            /** @enum {string} */
+            state: "pending" | "ready" | "partial" | "failed" | "expired";
+            /** Format: date-time */
+            expires_at: string;
+            filename?: string;
+            content_type?: string;
+            /** Format: int64 */
+            size?: number;
+            /** @description Safe explanation; never vendor URLs or raw responses. */
+            error?: string;
+        };
         SearchFindingsRequest: {
+            /** @description Optional incident creation time; supported only for SIEM incident searches. */
+            created_at_range?: components["schemas"]["TimeRange"];
+            /** @description Bounded NAD predicate; supported fields and operators are documented in Gateway providers. */
+            filter?: string;
             sources?: string[];
             kinds?: components["schemas"]["FindingKind"][];
             time_range: components["schemas"]["TimeRange"];
@@ -900,6 +993,8 @@ export interface components {
             status: "ok";
         };
         SearchSessionsRequest: {
+            /** @description Bounded NAD predicate; supported fields and operators are documented in Gateway providers. */
+            filter?: string;
             sources?: string[];
             time_range: components["schemas"]["TimeRange"];
             /** @default 50 */
@@ -921,7 +1016,7 @@ export interface components {
          * @description Operation that a source can perform through the Gateway.
          * @enum {string}
          */
-        Capability: "findings" | "sessions" | "events" | "entity_lookup" | "artifact_analysis" | "endpoints" | "response_catalog" | "account_userinfo";
+        Capability: "findings" | "sessions" | "events" | "entity_lookup" | "artifact_analysis" | "endpoints" | "response_catalog" | "account_userinfo" | "evidence_payload" | "evidence_file";
         /** @description External security product registered in the Gateway. */
         Source: {
             /** @description Stable source identifier used in requests and provenance. */
@@ -1051,6 +1146,7 @@ export interface components {
     parameters: {
         /** @description Sb0rka project whose integration allowlist is used. */
         ProjectId: string;
+        ExportId: string;
     };
     requestBodies: never;
     headers: never;
@@ -1376,6 +1472,105 @@ export interface operations {
             500: components["responses"]["InternalError"];
             502: components["responses"]["BadGateway"];
             504: components["responses"]["GatewayTimeout"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    createEvidenceExport: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Sb0rka project whose integration allowlist is used. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EvidenceReference"];
+            };
+        };
+        responses: {
+            /** @description Export registered; inspect its state before reading content. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EvidenceExport"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            404: components["responses"]["ErrorResponse"];
+            422: components["responses"]["ErrorResponse"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    getEvidenceExport: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Sb0rka project whose integration allowlist is used. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
+            path: {
+                export_id: components["parameters"]["ExportId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current export state; vendor task identifiers are not exposed. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EvidenceExport"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            404: components["responses"]["ErrorResponse"];
+            422: components["responses"]["ErrorResponse"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    getEvidenceContent: {
+        parameters: {
+            query?: {
+                offset?: number;
+                /** @description Optional byte slice length for MCP; omitted streams the full content. */
+                limit?: number;
+            };
+            header: {
+                /** @description Sb0rka project whose integration allowlist is used. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
+            path: {
+                export_id: components["parameters"]["ExportId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Bytes without transformation. Optional slicing is described by query parameters. */
+            200: {
+                headers: {
+                    "Content-Disposition"?: string;
+                    /** @description Present for bounded reads; true when the end was reached. */
+                    "X-Evidence-EOF"?: boolean;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": string;
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            404: components["responses"]["ErrorResponse"];
+            409: components["responses"]["ErrorResponse"];
+            410: components["responses"]["ErrorResponse"];
+            416: components["responses"]["ErrorResponse"];
+            422: components["responses"]["ErrorResponse"];
             default: components["responses"]["ErrorResponse"];
         };
     };

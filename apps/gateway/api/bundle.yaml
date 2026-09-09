@@ -9,6 +9,9 @@ info:
 servers:
   - url: .
 tags:
+  - name: evidence
+    description: Explicit source evidence exports.
+    x-displayName: evidence
   - name: health
     description: Gateway process health and readiness.
     x-displayName: health
@@ -408,6 +411,127 @@ paths:
           $ref: '#/components/responses/BadGateway'
         '504':
           $ref: '#/components/responses/GatewayTimeout'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+      security:
+        - bearerAuth: []
+  /api/v1/evidence/exports:
+    post:
+      tags:
+        - evidence
+      summary: Prepare selected source evidence for download
+      description: >-
+        Explicit payload or selected-file download. Pilot checks must not
+        download malware or suspicious attachments; use supplied dumps or
+        synthetic content. NAD session PCAP export remains unsupported and is
+        separate from reading a supplied dump.
+      operationId: createEvidenceExport
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EvidenceReference'
+      responses:
+        '202':
+          description: Export registered; inspect its state before reading content.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EvidenceExport'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '422':
+          $ref: '#/components/responses/ErrorResponse'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+      security:
+        - bearerAuth: []
+  /api/v1/evidence/exports/{export_id}:
+    get:
+      tags:
+        - evidence
+      summary: Read project-owned evidence export status
+      operationId: getEvidenceExport
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/ExportId'
+      responses:
+        '200':
+          description: Current export state; vendor task identifiers are not exposed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EvidenceExport'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '422':
+          $ref: '#/components/responses/ErrorResponse'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+      security:
+        - bearerAuth: []
+  /api/v1/evidence/exports/{export_id}/content:
+    get:
+      tags:
+        - evidence
+      summary: Stream source evidence or a bounded byte slice
+      operationId: getEvidenceContent
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/ExportId'
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            format: int64
+            minimum: 0
+            default: 0
+        - name: limit
+          in: query
+          description: >-
+            Optional byte slice length for MCP; omitted streams the full
+            content.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 65536
+      responses:
+        '200':
+          description: >-
+            Bytes without transformation. Optional slicing is described by query
+            parameters.
+          headers:
+            Content-Disposition:
+              schema:
+                type: string
+            X-Evidence-EOF:
+              description: Present for bounded reads; true when the end was reached.
+              schema:
+                type: boolean
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+        '410':
+          $ref: '#/components/responses/ErrorResponse'
+        '416':
+          $ref: '#/components/responses/ErrorResponse'
+        '422':
+          $ref: '#/components/responses/ErrorResponse'
         default:
           $ref: '#/components/responses/ErrorResponse'
       security:
@@ -1707,6 +1831,26 @@ components:
         source_entity_id:
           type: string
           description: Original entity identifier assigned by that source.
+    EvidenceReference:
+      type: object
+      required:
+        - kind
+        - ref
+      properties:
+        kind:
+          type: string
+          enum:
+            - payload
+            - file
+            - pcap
+        ref:
+          $ref: '#/components/schemas/SourceObjectRef'
+        object_id:
+          type: string
+          maxLength: 512
+          description: >-
+            File ID from session file_hints; required for file, omitted
+            otherwise. Payload uses an alert ref; PCAP uses a session ref.
     FindingKind:
       type: string
       enum:
@@ -1760,6 +1904,14 @@ components:
     NADAttackDetails:
       type: object
       properties:
+        malware_family:
+          type: array
+          items:
+            type: string
+        signature:
+          type: string
+        payload_available:
+          type: boolean
         class:
           type: string
         gid:
@@ -1785,6 +1937,10 @@ components:
         - entities
         - fetched_at
       properties:
+        evidence:
+          type: array
+          items:
+            $ref: '#/components/schemas/EvidenceReference'
         ref:
           $ref: '#/components/schemas/SourceObjectRef'
         kind:
@@ -1866,8 +2022,8 @@ components:
     SessionFileHint:
       type: object
       description: >-
-        Safe metadata for a file observed in the session; file content and full
-        vendor records are never returned.
+        Safe metadata for a file observed in the session; file content is
+        available only through an explicit evidence export.
       required:
         - external_id
         - size
@@ -1890,6 +2046,25 @@ components:
           type: string
         direction:
           type: string
+    SessionMailHint:
+      type: object
+      required:
+        - from
+        - to
+        - subject
+        - date
+      properties:
+        from:
+          type: string
+        to:
+          type: array
+          items:
+            type: string
+        subject:
+          type: string
+        date:
+          type: string
+          description: Original mail date header
     SessionAuthenticationHint:
       type: object
       description: >-
@@ -1932,6 +2107,10 @@ components:
         - related_findings
         - fetched_at
       properties:
+        evidence:
+          type: array
+          items:
+            $ref: '#/components/schemas/EvidenceReference'
         ref:
           $ref: '#/components/schemas/SourceObjectRef'
         title:
@@ -1982,6 +2161,10 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/SessionFileHint'
+        mail_hints:
+          type: array
+          items:
+            $ref: '#/components/schemas/SessionMailHint'
         authentication_hints:
           type: array
           items:
@@ -2004,11 +2187,58 @@ components:
         fetched_at:
           type: string
           format: date-time
+    EvidenceExport:
+      type: object
+      required:
+        - export_id
+        - evidence
+        - state
+        - expires_at
+      properties:
+        export_id:
+          type: string
+          format: uuid
+        evidence:
+          $ref: '#/components/schemas/EvidenceReference'
+        state:
+          type: string
+          enum:
+            - pending
+            - ready
+            - partial
+            - failed
+            - expired
+        expires_at:
+          type: string
+          format: date-time
+        filename:
+          type: string
+        content_type:
+          type: string
+        size:
+          type: integer
+          format: int64
+          minimum: 0
+        error:
+          type: string
+          description: Safe explanation; never vendor URLs or raw responses.
     SearchFindingsRequest:
       type: object
       required:
         - time_range
       properties:
+        created_at_range:
+          description: >-
+            Optional incident creation time; supported only for SIEM incident
+            searches.
+          allOf:
+            - $ref: '#/components/schemas/TimeRange'
+        filter:
+          type: string
+          maxLength: 4096
+          description: >-
+            Bounded NAD predicate; supported fields and operators are documented
+            in Gateway providers.
         sources:
           type: array
           uniqueItems: true
@@ -2072,6 +2302,12 @@ components:
       required:
         - time_range
       properties:
+        filter:
+          type: string
+          maxLength: 4096
+          description: >-
+            Bounded NAD predicate; supported fields and operators are documented
+            in Gateway providers.
         sources:
           type: array
           uniqueItems: true
@@ -2126,6 +2362,8 @@ components:
         - endpoints
         - response_catalog
         - account_userinfo
+        - evidence_payload
+        - evidence_file
     Source:
       type: object
       description: External security product registered in the Gateway.
@@ -2178,6 +2416,13 @@ components:
       schema:
         type: string
         pattern: ^[a-f0-9]{10,12}$
+    ExportId:
+      name: export_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
   responses:
     ErrorResponse:
       description: Error response.

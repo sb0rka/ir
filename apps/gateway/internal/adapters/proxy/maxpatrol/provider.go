@@ -76,6 +76,17 @@ type findingCursor struct {
 }
 
 func (provider *Provider) SearchFindings(ctx context.Context, access capability.Access, request capability.SearchFindingsRequest) (capability.FindingPage, error) {
+	if request.Filter != "" {
+		return capability.FindingPage{}, sourceRequestError("unsupported_filter", "SIEM findings do not support the NAD filter")
+	}
+	var created *TimeRange
+	if request.CreatedAtRange != nil {
+		if len(request.Kinds) != 1 || request.Kinds[0] != IncidentRecordType {
+			return capability.FindingPage{}, sourceRequestError("invalid_kinds", "created_at_range requires kinds=[siem_incident]")
+		}
+		created = &TimeRange{From: request.CreatedAtRange.From, To: request.CreatedAtRange.To}
+	}
+
 	if provider == nil || provider.client == nil {
 		return capability.FindingPage{}, sourceRequestError("source_unavailable", "MaxPatrol client is not configured")
 	}
@@ -109,9 +120,9 @@ func (provider *Provider) SearchFindings(ctx context.Context, access capability.
 
 	if !cursor.IncidentDone && remaining > 0 {
 		incidents, callErr := provider.client.SearchIncidents(ctx, accessValue, IncidentSearchRequest{
-			TimeRange: vendorRange,
-			Limit:     remaining,
-			Offset:    cursor.IncidentOffset,
+			TimeRange: vendorRange, CreatedAtRange: created,
+			Limit:  remaining,
+			Offset: cursor.IncidentOffset,
 		})
 		if callErr != nil {
 			return capability.FindingPage{}, translateError(callErr)

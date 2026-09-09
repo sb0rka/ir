@@ -48,7 +48,7 @@ components:
     Capability:
       type: string
       description: Operation that a source can perform through the Gateway.
-      enum: [findings, sessions, events, entity_lookup, artifact_analysis, endpoints, response_catalog, account_userinfo]
+      enum: [findings, sessions, events, entity_lookup, artifact_analysis, endpoints, response_catalog, account_userinfo, evidence_payload, evidence_file]
 
     Source:
       type: object

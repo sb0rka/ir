@@ -29,9 +29,10 @@ type Config struct {
 }
 
 type Client struct {
-	baseURL *url.URL
-	http    *http.Client
-	now     func() time.Time
+	baseURL      *url.URL
+	http         *http.Client
+	downloadHTTP *http.Client
+	now          func() time.Time
 }
 
 func NewClient(config Config) (*Client, error) {
@@ -57,7 +58,20 @@ func NewClient(config Config) (*Client, error) {
 	if now == nil {
 		now = time.Now
 	}
-	return &Client{baseURL: baseURL, http: &httpClient, now: now}, nil
+	// Downloads use the export deadline, not the short JSON request timeout.
+	// Reuse a dedicated transport to retain connection pooling and bounded headers.
+	downloadClient := httpClient
+	downloadClient.Timeout = 0
+	transport := httpClient.Transport
+	if transport == nil {
+		transport = http.DefaultTransport
+	}
+	if standard, ok := transport.(*http.Transport); ok {
+		streamTransport := standard.Clone()
+		streamTransport.ResponseHeaderTimeout = httpClient.Timeout
+		downloadClient.Transport = streamTransport
+	}
+	return &Client{baseURL: baseURL, http: &httpClient, downloadHTTP: &downloadClient, now: now}, nil
 }
 
 func (client *Client) SearchSessions(ctx context.Context, request SearchRequest, access Access) (SessionSearchResult, error) {
@@ -104,6 +118,10 @@ func (client *Client) SearchAttacks(ctx context.Context, request SearchRequest, 
 // GetAttack uses an exact, escaped ID predicate. It never obtains a broad page
 // and filters it client-side.
 func (client *Client) GetAttack(ctx context.Context, ref AttackRef, access Access) (Attack, error) {
+	return client.getAttack(ctx, ref, access, true)
+}
+
+func (client *Client) getAttack(ctx context.Context, ref AttackRef, access Access, enrich bool) (Attack, error) {
 	request, timeRange, err := validateAttackRef(ref)
 	if err != nil {
 		return Attack{}, err
@@ -114,7 +132,10 @@ func (client *Client) GetAttack(ctx context.Context, ref AttackRef, access Acces
 	}
 	for _, attack := range result.Attacks {
 		if attack.SourceRef.ExternalID == ref.ExternalID {
-			return attack, nil
+			if !enrich {
+				return attack, nil
+			}
+			return client.enrichAttack(ctx, attack, ref, access), nil
 		}
 	}
 	if result.Total == 0 {
@@ -274,6 +295,9 @@ func (client *Client) doJSON(ctx context.Context, operation, method, relativePat
 	if method == http.MethodPost {
 		request.Header.Set("Accept", "application/json, text/plain, */*")
 		request.Header.Set("Content-Type", "text/plain")
+		if operation == "evidence export" {
+			request.Header.Set("Content-Type", "application/json")
+		}
 		if csrfToken, ok := cookieValue(cookie, "csrftoken"); ok {
 			request.Header.Set("X-CSRFToken", csrfToken)
 			request.Header.Set("Referer", client.baseURL.String())
@@ -347,6 +371,11 @@ func cookieValue(cookieHeader, name string) (string, bool) {
 }
 
 func validateSearchRequest(request SearchRequest) (SearchRequest, TimeRange, error) {
+	predicate, err := compileFilter(request.Filter)
+	if err != nil {
+		return SearchRequest{}, TimeRange{}, err
+	}
+	request.predicate = predicate
 	if request.StoreID <= 0 {
 		return SearchRequest{}, TimeRange{}, fmt.Errorf("PT NAD store ID must be positive")
 	}
@@ -428,10 +457,10 @@ FROM "flow"
 WHERE
     "end" >= %d AND
     "end" <= %d
-    
+    %s
 ORDER BY "start" desc
 LIMIT %d
-`, request.From.UnixMilli(), request.To.UnixMilli(), request.Limit)
+`, request.From.UnixMilli(), request.To.UnixMilli(), bqlAnd(request.predicate), request.Limit)
 }
 
 func attackListBQL(request SearchRequest, exactID string) string {
@@ -444,10 +473,10 @@ FROM "alert"
 WHERE
 %s    "ts" >= %d AND
     "ts" <= %d AND
-    EXISTS (SELECT * FROM "flow" WHERE "end" >= %d AND "end" <= %d )
+    EXISTS (SELECT * FROM "flow" WHERE "end" >= %d AND "end" <= %d %s )
 ORDER BY "ts" desc
 LIMIT %d
-`, exact, request.From.UnixMilli(), request.To.UnixMilli(), request.From.UnixMilli(), request.To.UnixMilli(), request.Limit)
+`, exact, request.From.UnixMilli(), request.To.UnixMilli(), request.From.UnixMilli(), request.To.UnixMilli(), bqlAnd(request.predicate), request.Limit)
 }
 
 func httpPageBQL(ref SessionRef, fromTxID int64) string {

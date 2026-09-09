@@ -1,0 +1,121 @@
+openapi: 3.0.3
+info:
+  title: Sb0rka Gateway - evidence
+  version: 0.0.1
+servers:
+  - url: .
+security:
+  - bearerAuth: []
+paths:
+  /api/v1/evidence/exports:
+    post:
+      tags: [evidence]
+      summary: Prepare selected source evidence for download
+      description: Explicit payload or selected-file download. Pilot checks must not download malware or suspicious attachments; use supplied dumps or synthetic content. NAD session PCAP export remains unsupported and is separate from reading a supplied dump.
+      operationId: createEvidenceExport
+      parameters:
+        - $ref: '../shared/parameters.yaml#/ProjectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EvidenceReference' }
+      responses:
+        '202':
+          description: Export registered; inspect its state before reading content.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EvidenceExport' }
+        '400': { $ref: '../shared/responses.yaml#/ErrorResponse' }
+        '404': { $ref: '../shared/responses.yaml#/ErrorResponse' }
+        '422': { $ref: '../shared/responses.yaml#/ErrorResponse' }
+        default: { $ref: '../shared/responses.yaml#/ErrorResponse' }
+  /api/v1/evidence/exports/{export_id}:
+    get:
+      tags: [evidence]
+      summary: Read project-owned evidence export status
+      operationId: getEvidenceExport
+      parameters:
+        - $ref: '../shared/parameters.yaml#/ProjectId'
+        - $ref: '#/components/parameters/ExportId'
+      responses:
+        '200':
+          description: Current export state; vendor task identifiers are not exposed.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EvidenceExport' }
+        '400': { $ref: '../shared/responses.yaml#/ErrorResponse' }
+        '404': { $ref: '../shared/responses.yaml#/ErrorResponse' }
+        '422': { $ref: '../shared/responses.yaml#/ErrorResponse' }
+        default: { $ref: '../shared/responses.yaml#/ErrorResponse' }
+  /api/v1/evidence/exports/{export_id}/content:
+    get:
+      tags: [evidence]
+      summary: Stream source evidence or a bounded byte slice
+      operationId: getEvidenceContent
+      parameters:
+        - $ref: '../shared/parameters.yaml#/ProjectId'
+        - $ref: '#/components/parameters/ExportId'
+        - name: offset
+          in: query
+          schema: { type: integer, format: int64, minimum: 0, default: 0 }
+        - name: limit
+          in: query
+          description: Optional byte slice length for MCP; omitted streams the full content.
+          schema: { type: integer, minimum: 1, maximum: 65536 }
+      responses:
+        '200':
+          description: Bytes without transformation. Optional slicing is described by query parameters.
+          headers:
+            Content-Disposition:
+              schema: { type: string }
+            X-Evidence-EOF:
+              description: Present for bounded reads; true when the end was reached.
+              schema: { type: boolean }
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
+        '409': { $ref: '../shared/responses.yaml#/ErrorResponse' }
+        '410': { $ref: '../shared/responses.yaml#/ErrorResponse' }
+        '416': { $ref: '../shared/responses.yaml#/ErrorResponse' }
+        '400': { $ref: '../shared/responses.yaml#/ErrorResponse' }
+        '404': { $ref: '../shared/responses.yaml#/ErrorResponse' }
+        '422': { $ref: '../shared/responses.yaml#/ErrorResponse' }
+        default: { $ref: '../shared/responses.yaml#/ErrorResponse' }
+components:
+  parameters:
+    ExportId:
+      name: export_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+  schemas:
+    EvidenceReference:
+      type: object
+      required: [kind, ref]
+      properties:
+        kind:
+          type: string
+          enum: [payload, file, pcap]
+        ref:
+          $ref: '../shared/schemas.yaml#/SourceObjectRef'
+        object_id:
+          type: string
+          maxLength: 512
+          description: File ID from session file_hints; required for file, omitted otherwise. Payload uses an alert ref; PCAP uses a session ref.
+    EvidenceExport:
+      type: object
+      required: [export_id, evidence, state, expires_at]
+      properties:
+        export_id: { type: string, format: uuid }
+        evidence: { $ref: '#/components/schemas/EvidenceReference' }
+        state:
+          type: string
+          enum: [pending, ready, partial, failed, expired]
+        expires_at: { type: string, format: date-time }
+        filename: { type: string }
+        content_type: { type: string }
+        size: { type: integer, format: int64, minimum: 0 }
+        error:
+          type: string
+          description: Safe explanation; never vendor URLs or raw responses.

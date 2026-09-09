@@ -19,6 +19,8 @@ const (
 	CapabilityEndpoints        Capability = "endpoints"
 	CapabilityResponseCatalog  Capability = "response_catalog"
 	CapabilityAccountUserinfo  Capability = "account_userinfo"
+	CapabilityEvidencePayload  Capability = "evidence_payload"
+	CapabilityEvidenceFile     Capability = "evidence_file"
 )
 
 type Source struct {
@@ -84,15 +86,19 @@ type CorrelationDetails struct {
 }
 
 type NADAttackDetails struct {
-	Class         string
-	GID           int
-	SID           int
-	Revision      int
-	RawPriority   int
-	FalsePositive *bool
+	MalwareFamily    []string
+	Signature        string
+	PayloadAvailable *bool
+	Class            string
+	GID              int
+	SID              int
+	Revision         int
+	RawPriority      int
+	FalsePositive    *bool
 }
 
 type Finding struct {
+	Evidence        []EvidenceReference
 	Ref             SourceObjectRef
 	Kind            string
 	Title           string
@@ -145,7 +151,16 @@ type SessionAuthenticationHint struct {
 	ServerHost     string
 }
 
+type SessionMailHint struct {
+	From    string
+	To      []string
+	Subject string
+	Date    string
+}
+
 type Session struct {
+	MailHints           []SessionMailHint
+	Evidence            []EvidenceReference
 	Ref                 SourceObjectRef
 	Title               string
 	Severity            string
@@ -327,4 +342,10 @@ func NewEntity(kind, value string, provenance Provenance) Entity {
 		Attributes: map[string]any{},
 		Provenance: []Provenance{provenance},
 	}
+}
+
+type EvidenceReference struct {
+	Kind     string
+	Ref      SourceObjectRef
+	ObjectID string
 }

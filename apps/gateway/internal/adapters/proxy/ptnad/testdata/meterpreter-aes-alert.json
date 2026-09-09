@@ -1,0 +1,30 @@
+{
+  "id": "VxwE4Z4BaLX3hldUPkf8",
+  "parent": "P8H9Gwlavecg14_4dNMd01",
+  "ts": "2023-06-10T09:58:28.131928",
+  "msg": "TOOLS [PTsecurity] Meterpreter HTTP session opened: AES key exchange. Response.",
+  "cls": "Exploitation attributes",
+  "gid": 1,
+  "sid": 10008428,
+  "rev": 2,
+  "pr": 1,
+  "attacker": {
+    "groups": [
+      "HOME_NET"
+    ],
+    "ip": "192.168.214.200"
+  },
+  "victim": {
+    "groups": [
+      "HOME_NET"
+    ],
+    "ip": "192.168.25.190"
+  },
+  "malware_family": null,
+  "signature": {
+    "description": {
+      "name": null,
+      "malware_family": "Meterpreter"
+    }
+  }
+}

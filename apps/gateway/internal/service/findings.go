@@ -14,11 +14,13 @@ import (
 )
 
 type SearchFindingsRequest struct {
-	Sources   []string
-	Kinds     []string
-	TimeRange domain.TimeRange
-	Limit     int
-	Cursor    string
+	Filter         string
+	CreatedAtRange *domain.TimeRange
+	Sources        []string
+	Kinds          []string
+	TimeRange      domain.TimeRange
+	Limit          int
+	Cursor         string
 }
 
 type SearchFindingsResult struct {
@@ -35,7 +37,7 @@ func (service *Service) SearchFindings(ctx context.Context, access ProjectAccess
 		return SearchFindingsResult{}, err
 	}
 	limit := normalizeLimit(request.Limit)
-	fingerprint := objectFingerprint(request.Sources, request.Kinds, request.TimeRange)
+	fingerprint := objectFingerprint(request.Sources, request.Kinds, request.TimeRange, request.Filter, createdRangeKey(request.CreatedAtRange))
 	state, err := decodeCursor(request.Cursor, fingerprint)
 	if err != nil {
 		return SearchFindingsResult{}, err
@@ -62,7 +64,7 @@ func (service *Service) SearchFindings(ctx context.Context, access ProjectAccess
 			callErr := service.callProvider(requestCtx, access, provider, func(attemptCtx context.Context, providerAccess capability.Access) error {
 				var innerErr error
 				page, innerErr = provider.Findings.SearchFindings(attemptCtx, providerAccess, capability.SearchFindingsRequest{
-					TimeRange: request.TimeRange, Kinds: request.Kinds, Limit: limit, Cursor: positions[provider.Source.Code],
+					TimeRange: request.TimeRange, Kinds: request.Kinds, Limit: limit, Cursor: positions[provider.Source.Code], Filter: request.Filter, CreatedAtRange: request.CreatedAtRange,
 				})
 				return innerErr
 			})
@@ -166,13 +168,19 @@ func (service *Service) GetFinding(ctx context.Context, access ProjectAccess, re
 	return domain.Finding{}, domain.ObjectResolution{}, fmt.Errorf("%w: finding %q", domain.ErrNotFound, ref.ExternalID)
 }
 
-func objectFingerprint(sources, kinds []string, value domain.TimeRange) string {
+func objectFingerprint(sources, kinds []string, value domain.TimeRange, controls ...string) string {
 	sources = append([]string(nil), sources...)
 	kinds = append([]string(nil), kinds...)
 	sort.Strings(sources)
 	sort.Strings(kinds)
 	raw := strings.Join(sources, ",") + "\x00" + strings.Join(kinds, ",") + "\x00" +
 		value.From.UTC().Format(time.RFC3339Nano) + "\x00" + value.To.UTC().Format(time.RFC3339Nano)
+	for len(controls) > 0 && controls[len(controls)-1] == "" {
+		controls = controls[:len(controls)-1]
+	}
+	for _, control := range controls {
+		raw += "\x00" + control
+	}
 	sum := sha256.Sum256([]byte(raw))
 	return hex.EncodeToString(sum[:])
 }
@@ -213,4 +221,11 @@ func resolutionFor(items []domain.ObjectResolution, ref domain.SourceObjectRef) 
 		}
 	}
 	return domain.ObjectResolution{Ref: ref, Status: "complete", Errors: []domain.SourceError{}}
+}
+
+func createdRangeKey(value *domain.TimeRange) string {
+	if value == nil {
+		return ""
+	}
+	return value.From.UTC().Format(time.RFC3339Nano) + "/" + value.To.UTC().Format(time.RFC3339Nano)
 }
