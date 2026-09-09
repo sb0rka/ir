@@ -111,7 +111,7 @@ func validateCapabilities(provider Provider) error {
 	}
 	for _, item := range provider.Source.Capabilities {
 		switch item {
-		case domain.CapabilityEvidencePayload, domain.CapabilityEvidenceFile:
+		case domain.CapabilityEvidencePayload:
 			if provider.Evidence == nil {
 				return fmt.Errorf("evidence capability has no implementation")
 			}

@@ -11,6 +11,7 @@ paths:
     post:
       tags: [evidence]
       summary: Prepare selected source evidence for download
+      description: NAD supports alert payload only. File extraction is disabled for the pilot; file and PCAP requests return unsupported_capability. Use PCAP dumps supplied with the case.
       operationId: createEvidenceExport
       parameters:
         - $ref: '../shared/parameters.yaml#/ProjectId'
@@ -96,12 +97,13 @@ components:
         kind:
           type: string
           enum: [payload, file, pcap]
+          description: Evidence type. NAD exports payload only; file and PCAP are unsupported.
         ref:
           $ref: '../shared/schemas.yaml#/SourceObjectRef'
         object_id:
           type: string
           maxLength: 512
-          description: File ID from session file_hints; required for file, omitted otherwise. Payload uses an alert ref; PCAP uses a session ref.
+          description: Optional evidence selector. Omit for NAD payload, which uses the alert ref. NAD file extraction is disabled, including requests with a file ID from file_hints.
     EvidenceExport:
       type: object
       required: [export_id, evidence, state, expires_at]

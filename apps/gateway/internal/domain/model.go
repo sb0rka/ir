@@ -20,7 +20,6 @@ const (
 	CapabilityResponseCatalog  Capability = "response_catalog"
 	CapabilityAccountUserinfo  Capability = "account_userinfo"
 	CapabilityEvidencePayload  Capability = "evidence_payload"
-	CapabilityEvidenceFile     Capability = "evidence_file"
 )
 
 type Source struct {

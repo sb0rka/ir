@@ -25,7 +25,7 @@ The bounded credential cache is keyed by `{project_id, source_code}` and seriali
 
 Finding and session identity is `{source_code, source_instance, record_type, external_id}`. The required time range is replay provenance and is not part of identity. SIEM uses an empty source instance; NAD uses a configured store ID.
 
-`Finding` and `Session` are first-class coarse objects. `Event`, `Entity`, and entity `Relation` remain granular evidence. Resolve retains a found root even when child context fails and marks that object `partial`; a missing root is not synthesized. Incident resolution includes correlation findings. Attack resolution includes its parent network session. Ordinary object responses contain metadata and evidence references. Explicit evidence exports stream payload or file bytes; cookies, password/NTLM material and full vendor JSON stay behind the adapter boundary. PCAP export is not enabled until its vendor contract is verified.
+`Finding` and `Session` are first-class coarse objects. `Event`, `Entity`, and entity `Relation` remain granular evidence. Resolve retains a found root even when child context fails and marks that object `partial`; a missing root is not synthesized. Incident resolution includes correlation findings. Attack resolution includes its parent network session. Ordinary object responses contain metadata and evidence references. Explicit evidence exports stream alert payload bytes; cookies, password/NTLM material and full vendor JSON stay behind the adapter boundary. NAD file extraction is disabled for the pilot; PCAP dumps are supplied with the case.
 
 Canonical normalization covers IP, MAC, host, account, and hashes. Event entity mentions retain roles such as `src`, `dst`, `attacker`, and `victim`; flow direction never substitutes for attacker semantics.
 
@@ -39,17 +39,17 @@ block a new export; an evicted ID returns 404. This is not a shared or persisten
 Gateway replicas need request affinity for an export's lifetime.
 
 Every status/content request rechecks the project and current source allowlist.
-Provider task IDs and download locations never leave the adapter/service boundary.
-Creation starts at most one vendor task per request and is not automatically retried;
-status GETs use the existing credential refresh/retry policy. Downloads propagate
-request cancellation and expiration, close the upstream body, and never retry after
-sending bytes. Stream failures abort the response instead of appending JSON.
+Vendor locations never leave the adapter/service boundary. NAD payload creation
+validates the alert parent and reads its payload; it starts no vendor task.
+Content reads propagate request cancellation and expiration. Stream failures
+abort the response instead of appending JSON.
 
-NAD advertises `evidence_payload` and `evidence_file` through source capabilities.
-PCAP references are provenance only; PCAP export is not advertised or implemented.
-File streams use the export expiry deadline for body reads and HTTP writes, with
-the source timeout retained for upstream response headers. JSON calls keep their
-ordinary timeout. Cookie handling remains the existing temporary pilot mechanism.
+NAD advertises only `evidence_payload` for evidence exports. File extraction and
+attachments are disabled at creation, polling and content reading; no file export
+capability or downloadable file reference is returned. Session file metadata is
+preserved. PCAP references are provenance only; the course supplies the dumps.
+JSON calls keep their ordinary timeout. Cookie handling remains the existing
+temporary pilot mechanism.
 
 The HTTP content operation streams the full response or a bounded byte slice.
 IR MCP requests slices (16 KiB default, 64 KiB maximum) and returns Base64 with byte

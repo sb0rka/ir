@@ -420,6 +420,10 @@ paths:
       tags:
         - evidence
       summary: Prepare selected source evidence for download
+      description: >-
+        NAD supports alert payload only. File extraction is disabled for the
+        pilot; file and PCAP requests return unsupported_capability. Use PCAP
+        dumps supplied with the case.
       operationId: createEvidenceExport
       parameters:
         - $ref: '#/components/parameters/ProjectId'
@@ -1838,14 +1842,18 @@ components:
             - payload
             - file
             - pcap
+          description: >-
+            Evidence type. NAD exports payload only; file and PCAP are
+            unsupported.
         ref:
           $ref: '#/components/schemas/SourceObjectRef'
         object_id:
           type: string
           maxLength: 512
           description: >-
-            File ID from session file_hints; required for file, omitted
-            otherwise. Payload uses an alert ref; PCAP uses a session ref.
+            Optional evidence selector. Omit for NAD payload, which uses the
+            alert ref. NAD file extraction is disabled, including requests with
+            a file ID from file_hints.
     FindingKind:
       type: string
       enum:
@@ -2358,7 +2366,6 @@ components:
         - response_catalog
         - account_userinfo
         - evidence_payload
-        - evidence_file
     Source:
       type: object
       description: External security product registered in the Gateway.

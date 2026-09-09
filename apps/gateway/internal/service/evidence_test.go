@@ -23,7 +23,7 @@ type evidenceFake struct {
 
 func (f *evidenceFake) StartEvidence(_ context.Context, _ capability.Access, ref domain.EvidenceReference) (capability.EvidenceHandle, error) {
 	f.starts++
-	return capability.EvidenceHandle{Reference: ref, State: f.state, TaskID: "private-vendor-id"}, f.startErr
+	return capability.EvidenceHandle{Reference: ref, State: f.state, ParentID: "private-vendor-id"}, f.startErr
 }
 func (f *evidenceFake) PollEvidence(_ context.Context, _ capability.Access, h capability.EvidenceHandle) (capability.EvidenceHandle, error) {
 	f.polls++

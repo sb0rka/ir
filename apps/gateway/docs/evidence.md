@@ -3,15 +3,17 @@
 ## Status and boundary
 
 Implemented: restricted NAD filters, SIEM incident creation range, alert/mail
-context, full payload and selected-file ZIP export, HTTP streaming and MCP chunks.
-PCAP references are retained; creation currently returns HTTP 422
-`unsupported_capability`. Its start/status/download requests must first be captured
-on the lab. The saved cases do not establish that chain.
+context, full alert payload, HTTP streaming and MCP chunks.
+NAD file extraction is disabled for the pilot: executables and attachments are
+never downloaded. File names, hashes and session relations remain metadata only.
+File requests return HTTP 422 `unsupported_capability` before any NAD request.
+PCAP references are provenance only; use the dumps supplied separately by the
+course. NAD PCAP export is not implemented or required for this pilot.
 
 No persistent binary storage, database migration or Dashboard change. Export
 metadata is process-local for one hour; after a restart request a new export.
 Unknown IDs and exports belonging to another project return the same 404.
-Project/source access is checked again on every request. Vendor URLs, task IDs and
+Project/source access is checked again on every request. Vendor URLs and
 credentials are supplied by the server and are not accepted in the public body.
 
 ## Search grammar
@@ -102,13 +104,11 @@ one TCP/2222 shell session, one ChromeUpdate session and three IMAP sessions.
 The target IMAP context retained five files, its sender/recipient/subject/date and
 normalized account. A limit-one IMAP query still reported three vendor matches.
 
-Full exports were compared between HTTP and concatenated MCP Base64 chunks:
+Alert payloads were compared between HTTP and concatenated MCP Base64 chunks:
 
 | Evidence | Original bytes | SHA-256 |
 | --- | ---: | --- |
 | Shell banner | 116 | `3d9c61d64e2741fdd8bb3b9124d9169ae0932bf2d070da7cdd46bc304789905f` |
-| ChromeUpdate inside ZIP | 73802 | `c90c2cc6ee4bd2b892fb6651f30544f1b541d65a92ab0038a5bc455408401897` |
-| HTML attachment inside ZIP | 103 | `7a35fae98ef2b9384c9300d357843048362196d730d3f2b87adc8deffc227299` |
 | Meterpreter payload | 3000 | `b7fa96cfcbdb0e18fcaae8d8747b92de97978bc21120161abe6cba5cf814f268` |
 
 The production Gateway and IR API images were used with JWT validation enabled.
@@ -116,10 +116,10 @@ A separate local test helper delivered `.env` cookies through the Secrets API
 contract; production Sb0rka secret storage/authentication was not tested by this
 run. Binary exports were kept only as local test artifacts, outside IR storage.
 
-PCAP remains unimplemented and unverified: the current lab account exposes
-`save_files`, `view_app_proto`, `view_flow`, and `view_auth_data`, but lacks
-`export_pcap`. Capture the real export sequence with an authorized account before
-implementing PCAP; file export success does not establish PCAP support.
+The earlier run also exercised file exports. That behavior has since been removed
+from the pilot; those historical results are not a supported capability or an
+instruction to repeat file downloads. Current checks must verify rejection of
+file exports and preservation of file metadata without downloading file content.
 
 ### SIEM 2.5
 
@@ -152,17 +152,15 @@ Pass one complete evidence reference returned by a finding/session to
 }
 ```
 
-For a file, use `kind: "file"`, the session ref (`record_type: "nad_session"`) and
-`object_id` from that session's file hint. The adapter verifies membership before
-requesting only that flow/store/MD5 via `POST /api/v2/sources/getfile`. The returned
-content is the vendor ZIP containing the selected extraction; it is not unpacked
-or executed. Payload uses the exact alert's Base64 field without text conversion.
+Payload uses the exact alert's Base64 field without text conversion. Do not submit
+file IDs for extraction: NAD supports `kind: "payload"` only. File and PCAP requests
+return `unsupported_capability`; case PCAP dumps are supplied outside Gateway.
 
 Creation returns 202 with `export_id`, `state`, `expires_at` and available metadata.
 Poll `GET /api/v1/evidence/exports/{export_id}` / `gateway_get_evidence_export`.
-States: `pending`, `ready`, `partial`, `failed`, `expired`. A partial extraction
-has a safe error explanation and remains partial even after its bytes are read.
-Transient status transport errors return an error without launching another task.
+The shared lifecycle has `pending`, `ready`, `partial`, `failed`, `expired` states.
+NAD payload is ready at successful creation and expires after one hour; it starts
+no vendor extraction task. Partial responses, when present, remain marked partial.
 
 `GET /api/v1/evidence/exports/{export_id}/content` streams the complete bytes with
 Content-Type, Content-Disposition and no-store headers. Optional `offset` and
@@ -185,24 +183,22 @@ only while it remains valid. Payload detail retains the existing bounded JSON
 response limit; oversized responses fail explicitly rather than returning a
 silently truncated payload.
 
-For the pilot, repeated downloads are intentional; no binary storage or cache is
-introduced. File downloads are bounded by the export expiry and request cancellation,
-not the short JSON timeout; upstream response headers still use the source timeout.
-Source discovery advertises `evidence_payload` and `evidence_file` for NAD. PCAP
-metadata does not mean that PCAP export is supported. At registry capacity, expired
-metadata can be evicted before its additional retention hour, returning 404 thereafter.
+Payload reads are repeated upstream requests; no binary storage or cache is
+introduced. Source discovery advertises `evidence_payload` for NAD, never
+`evidence_file`. At registry capacity, expired metadata can be evicted before its
+additional retention hour, returning 404 thereafter.
 
 ## Verification
 
 `task gen` regenerates OpenAPI, Go server/client and TypeScript contracts.
 `task build`, `task test`, `task vet`, `task typecheck` cover the implementation.
-Tests replay selected fields from docs-internal PR #6 and synthetic task responses;
+Tests replay selected fields from docs-internal PR #6 and synthetic payload bytes;
 local HTTP tests cover scope, state, chunks and stream interruption. MCP tests call
 the registered tools and reconstruct binary content across chunk boundaries.
 These checks are not live NAD/SIEM E2E.
 
 For the agreed NAD pilot, PCAP is supplied separately by the course; exporting it
 from NAD is not a release gate. The NAD HTTP/MCP results above cover the implemented
-search, context, payload and file operations. They do not establish live SIEM 2.5
+search, context and payload operations. They do not establish live SIEM 2.5
 coverage; SIEM creation/detection ranges and null-group drill-down require a separate
 live check before claiming that case complete.

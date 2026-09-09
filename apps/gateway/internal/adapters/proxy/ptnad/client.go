@@ -29,10 +29,9 @@ type Config struct {
 }
 
 type Client struct {
-	baseURL      *url.URL
-	http         *http.Client
-	downloadHTTP *http.Client
-	now          func() time.Time
+	baseURL *url.URL
+	http    *http.Client
+	now     func() time.Time
 }
 
 func NewClient(config Config) (*Client, error) {
@@ -58,20 +57,7 @@ func NewClient(config Config) (*Client, error) {
 	if now == nil {
 		now = time.Now
 	}
-	// Downloads use the export deadline, not the short JSON request timeout.
-	// Reuse a dedicated transport to retain connection pooling and bounded headers.
-	downloadClient := httpClient
-	downloadClient.Timeout = 0
-	transport := httpClient.Transport
-	if transport == nil {
-		transport = http.DefaultTransport
-	}
-	if standard, ok := transport.(*http.Transport); ok {
-		streamTransport := standard.Clone()
-		streamTransport.ResponseHeaderTimeout = httpClient.Timeout
-		downloadClient.Transport = streamTransport
-	}
-	return &Client{baseURL: baseURL, http: &httpClient, downloadHTTP: &downloadClient, now: now}, nil
+	return &Client{baseURL: baseURL, http: &httpClient, now: now}, nil
 }
 
 func (client *Client) SearchSessions(ctx context.Context, request SearchRequest, access Access) (SessionSearchResult, error) {

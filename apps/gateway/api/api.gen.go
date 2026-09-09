@@ -37,7 +37,6 @@ const (
 	CapabilityEndpoints        Capability = "endpoints"
 	CapabilityEntityLookup     Capability = "entity_lookup"
 	CapabilityEvents           Capability = "events"
-	CapabilityEvidenceFile     Capability = "evidence_file"
 	CapabilityEvidencePayload  Capability = "evidence_payload"
 	CapabilityFindings         Capability = "findings"
 	CapabilityResponseCatalog  Capability = "response_catalog"
@@ -56,8 +55,6 @@ func (e Capability) Valid() bool {
 	case CapabilityEntityLookup:
 		return true
 	case CapabilityEvents:
-		return true
-	case CapabilityEvidenceFile:
 		return true
 	case CapabilityEvidencePayload:
 		return true
@@ -789,16 +786,17 @@ type EvidenceExportState string
 
 // EvidenceReference defines model for EvidenceReference.
 type EvidenceReference struct {
+	// Kind Evidence type. NAD exports payload only; file and PCAP are unsupported.
 	Kind EvidenceReferenceKind `json:"kind"`
 
-	// ObjectId File ID from session file_hints; required for file, omitted otherwise. Payload uses an alert ref; PCAP uses a session ref.
+	// ObjectId Optional evidence selector. Omit for NAD payload, which uses the alert ref. NAD file extraction is disabled, including requests with a file ID from file_hints.
 	ObjectId *string `json:"object_id,omitempty"`
 
 	// Ref Stable source-owned object identity plus the bounded time window needed to resolve it again.
 	Ref SourceObjectRef `json:"ref"`
 }
 
-// EvidenceReferenceKind defines model for EvidenceReference.Kind.
+// EvidenceReferenceKind Evidence type. NAD exports payload only; file and PCAP are unsupported.
 type EvidenceReferenceKind string
 
 // Finding A source-native coarse security object; never a renamed raw event.

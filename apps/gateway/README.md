@@ -60,8 +60,7 @@ See [architecture](docs/architecture.md), [provider mappings](docs/providers.md)
 
 Findings/sessions accept restricted NAD `filter` predicates; SIEM incidents also
 accept `created_at_range`. Session details include mail metadata and account hints.
-Full payload and selected-file bytes use explicit evidence exports and bounded MCP
-reads. See [case requests, lifecycle and verification](docs/evidence.md).
+Full alert payload uses explicit evidence exports and bounded MCP reads.
+File extraction is disabled; file names, hashes and relations remain metadata only. See [case requests, lifecycle and verification](docs/evidence.md).
 
-PCAP references are retained, but PCAP export awaits a verified lab capture of its
-vendor task/download chain. Local contract tests do not establish live case coverage.
+PCAP references are retained for provenance; use dumps supplied with the case. Local contract tests do not establish live case coverage.
