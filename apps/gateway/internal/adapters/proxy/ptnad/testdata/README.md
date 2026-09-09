@@ -9,8 +9,10 @@ Selected response fields from sb0rka/docs-internal PR #6, head
 - `file-session.json`: NAD_2.6/queries/04-nad-open-session-P8H9F5zUMIAFzrmsj6-mk1-chromeupdate-exe.json
 
 No HTTP credentials, mailbox passwords, executable files or vendor download URLs.
-The shell banner retains the original Base64 bytes. File-session fixtures contain
-metadata only; tests reject extraction without making a vendor request.
+The shell banner retains the original Base64 bytes. Export task responses in tests
+are synthetic instances of the captured sources/getfile -> tasks -> download contract.
+The file lifecycle test builds a ZIP with an empty synthetic Ethernet PCAP, verifies
+archive and extracted bytes, and never downloads an executable or lab attachment.
 These fixtures do not establish live NAD availability or PCAP export support.
 
 `meterpreter-aes-alert.json` retains selected fields from the canonical

@@ -81,6 +81,9 @@ func canonicalSession(value Session) domain.Session {
 	for _, attack := range value.RelatedAttacks {
 		item.RelatedFindings = append(item.RelatedFindings, canonicalRef(attack.SourceRef))
 	}
+	for _, file := range value.Files {
+		item.Evidence = append(item.Evidence, domain.EvidenceReference{Kind: "file", Ref: ref, ObjectID: file.ExternalID})
+	}
 	if len(value.PCAPs) > 0 {
 		item.Evidence = append(item.Evidence, domain.EvidenceReference{Kind: "pcap", Ref: ref})
 	}

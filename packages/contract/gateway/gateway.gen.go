@@ -40,6 +40,7 @@ const (
 	CapabilityEndpoints        Capability = "endpoints"
 	CapabilityEntityLookup     Capability = "entity_lookup"
 	CapabilityEvents           Capability = "events"
+	CapabilityEvidenceFile     Capability = "evidence_file"
 	CapabilityEvidencePayload  Capability = "evidence_payload"
 	CapabilityFindings         Capability = "findings"
 	CapabilityResponseCatalog  Capability = "response_catalog"
@@ -58,6 +59,8 @@ func (e Capability) Valid() bool {
 	case CapabilityEntityLookup:
 		return true
 	case CapabilityEvents:
+		return true
+	case CapabilityEvidenceFile:
 		return true
 	case CapabilityEvidencePayload:
 		return true
@@ -789,17 +792,16 @@ type EvidenceExportState string
 
 // EvidenceReference defines model for EvidenceReference.
 type EvidenceReference struct {
-	// Kind Evidence type. NAD exports payload only; file and PCAP are unsupported.
 	Kind EvidenceReferenceKind `json:"kind"`
 
-	// ObjectId Optional evidence selector. Omit for NAD payload, which uses the alert ref. NAD file extraction is disabled, including requests with a file ID from file_hints.
+	// ObjectId File ID from session file_hints; required for file, omitted otherwise. Payload uses an alert ref; PCAP uses a session ref.
 	ObjectId *string `json:"object_id,omitempty"`
 
 	// Ref Stable source-owned object identity plus the bounded time window needed to resolve it again.
 	Ref SourceObjectRef `json:"ref"`
 }
 
-// EvidenceReferenceKind Evidence type. NAD exports payload only; file and PCAP are unsupported.
+// EvidenceReferenceKind defines model for EvidenceReference.Kind.
 type EvidenceReferenceKind string
 
 // Finding A source-native coarse security object; never a renamed raw event.
@@ -1667,7 +1669,7 @@ type ClientInterface interface {
 
 	// CreateEvidenceExportWithBody Prepare selected source evidence for download
 	//
-	// NAD supports alert payload only. File extraction is disabled for the pilot; file and PCAP requests return unsupported_capability. Use PCAP dumps supplied with the case.
+	// Explicit payload or selected-file download. Pilot checks must not download malware or suspicious attachments; use supplied dumps or synthetic content. NAD session PCAP export remains unsupported and is separate from reading a supplied dump.
 	//
 	// Takes any type of body and a specified content type.
 	//
@@ -1676,7 +1678,7 @@ type ClientInterface interface {
 
 	// CreateEvidenceExport Prepare selected source evidence for download
 	//
-	// NAD supports alert payload only. File extraction is disabled for the pilot; file and PCAP requests return unsupported_capability. Use PCAP dumps supplied with the case.
+	// Explicit payload or selected-file download. Pilot checks must not download malware or suspicious attachments; use supplied dumps or synthetic content. NAD session PCAP export remains unsupported and is separate from reading a supplied dump.
 	//
 	// Takes a body of the `application/json` content type.
 	//
@@ -1982,7 +1984,7 @@ func (c *Client) SearchEvents(ctx context.Context, params *SearchEventsParams, b
 
 // CreateEvidenceExportWithBody Prepare selected source evidence for download
 //
-// NAD supports alert payload only. File extraction is disabled for the pilot; file and PCAP requests return unsupported_capability. Use PCAP dumps supplied with the case.
+// Explicit payload or selected-file download. Pilot checks must not download malware or suspicious attachments; use supplied dumps or synthetic content. NAD session PCAP export remains unsupported and is separate from reading a supplied dump.
 //
 // Takes any type of body and a specified content type.
 //
@@ -2001,7 +2003,7 @@ func (c *Client) CreateEvidenceExportWithBody(ctx context.Context, params *Creat
 
 // CreateEvidenceExport Prepare selected source evidence for download
 //
-// NAD supports alert payload only. File extraction is disabled for the pilot; file and PCAP requests return unsupported_capability. Use PCAP dumps supplied with the case.
+// Explicit payload or selected-file download. Pilot checks must not download malware or suspicious attachments; use supplied dumps or synthetic content. NAD session PCAP export remains unsupported and is separate from reading a supplied dump.
 //
 // Takes a body of the `application/json` content type.
 //
@@ -3438,7 +3440,7 @@ type ClientWithResponsesInterface interface {
 
 	// CreateEvidenceExportWithBodyWithResponse Prepare selected source evidence for download
 	//
-	// NAD supports alert payload only. File extraction is disabled for the pilot; file and PCAP requests return unsupported_capability. Use PCAP dumps supplied with the case.
+	// Explicit payload or selected-file download. Pilot checks must not download malware or suspicious attachments; use supplied dumps or synthetic content. NAD session PCAP export remains unsupported and is separate from reading a supplied dump.
 	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -3447,7 +3449,7 @@ type ClientWithResponsesInterface interface {
 
 	// CreateEvidenceExportWithResponse Prepare selected source evidence for download
 	//
-	// NAD supports alert payload only. File extraction is disabled for the pilot; file and PCAP requests return unsupported_capability. Use PCAP dumps supplied with the case.
+	// Explicit payload or selected-file download. Pilot checks must not download malware or suspicious attachments; use supplied dumps or synthetic content. NAD session PCAP export remains unsupported and is separate from reading a supplied dump.
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -5381,7 +5383,7 @@ func (c *ClientWithResponses) SearchEventsWithResponse(ctx context.Context, para
 
 // CreateEvidenceExportWithBodyWithResponse Prepare selected source evidence for download
 //
-// NAD supports alert payload only. File extraction is disabled for the pilot; file and PCAP requests return unsupported_capability. Use PCAP dumps supplied with the case.
+// Explicit payload or selected-file download. Pilot checks must not download malware or suspicious attachments; use supplied dumps or synthetic content. NAD session PCAP export remains unsupported and is separate from reading a supplied dump.
 //
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
@@ -5396,7 +5398,7 @@ func (c *ClientWithResponses) CreateEvidenceExportWithBodyWithResponse(ctx conte
 
 // CreateEvidenceExportWithResponse Prepare selected source evidence for download
 //
-// NAD supports alert payload only. File extraction is disabled for the pilot; file and PCAP requests return unsupported_capability. Use PCAP dumps supplied with the case.
+// Explicit payload or selected-file download. Pilot checks must not download malware or suspicious attachments; use supplied dumps or synthetic content. NAD session PCAP export remains unsupported and is separate from reading a supplied dump.
 //
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //

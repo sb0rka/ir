@@ -568,6 +568,15 @@ func TestMCPEvidenceToolsForwardProjectAndReadDefaults(t *testing.T) {
 	calls := 0
 	gateway := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls++
+		if r.Method == http.MethodPost {
+			var ref struct {
+				Kind     string `json:"kind"`
+				ObjectID string `json:"object_id"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&ref); err != nil || ref.Kind != "file" || ref.ObjectID != "synthetic-dump" {
+				t.Errorf("file selector not forwarded: %+v %v", ref, err)
+			}
+		}
 		if r.Header.Get("X-Project-ID") != "abcdef1234" || r.Header.Get("Authorization") != "Bearer user-access-jwt" {
 			t.Error("missing authenticated scope")
 		}
@@ -585,7 +594,7 @@ func TestMCPEvidenceToolsForwardProjectAndReadDefaults(t *testing.T) {
 	defer gateway.Close()
 	server := &Server{gateway: gatewayclient.New(gatewayclient.Config{BaseURL: gateway.URL})}
 	args := map[string]string{
-		"gateway_create_evidence_export": `{"kind":"payload","ref":{"source_code":"pt-nad","record_type":"nad_attack","external_id":"alert","source_instance":"23","time_range":{"from":"2023-06-10T00:00:00Z","to":"2023-06-11T00:00:00Z"}}}`,
+		"gateway_create_evidence_export": `{"kind":"file","object_id":"synthetic-dump","ref":{"source_code":"pt-nad","record_type":"nad_session","external_id":"flow","source_instance":"23","time_range":{"from":"2023-06-10T00:00:00Z","to":"2023-06-11T00:00:00Z"}}}`,
 		"gateway_get_evidence_export":    `{"export_id":"11111111-2222-4333-8444-555555555555"}`,
 		"gateway_read_evidence_content":  `{"export_id":"11111111-2222-4333-8444-555555555555"}`,
 	}

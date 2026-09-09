@@ -1031,7 +1031,7 @@ type mcpEvidenceReadArgs struct {
 
 func addGatewayTools(server *mcp.Server, s *Server) {
 	mcp.AddTool(server, mcpTool[gatewaycontract.EvidenceReference](
-		"gateway_create_evidence_export", "Read alert payload from a source object ref. NAD file extraction is disabled: do not download executables or attachments. Use PCAP dumps supplied with the case. Exports expire after one hour and after a Gateway restart.",
+		"gateway_create_evidence_export", "Explicitly request full payload or file evidence from a source object ref. For this pilot, do not download malware or suspicious attachments; use supplied dumps or synthetic content for checks. NAD session PCAP export is unsupported; a supplied PCAP is analyzed separately. Poll status until ready or partial. Exports expire after one hour and after a Gateway restart.",
 	), gatewayHandler(s, func(ctx context.Context, args gatewaycontract.EvidenceReference, scope socctx.Scope, bearer string) (json.RawMessage, error) {
 		return s.gateway.CreateEvidenceExport(ctx, scope.ProjectID, bearer, args)
 	}))

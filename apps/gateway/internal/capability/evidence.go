@@ -9,6 +9,7 @@ import (
 // EvidenceHandle is private adapter state, never serialized to a client.
 type EvidenceHandle struct {
 	Reference   domain.EvidenceReference
+	TaskID      string
 	ParentID    string
 	State       string
 	Filename    string

@@ -59,7 +59,7 @@ type exportProvider struct {
 }
 
 func (p *exportProvider) StartEvidence(_ context.Context, _ capability.Access, ref domain.EvidenceReference) (capability.EvidenceHandle, error) {
-	return capability.EvidenceHandle{Reference: ref, State: p.state, Filename: "evidence.zip", ContentType: "application/zip", ParentID: "private-task-id"}, nil
+	return capability.EvidenceHandle{Reference: ref, State: p.state, Filename: "evidence.zip", ContentType: "application/zip", TaskID: "private-task-id"}, nil
 }
 func (p *exportProvider) PollEvidence(_ context.Context, _ capability.Access, h capability.EvidenceHandle) (capability.EvidenceHandle, error) {
 	h.State = p.state

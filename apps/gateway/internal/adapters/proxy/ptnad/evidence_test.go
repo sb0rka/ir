@@ -1,11 +1,14 @@
 package ptnad
 
 import (
+	"archive/zip"
 	"bytes"
 	"context"
+	"crypto/md5"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -18,6 +21,48 @@ import (
 	"github.com/sb0rka/ir/apps/gateway/internal/capability"
 	"github.com/sb0rka/ir/apps/gateway/internal/domain"
 )
+
+func TestEvidenceDownloadOutlivesJSONTimeout(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("first"))
+		w.(http.Flusher).Flush()
+		time.Sleep(150 * time.Millisecond)
+		w.Write([]byte("last"))
+	}))
+	defer upstream.Close()
+	httpClient := upstream.Client()
+	httpClient.Timeout = 50 * time.Millisecond
+	client, err := NewClient(Config{BaseURL: upstream.URL, HTTPClient: httpClient})
+	if err != nil {
+		t.Fatal(err)
+	}
+	provider, err := NewProvider(client, []int64{23})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	reader, err := provider.OpenEvidence(ctx, capability.Access{Cookie: "csrftoken=test"}, capability.EvidenceHandle{Reference: domain.EvidenceReference{Kind: "file"}, TaskID: "11111111-2222-4333-8444-555555555555"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reader.Close()
+	raw, err := io.ReadAll(reader)
+	if err != nil || string(raw) != "firstlast" {
+		t.Fatalf("download: %q %v", raw, err)
+	}
+	if client.http.Timeout != httpClient.Timeout {
+		t.Fatal("JSON timeout changed")
+	}
+	transport := client.downloadHTTP.Transport.(*http.Transport)
+	if transport.ResponseHeaderTimeout != httpClient.Timeout {
+		t.Fatal("header timeout lost")
+	}
+	registered := provider.RegistryProvider()
+	if !slices.Contains(registered.Source.Capabilities, domain.CapabilityEvidencePayload) || !slices.Contains(registered.Source.Capabilities, domain.CapabilityEvidenceFile) {
+		t.Fatal("export capabilities missing")
+	}
+}
 
 func fixture(t *testing.T, name string, target any) []byte {
 	t.Helper()
@@ -226,52 +271,136 @@ func TestRecordedPayloadExactAndIdentity(t *testing.T) {
 		t.Fatal("partial root not preserved")
 	}
 }
-func TestNADFileExportsRejectedWithoutVendorRequests(t *testing.T) {
-	calls := 0
-	_, provider := testNAD(t, func(w http.ResponseWriter, r *http.Request) {
-		calls++
-		t.Errorf("unexpected vendor request: %s", r.URL)
-		http.Error(w, "unexpected", http.StatusInternalServerError)
-	})
-	access := capability.Access{Cookie: "csrftoken=test"}
-	for _, kind := range []string{"file", "pcap"} {
-		ref := domain.EvidenceReference{Kind: kind, Ref: caseRef(SessionRecordType, "flow-1"), ObjectID: "file-1"}
-		if _, err := provider.StartEvidence(context.Background(), access, ref); !errors.Is(err, domain.ErrUnsupportedCapability) {
-			t.Fatalf("start %s: %v", kind, err)
-		}
-		// Old or forged handles must not bypass the creation guard.
-		for _, state := range []string{"pending", "ready", "partial"} {
-			handle := capability.EvidenceHandle{Reference: ref, State: state}
-			if _, err := provider.PollEvidence(context.Background(), access, handle); !errors.Is(err, domain.ErrUnsupportedCapability) {
-				t.Fatalf("poll %s: %v", kind, err)
-			}
-			if reader, err := provider.OpenEvidence(context.Background(), access, handle); !errors.Is(err, domain.ErrUnsupportedCapability) || reader != nil {
-				t.Fatalf("open %s: %v", kind, err)
-			}
-		}
-	}
-	if calls != 0 {
-		t.Fatalf("vendor calls: %d", calls)
-	}
-	registered := provider.RegistryProvider()
-	if !slices.Contains(registered.Source.Capabilities, domain.CapabilityEvidencePayload) || slices.Contains(registered.Source.Capabilities, domain.Capability("evidence_file")) {
-		t.Fatalf("capabilities: %v", registered.Source.Capabilities)
-	}
-
+func TestFileExportLifecycleAndReferenceValidation(t *testing.T) {
 	var detail flowDetail
 	fixture(t, "file-session.json", &detail)
-	session, err := mapFlowDetail(detail, 23, caseWindow(), time.Now())
+	// A synthetic empty Ethernet PCAP: no executable or lab attachment is fetched.
+	dump := []byte{0xd4, 0xc3, 0xb2, 0xa1, 2, 0, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff, 0, 0, 1, 0, 0, 0}
+	detail.Files = []fileDetail{{ID: detail.Files[0].ID, Parent: detail.ID, Filename: "synthetic.pcap", MD5: fmt.Sprintf("%x", md5.Sum(dump)), MIME: "application/vnd.tcpdump.pcap", Size: int64(len(dump))}}
+	raw, err := json.Marshal(detail)
 	if err != nil {
 		t.Fatal(err)
 	}
-	canonical := canonicalSession(session)
-	if len(canonical.FileHints) == 0 || canonical.FileHints[0].Name == "" || canonical.FileHints[0].MD5 == "" {
-		t.Fatalf("file metadata lost: %+v", canonical.FileHints)
+	taskID := "11111111-2222-4333-8444-555555555555"
+	posts := 0
+	var archive bytes.Buffer
+	writer := zip.NewWriter(&archive)
+	entry, err := writer.Create("synthetic.pcap")
+	if err != nil {
+		t.Fatal(err)
 	}
-	for _, evidence := range canonical.Evidence {
-		if evidence.Kind == "file" {
-			t.Fatal("file download reference still advertised")
+	if _, err := entry.Write(dump); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	content := archive.Bytes()
+	_, provider := testNAD(t, func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/v2/flow/" + detail.ID:
+			w.Write(raw)
+		case "/api/v2/sources/getfile":
+			posts++
+			var body struct {
+				IDs    []string `json:"id"`
+				MD5    []string `json:"md5"`
+				Source []string `json:"source"`
+			}
+			json.NewDecoder(r.Body).Decode(&body)
+			if r.Method != "POST" || r.Header.Get("Content-Type") != "application/json" || len(body.IDs) != 1 || body.IDs[0] != detail.ID || len(body.MD5) != 1 || body.MD5[0] != detail.Files[0].MD5 || len(body.Source) != 1 || body.Source[0] != "23" {
+				t.Errorf("extraction request: %+v", body)
+			}
+			w.WriteHeader(202)
+			io.WriteString(w, `{"id":"`+taskID+`","state":"PENDING"}`)
+		case "/api/v2/tasks/" + taskID:
+			io.WriteString(w, `{"id":"`+taskID+`","state":"SUCCESS","result":{"url":"/api/v2/download/`+taskID+`.zip","total_files":1,"extracted_files":1,"errors":[]}}`)
+		case "/api/v2/download/" + taskID + ".zip":
+			w.Write(content)
+		default:
+			t.Error(r.URL)
+			http.NotFound(w, r)
 		}
+	})
+	access := capability.Access{Cookie: "csrftoken=test"}
+	ref := domain.EvidenceReference{Kind: "file", Ref: caseRef(SessionRecordType, detail.ID), ObjectID: detail.Files[0].ID}
+	handle, err := provider.StartEvidence(context.Background(), access, ref)
+	if err != nil || handle.State != "pending" {
+		t.Fatal(handle, err)
+	}
+	handle, err = provider.PollEvidence(context.Background(), access, handle)
+	if err != nil || handle.State != "ready" {
+		t.Fatal(handle, err)
+	}
+	reader, err := provider.OpenEvidence(context.Background(), access, handle)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := io.ReadAll(reader)
+	reader.Close()
+	if err != nil || !bytes.Equal(got, content) {
+		t.Fatal("archive bytes changed", err)
+	}
+	downloaded, err := zip.NewReader(bytes.NewReader(got), int64(len(got)))
+	if err != nil || len(downloaded.File) != 1 || downloaded.File[0].Name != "synthetic.pcap" {
+		t.Fatal("invalid dump archive", err)
+	}
+	dumpReader, err := downloaded.File[0].Open()
+	if err != nil {
+		t.Fatal(err)
+	}
+	gotDump, err := io.ReadAll(dumpReader)
+	dumpReader.Close()
+	if err != nil || !bytes.Equal(gotDump, dump) {
+		t.Fatal("PCAP bytes changed", err)
+	}
+	ref.ObjectID = "foreign-file"
+	if _, err = provider.StartEvidence(context.Background(), access, ref); !errors.Is(err, domain.ErrNotFound) {
+		t.Fatal(err)
+	}
+	ref.Ref.SourceInstance = "99"
+	if _, err = provider.StartEvidence(context.Background(), access, ref); err == nil {
+		t.Fatal("accepted foreign source instance")
+	}
+	if posts != 1 {
+		t.Fatalf("unexpected vendor tasks: %d", posts)
+	}
+	ref = domain.EvidenceReference{Kind: "pcap", Ref: caseRef(SessionRecordType, detail.ID)}
+	if _, err = provider.StartEvidence(context.Background(), access, ref); !errors.Is(err, domain.ErrUnsupportedCapability) {
+		t.Fatal(err)
+	}
+}
+func TestTaskPartialFailureAndHostileLocation(t *testing.T) {
+	id := "11111111-2222-4333-8444-555555555555"
+	base := capability.EvidenceHandle{TaskID: id}
+	for _, tc := range []struct {
+		state            string
+		total, extracted int
+		want             string
+	}{{"PENDING", 0, 0, "pending"}, {"SUCCESS", 2, 1, "partial"}, {"SUCCESS", 1, 0, "failed"}, {"FAILURE", 0, 0, "failed"}, {"SUCCESS", 1, 1, "ready"}} {
+		task := exportTask{ID: id, State: tc.state}
+		task.Result.URL = "/api/v2/download/" + id + ".zip"
+		task.Result.Total = tc.total
+		task.Result.Extracted = tc.extracted
+		got, err := updateExportTask(base, task)
+		if err != nil || got.State != tc.want {
+			t.Fatal(got, err)
+		}
+		if tc.want == "partial" || tc.want == "failed" {
+			if got.Error == "" {
+				t.Fatal("missing explanation")
+			}
+		}
+	}
+	for _, url := range []string{"https://other.example/steal", "//other.example/file", "/api/v2/download/other.zip"} {
+		task := exportTask{ID: id, State: "SUCCESS"}
+		task.Result.URL = url
+		if _, err := updateExportTask(base, task); err == nil {
+			t.Fatal("accepted", url)
+		}
+	}
+	if _, err := updateExportTask(base, exportTask{ID: "other", State: "PENDING"}); err == nil {
+		t.Fatal("accepted substituted task")
 	}
 }
 

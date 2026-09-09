@@ -171,7 +171,7 @@ export interface paths {
         put?: never;
         /**
          * Prepare selected source evidence for download
-         * @description NAD supports alert payload only. File extraction is disabled for the pilot; file and PCAP requests return unsupported_capability. Use PCAP dumps supplied with the case.
+         * @description Explicit payload or selected-file download. Pilot checks must not download malware or suspicious attachments; use supplied dumps or synthetic content. NAD session PCAP export remains unsupported and is separate from reading a supplied dump.
          */
         post: operations["createEvidenceExport"];
         delete?: never;
@@ -803,13 +803,10 @@ export interface components {
             source_entity_id: string;
         };
         EvidenceReference: {
-            /**
-             * @description Evidence type. NAD exports payload only; file and PCAP are unsupported.
-             * @enum {string}
-             */
+            /** @enum {string} */
             kind: "payload" | "file" | "pcap";
             ref: components["schemas"]["SourceObjectRef"];
-            /** @description Optional evidence selector. Omit for NAD payload, which uses the alert ref. NAD file extraction is disabled, including requests with a file ID from file_hints. */
+            /** @description File ID from session file_hints; required for file, omitted otherwise. Payload uses an alert ref; PCAP uses a session ref. */
             object_id?: string;
         };
         /** @enum {string} */
@@ -1019,7 +1016,7 @@ export interface components {
          * @description Operation that a source can perform through the Gateway.
          * @enum {string}
          */
-        Capability: "findings" | "sessions" | "events" | "entity_lookup" | "artifact_analysis" | "endpoints" | "response_catalog" | "account_userinfo" | "evidence_payload";
+        Capability: "findings" | "sessions" | "events" | "entity_lookup" | "artifact_analysis" | "endpoints" | "response_catalog" | "account_userinfo" | "evidence_payload" | "evidence_file";
         /** @description External security product registered in the Gateway. */
         Source: {
             /** @description Stable source identifier used in requests and provenance. */
