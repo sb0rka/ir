@@ -468,7 +468,7 @@ func importSelectionTx(ctx context.Context, tx pgx.Tx, request model.ImportReque
 		eventNodes := make(map[string]model.GraphNode, len(eventIDs))
 		entityNodes := make(map[string]model.GraphNode, len(entityIDs))
 		for snapshotID, eventID := range eventIDs {
-			node, inserted, err := upsertNodeTx(ctx, tx, request.InvestigationID, "event", nil, &eventID, "analyst", nil, nil)
+			node, inserted, err := upsertNodeTx(ctx, tx, request.InvestigationID, "event", nil, &eventID, "analyst", request.Why, nil)
 			if err != nil {
 				return stats, err
 			}
@@ -479,7 +479,7 @@ func importSelectionTx(ctx context.Context, tx pgx.Tx, request model.ImportReque
 			}
 		}
 		for snapshotID, entityID := range entityIDs {
-			node, inserted, err := upsertNodeTx(ctx, tx, request.InvestigationID, "entity", &entityID, nil, "analyst", nil, nil)
+			node, inserted, err := upsertNodeTx(ctx, tx, request.InvestigationID, "entity", &entityID, nil, "analyst", request.Why, nil)
 			if err != nil {
 				return stats, err
 			}

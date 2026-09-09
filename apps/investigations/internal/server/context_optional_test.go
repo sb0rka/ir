@@ -90,3 +90,43 @@ func TestContextImportForwardsResolve(t *testing.T) {
 		}
 	}
 }
+
+func TestContextImportForwardsWhy(t *testing.T) {
+	for _, hypothesis := range []bool{false, true} {
+		t.Run(map[bool]string{false: "investigation", true: "hypothesis"}[hypothesis], func(t *testing.T) {
+			var body investigations.ContextSelection
+			if err := json.Unmarshal([]byte(`{"findings":[{"source_code":"pt-maxpatrol-siem","record_type":"siem_incident","external_id":"11111111-1111-4111-8111-111111111111","time_range":{"from":"2026-09-01T00:00:00Z","to":"2026-09-02T00:00:00Z"}}],"events":[],"sessions":[],"entities":[],"why":"  seed evidence for the case  "}`), &body); err != nil {
+				t.Fatal(err)
+			}
+			gateway := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(`{"findings":[{"ref":{"source_code":"pt-maxpatrol-siem","record_type":"siem_incident","external_id":"11111111-1111-4111-8111-111111111111","time_range":{"from":"2026-09-01T00:00:00Z","to":"2026-09-02T00:00:00Z"}},"kind":"siem_incident","title":"Incident","severity":"high","occurred_at":"2026-09-01T12:00:00Z","fetched_at":"2026-09-01T12:00:00Z"}],"events":[],"entities":[],"sessions":[],"relations":[],"resolutions":[],"source_errors":[]}`))
+			}))
+			defer gateway.Close()
+			server := &Server{gateway: gatewayclient.New(gatewayclient.Config{BaseURL: gateway.URL})}
+			ctx := socctx.WithScope(context.Background(), socctx.Scope{ProjectID: "aabbccddee"})
+			id := uuid.New()
+			var imported model.ImportRequest
+			if hypothesis {
+				db := &hypothesisFakeDB{hypothesis: model.Hypothesis{Status: "open"}}
+				server.db = db
+				_, err := server.AddHypothesisContext(ctx, investigations.AddHypothesisContextRequestObject{InvestigationId: id, HypothesisId: uuid.New(), Body: &body})
+				if err != nil {
+					t.Fatal(err)
+				}
+				imported = db.lastImport
+			} else {
+				db := &mcpRecordingDB{}
+				server.db = db
+				_, err := server.AddInvestigationContext(ctx, investigations.AddInvestigationContextRequestObject{InvestigationId: id, Body: &body})
+				if err != nil {
+					t.Fatal(err)
+				}
+				imported = db.request
+			}
+			if imported.Why == nil || *imported.Why != "seed evidence for the case" {
+				t.Fatalf("why was not forwarded: %#v", imported.Why)
+			}
+		})
+	}
+}

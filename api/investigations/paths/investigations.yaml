@@ -486,6 +486,13 @@ components:
           description: >-
             Marks directly selected events as the seed evidence that opened the
             investigation. Derived events are never marked as seed.
+        why:
+          type: string
+          minLength: 1
+          maxLength: 4096
+          description: >-
+            Optional justification applied to every graph node created by this
+            analyst import. Existing nodes keep their stored why.
         findings:
           type: array
           maxItems: 100
