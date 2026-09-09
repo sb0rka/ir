@@ -1,5 +1,6 @@
 import {
   useCallback,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -10,6 +11,7 @@ import { useWorkspaceStore } from '../../state/useWorkspaceStore'
 import { Button } from '../ui'
 import { SEVERITY_COLOR } from './constants'
 import { eventsInRange } from './graph-adapters'
+import { layoutTimeline } from './timeline-layout'
 import { useHypothesisGraphView } from './useHypothesisGraphView'
 import { clamp, formatClock, formatEventTooltip, formatShortDate, toMs } from './time'
 import type { EventRef, Selection } from './types'
@@ -95,6 +97,19 @@ function TimelineInner({
   )
 
   const trackRef = useRef<HTMLDivElement>(null)
+  const [trackWidth, setTrackWidth] = useState(0)
+  useEffect(() => {
+    const track = trackRef.current
+    if (!track) return
+    const observer = new ResizeObserver(() => setTrackWidth(track.clientWidth))
+    observer.observe(track)
+    setTrackWidth(track.clientWidth)
+    return () => observer.disconnect()
+  }, [])
+  const markerLayout = useMemo(
+    () => layoutTimeline(visible, windowStart, windowEnd, trackWidth),
+    [visible, windowStart, windowEnd, trackWidth],
+  )
   const [brushing, setBrushing] = useState<{
     origin: number
     current: number
@@ -165,7 +180,6 @@ function TimelineInner({
   return (
     <div className="flex h-[176px] flex-col border-t border-[var(--border)] bg-[var(--bg-panel)] px-4 py-3">
       <div
-        ref={trackRef}
         className="relative h-20 flex-1 cursor-crosshair select-none overflow-hidden rounded-md border border-[var(--border)] bg-[var(--bg)]"
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
@@ -195,7 +209,7 @@ function TimelineInner({
 
         <div
           className="pointer-events-none absolute inset-y-0 border-x border-[var(--border-strong)] bg-[var(--timeline-brush)]"
-          style={{ left: `${brushPct.left}%`, width: `${brushPct.width}%` }}
+          style={{ left: trackWidth * brushPct.left / 100, width: trackWidth * brushPct.width / 100 }}
         />
 
         {ticks.map((tick, i) => {
@@ -204,7 +218,7 @@ function TimelineInner({
             <div
               key={tick.t}
               className="pointer-events-none absolute bottom-0 top-0 border-l border-[var(--border)]/60"
-              style={{ left: `${tick.pct}%` }}
+              style={{ left: trackWidth * tick.pct / 100 }}
             >
               <span
                 className={
@@ -219,59 +233,62 @@ function TimelineInner({
           )
         })}
 
-        {visible.map((ev, idx) => {
-          const t = toMs(ev.event_ts)
-          const pct = timeToPct(t)
-          const inRange = t >= range.start && t <= range.end
-          const color = ev.severity
-            ? SEVERITY_COLOR[ev.severity]
-            : 'var(--accent)'
-          const selected = selectedEventId === ev.id
-          const lane = (idx % 3) * 16 + 26
+        <div className="absolute inset-x-0 bottom-5 top-7 overflow-y-auto" aria-label="События таймлайна">
+          <div ref={trackRef} className="relative" style={{ height: markerLayout.height }}>
+            {markerLayout.markers.map(({ event: ev, left, top, width }) => {
+              const t = toMs(ev.event_ts)
+              const inRange = t >= range.start && t <= range.end
+              const color = ev.severity
+                ? SEVERITY_COLOR[ev.severity]
+                : 'var(--accent)'
+              const selected = selectedEventId === ev.id
 
-          return (
-            <button
-              key={ev.id}
-              type="button"
-              data-marker
-              title={`${ev.isSeed ? 'исходный · ' : ''}${formatEventTooltip(ev.event_ts, ev.title)}`}
-              className="absolute z-10 -translate-x-1/2 rounded-sm border px-1.5 py-0.5 text-left transition-opacity"
-              style={{
-                left: `${pct}%`,
-                top: lane,
-                borderColor: selected ? 'var(--accent)' : color,
-                background: selected
-                  ? 'var(--accent-soft)'
-                  : `color-mix(in srgb, ${color} 12%, var(--bg-node))`,
-                opacity: inRange ? 1 : 0.25,
-                maxWidth: 136,
-                boxShadow: ev.isSeed
-                  ? `0 0 0 1px var(--bg), 0 0 0 2px var(--text)`
-                  : undefined,
-              }}
-              onMouseEnter={() => setHoverEvent(ev.id)}
-              onMouseLeave={() => setHoverEvent(null)}
-              onClick={(e) => {
-                e.stopPropagation()
-                select({ kind: 'event', id: ev.id })
-              }}
-            >
-              <div
-                className="flex items-center gap-1 truncate text-[10px] font-medium leading-tight"
-                style={{ color }}
-              >
-                {ev.isSeed && (
-                  <span
-                    className="inline-block h-1.5 w-1.5 shrink-0 rotate-45 border"
-                    style={{ borderColor: color, background: color }}
-                    aria-hidden
-                  />
-                )}
-                <span className="truncate">{ev.title}</span>
-              </div>
-            </button>
-          )
-        })}
+              return (
+                <button
+                  key={ev.id}
+                  type="button"
+                  data-marker
+                  title={`${ev.isSeed ? 'исходный · ' : ''}${formatEventTooltip(ev.event_ts, ev.title)}`}
+                  className="absolute z-10 rounded-sm border px-1.5 py-0.5 text-left transition-opacity"
+                  style={{
+                    left,
+                    top,
+                    width,
+                    borderColor: selected ? 'var(--accent)' : color,
+                    background: selected
+                      ? 'var(--accent-soft)'
+                      : `color-mix(in srgb, ${color} 12%, var(--bg-node))`,
+                    opacity: inRange ? 1 : 0.25,
+                    maxWidth: 136,
+                    boxShadow: ev.isSeed
+                      ? `0 0 0 1px var(--bg), 0 0 0 2px var(--text)`
+                      : undefined,
+                  }}
+                  onMouseEnter={() => setHoverEvent(ev.id)}
+                  onMouseLeave={() => setHoverEvent(null)}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    select({ kind: 'event', id: ev.id })
+                  }}
+                >
+                  <div
+                    className="flex items-center gap-1 truncate text-[10px] font-medium leading-tight"
+                    style={{ color }}
+                  >
+                    {ev.isSeed && (
+                      <span
+                        className="inline-block h-1.5 w-1.5 shrink-0 rotate-45 border"
+                        style={{ borderColor: color, background: color }}
+                        aria-hidden
+                      />
+                    )}
+                    <span className="truncate">{ev.title}</span>
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+        </div>
       </div>
     </div>
   )
