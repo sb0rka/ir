@@ -368,6 +368,9 @@ type ContextSelection struct {
 	// Seed Marks directly selected events as the seed evidence that opened the investigation. Derived events are never marked as seed.
 	Seed     *bool             `json:"seed,omitempty"`
 	Sessions []SourceObjectRef `json:"sessions"`
+
+	// Why Optional justification applied to every graph node created by this analyst import. Existing nodes keep their stored why.
+	Why *string `json:"why,omitempty"`
 }
 
 // EntitySourceRef defines model for EntitySourceRef.

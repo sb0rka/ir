@@ -2425,6 +2425,8 @@ export interface components {
              * @default false
              */
             seed: boolean;
+            /** @description Optional justification applied to every graph node created by this analyst import. Existing nodes keep their stored why. */
+            why?: string;
             findings: components["schemas"]["SourceObjectRef"][];
             sessions: components["schemas"]["SourceObjectRef"][];
             events: components["schemas"]["EventSourceRef"][];

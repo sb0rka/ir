@@ -162,7 +162,11 @@ func (s *Server) AddInvestigationContext(ctx context.Context, request investigat
 		return nil, err
 	}
 	seed := request.Body.Seed != nil && *request.Body.Seed
-	stats, err := s.db.ImportContext(ctx, model.ImportRequest{ProjectID: scope.ProjectID, InvestigationID: request.InvestigationId.String(), Selection: resolved.Selection, Origin: "analyst", Warnings: resolved.Warnings, Seed: seed})
+	stats, err := s.db.ImportContext(ctx, model.ImportRequest{
+		ProjectID: scope.ProjectID, InvestigationID: request.InvestigationId.String(),
+		Selection: resolved.Selection, Origin: "analyst", Warnings: resolved.Warnings,
+		Seed: seed, Why: optionalTrimmedString(request.Body.Why),
+	})
 	if err != nil {
 		return nil, storeError(err)
 	}
@@ -880,6 +884,17 @@ func optionalSlice[T any](items *[]T) []T {
 	return *items
 }
 
+func optionalTrimmedString(value *string) *string {
+	if value == nil {
+		return nil
+	}
+	trimmed := strings.TrimSpace(*value)
+	if trimmed == "" {
+		return nil
+	}
+	return &trimmed
+}
+
 func appendOptionalSlice[T any](items *[]T, value T) *[]T {
 	if items == nil {
 		slice := []T{value}
@@ -1092,6 +1107,7 @@ func (s *Server) AddHypothesisContext(ctx context.Context, request investigation
 	stats, err := s.db.ImportContext(ctx, model.ImportRequest{
 		ProjectID: scope.ProjectID, InvestigationID: investigationID, HypothesisID: &hypothesisID,
 		Selection: resolved.Selection, Origin: "analyst", Warnings: resolved.Warnings,
+		Why: optionalTrimmedString(request.Body.Why),
 	})
 	if err != nil {
 		return nil, hypothesisStoreError(err)
