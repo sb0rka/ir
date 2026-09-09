@@ -1,4 +1,5 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { ChevronDown } from 'lucide-react'
 import type { Severity } from '../types'
 import { clsx, severityDot } from '../lib/utils'
@@ -318,7 +319,18 @@ export function Select<T extends string>({
   )
 }
 
-export function ErrorBanner({
+const TOAST_DURATION_MS = 6000
+
+export function ToastStack({ children }: { children: ReactNode }) {
+  return createPortal(
+    <div className="pointer-events-none fixed inset-x-0 top-4 z-[60] flex flex-col items-center gap-2 px-4">
+      {children}
+    </div>,
+    document.body,
+  )
+}
+
+export function Toast({
   message,
   tone = 'error',
   onDismiss,
@@ -327,15 +339,28 @@ export function ErrorBanner({
   tone?: 'error' | 'warning'
   onDismiss?: () => void
 }) {
+  const onDismissRef = useRef(onDismiss)
+  onDismissRef.current = onDismiss
+  const [hovering, setHovering] = useState(false)
+
+  useEffect(() => {
+    if (!message || hovering) return
+    const id = window.setTimeout(() => onDismissRef.current?.(), TOAST_DURATION_MS)
+    return () => window.clearTimeout(id)
+  }, [message, hovering])
+
   if (!message) return null
   return (
     <div
+      role="status"
       className={clsx(
-        'flex items-start justify-between gap-3 border-b px-4 py-2 text-xs',
+        'pointer-events-auto flex w-[min(100%,50vw)] items-start justify-between gap-4 rounded border px-4 py-3 text-sm shadow-xl',
         tone === 'warning'
-          ? 'border-proposed/40 bg-proposed/10 text-fg'
-          : 'border-critical/40 bg-critical/10 text-critical',
+          ? 'border-proposed/40 bg-surface-1 text-fg'
+          : 'border-critical/40 bg-surface-1 text-critical',
       )}
+      onMouseEnter={() => setHovering(true)}
+      onMouseLeave={() => setHovering(false)}
     >
       <span>{message}</span>
       {onDismiss && (

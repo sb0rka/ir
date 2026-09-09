@@ -6,7 +6,7 @@ import { QueuePage } from './pages/QueuePage'
 import { InvestigationsPage } from './pages/InvestigationsPage'
 import { InvestigationPage } from './pages/InvestigationPage'
 import { emptyContextQueue, useAppStore } from './store/appStore'
-import { Button, ErrorBanner } from './components/ui'
+import { Button, Toast, ToastStack } from './components/ui'
 import { ThemeToggle } from './components/theme-toggle'
 import {
   bootstrapAuth,
@@ -162,8 +162,16 @@ function Dashboard({
   const lastError = useAppStore((state) => state.lastError)
   const lastNotImplemented = useAppStore((state) => state.lastNotImplemented)
   const somHint = useAppStore((state) => state.somHint)
-  const clearError = useAppStore((state) => state.clearError)
   const bootstrap = useAppStore((state) => state.bootstrap)
+  const dismissError = useCallback(() => {
+    useAppStore.setState({ lastError: null })
+  }, [])
+  const dismissNotImplemented = useCallback(() => {
+    useAppStore.setState({ lastNotImplemented: null })
+  }, [])
+  const dismissSomHint = useCallback(() => {
+    useAppStore.setState({ somHint: null })
+  }, [])
   const investigationFilters = useAppStore((state) => state.investigationFilters)
   const setInvestigationFilter = useAppStore((state) => state.setInvestigationFilter)
   const queueTextFilter = useAppStore((state) => state.queueTextFilter)
@@ -349,9 +357,11 @@ function Dashboard({
           </Button>
         </div>
       </header>
-      <ErrorBanner message={lastError} onDismiss={clearError} />
-      <ErrorBanner message={lastNotImplemented} tone="warning" onDismiss={clearError} />
-      <ErrorBanner message={somHint} tone="warning" onDismiss={clearError} />
+      <ToastStack>
+        <Toast message={lastError} onDismiss={dismissError} />
+        <Toast message={lastNotImplemented} tone="warning" onDismiss={dismissNotImplemented} />
+        <Toast message={somHint} tone="warning" onDismiss={dismissSomHint} />
+      </ToastStack>
       <TabBar />
       <main className="min-h-0 flex-1">
         {activeTab === 'queue' ? (
