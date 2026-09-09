@@ -219,6 +219,60 @@ describe('group selection vs PDQL grouping', () => {
 
     expect(useAppStore.getState().contextQueue['inv-1']?.groupValues).toEqual([])
   })
+
+  it('appends a grouping-field click as a regular PDQL filter, not a group selection', () => {
+    useAppStore.setState({
+      queuePdql: 'group(event_src.host) | select(event_src.host, count(), time)',
+      queueSource: 'events',
+      groupValues: ['dc01'],
+    })
+
+    useAppStore.getState().appendPdqlFilter(null, 'event_src.host', 'ws01')
+
+    const state = useAppStore.getState()
+    expect(state.queuePdql).toContain('event_src.host = "ws01"')
+    expect(state.groupValues).toEqual(['dc01'])
+    const parsed = parseQueuePdql(state.queuePdql)
+    expect(parsed.ok).toBe(true)
+    if (!parsed.ok) return
+    expect(pdqlToChips(parsed.ast).filter((chip) => chip.kind === 'filter').map((chip) => chip.label)).toEqual([
+      'event_src.host = "ws01"',
+    ])
+  })
+
+  it('keeps that PDQL filter after grouping is cleared', () => {
+    useAppStore.setState({
+      queuePdql: 'group(event_src.host) | select(event_src.host, count(), time)',
+      queueSource: 'events',
+      groupValues: ['dc01'],
+    })
+
+    useAppStore.getState().appendPdqlFilter(null, 'event_src.host', 'ws01')
+    useAppStore.getState().setQueuePdql('filter(event_src.host = "ws01") | select(time)')
+
+    const state = useAppStore.getState()
+    expect(state.queuePdql).toContain('event_src.host = "ws01"')
+    expect(state.groupValues).toEqual([])
+  })
+
+  it('appends a grouping-field click as a PDQL filter on the context queue', () => {
+    useAppStore.setState({
+      contextQueue: {
+        'inv-1': {
+          ...emptyContextQueue,
+          pdql: 'group(event_src.host) | select(event_src.host, count(), time)',
+          queueSource: 'events',
+          groupValues: ['dc01'],
+        },
+      },
+    })
+
+    useAppStore.getState().appendPdqlFilter('inv-1', 'event_src.host', 'ws01')
+
+    const queue = useAppStore.getState().contextQueue['inv-1']
+    expect(queue?.pdql).toContain('event_src.host = "ws01"')
+    expect(queue?.groupValues).toEqual(['dc01'])
+  })
 })
 
 describe('queue source result cache', () => {

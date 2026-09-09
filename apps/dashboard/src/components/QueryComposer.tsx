@@ -207,7 +207,6 @@ export function QueryComposer({
   onQueueSourceChange,
   onExecute,
   onApplyHistory,
-  onClearGroupFrom,
 }: {
   pdql: string
   timeInterval: TimeInterval
@@ -223,7 +222,6 @@ export function QueryComposer({
   onQueueSourceChange?: (source: QueueSource) => void
   onExecute: () => void
   onApplyHistory: (entry: QueryHistoryEntry) => void
-  onClearGroupFrom?: (index: number) => void
 }) {
   const loadFields = usePdqlStore((s) => s.loadFields)
   const fields = usePdqlStore((s) => s.fields)
@@ -465,28 +463,6 @@ export function QueryComposer({
         </div>
         {extra}
       </div>
-      {queueSource === 'events' && parsed.ok && parsed.ast.groups.length > 0 && (
-        <div className="mt-2 flex flex-wrap items-center gap-1">
-          {parsed.ast.groups.map((group, index) => (
-            <span key={group.id} className="flex items-center gap-1">
-              {index > 0 && <span className="text-fg-dim">/</span>}
-              <Chip
-                onRemove={
-                  index < groupValues.length && onClearGroupFrom
-                    ? () => onClearGroupFrom(index)
-                    : undefined
-                }
-              >
-                <span className="text-fg-dim">{group.field}</span>
-                {index < groupValues.length
-                  ? ` = ${groupValues[index] ?? 'Нет данных'}`
-                  : ' · выберите'}
-              </Chip>
-            </span>
-          ))}
-        </div>
-      )}
-
       <div className="mt-2 flex items-center gap-2">
         {editing ? (
           <input
@@ -595,7 +571,6 @@ export function GlobalQueryComposer() {
   const setQueueSource = useAppStore((s) => s.setQueueSource)
   const applyQueueHistory = useAppStore((s) => s.applyQueueHistory)
   const loadQueue = useAppStore((s) => s.loadQueue)
-  const clearGroupPathFrom = useAppStore((s) => s.clearGroupPathFrom)
 
   return (
     <QueryComposer
@@ -612,7 +587,6 @@ export function GlobalQueryComposer() {
       onQueueSourceChange={setQueueSource}
       onApplyHistory={applyQueueHistory}
       onExecute={() => void loadQueue()}
-      onClearGroupFrom={(index) => clearGroupPathFrom(null, index)}
     />
   )
 }
@@ -627,7 +601,6 @@ export function ContextQueryComposer({
   const queue = useAppStore((s) => s.contextQueue[investigationId]) ?? emptyContextQueue
   const setContextQueue = useAppStore((s) => s.setContextQueue)
   const executeContextQuery = useAppStore((s) => s.executeContextQuery)
-  const clearGroupPathFrom = useAppStore((s) => s.clearGroupPathFrom)
 
   return (
     <QueryComposer
@@ -662,7 +635,6 @@ export function ContextQueryComposer({
       onExecute={() => {
         void executeContextQuery(investigationId)
       }}
-      onClearGroupFrom={(index) => clearGroupPathFrom(investigationId, index)}
     />
   )
 }

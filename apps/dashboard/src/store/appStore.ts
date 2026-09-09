@@ -32,7 +32,7 @@ import {
   lookupEntity,
   searchQueue,
 } from '../api/search'
-import { appendCondition, alignGroupValues, astToFilterChips, defaultQuery, drillGroupValues, entityKindForField, findingUuidFromAst, findingUuidQuery, isEntityQueueField, parseQueuePdql, serialize, withExplicitLimit, type FindingFilterField } from '../lib/pdql'
+import { appendCondition, alignGroupValues, astToFilterChips, defaultQuery, entityKindForField, findingUuidFromAst, findingUuidQuery, isEntityQueueField, parseQueuePdql, serialize, withExplicitLimit, type FindingFilterField } from '../lib/pdql'
 import { pdqlFieldForFilterField } from '../lib/filters'
 import { filterFingerprint } from '../lib/queryFingerprint'
 import { findingRefForImport } from '../lib/queueContext'
@@ -387,10 +387,8 @@ interface AppState {
   setWorkingTimeZone: (timeZone: string) => void
   setQueueSource: (source: QueueSource) => void
   applyQueueHistory: (entry: QueryHistoryEntry) => void
-  drillGroupValue: (investigationId: string | null, field: string, value: string) => void
   selectGroupValue: (investigationId: string | null, value: string | null) => void
   clearGroupSelection: (investigationId: string | null) => void
-  clearGroupPathFrom: (investigationId: string | null, index: number) => void
   toggleAlertSelect: (id: string) => void
   clearAlertSelection: () => void
   setAlertSelection: (ids: string[]) => void
@@ -867,29 +865,6 @@ export const useAppStore = create<AppState>((set, get) => ({
       groupValues: entry.groupValues ?? [],
     })
   },
-  drillGroupValue: (investigationId, field, value) => {
-    if (!investigationId) {
-      const parsed = parseQueuePdql(get().queuePdql)
-      if (parsed.ok === false) return
-      const next = drillGroupValues(parsed.ast, get().groupValues, field, value)
-      if (!next) return
-      set({ groupValues: next })
-      void get().loadQueue()
-      return
-    }
-    const cur = get().contextQueue[investigationId] ?? emptyContextQueue
-    const parsed = parseQueuePdql(cur.pdql)
-    if (parsed.ok === false) return
-    const next = drillGroupValues(parsed.ast, cur.groupValues, field, value)
-    if (!next) return
-    set({
-      contextQueue: {
-        ...get().contextQueue,
-        [investigationId]: { ...cur, groupValues: next },
-      },
-    })
-    void get().executeContextQuery(investigationId)
-  },
   selectGroupValue: (investigationId, value) => {
     const nextFor = (current: (string | null)[]) =>
       current.length === 1 && current[0] === value ? [] : [value]
@@ -918,24 +893,6 @@ export const useAppStore = create<AppState>((set, get) => ({
       contextQueue: {
         ...get().contextQueue,
         [investigationId]: { ...cur, groupValues: [] },
-      },
-    })
-    void get().executeContextQuery(investigationId)
-  },
-  clearGroupPathFrom: (investigationId, index) => {
-    if (!investigationId) {
-      set({ groupValues: get().groupValues.slice(0, index) })
-      void get().loadQueue()
-      return
-    }
-    const cur = get().contextQueue[investigationId] ?? emptyContextQueue
-    set({
-      contextQueue: {
-        ...get().contextQueue,
-        [investigationId]: {
-          ...cur,
-          groupValues: cur.groupValues.slice(0, index),
-        },
       },
     })
     void get().executeContextQuery(investigationId)
@@ -1653,22 +1610,8 @@ export const useAppStore = create<AppState>((set, get) => ({
     const pdql = investigationId
       ? (get().contextQueue[investigationId] ?? emptyContextQueue).pdql
       : get().queuePdql
-    const queueSource = investigationId
-      ? (get().contextQueue[investigationId] ?? emptyContextQueue).queueSource
-      : get().queueSource
     const parsed = parseQueuePdql(pdql)
-    if (queueSource === 'events' && parsed.ok && parsed.ast.groups.some((group) => group.field === field)) {
-      get().drillGroupValue(investigationId, field, value)
-      return
-    }
-    const nextPdql = appendCondition(
-      investigationId
-        ? (get().contextQueue[investigationId] ?? emptyContextQueue).pdql
-        : get().queuePdql,
-      field,
-      '=',
-      value,
-    )
+    const nextPdql = appendCondition(pdql, field, '=', value)
     // Involved host/account filters belong on the entities queue, not SIEM PDQL events.
     // Keep events when a finding resolve chip is active — extras are client-side.
     const switchToEntities =
