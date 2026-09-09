@@ -188,6 +188,33 @@ func TestRecordedMailAndCredentialFallback(t *testing.T) {
 		t.Fatal(session.Authentication)
 	}
 }
+func TestPayloadCreateFetchesDetailOnce(t *testing.T) {
+	var detail alertDetail
+	fixture(t, "shell-alert.json", &detail)
+	search := fixture(t, "shell-search.json", nil)
+	detailCalls := 0
+	_, provider := testNAD(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/v2/bql" {
+			w.Write(search)
+			return
+		}
+		if r.URL.Path != "/api/v2/flow/"+detail.Parent+"/alert/"+detail.ID {
+			t.Error(r.URL)
+			http.NotFound(w, r)
+			return
+		}
+		detailCalls++
+		json.NewEncoder(w).Encode(detail)
+	})
+	handle, err := provider.StartEvidence(context.Background(), capability.Access{Cookie: "csrftoken=test"}, domain.EvidenceReference{Kind: "payload", Ref: caseRef(AttackRecordType, detail.ID)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if detailCalls != 1 || handle.State != "ready" || handle.Size == nil || *handle.Size == 0 {
+		t.Fatalf("calls=%d handle=%+v", detailCalls, handle)
+	}
+}
+
 func TestRecordedPayloadExactAndIdentity(t *testing.T) {
 	var detail alertDetail
 	fixture(t, "shell-alert.json", &detail)
@@ -347,6 +374,7 @@ func TestResolveFindingKeepsDedicatedDetailAndPartialRoot(t *testing.T) {
 	fixture(t, "shell-alert.json", &detail)
 	search := fixture(t, "shell-search.json", nil)
 	detail.MalwareFamily = []string{"test-family"}
+	detail.Signature.Description.Recommendation = "preserve flow recommendation"
 	failDetail := false
 	_, provider := testNAD(t, func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -375,6 +403,11 @@ func TestResolveFindingKeepsDedicatedDetailAndPartialRoot(t *testing.T) {
 			t.Fatal(page, err)
 		}
 		finding := page.Findings[0]
+		if !slices.ContainsFunc(page.Events, func(event domain.Event) bool {
+			return event.Type == "network.detection" && event.Attributes["recommendation"] == detail.Signature.Description.Recommendation
+		}) {
+			t.Fatalf("alert event lost available flow metadata (detail failed=%v): %+v", fail, page.Events)
+		}
 		if !fail && (len(finding.Evidence) != 1 || finding.NADAttack == nil || finding.NADAttack.PayloadAvailable == nil || !*finding.NADAttack.PayloadAvailable || len(finding.NADAttack.MalwareFamily) != 1) {
 			t.Fatalf("dedicated detail overwritten: %+v", finding)
 		}

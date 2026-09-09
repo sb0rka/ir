@@ -434,6 +434,7 @@ type alertDetail struct {
 			AttackTarget   string `json:"attack_target"`
 			Description    string `json:"description"`
 			Recommendation string `json:"recommendation"`
+			MalwareFamily  string `json:"malware_family"`
 			AttackFlag     *bool  `json:"attack_flag"`
 			Disabled       *bool  `json:"disabled"`
 		} `json:"description"`

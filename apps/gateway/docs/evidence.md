@@ -201,7 +201,8 @@ local HTTP tests cover scope, state, chunks and stream interruption. MCP tests c
 the registered tools and reconstruct binary content across chunk boundaries.
 These checks are not live NAD/SIEM E2E.
 
-Release gate still requires an accessible lab: capture PCAP start/status/download,
-implement that confirmed chain, then run all three cases through real Gateway HTTP
-and MCP. Check shell bytes, extracted files, PCAP, mail/account metadata and SIEM
-null-group drill-down. No live pass is claimed while this gate remains open.
+For the agreed NAD pilot, PCAP is supplied separately by the course; exporting it
+from NAD is not a release gate. The NAD HTTP/MCP results above cover the implemented
+search, context, payload and file operations. They do not establish live SIEM 2.5
+coverage; SIEM creation/detection ranges and null-group drill-down require a separate
+live check before claiming that case complete.

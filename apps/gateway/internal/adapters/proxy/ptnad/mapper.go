@@ -320,6 +320,9 @@ func mapAttackDetail(raw alertDetail, storeID int64, timeRange TimeRange, fetche
 	}
 	attack.SignatureName = safeText(raw.Signature.Description.Name)
 	attack.MalwareFamily = normalizedSafeStrings(raw.MalwareFamily)
+	if len(attack.MalwareFamily) == 0 {
+		attack.MalwareFamily = normalizedSafeStrings([]string{raw.Signature.Description.MalwareFamily})
+	}
 	attack.PayloadAvailable = raw.Payload != ""
 	attack.GID = raw.GID
 	attack.Description = safeText(raw.Signature.Description.Description)

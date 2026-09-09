@@ -44,7 +44,7 @@ func (provider *Provider) StartEvidence(ctx context.Context, access capability.A
 		if ref.ObjectID != "" {
 			return handle, invalidRequest("payload uses its alert ref without object_id")
 		}
-		attack, err := provider.client.GetAttack(ctx, AttackRef{StoreID: store, ExternalID: ref.Ref.ExternalID, TimeRange: window}, cookie)
+		attack, err := provider.client.getAttack(ctx, AttackRef{StoreID: store, ExternalID: ref.Ref.ExternalID, TimeRange: window}, cookie, false)
 		if err != nil {
 			return handle, canonicalProviderError(err)
 		}

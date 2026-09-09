@@ -12,3 +12,8 @@ No HTTP credentials, mailbox passwords, executable files or vendor download URLs
 The shell banner retains the original Base64 bytes. Export task responses in tests
 are synthetic instances of the captured sources/getfile -> tasks -> download contract.
 These fixtures do not establish live NAD availability or PCAP export support.
+
+`meterpreter-aes-alert.json` retains selected fields from the canonical
+`pt-cases/NAD/Guided Case_2.6 - Расследование обнаруженной активности Meterpreter/queries/10-meterpreter-aes-session-detail.response.json`
+in docs-internal. Alert `VxwE4Z4BaLX3hldUPkf8` has a null top-level family and
+`signature.description.malware_family: "Meterpreter"`; payload is omitted.

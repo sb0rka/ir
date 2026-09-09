@@ -192,6 +192,7 @@ func (provider *Provider) ResolveFinding(ctx context.Context, access capability.
 	for _, related := range session.RelatedAttacks {
 		if related.SourceRef.Identity() == attack.SourceRef.Identity() {
 			if len(attack.ContextErrors) > 0 {
+				attack = related
 				page.Findings[0] = canonicalFinding(related)
 			}
 			rootEnriched = true
