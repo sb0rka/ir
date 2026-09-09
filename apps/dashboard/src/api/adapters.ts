@@ -574,10 +574,26 @@ export function layoutGraph(
   const pos = new Map<string, Point>()
   const pinned = new Set<string>()
   const fanMode = events.length <= 1 ? 'right' : 'above'
+  // Keep dense investigations compact; chronology continues left-to-right on each row.
+  const columns = events.length <= 8 ? 8 : Math.ceil(Math.sqrt(events.length * 1.6))
+  const fanSizes = events.map((event) =>
+    (neighbors.get(event.id) ?? []).filter((id) =>
+      !eventIds.has(id) && (neighbors.get(id) ?? []).filter((n) => eventIds.has(n)).length === 1,
+    ).length,
+  )
+  const firstRowFanSize = Math.max(0, ...fanSizes.slice(0, columns))
+  const rowOffsets = [0]
+  for (let i = columns; i < events.length; i += columns) {
+    const fanSize = Math.max(0, ...fanSizes.slice(i, i + columns))
+    rowOffsets.push(rowOffsets[rowOffsets.length - 1] +
+      EVENT_SIZE.h + 2 * EVENT_WAVE_Y + BAND_GAP + fanSize * ENTITY_ROW)
+  }
 
   events.forEach((n, i) => {
-    // Event X is always chronological so a saved alphabetical layout cannot stick.
-    pos.set(n.id, { x: EVENT_ORIGIN_X + i * EVENT_STEP_X, y: eventWaveY(i) })
+    pos.set(n.id, {
+      x: EVENT_ORIGIN_X + (i % columns) * EVENT_STEP_X,
+      y: eventWaveY(i) + rowOffsets[Math.floor(i / columns)],
+    })
     pinned.add(n.id)
   })
 
@@ -607,7 +623,15 @@ export function layoutGraph(
     }
   }
 
-  for (const entity of shared) {
+  for (const [i, entity] of shared.slice().sort(compareEntities).entries()) {
+    if (events.length > columns) {
+      // Shared entities need their own band, away from the wrapped event rows.
+      pos.set(entity.id, {
+        x: EVENT_ORIGIN_X + (i % columns) * (ENTITY_SIZE.w + NODE_GAP_X),
+        y: EVENT_BASE_Y - BAND_GAP - ENTITY_SIZE.h - (firstRowFanSize + 1 + Math.floor(i / columns)) * ENTITY_ROW,
+      })
+      continue
+    }
     const eventNeighbors = (neighbors.get(entity.id) ?? []).filter((id) =>
       eventIds.has(id),
     )

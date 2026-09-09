@@ -1,9 +1,59 @@
 import { describe, expect, it } from 'vitest'
 import type { components as Ir } from '@ir/contract'
-import { mapIrEvent, mapIrInvestigation } from './adapters'
+import { layoutGraph, mapIrEvent, mapIrInvestigation } from './adapters'
+import type { GraphNode } from '../types'
 
 type IrEvent = Ir['schemas']['EventSummary']
 type IrInvestigation = Ir['schemas']['Investigation']
+
+describe('dense investigation layout', () => {
+  const events: GraphNode[] = Array.from({ length: 63 }, (_, i) => ({
+    id: `event-${i}`, refId: `event-${i}`, kind: 'event', label: 'NTLMSSP_AUTH',
+    review: 'confirmed', x: 0, y: 0,
+    occurredAt: new Date(Date.UTC(2023, 5, 8, 11, 1, i)).toISOString(),
+  }))
+  const entities: GraphNode[] = Array.from({ length: 6 }, (_, i) => ({
+    id: `host-${i}`, refId: `host-${i}`, kind: 'host', label: `host-${i}`,
+    review: 'confirmed', x: 0, y: 0,
+  }))
+  const edges = events.flatMap((event) => entities.map((entity) => ({ source: event.id, target: entity.id })))
+
+  it('keeps all 69 nodes compact and non-overlapping in chronological rows', () => {
+    const input = [...events].reverse().concat(entities)
+    const placed = layoutGraph('dense', input, edges, { ignoreSaved: true })
+    expect(placed.map((n) => n.id)).toEqual(input.map((n) => n.id))
+    expect(Math.max(...placed.map((n) => n.x)) - Math.min(...placed.map((n) => n.x))).toBeLessThan(3500)
+    expect(Math.max(...placed.map((n) => n.y)) - Math.min(...placed.map((n) => n.y))).toBeLessThan(2500)
+    const byId = new Map(placed.map((n) => [n.id, n]))
+    for (let i = 1; i < events.length; i++) {
+      const prev = byId.get(events[i - 1].id)!
+      const next = byId.get(events[i].id)!
+      expect(next.x > prev.x || next.y > prev.y + 100).toBe(true)
+    }
+    for (let i = 0; i < placed.length; i++) {
+      for (const b of placed.slice(i + 1)) {
+        const a = placed[i]
+        const [aw, ah] = a.kind === 'event' ? [220, 72] : [180, 56]
+        const [bw, bh] = b.kind === 'event' ? [220, 72] : [180, 56]
+        expect(a.x + aw <= b.x || b.x + bw <= a.x || a.y + ah <= b.y || b.y + bh <= a.y,
+          `overlap: ${a.id} and ${b.id}`).toBe(true)
+      }
+    }
+  })
+
+  it('retains the single row for small investigations', () => {
+    const placed = layoutGraph('small', events.slice(0, 7), [], { ignoreSaved: true })
+    expect(placed.every((n, i) => i === 0 || n.x > placed[i - 1].x)).toBe(true)
+    expect(Math.max(...placed.map((n) => n.y)) - Math.min(...placed.map((n) => n.y))).toBeLessThan(50)
+  })
+
+  it('does not inflate every row for entities attached only to the first event', () => {
+    const localEdges = events.flatMap((event) => entities.slice(0, 3).map((entity) => ({ source: event.id, target: entity.id })))
+    localEdges.push(...entities.slice(3).map((entity) => ({ source: events[0].id, target: entity.id })))
+    const placed = layoutGraph('local-fan', [...events, ...entities], localEdges, { ignoreSaved: true })
+    expect(Math.max(...placed.map((n) => n.y)) - Math.min(...placed.map((n) => n.y))).toBeLessThan(1600)
+  })
+})
 
 function irEvent(overrides: Partial<IrEvent>): IrEvent {
   return {

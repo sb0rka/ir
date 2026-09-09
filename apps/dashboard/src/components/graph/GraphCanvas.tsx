@@ -146,7 +146,7 @@ function GraphInner({ fitToken }: { fitToken: FitToken }) {
     if (fittedSizeKey.current === key) return
     const duration = fittedSizeKey.current === null ? 0 : 200
     fittedSizeKey.current = key
-    void fitView({ padding: 0.15, duration })
+    void fitView({ padding: 0.15, minZoom: 0.3, duration })
   }, [
     fitToken,
     fitView,
@@ -207,7 +207,7 @@ function GraphInner({ fitToken }: { fitToken: FitToken }) {
     )
     window.requestAnimationFrame(() => {
       window.requestAnimationFrame(() => {
-        void fitView({ padding: 0.15, duration: 200 })
+        void fitView({ padding: 0.15, minZoom: 0.3, duration: 200 })
       })
     })
   }, [arrangeNodes, fitView, setNodes])
