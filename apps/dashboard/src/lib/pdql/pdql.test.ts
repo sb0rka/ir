@@ -24,7 +24,7 @@ import {
   timeIntervalFromAst,
 } from './toSearch'
 import { addFieldToAst, addFieldToPdql, removeGroup, setGroupAggregate } from './ast'
-import { appendCondition, findingUuidQuery } from './append'
+import { appendCondition, appendConditions, findingUuidQuery } from './append'
 import { collectConditions, ungroupFilter, wrapFilterAdjacent } from './filterTree'
 import { relatedFieldColumns } from './relatedFields'
 
@@ -384,6 +384,20 @@ describe('appendCondition', () => {
   it('replaces a broken query with the new condition', () => {
     expect(appendCondition('filter(action = )', 'action', '=', 'login')).toBe(
       'filter(action = "login")',
+    )
+  })
+
+  it('serializes contains, in-list, and null checks', () => {
+    expect(appendCondition('', 'text', 'contains', 'foo')).toBe('filter(text contains "foo")')
+    expect(appendCondition('', 'action', 'in', 'login, logout')).toBe(
+      'filter(action in ("login", "logout"))',
+    )
+    expect(appendCondition('', 'src.ip', 'is_null', 'ignored')).toBe('filter(src.ip is null)')
+  })
+
+  it('groups several fields with the chosen joiner', () => {
+    expect(appendConditions('', ['src.host', 'event_src.host'], '=', 'ws01', 'or')).toBe(
+      'filter((src.host = "ws01" or event_src.host = "ws01"))',
     )
   })
 })

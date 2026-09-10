@@ -1,8 +1,66 @@
-import { Check, Copy } from 'lucide-react'
-import { useEffect, useState } from 'react'
-import { entityKindForField, relatedFieldColumns } from '../../lib/pdql'
+import { Check, Copy, Plus, Search } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import {
+  entityKindForField,
+  eventFieldLabelRu,
+  fetchEventFields,
+  loadFieldFreq,
+  relatedFieldColumns,
+  sortFields,
+  type CompareOp,
+  type EventFieldDef,
+  type LogicalJoiner,
+} from '../../lib/pdql'
 import { kindLabel } from '../../lib/utils'
+import { highlightMatch } from '../pdql/highlight'
 import { Button } from '../ui'
+
+const OP_LABELS: Record<CompareOp, string> = {
+  '=': '=',
+  '!=': '≠',
+  '>': '>',
+  '<': '<',
+  '>=': '≥',
+  '<=': '≤',
+  contains: 'contains',
+  startswith: 'startswith',
+  in: 'in',
+  is_null: 'is null',
+  is_not_null: 'is not null',
+}
+
+const FILTER_OPS: CompareOp[] = [
+  '=',
+  '!=',
+  'contains',
+  'startswith',
+  'in',
+  '>',
+  '<',
+  '>=',
+  '<=',
+  'is_null',
+  'is_not_null',
+]
+
+export type AddEventFilter = (
+  fields: string | readonly string[],
+  value: string,
+  op?: CompareOp,
+  joiner?: LogicalJoiner,
+) => void
+
+function sortFieldNames(names: string[], freq: Record<string, number>): string[] {
+  return sortFields(
+    names.map((name) => ({
+      name,
+      type: 'string' as const,
+      description: eventFieldLabelRu(name),
+    })),
+    freq,
+    '',
+  ).map((field) => field.name)
+}
 
 export function EventFieldModal({
   field,
@@ -18,21 +76,51 @@ export function EventFieldModal({
   investigationId?: string
   eventInContext: boolean
   onClose: () => void
-  onAddFilter: (field: string, value: string) => void
+  onAddFilter: AddEventFilter
   onAddToContext?: (includeEvent: boolean) => Promise<void>
 }) {
+  const fieldFreq = useRef(loadFieldFreq()).current
   const entityKind = entityKindForField(field)
-  const columns = relatedFieldColumns(field)
+  const related = relatedFieldColumns(field).map((column) => ({
+    ...column,
+    fields: sortFieldNames(column.fields, fieldFreq),
+  }))
+  const relatedNames = new Set(related.flatMap((column) => column.fields))
   const [selected, setSelected] = useState<Set<string>>(() => new Set([field]))
+  const [extraFields, setExtraFields] = useState<string[]>([])
+  const [op, setOp] = useState<CompareOp>('=')
+  const [joiner, setJoiner] = useState<LogicalJoiner>('or')
+  const [draftValue, setDraftValue] = useState(value)
   const [addEntity, setAddEntity] = useState(Boolean(entityKind && investigationId))
   const [includeEvent, setIncludeEvent] = useState(!eventInContext)
   const [busy, setBusy] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [catalogOpen, setCatalogOpen] = useState(false)
+  const [catalogQuery, setCatalogQuery] = useState('')
+  const [catalog, setCatalog] = useState<EventFieldDef[]>([])
   const canContext = Boolean(investigationId && onAddToContext && entityKind)
+  const needsValue = op !== 'is_null' && op !== 'is_not_null'
+  const extras = sortFieldNames(
+    extraFields.filter((name) => !relatedNames.has(name)),
+    fieldFreq,
+  )
+  const listed = new Set([...related.flatMap((column) => column.fields), ...extras])
+  const selectedOrdered = [...related.flatMap((column) => column.fields), ...extras].filter((name) =>
+    selected.has(name),
+  )
+  const grouped = selectedOrdered.length > 1
+  const inValues =
+    op === 'in'
+      ? draftValue
+          .split(',')
+          .map((item) => item.trim())
+          .filter(Boolean)
+      : []
+  const canApply = selectedOrdered.length > 0 && !busy && (op !== 'in' || inValues.length > 0)
 
   const copyValue = async () => {
     try {
-      await navigator.clipboard.writeText(value)
+      await navigator.clipboard.writeText(draftValue)
       setCopied(true)
       window.setTimeout(() => setCopied(false), 1200)
     } catch {
@@ -40,16 +128,57 @@ export function EventFieldModal({
     }
   }
 
+  const toggleField = (name: string) => {
+    setSelected((current) => {
+      const next = new Set(current)
+      if (next.has(name)) next.delete(name)
+      else next.add(name)
+      return next
+    })
+  }
+
+  const addCatalogField = (name: string) => {
+    setSelected((current) => {
+      const next = new Set(current)
+      next.add(name)
+      return next
+    })
+    if (!listed.has(name)) {
+      setExtraFields((current) => (current.includes(name) ? current : [...current, name]))
+    }
+  }
+
+  useEffect(() => {
+    let cancelled = false
+    void fetchEventFields().then((fields) => {
+      if (!cancelled) setCatalog(fields)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose()
+      if (event.key !== 'Escape') return
+      if (catalogOpen) {
+        setCatalogOpen(false)
+        return
+      }
+      onClose()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
+  }, [catalogOpen, onClose])
 
   const apply = async () => {
-    for (const name of selected) onAddFilter(name, value)
+    if (!canApply) return
+    onAddFilter(
+      selectedOrdered,
+      needsValue ? draftValue : '',
+      op,
+      grouped ? joiner : undefined,
+    )
     if (canContext && addEntity) {
       setBusy(true)
       try {
@@ -66,15 +195,38 @@ export function EventFieldModal({
       <div className="absolute inset-0 bg-black/60" onClick={onClose} />
       <div
         role="dialog"
-        aria-label={`${field} = ${value}`}
-        className="relative w-full max-w-lg overflow-hidden rounded border border-border bg-surface-1 shadow-xl"
+        aria-label={`${field} ${OP_LABELS[op]} ${draftValue}`}
+        className="relative w-full max-w-3xl rounded border border-border bg-surface-1 shadow-xl"
       >
         <div className="border-b border-border px-4 py-3">
           <div className="flex items-start justify-between gap-2">
-            <div className="min-w-0 flex-1">
+            <div className="min-w-0 flex-1 space-y-1.5">
               <div className="text-[10px] uppercase tracking-wider text-fg-dim">{field}</div>
-              <div className="mt-0.5 break-all font-mono text-sm text-fg" title={value}>
-                {value}
+              <div className="flex items-center gap-1.5">
+                <select
+                  value={op}
+                  aria-label="Оператор"
+                  onChange={(event) => setOp(event.target.value as CompareOp)}
+                  className="shrink-0 rounded border border-border bg-surface-0 px-1.5 py-1 font-mono text-[11px] text-fg outline-none focus:border-fg/30"
+                >
+                  {FILTER_OPS.map((item) => (
+                    <option key={item} value={item}>
+                      {OP_LABELS[item]}
+                    </option>
+                  ))}
+                </select>
+                {needsValue ? (
+                  <input
+                    autoFocus
+                    value={draftValue}
+                    aria-label="Значение"
+                    placeholder={op === 'in' ? 'a, b, c' : 'Значение'}
+                    onChange={(event) => setDraftValue(event.target.value)}
+                    className="min-w-0 flex-1 rounded border border-border bg-surface-0 px-2 py-1 font-mono text-sm text-fg outline-none focus:border-fg/30"
+                  />
+                ) : (
+                  <div className="min-w-0 flex-1 font-mono text-sm text-fg-dim">без значения</div>
+                )}
               </div>
             </div>
             <Button
@@ -125,43 +277,67 @@ export function EventFieldModal({
           )}
 
           <section>
-            <div className="mb-2 text-[10px] uppercase tracking-wider text-fg-dim">
-              Фильтр по значению
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <div className="text-[10px] uppercase tracking-wider text-fg-dim">
+                Фильтр по значению
+              </div>
+              <FieldCatalogPopover
+                open={catalogOpen}
+                query={catalogQuery}
+                fields={catalog}
+                freq={fieldFreq}
+                onQueryChange={setCatalogQuery}
+                onOpenChange={(next) => {
+                  setCatalogOpen(next)
+                  if (!next) setCatalogQuery('')
+                }}
+                onChoose={addCatalogField}
+              />
             </div>
-            <div className={columns.length > 1 ? 'grid grid-cols-2 gap-3' : undefined}>
-              {columns.map((column) => (
-                <div key={column.title}>
-                  <div className="mb-1 text-[10px] font-medium uppercase tracking-wider text-fg-dim">
-                    {column.title}
-                  </div>
-                  <div className="space-y-1">
-                    {column.fields.map((name) => {
-                      const checked = selected.has(name)
-                      return (
-                        <label
-                          key={name}
-                          className="flex items-center gap-2 rounded border border-border px-2 py-1.5 text-xs hover:bg-surface-2"
-                        >
-                          <input
-                            type="checkbox"
-                            className="accent-fg"
-                            checked={checked}
-                            onChange={() => {
-                              setSelected((current) => {
-                                const next = new Set(current)
-                                if (next.has(name)) next.delete(name)
-                                else next.add(name)
-                                return next
-                              })
-                            }}
-                          />
-                          <span className="font-mono text-fg">{name}</span>
-                        </label>
-                      )
-                    })}
-                  </div>
+            <div
+              className={
+                grouped
+                  ? 'rounded border border-dashed border-fg/30 bg-surface-2/40 p-1.5'
+                  : undefined
+              }
+            >
+              {grouped ? (
+                <div className="mb-2 flex items-center gap-1">
+                  <button
+                    type="button"
+                    aria-label="Оператор группы"
+                    onClick={() => setJoiner((current) => (current === 'and' ? 'or' : 'and'))}
+                    className="rounded border border-border px-2 py-0.5 font-mono text-[11px] uppercase text-fg-muted hover:text-fg"
+                  >
+                    {joiner}
+                  </button>
+                  <span className="font-mono text-[11px] text-fg-dim">(</span>
                 </div>
-              ))}
+              ) : null}
+              <div className={related.length > 1 ? 'grid grid-cols-2 gap-3' : undefined}>
+                {related.map((column) => (
+                  <FieldChecks
+                    key={column.title}
+                    title={column.title}
+                    fields={column.fields}
+                    selected={selected}
+                    onToggle={toggleField}
+                  />
+                ))}
+              </div>
+              {extras.length > 0 && (
+                <div className="mt-3">
+                  <FieldChecks
+                    title="Добавленные"
+                    fields={extras}
+                    selected={selected}
+                    onToggle={toggleField}
+                  />
+                </div>
+              )}
+              {grouped ? (
+                <div className="mt-1 font-mono text-[11px] text-fg-dim">)</div>
+              ) : null}
             </div>
           </section>
         </div>
@@ -170,11 +346,121 @@ export function EventFieldModal({
           <Button size="sm" variant="ghost" onClick={onClose}>
             Отмена
           </Button>
-          <Button size="sm" variant="primary" disabled={busy} onClick={() => void apply()}>
+          <Button size="sm" variant="primary" disabled={!canApply} onClick={() => void apply()}>
             Применить
           </Button>
         </div>
       </div>
+    </div>
+  )
+}
+
+function FieldChecks({
+  title,
+  fields,
+  selected,
+  onToggle,
+}: {
+  title: string
+  fields: string[]
+  selected: Set<string>
+  onToggle: (name: string) => void
+}) {
+  return (
+    <div>
+      <div className="mb-1 text-[10px] font-medium uppercase tracking-wider text-fg-dim">
+        {title}
+      </div>
+      <div className="space-y-1">
+        {fields.map((name) => (
+          <label
+            key={name}
+            className="flex items-center gap-2 rounded border border-border px-2 py-1.5 text-xs hover:bg-surface-2"
+          >
+            <input
+              type="checkbox"
+              className="accent-fg"
+              checked={selected.has(name)}
+              onChange={() => onToggle(name)}
+            />
+            <span className="font-mono text-fg">{name}</span>
+          </label>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function FieldCatalogPopover({
+  open,
+  query,
+  fields,
+  freq,
+  onQueryChange,
+  onOpenChange,
+  onChoose,
+}: {
+  open: boolean
+  query: string
+  fields: EventFieldDef[]
+  freq: Record<string, number>
+  onQueryChange: (value: string) => void
+  onOpenChange: (open: boolean) => void
+  onChoose: (name: string) => void
+}) {
+  const sorted = sortFields(fields, freq, query)
+
+  return (
+    <div className="relative">
+      <Button
+        size="sm"
+        variant="ghost"
+        title="Добавить поле"
+        onClick={() => onOpenChange(!open)}
+      >
+        <Plus className="h-3.5 w-3.5" />
+        Поле
+      </Button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-[60]" onClick={() => onOpenChange(false)} />
+          <div className="absolute right-0 top-full z-[70] mt-1 w-80 overflow-hidden rounded border border-border bg-surface-2 shadow-xl">
+            <label className="flex items-center gap-1.5 border-b border-border px-2 py-1.5">
+              <Search className="h-3.5 w-3.5 text-fg-dim" />
+              <input
+                autoFocus
+                value={query}
+                onChange={(event) => onQueryChange(event.target.value)}
+                placeholder="Найти поле"
+                className="w-full bg-transparent text-xs text-fg outline-none placeholder:text-fg-dim"
+              />
+            </label>
+            <div className="max-h-72 overflow-auto">
+              {sorted.length === 0 ? (
+                <div className="px-3 py-4 text-xs text-fg-dim">Нет полей по запросу</div>
+              ) : (
+                sorted.map((item) => (
+                  <button
+                    key={item.name}
+                    type="button"
+                    className="flex w-full flex-col items-start gap-0.5 px-3 py-1.5 text-left hover:bg-surface-1"
+                    onClick={() => onChoose(item.name)}
+                  >
+                    <span className="text-xs text-fg">
+                      {highlightMatch(item.description || eventFieldLabelRu(item.name), query)}
+                    </span>
+                    {item.description !== item.name && (
+                      <span className="font-mono text-[11px] text-fg-dim">
+                        {highlightMatch(item.name, query)}
+                      </span>
+                    )}
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+        </>
+      )}
     </div>
   )
 }

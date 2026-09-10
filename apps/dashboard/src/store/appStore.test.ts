@@ -175,6 +175,31 @@ describe('appendPdqlFilter entity fields', () => {
     expect(useAppStore.getState().queueSource).toBe('events')
     expect(useAppStore.getState().queuePdql).toContain('action = "login"')
   })
+
+  it('appends a non-equality operator when provided', () => {
+    useAppStore.setState({
+      queuePdql: 'select(time) | sort(time desc)',
+      queueSource: 'events',
+    })
+
+    useAppStore.getState().appendPdqlFilter(null, 'action', 'login', '!=')
+
+    expect(useAppStore.getState().queuePdql).toContain('action != "login"')
+  })
+
+  it('appends a grouped or-filter for multiple fields', () => {
+    useAppStore.setState({
+      queuePdql: 'select(time) | sort(time desc)',
+      queueSource: 'events',
+    })
+
+    useAppStore.getState().appendPdqlFilter(null, ['src.host', 'dst.host'], 'ws01', '=', 'or')
+
+    expect(useAppStore.getState().queuePdql).toContain(
+      '(src.host = "ws01" or dst.host = "ws01")',
+    )
+    expect(useAppStore.getState().queueSource).toBe('events')
+  })
 })
 
 describe('group selection vs PDQL grouping', () => {

@@ -368,7 +368,9 @@ export function DetailPanel({ investigationId }: { investigationId: string }) {
                 setContextQueue(investigationId, { timeInterval: interval })
                 void executeContextQuery(investigationId)
               }}
-              onAddFilter={(field, value) => appendPdqlFilter(investigationId, field, value)}
+              onAddFilter={(fields, value, op, joiner) =>
+                appendPdqlFilter(investigationId, fields, value, op, joiner)
+              }
               onFilterFindingUuid={(uuid, recordType) =>
                 filterByFindingUuid(investigationId, uuid, recordType)
               }

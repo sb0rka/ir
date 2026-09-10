@@ -32,7 +32,7 @@ import {
   lookupEntity,
   searchQueue,
 } from '../api/search'
-import { appendCondition, alignGroupValues, astToFilterChips, defaultQuery, entityKindForField, findingUuidFromAst, findingUuidQuery, isEntityQueueField, parseQueuePdql, serialize, withExplicitLimit, type FindingFilterField } from '../lib/pdql'
+import { appendCondition, appendConditions, alignGroupValues, astToFilterChips, defaultQuery, entityKindForField, findingUuidFromAst, findingUuidQuery, isEntityQueueField, parseQueuePdql, serialize, withExplicitLimit, type CompareOp, type FindingFilterField, type LogicalJoiner } from '../lib/pdql'
 import { pdqlFieldForFilterField } from '../lib/filters'
 import { filterFingerprint } from '../lib/queryFingerprint'
 import { findingRefForImport } from '../lib/queueContext'
@@ -434,7 +434,13 @@ interface AppState {
     investigationId: string,
     event: { source?: string; sourceEventId?: string },
   ) => boolean
-  appendPdqlFilter: (investigationId: string | null, field: string, value: string) => void
+  appendPdqlFilter: (
+    investigationId: string | null,
+    field: string | readonly string[],
+    value: string,
+    op?: CompareOp,
+    joiner?: LogicalJoiner,
+  ) => void
   filterByFindingUuid: (
     investigationId: string | null,
     uuid: string,
@@ -1606,16 +1612,19 @@ export const useAppStore = create<AppState>((set, get) => ({
     return true
   },
 
-  appendPdqlFilter: (investigationId, field, value) => {
+  appendPdqlFilter: (investigationId, field, value, op = '=', joiner = 'and') => {
     const pdql = investigationId
       ? (get().contextQueue[investigationId] ?? emptyContextQueue).pdql
       : get().queuePdql
     const parsed = parseQueuePdql(pdql)
-    const nextPdql = appendCondition(pdql, field, '=', value)
+    const fields = typeof field === 'string' ? [field] : [...field]
+    const nextPdql = appendConditions(pdql, fields, op, value, joiner)
     // Involved host/account filters belong on the entities queue, not SIEM PDQL events.
     // Keep events when a finding resolve chip is active — extras are client-side.
     const switchToEntities =
-      isEntityQueueField(field) && !(parsed.ok && findingUuidFromAst(parsed.ast))
+      fields.length > 0 &&
+      fields.every(isEntityQueueField) &&
+      !(parsed.ok && findingUuidFromAst(parsed.ast))
     if (!investigationId) {
       if (switchToEntities) {
         set({
