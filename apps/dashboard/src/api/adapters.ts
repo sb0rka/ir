@@ -382,7 +382,7 @@ const NODE_GAP_Y = 24
 const COL_GAP = 48
 const BAND_GAP = 36
 const STAGGER_X = 22
-const EVENT_SIZE = { w: 220, h: 72 }
+const EVENT_SIZE = { w: 220, h: 88 }
 const ENTITY_SIZE = { w: 180, h: 56 }
 const ENTITY_ROW = ENTITY_SIZE.h + NODE_GAP_Y
 const SEPARATE_ITERS = 8
@@ -661,6 +661,7 @@ export function layoutGraph(
 export function mapGraphNode(node: IrNode): GraphNode {
   const isEvent = node.node_type === 'event'
   const review: ReviewState = node.origin === 'analyst' ? 'confirmed' : 'proposed'
+  const why = node.why?.trim()
   return {
     id: node.id,
     kind: isEvent ? 'event' : mapEntityKind(node.type_code),
@@ -671,6 +672,7 @@ export function mapGraphNode(node: IrNode): GraphNode {
     y: 0,
     origin: mapOrigin(node.origin),
     occurredAt: node.occurred_at ?? undefined,
+    ...(why ? { why } : {}),
   }
 }
 

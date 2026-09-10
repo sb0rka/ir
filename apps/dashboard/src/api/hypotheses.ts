@@ -2,6 +2,7 @@ import type { components as Ir } from '@ir/contract'
 import { irClient } from './clients'
 import { unwrapError } from './error'
 import { getProjectId } from './env'
+import { contextSelectionFields } from '../lib/queueContext'
 
 export type Hypothesis = Ir['schemas']['Hypothesis']
 export type HypothesisStatus = Ir['schemas']['HypothesisStatus']
@@ -125,6 +126,8 @@ export async function addHypothesisContext(
   input: {
     events?: EventSourceRef[]
     findings?: SourceObjectRef[]
+    expandFindings?: boolean
+    why?: string
   },
 ): Promise<Ir['schemas']['ContextImportResult'] | undefined> {
   const events = input.events ?? []
@@ -133,7 +136,14 @@ export async function addHypothesisContext(
   return throwIfError(
     await irClient.POST('/investigations/{investigation_id}/hypotheses/{hypothesis_id}/context', {
       params: hypothesisPath(investigationId, hypothesisId),
-      body: { findings, sessions: [], events, entities: [], seed: false },
+      body: {
+        findings,
+        sessions: [],
+        events,
+        entities: [],
+        seed: false,
+        ...contextSelectionFields(input),
+      },
     }),
   )
 }

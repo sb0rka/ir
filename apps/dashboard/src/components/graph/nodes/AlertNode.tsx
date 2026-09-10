@@ -64,7 +64,7 @@ export function AlertNode({ id, data }: NodeProps<AlertFlowNode>) {
         >
           {data.isSeed ? `исходный · ${data.sublabel}` : data.sublabel}
         </div>
-        <div className="line-clamp-2 text-xs font-medium leading-snug">
+        <div className="line-clamp-3 break-words text-xs font-medium leading-snug [overflow-wrap:anywhere]">
           {data.label}
         </div>
       </div>

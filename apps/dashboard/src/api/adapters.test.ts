@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { components as Ir } from '@ir/contract'
-import { mapIrEvent, mapIrInvestigation } from './adapters'
+import { mapGraphNode, mapIrEvent, mapIrInvestigation } from './adapters'
 
 type IrEvent = Ir['schemas']['EventSummary']
 type IrInvestigation = Ir['schemas']['Investigation']
@@ -87,5 +87,35 @@ describe('mapIrInvestigation catalog fields', () => {
     expect(mapped.description).toBe('beaconing host')
     expect(mapped.nodeIds).toEqual([])
     expect(mapped.view).toBe('graph')
+  })
+})
+
+type IrNode = Ir['schemas']['GraphNode']
+
+function irNode(overrides: Partial<IrNode> = {}): IrNode {
+  return {
+    id: '22222222-2222-2222-2222-222222222222',
+    investigation_id: '11111111-1111-1111-1111-111111111111',
+    node_type: 'event',
+    event_id: '00000000-0000-0000-0000-000000000001',
+    origin: 'agent',
+    som_issue_ids: [],
+    label: 'login failed',
+    occurred_at: '2026-01-01T00:00:00.000Z',
+    ...overrides,
+  }
+}
+
+describe('mapGraphNode why', () => {
+  it('copies a non-empty why from the IR node', () => {
+    const mapped = mapGraphNode(irNode({ why: '  brute force against ssh  ' }))
+    expect(mapped.why).toBe('brute force against ssh')
+    expect(mapped.label).toBe('login failed')
+  })
+
+  it('omits blank or missing why', () => {
+    expect(mapGraphNode(irNode()).why).toBeUndefined()
+    expect(mapGraphNode(irNode({ why: '   ' })).why).toBeUndefined()
+    expect(mapGraphNode(irNode({ why: null })).why).toBeUndefined()
   })
 })

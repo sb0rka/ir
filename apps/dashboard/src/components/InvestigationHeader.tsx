@@ -9,6 +9,7 @@ import {
   edgeReviewState,
   filterInvestigationEdges,
 } from '../lib/edge-review'
+import { eventNodeLabel } from '../api/analystWhy'
 import { clsx, kindLabel, statusLabel } from '../lib/utils'
 import { Check, Eye, EyeOff, X } from 'lucide-react'
 
@@ -58,6 +59,7 @@ export function ContextTable({ investigationId }: { investigationId: string }) {
   const update = useAppStore((s) => s.updateInvestigation)
   const graphNodes = useAppStore((s) => s.graphNodes)
   const graphEdges = useAppStore((s) => s.graphEdges)
+  const contextEvents = useAppStore((s) => s.contextEvents)
   const hiddenGraphNodeIds = useAppStore(
     (s) => s.hiddenGraphNodeIds[investigationId] ?? EMPTY_HIDDEN_NODE_IDS,
   )
@@ -65,22 +67,35 @@ export function ContextTable({ investigationId }: { investigationId: string }) {
 
   if (!inv) return null
 
+  const eventCaption = (node: (typeof graphNodes)[string]) => {
+    if (node.kind !== 'event') return node.label
+    const ev = contextEvents[node.refId]
+    return eventNodeLabel({
+      why: node.why,
+      fallback: ev?.title ?? node.label,
+      origin: ev?.origin ?? node.origin,
+    })
+  }
+
   const rows = filterInvestigationEdges(
     inv.edgeIds,
     graphEdges,
     edgeReviews,
     queue,
   ).sort((a, b) => {
-    const sourceA = graphNodes[a.source]?.label ?? ''
-    const sourceB = graphNodes[b.source]?.label ?? ''
-    return sourceA.localeCompare(sourceB, 'ru')
+    const sourceA = graphNodes[a.source]
+    const sourceB = graphNodes[b.source]
+    return (sourceA ? eventCaption(sourceA) : '').localeCompare(
+      sourceB ? eventCaption(sourceB) : '',
+      'ru',
+    )
   })
 
   const nodeLabel = (nodeId: string) => {
     const node = graphNodes[nodeId]
     if (!node) return nodeId
     const kind = kindLabel[node.kind] ?? node.kind
-    return `${node.label} · ${kind}`
+    return `${eventCaption(node)} · ${kind}`
   }
 
   const clampCell =

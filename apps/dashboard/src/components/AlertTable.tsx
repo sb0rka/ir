@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { useAppStore, emptyContextQueue } from '../store/appStore'
 import type { AlertEvent, CorrelationGroup, Entity, QueueItem } from '../types'
 import { Chip, MarqueeText, SeverityBadge } from './ui'
@@ -15,7 +15,9 @@ import {
   resolveAlertTableSearchColumn,
   type AlertTableColumnId,
 } from './alertTableColumns'
-import { ChevronDown, ChevronRight, Layers } from 'lucide-react'
+import { ChevronDown, ChevronRight, Layers, Loader2 } from 'lucide-react'
+
+const SKELETON_ROW_COUNT = 8
 
 const COL_FIT = 'max-w-0 overflow-hidden whitespace-nowrap align-middle'
 const COL_TITLE = 'min-w-0 max-w-0 overflow-hidden align-middle'
@@ -133,6 +135,33 @@ function ColumnResizeHandle({
     >
       <div className="h-full w-px bg-transparent transition-colors group-hover/resize:bg-border-strong group-active/resize:bg-fg/50" />
     </div>
+  )
+}
+
+function AlertTableSkeleton({
+  colGroup,
+  colCount,
+  tableStyle,
+}: {
+  colGroup: ReactNode
+  colCount: number
+  tableStyle: { width: number }
+}) {
+  return (
+    <table className={TABLE_CLASS} style={tableStyle} aria-hidden>
+      {colGroup}
+      <tbody>
+        {Array.from({ length: SKELETON_ROW_COUNT }, (_, row) => (
+          <tr key={row} className="border-b border-border/60">
+            {Array.from({ length: colCount }, (_, col) => (
+              <td key={col} className="px-3 py-2">
+                <div className="h-4 animate-pulse rounded bg-surface-2" />
+              </td>
+            ))}
+          </tr>
+        ))}
+      </tbody>
+    </table>
   )
 }
 
@@ -710,7 +739,7 @@ export function AlertTable({ investigationId }: { investigationId?: string } = {
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div className="flex h-full min-h-0 flex-col" aria-busy={loading}>
       <div className="relative flex shrink-0 border-b border-border bg-surface-1">
         <div
           ref={headerWrapRef}
@@ -726,7 +755,7 @@ export function AlertTable({ investigationId }: { investigationId?: string } = {
                     ref={selectAllRef}
                     type="checkbox"
                     checked={allSelectableSelected}
-                    disabled={selectableIds.length === 0}
+                    disabled={loading || selectableIds.length === 0}
                     onChange={toggleSelectAll}
                     title={allSelectableSelected ? 'Снять выбор' : 'Выбрать все'}
                     aria-label={allSelectableSelected ? 'Снять выбор' : 'Выбрать все'}
@@ -831,7 +860,13 @@ export function AlertTable({ investigationId }: { investigationId?: string } = {
         className="relative min-h-0 flex-1 overflow-auto"
         onScroll={() => syncScrollLeft('body')}
       >
-        {rows.length === 0 ? (
+        {loading && rows.length === 0 ? (
+          <AlertTableSkeleton
+            colGroup={colGroup}
+            colCount={colKeys.length}
+            tableStyle={tableStyle}
+          />
+        ) : rows.length === 0 ? (
           <div className="flex h-full items-center justify-center px-4 text-center">
             <div>
               {waitingForGroup ? (
@@ -856,35 +891,46 @@ export function AlertTable({ investigationId }: { investigationId?: string } = {
             </div>
           </div>
         ) : (
-          <table className={TABLE_CLASS} style={tableStyle}>
-            {colGroup}
-            <tbody>
-              {rows.map((item) =>
-                item.kind === 'correlation' ? (
-                  <CorrelationRow
-                    key={item.id}
-                    group={correlations[item.id]}
-                    alerts={alerts}
-                    selectFields={selectFields}
-                    showCategory={showCategory}
-                  />
-                ) : item.kind === 'entity' ? (
-                  <EntityRow key={item.id} entity={entities[item.id]} />
-                ) : (
-                  <AlertRow
-                    key={item.id}
-                    alert={alerts[item.id]}
-                    investigationId={investigationId}
-                    inContext={inContextOf(alerts[item.id])}
-                    selected={selected.includes(item.id)}
-                    selectFields={selectFields}
-                    showCategory={showCategory}
-                    onToggle={() => toggleRow(item.id)}
-                  />
-                ),
-              )}
-            </tbody>
-          </table>
+          <>
+            <table
+              className={clsx(TABLE_CLASS, loading && 'pointer-events-none opacity-50')}
+              style={tableStyle}
+            >
+              {colGroup}
+              <tbody>
+                {rows.map((item) =>
+                  item.kind === 'correlation' ? (
+                    <CorrelationRow
+                      key={item.id}
+                      group={correlations[item.id]}
+                      alerts={alerts}
+                      selectFields={selectFields}
+                      showCategory={showCategory}
+                    />
+                  ) : item.kind === 'entity' ? (
+                    <EntityRow key={item.id} entity={entities[item.id]} />
+                  ) : (
+                    <AlertRow
+                      key={item.id}
+                      alert={alerts[item.id]}
+                      investigationId={investigationId}
+                      inContext={inContextOf(alerts[item.id])}
+                      selected={selected.includes(item.id)}
+                      selectFields={selectFields}
+                      showCategory={showCategory}
+                      onToggle={() => toggleRow(item.id)}
+                    />
+                  ),
+                )}
+              </tbody>
+            </table>
+            {loading ? (
+              <div className="absolute inset-0 z-10 flex items-center justify-center bg-surface-1/60">
+                <Loader2 className="h-5 w-5 animate-spin text-fg-dim" aria-hidden />
+                <span className="sr-only">Загрузка</span>
+              </div>
+            ) : null}
+          </>
         )}
       </div>
     </div>

@@ -1,6 +1,6 @@
 import { useDraggable } from '@dnd-kit/core'
 import { CSS } from '@dnd-kit/utilities'
-import { fieldPrefix, sortFields, type EventFieldDef } from '../../lib/pdql'
+import { sortFields, type EventFieldDef } from '../../lib/pdql'
 import { clsx } from '../../lib/utils'
 import { highlightMatch } from './highlight'
 
@@ -20,18 +20,6 @@ export function FieldSearchList({
   idPrefix?: string
 }) {
   const sorted = sortFields(fields, freq, query)
-  const groups = new Map<string, EventFieldDef[]>()
-  for (const field of sorted) {
-    const prefix = fieldPrefix(field.name)
-    const list = groups.get(prefix) ?? []
-    list.push(field)
-    groups.set(prefix, list)
-  }
-  const prefixes = [...groups.keys()].sort((left, right) => {
-    if (left === 'общее') return -1
-    if (right === 'общее') return 1
-    return left.localeCompare(right)
-  })
 
   if (sorted.length === 0) {
     return <div className="px-3 py-4 text-xs text-fg-dim">Нет полей по запросу</div>
@@ -39,22 +27,15 @@ export function FieldSearchList({
 
   return (
     <div className="flex flex-col">
-      {prefixes.map((prefix) => (
-        <div key={prefix}>
-          <div className="sticky top-0 z-10 bg-surface-1 px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-fg-dim">
-            {prefix}
-          </div>
-          {(groups.get(prefix) ?? []).map((field) => (
-            <FieldRow
-              key={field.name}
-              idPrefix={idPrefix}
-              field={field}
-              query={query}
-              onChoose={onChoose}
-              onActivate={onActivate}
-            />
-          ))}
-        </div>
+      {sorted.map((field) => (
+        <FieldRow
+          key={field.name}
+          idPrefix={idPrefix}
+          field={field}
+          query={query}
+          onChoose={onChoose}
+          onActivate={onActivate}
+        />
       ))}
     </div>
   )

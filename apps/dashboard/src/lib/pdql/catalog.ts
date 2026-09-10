@@ -2,7 +2,7 @@ import type { EventFieldDef, FieldType } from './model'
 import { eventFieldLabelRu } from './fieldLabelsRu'
 import { KNOWN_EVENT_FIELDS } from './relatedFields'
 
-const FREQ_KEY = 'ir.pdql.fieldFreq'
+const USAGE_KEY = 'ir.pdql.fieldUsage'
 
 export const DEFAULT_FIELD_FREQ: Record<string, number> = {
   time: 100,
@@ -69,18 +69,18 @@ export async function fetchEventFields(): Promise<EventFieldDef[]> {
 
 export function loadFieldFreq(): Record<string, number> {
   try {
-    const raw = localStorage.getItem(FREQ_KEY)
-    if (!raw) return { ...DEFAULT_FIELD_FREQ }
+    const raw = localStorage.getItem(USAGE_KEY)
+    if (!raw) return {}
     const parsed = JSON.parse(raw) as Record<string, number>
-    return { ...DEFAULT_FIELD_FREQ, ...parsed }
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {}
   } catch {
-    return { ...DEFAULT_FIELD_FREQ }
+    return {}
   }
 }
 
 export function saveFieldFreq(freq: Record<string, number>): void {
   try {
-    localStorage.setItem(FREQ_KEY, JSON.stringify(freq))
+    localStorage.setItem(USAGE_KEY, JSON.stringify(freq))
   } catch {
     /* ignore quota / private mode */
   }
@@ -109,8 +109,10 @@ export function sortFields(
       )
     : fields.slice()
   return matched.sort((left, right) => {
-    const freqDelta = (freq[right.name] ?? 0) - (freq[left.name] ?? 0)
-    if (freqDelta !== 0) return freqDelta
+    const usageDelta = (freq[right.name] ?? 0) - (freq[left.name] ?? 0)
+    if (usageDelta !== 0) return usageDelta
+    const seedDelta = (DEFAULT_FIELD_FREQ[right.name] ?? 0) - (DEFAULT_FIELD_FREQ[left.name] ?? 0)
+    if (seedDelta !== 0) return seedDelta
     return left.name.localeCompare(right.name)
   })
 }

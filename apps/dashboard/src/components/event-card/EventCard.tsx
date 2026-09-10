@@ -8,7 +8,7 @@ import { formatTime } from '../../lib/utils'
 import type { AlertEvent } from '../../types'
 import { resolve, type TimeInterval } from '../time-interval'
 import { SeverityBadge } from '../ui'
-import { EventFieldModal } from './EventFieldModal'
+import { EventFieldModal, type AddEventFilter } from './EventFieldModal'
 import {
   EventFields,
   eventCardModelFromAlert,
@@ -73,7 +73,7 @@ export function EventCard({
   timeInterval: TimeInterval
   onTimeChange: (value: TimeInterval) => void
   onTimeExecute: (value: TimeInterval) => void
-  onAddFilter: (field: string, value: string) => void
+  onAddFilter: AddEventFilter
   onFilterFindingUuid?: (uuid: string, recordType: 'siem_incident' | 'siem_correlation') => void
   onAddToContext?: (field: string, value: string, includeEvent: boolean) => Promise<void>
   onActiveAlertChange?: (alert: AlertEvent) => void

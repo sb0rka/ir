@@ -2,6 +2,7 @@ import type { components as Ir } from '@ir/contract'
 import { getProjectId } from './env'
 import { irClient } from './clients'
 import { unwrapError } from './error'
+import { contextSelectionFields } from '../lib/queueContext'
 import { getSomRunSettings, getSomSelectors } from './som-settings'
 import {
   gatewayFindingId,
@@ -196,6 +197,8 @@ export async function addContext(
     events?: EventSourceRef[]
     findings?: SourceObjectRef[]
     seed?: boolean
+    expandFindings?: boolean
+    why?: string
   },
 ): Promise<Ir['schemas']['ContextImportResult'] | undefined> {
   const events = input.events ?? []
@@ -204,7 +207,14 @@ export async function addContext(
   return throwIfError(
     await irClient.POST('/investigations/{investigation_id}/context', {
       params: { ...projectParams(), path: { investigation_id: investigationId } },
-      body: { findings, sessions: [], events, entities: [], seed: input.seed ?? false },
+      body: {
+        findings,
+        sessions: [],
+        events,
+        entities: [],
+        seed: input.seed ?? false,
+        ...contextSelectionFields(input),
+      },
     }),
   )
 }

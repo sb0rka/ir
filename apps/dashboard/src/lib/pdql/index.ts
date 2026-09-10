@@ -1,6 +1,12 @@
 export { parse } from './parse'
 export { formatCondition, formatConditionLabel, formatFilterList, serialize } from './serialize'
-export { appendCondition, FINDING_FILTER_LABELS, findingUuidQuery, isFindingFilterField } from './append'
+export {
+  appendCondition,
+  appendConditions,
+  FINDING_FILTER_LABELS,
+  findingUuidQuery,
+  isFindingFilterField,
+} from './append'
 export type { FindingFilterField } from './append'
 export {
   addFieldToAst,
