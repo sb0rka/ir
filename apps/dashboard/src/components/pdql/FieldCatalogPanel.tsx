@@ -1,5 +1,5 @@
 import { Search } from 'lucide-react'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { usePdqlStore } from '../../store/pdqlStore'
 import type { ActiveSection } from '../../lib/pdql'
 import { clsx } from '../../lib/utils'
@@ -13,7 +13,7 @@ const MODES: { id: ActiveSection; label: string }[] = [
 
 export function FieldCatalogPanel() {
   const fields = usePdqlStore((s) => s.fields)
-  const fieldFreq = usePdqlStore((s) => s.fieldFreq)
+  const frozenFreq = useRef(usePdqlStore.getState().fieldFreq).current
   const fieldsLoading = usePdqlStore((s) => s.fieldsLoading)
   const fieldsError = usePdqlStore((s) => s.fieldsError)
   const activeSection = usePdqlStore((s) => s.activeSection)
@@ -56,7 +56,7 @@ export function FieldCatalogPanel() {
         {!fieldsLoading && !fieldsError && (
           <FieldSearchList
             fields={fields}
-            freq={fieldFreq}
+            freq={frozenFreq}
             query={query}
             onChoose={(name) => addField(name)}
           />
