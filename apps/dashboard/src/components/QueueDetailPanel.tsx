@@ -19,7 +19,7 @@ import {
   contextImportOptions,
   selectionHasFindings,
 } from '../lib/queueContext'
-import { EventCard, eventCardModelFromAlert } from './event-card'
+import { EventCard, eventCardModelFromAlert, type AddEventFilter } from './event-card'
 import type { TimeInterval } from './time-interval'
 
 export function QueueDetailPanel({
@@ -150,8 +150,8 @@ export function QueueDetailPanel({
               alert={alert}
               eventInContext={inContext}
               onActiveAlertChange={rememberActiveAlert}
-              onAddFilter={(field, value) =>
-                appendPdqlFilter(investigationId ?? null, field, value)
+              onAddFilter={(fields, value, op, joiner) =>
+                appendPdqlFilter(investigationId ?? null, fields, value, op, joiner)
               }
               onFilterFindingUuid={(uuid, recordType) =>
                 filterByFindingUuid(investigationId ?? null, uuid, recordType)
@@ -313,7 +313,7 @@ function AlertDetails({
   alert: AlertEvent
   eventInContext: boolean
   onActiveAlertChange: (alert: AlertEvent) => void
-  onAddFilter: (field: string, value: string) => void
+  onAddFilter: AddEventFilter
   onFilterFindingUuid: (uuid: string, recordType: 'siem_incident' | 'siem_correlation') => void
   timeInterval: TimeInterval
   onTimeChange: (value: TimeInterval) => void

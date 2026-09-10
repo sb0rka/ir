@@ -73,6 +73,7 @@ export function ContextTable({ investigationId }: { investigationId: string }) {
     return eventNodeLabel({
       why: node.why,
       fallback: ev?.title ?? node.label,
+      origin: ev?.origin ?? node.origin,
     })
   }
 

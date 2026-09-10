@@ -181,6 +181,7 @@ function buildFromApp(inv: Investigation): GraphInvestigation {
       title: eventNodeLabel({
         why: n.why,
         fallback: ev?.title ?? n.label,
+        origin: ev?.origin ?? n.origin,
       }),
       severity: mapSeverity(ev?.severity ?? 'low'),
       event_ts: ev?.time ?? n.occurredAt ?? '',
@@ -254,6 +255,7 @@ function buildFromApp(inv: Investigation): GraphInvestigation {
           ? eventNodeLabel({
               why: eventNode.why,
               fallback: ev.title,
+              origin: ev.origin ?? eventNode.origin,
             })
           : ev.title,
         severity: mapSeverity(ev.severity),
