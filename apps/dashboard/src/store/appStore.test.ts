@@ -560,6 +560,49 @@ describe('event queue snapshots', () => {
       }),
     )
   })
+
+  it('clears queue selection immediately and lists the case without focusing it', async () => {
+    let finishCreate!: (value: Investigation) => void
+    vi.spyOn(irApi, 'createInvestigation').mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finishCreate = resolve
+        }),
+    )
+    vi.spyOn(irApi, 'addContext').mockResolvedValue(undefined)
+    vi.spyOn(irApi, 'loadInvestigationBundle').mockResolvedValue({
+      investigation: investigationStub({ id: 'inv-bg', title: 'Case', eventIds: ['evt-1'] }),
+      events: {},
+      entities: {},
+      nodes: {},
+      edges: {},
+      findingSourceKeys: [],
+    })
+    useAppStore.setState({
+      alerts: { 'evt-1': alertStub('evt-1') },
+      selectedAlertIds: ['evt-1'],
+      inspectedQueueItem: { kind: 'alert', id: 'evt-1' },
+      tabs: ['queue', 'investigations'],
+      activeTab: 'queue',
+      investigationRootIds: [],
+    })
+
+    const pending = useAppStore.getState().startInvestigation(['evt-1'], 'Case')
+
+    expect(useAppStore.getState().selectedAlertIds).toEqual([])
+    expect(useAppStore.getState().inspectedQueueItem).toBeNull()
+    expect(useAppStore.getState().tabs).toEqual(['queue', 'investigations'])
+    expect(useAppStore.getState().investigationRootIds).toEqual([])
+
+    finishCreate(investigationStub({ id: 'inv-bg', title: 'Case' }))
+    await expect(pending).resolves.toBe('inv-bg')
+
+    const state = useAppStore.getState()
+    expect(state.investigationRootIds).toEqual(['inv-bg'])
+    expect(state.tabs).toContain('inv-bg')
+    expect(state.activeTab).toBe('queue')
+    expect(state.investigations['inv-bg']?.title).toBe('Case')
+  })
 })
 
 function findingAlert(id: string): AlertEvent {

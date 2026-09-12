@@ -45,6 +45,11 @@ function containsIssue(node: SomIssueTreeNode, issueId: string): boolean {
   return node.children.some((child) => containsIssue(child, issueId))
 }
 
+/** Strip markup escapes (`\_` → `_`) so view and edit match readable text. */
+function unescapeDescriptionMarkup(text: string): string {
+  return text.replace(/\\(.)/g, '$1')
+}
+
 function SomIssueTreeItem({
   node,
   investigationId,
@@ -108,14 +113,20 @@ function SomIssueTreeItem({
     setDescriptionEditorHeight(
       viewHeight && viewHeight > 0 ? Math.max(viewHeight, 80) : 256,
     )
-    openSomIssueDescriptionEditor(item.id, catalogDescription ?? '')
+    openSomIssueDescriptionEditor(
+      item.id,
+      unescapeDescriptionMarkup(catalogDescription ?? ''),
+    )
   }
 
   const finishEditDescription = async () => {
     if (savingDescription || !editingDescription) return
     const next = descriptionDraft.trim() === '' ? null : descriptionDraft
-    const prev = catalogDescription
-    if (next === prev || (next === null && (prev == null || prev === ''))) {
+    const prev =
+      catalogDescription == null || catalogDescription.trim() === ''
+        ? null
+        : unescapeDescriptionMarkup(catalogDescription)
+    if (next === prev) {
       closeSomIssueDescriptionEditor()
       setDescriptionEditorHeight(null)
       return
@@ -346,7 +357,7 @@ function SomIssueTreeItem({
                       ref={descriptionViewRef}
                       className="max-h-64 overflow-y-auto whitespace-pre-wrap text-fg-muted"
                     >
-                      {displayDescription.replace(/\\(.)/g, '$1')}
+                      {unescapeDescriptionMarkup(displayDescription)}
                     </p>
                   ) : (
                     <p ref={descriptionViewRef} className="text-fg-dim">

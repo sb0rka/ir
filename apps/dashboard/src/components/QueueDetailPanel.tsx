@@ -57,7 +57,6 @@ export function QueueDetailPanel({
   })
   const contextEvents = useAppStore((s) => s.contextEvents)
   const correlations = useAppStore((s) => s.correlations)
-  const loading = useAppStore((s) => s.investigationLoading)
   const [contextModal, setContextModal] = useState<{
     mode: AddContextModalMode
     ids: string[]
@@ -193,7 +192,7 @@ export function QueueDetailPanel({
                   size="md"
                   variant="primary"
                   className="w-full"
-                  disabled={loading || !actionAlert}
+                  disabled={modalBusy || !actionAlert}
                   onClick={() => {
                     const target = commitActionAlert()
                     if (!target) return
@@ -210,7 +209,7 @@ export function QueueDetailPanel({
                     size="md"
                     variant={inContext && canAddToHypothesis ? 'primary' : 'default'}
                     className="w-full"
-                    disabled={loading || !canAddToHypothesis}
+                    disabled={modalBusy || !canAddToHypothesis}
                     title={addToHypothesisTitle}
                     onClick={() => {
                       const target = commitActionAlert()
@@ -225,7 +224,7 @@ export function QueueDetailPanel({
                     size="md"
                     variant="ghost"
                     className="w-full"
-                    disabled={loading}
+                    disabled={modalBusy}
                     onClick={() => {
                       const target = commitActionAlert()
                       if (!target) return
@@ -244,7 +243,6 @@ export function QueueDetailPanel({
                 size="md"
                 variant="primary"
                 className="w-full"
-                disabled={loading}
                 onClick={() => setContextModal({ mode: 'start', ids: [actionId] })}
               >
                 <Play className="h-3.5 w-3.5" />
@@ -261,9 +259,9 @@ export function QueueDetailPanel({
         mode={contextModal.mode}
         eventTitles={titlesForQueueIds(contextModal.ids, alerts, correlations)}
         hasFindings={selectionHasFindings(contextModal.ids, alerts)}
-        busy={loading || modalBusy}
+        busy={modalBusy}
         onClose={() => {
-          if (loading || modalBusy) return
+          if (modalBusy) return
           setContextModal(null)
         }}
         onConfirm={async ({ title, why, expandFindings }) => {
@@ -273,8 +271,8 @@ export function QueueDetailPanel({
           })
           if (contextModal.mode === 'start') {
             if (actionAlert) rememberQueueAlerts([actionAlert], investigationId)
-            const createdId = await start(contextModal.ids, title ?? '', options)
-            if (createdId) setContextModal(null)
+            setContextModal(null)
+            void start(contextModal.ids, title ?? '', options)
             return
           }
           if (!investigationId) return

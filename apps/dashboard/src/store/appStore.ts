@@ -1210,7 +1210,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   startInvestigation: async (ids, title, options) => {
     const trimmed = title.trim().slice(0, 255)
     if (!trimmed) return ''
-    const { alerts, correlations } = get()
+    const snapshot = get()
+    const { alerts, correlations } = snapshot
     const severity =
       ids
         .map((id) => correlations[id]?.severity ?? alerts[id]?.severity)
@@ -1220,7 +1221,8 @@ export const useAppStore = create<AppState>((set, get) => ({
           return order.indexOf(a!) - order.indexOf(b!)
         })[0] ?? 'high'
 
-    set({ investigationLoading: true, lastError: null })
+    // Close queue chrome immediately; create+seed+bundle continue in background.
+    set({ selectedAlertIds: [], inspectedQueueItem: null, lastError: null })
     try {
       const created = await createInvestigation({ title: trimmed, severity })
       const refs = contextRefsFromIds(
@@ -1228,17 +1230,17 @@ export const useAppStore = create<AppState>((set, get) => ({
         alerts,
         correlations,
         get().contextEvents,
-        resolve(get().timeInterval),
+        resolve(snapshot.timeInterval),
       )
       if (refs.events.length || refs.findings.length) {
         rememberEventQueueSnapshots(
           created.id,
           snapshotEventsForIds(ids, alerts, correlations, get().contextEvents),
           {
-            pdql: get().queuePdql,
-            timeInterval: get().timeInterval,
-            queueSource: get().queueSource,
-            groupValues: get().groupValues,
+            pdql: snapshot.queuePdql,
+            timeInterval: snapshot.timeInterval,
+            queueSource: snapshot.queueSource,
+            groupValues: snapshot.groupValues,
           },
         )
         await addContext(created.id, { ...refs, seed: true, ...contextRequestOptions(options) })
@@ -1249,28 +1251,25 @@ export const useAppStore = create<AppState>((set, get) => ({
       })
       set({
         ...applyBundle(get, bundle),
+        // Appear in TabBar + list; do not steal focus from the current view.
         tabs: get().tabs.includes(created.id) ? get().tabs : [...get().tabs, created.id],
-        activeTab: created.id,
         investigationRootIds: prependId(get().investigationRootIds, created.id),
-        selectedAlertIds: [],
-        inspectedQueueItem: null,
-        investigationLoading: false,
         contextQueue: {
           ...get().contextQueue,
           [created.id]: {
             ...emptyContextQueue,
-            chips: get().chips,
-            pdql: get().queuePdql,
-            timeInterval: get().timeInterval,
-            queueSource: get().queueSource,
-            groupValues: get().groupValues,
-            queryHistory: get().queryHistory,
+            chips: snapshot.chips,
+            pdql: snapshot.queuePdql,
+            timeInterval: snapshot.timeInterval,
+            queueSource: snapshot.queueSource,
+            groupValues: snapshot.groupValues,
+            queryHistory: snapshot.queryHistory,
           },
         },
       })
       return created.id
     } catch (err) {
-      set({ investigationLoading: false, lastError: errorMessage(err) })
+      set({ lastError: errorMessage(err) })
       return ''
     }
   },

@@ -266,7 +266,7 @@ export function AddContextModal({
             </label>
           )}
           <label className="block space-y-1.5">
-            <span className="text-[10px] uppercase tracking-wider text-fg-dim">Почему</span>
+            <span className="text-[10px] uppercase tracking-wider text-fg-dim">Основание</span>
             <textarea
               ref={whyRef}
               className="w-full resize-none rounded border border-border bg-surface-0 px-2 py-1.5 text-sm outline-none focus:border-fg/30"
@@ -278,7 +278,7 @@ export function AddContextModal({
                 cancelTyping()
                 setWhy(event.target.value)
               }}
-              placeholder="Зачем эта нода в графе"
+              placeholder="Причина добавления нод в расследование"
             />
           </label>
         </div>

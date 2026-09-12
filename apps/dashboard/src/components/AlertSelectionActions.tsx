@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Loader2, Play, Plus, X } from 'lucide-react'
+import { Play, Plus, X } from 'lucide-react'
 import { emptyContextQueue, useAppStore } from '../store/appStore'
 import { titlesForQueueIds } from '../lib/investigationTitle'
 import {
@@ -15,7 +15,6 @@ import { AddContextModal, type AddContextModalMode } from './AddContextModal'
 export function AlertSelectionActions({ investigationId }: { investigationId?: string } = {}) {
   const globalSelected = useAppStore((s) => s.selectedAlertIds)
   const start = useAppStore((s) => s.startInvestigation)
-  const starting = useAppStore((s) => s.investigationLoading)
   const clear = useAppStore((s) => s.clearAlertSelection)
   const globalAlerts = useAppStore((s) => s.alerts)
   const correlations = useAppStore((s) => s.correlations)
@@ -76,14 +75,9 @@ export function AlertSelectionActions({ investigationId }: { investigationId?: s
             <Button
               size="sm"
               variant="primary"
-              disabled={starting}
               onClick={() => setModal({ mode: 'start', ids: selected })}
             >
-              {starting ? (
-                <Loader2 className="h-3 w-3 animate-spin" />
-              ) : (
-                <Play className="h-3 w-3" />
-              )}
+              <Play className="h-3 w-3" />
               Начать расследование
             </Button>
           )}
@@ -94,9 +88,9 @@ export function AlertSelectionActions({ investigationId }: { investigationId?: s
           mode={modal.mode}
           eventTitles={titlesForQueueIds(modal.ids, alerts, correlations)}
           hasFindings={selectionHasFindings(modal.ids, alerts)}
-          busy={starting || modalBusy}
+          busy={modalBusy}
           onClose={() => {
-            if (starting || modalBusy) return
+            if (modalBusy) return
             setModal(null)
           }}
           onConfirm={async ({ title, why, expandFindings }) => {
@@ -105,8 +99,8 @@ export function AlertSelectionActions({ investigationId }: { investigationId?: s
               expandFindings,
             })
             if (modal.mode === 'start') {
-              const createdId = await start(modal.ids, title ?? '', options)
-              if (createdId) setModal(null)
+              setModal(null)
+              void start(modal.ids, title ?? '', options)
               return
             }
             if (!investigationId) return
