@@ -1408,6 +1408,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/som/issues/{issue_id}": {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
+            path: {
+                /** @description SOM issue to update. */
+                issue_id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update a SOM issue description
+         * @description Proxies SOM `PATCH /v1/issues/{id}` with the selected project's cached `DEMO_SOM_ACCESS_TOKEN`. Only `description` is supported; `null` clears the field. Returns the updated issue from SOM.
+         */
+        patch: operations["updateSomIssue"];
+        trace?: never;
+    };
     "/som/issues/{issue_id}/run": {
         parameters: {
             query?: never;
@@ -2739,6 +2765,11 @@ export interface components {
             issues: components["schemas"]["SomIssue"][];
             /** @description Total issues on the board, regardless of paging. */
             total_count: number;
+        };
+        /** @description Fields IR may change on a SOM issue. Only description is exposed; null clears the description. */
+        SomIssueUpdateRequest: {
+            /** @description New description text, or null to clear. */
+            description: string | null;
         };
         /** @description Context IR adds to the run. */
         SomIssueRunRequest: {
@@ -5302,6 +5333,43 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+            501: components["responses"]["NotImplemented"];
+            502: components["responses"]["SourceUnavailable"];
+        };
+    };
+    updateSomIssue: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
+            path: {
+                /** @description SOM issue to update. */
+                issue_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SomIssueUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Updated issue */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SomIssue"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["ValidationError"];
             500: components["responses"]["InternalError"];
             501: components["responses"]["NotImplemented"];
             502: components["responses"]["SourceUnavailable"];

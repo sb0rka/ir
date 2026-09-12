@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useAppStore } from '../store/appStore'
 import { Button, Chip } from './ui'
 import { clsx, formatTime, statusLabel } from '../lib/utils'
@@ -7,6 +7,7 @@ import {
   CircleDashed,
   Loader2,
   MessageSquare,
+  Pencil,
   Play,
   Square,
   XCircle,
@@ -63,10 +64,25 @@ function SomIssueTreeItem({
 }) {
   const item = node.issue
   const [commentDraft, setCommentDraft] = useState('')
+  const [savingDescription, setSavingDescription] = useState(false)
+  const [descriptionEditorHeight, setDescriptionEditorHeight] = useState<number | null>(
+    null,
+  )
+  const descriptionViewRef = useRef<HTMLParagraphElement>(null)
+  const descriptionTextareaRef = useRef<HTMLTextAreaElement>(null)
+  const descriptionScrollRef = useRef({ textarea: 0, parent: 0 })
   const issues = useAppStore((s) => s.issues)
   const runEnrichment = useAppStore((s) => s.runEnrichment)
   const cancelIssue = useAppStore((s) => s.cancelIssue)
   const addComment = useAppStore((s) => s.addIssueComment)
+  const updateSomIssueDescription = useAppStore((s) => s.updateSomIssueDescription)
+  const somIssueDescriptionEditor = useAppStore((s) => s.somIssueDescriptionEditor)
+  const openSomIssueDescriptionEditor = useAppStore((s) => s.openSomIssueDescriptionEditor)
+  const closeSomIssueDescriptionEditor = useAppStore((s) => s.closeSomIssueDescriptionEditor)
+  const setSomIssueDescriptionDraft = useAppStore((s) => s.setSomIssueDescriptionDraft)
+  const setSomIssueDescriptionSelection = useAppStore(
+    (s) => s.setSomIssueDescriptionSelection,
+  )
 
   const issue = issues[item.id]
   const busy = issue?.status === 'running'
@@ -76,9 +92,98 @@ function SomIssueTreeItem({
   const cta = selected || awaitingConfirm
   const onActivePath = expandedId != null && containsIssue(node, expandedId)
   const showChildren = hasChildren && onActivePath
-  const description = item.description?.trim() || issue?.description
-  const showDescription = onActivePath && Boolean(description)
+  const catalogDescription = item.description ?? null
+  const displayDescription =
+    catalogDescription?.trim() || issue?.description?.trim() || ''
+  const showDescription = onActivePath
   const showComments = selected && Boolean(issue)
+  const editingDescription = somIssueDescriptionEditor?.issueId === item.id
+  const descriptionDraft = editingDescription
+    ? somIssueDescriptionEditor.draft
+    : (catalogDescription ?? '')
+
+  const beginEditDescription = () => {
+    if (savingDescription) return
+    const viewHeight = descriptionViewRef.current?.offsetHeight
+    setDescriptionEditorHeight(
+      viewHeight && viewHeight > 0 ? Math.max(viewHeight, 80) : 256,
+    )
+    openSomIssueDescriptionEditor(item.id, catalogDescription ?? '')
+  }
+
+  const finishEditDescription = async () => {
+    if (savingDescription || !editingDescription) return
+    const next = descriptionDraft.trim() === '' ? null : descriptionDraft
+    const prev = catalogDescription
+    if (next === prev || (next === null && (prev == null || prev === ''))) {
+      closeSomIssueDescriptionEditor()
+      setDescriptionEditorHeight(null)
+      return
+    }
+    setSavingDescription(true)
+    const ok = await updateSomIssueDescription(item.id, next)
+    setSavingDescription(false)
+    if (ok) {
+      closeSomIssueDescriptionEditor()
+      setDescriptionEditorHeight(null)
+    }
+  }
+
+  const toggleEditDescription = () => {
+    if (editingDescription) void finishEditDescription()
+    else beginEditDescription()
+  }
+
+  const captureDescriptionScroll = () => {
+    const el = descriptionTextareaRef.current
+    if (!el) return
+    descriptionScrollRef.current.textarea = el.scrollTop
+    let scrollParent: HTMLElement | null = el.parentElement
+    while (
+      scrollParent &&
+      !(scrollParent.scrollHeight > scrollParent.clientHeight)
+    ) {
+      scrollParent = scrollParent.parentElement
+    }
+    if (scrollParent) {
+      descriptionScrollRef.current.parent = scrollParent.scrollTop
+    }
+  }
+
+  useEffect(() => {
+    if (!onActivePath && somIssueDescriptionEditor?.issueId === item.id) {
+      void finishEditDescription()
+    }
+    // Collapse of this issue path closes the editor (after save).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [onActivePath])
+
+  useEffect(() => {
+    if (!editingDescription || !somIssueDescriptionEditor) return
+    const el = descriptionTextareaRef.current
+    if (!el) return
+    let scrollParent: HTMLElement | null = el.parentElement
+    while (
+      scrollParent &&
+      !(scrollParent.scrollHeight > scrollParent.clientHeight)
+    ) {
+      scrollParent = scrollParent.parentElement
+    }
+    const restoreScroll = () => {
+      el.scrollTop = descriptionScrollRef.current.textarea
+      if (scrollParent) {
+        scrollParent.scrollTop = descriptionScrollRef.current.parent
+      }
+    }
+    el.focus({ preventScroll: true })
+    el.setSelectionRange(
+      somIssueDescriptionEditor.selectionStart,
+      somIssueDescriptionEditor.selectionEnd,
+    )
+    restoreScroll()
+    const frame = window.requestAnimationFrame(restoreScroll)
+    return () => window.cancelAnimationFrame(frame)
+  }, [editingDescription, somIssueDescriptionEditor?.selectionEpoch])
 
   const handleRunClick = () => {
     if (busy) return
@@ -166,6 +271,27 @@ function SomIssueTreeItem({
               )}
             </Button>
           </div>
+          {selected && (
+            <Button
+              size="sm"
+              title={editingDescription ? 'Сохранить описание' : 'Редактировать описание'}
+              aria-label={
+                editingDescription ? 'Сохранить описание' : 'Редактировать описание'
+              }
+              variant={editingDescription ? 'primary' : 'default'}
+              disabled={savingDescription}
+              onClick={(e) => {
+                e.stopPropagation()
+                toggleEditDescription()
+              }}
+            >
+              {savingDescription ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Pencil className="h-3.5 w-3.5" />
+              )}
+            </Button>
+          )}
           {busy && (
             <Button
               size="sm"
@@ -180,11 +306,55 @@ function SomIssueTreeItem({
 
         {(showDescription || showComments) && (
           <div className="space-y-2 border-t border-border/80 bg-surface-2/30 p-2.5 text-xs">
-            {showDescription && (
-              <p className="max-h-64 overflow-y-auto whitespace-pre-wrap text-fg-muted">
-                {description.replace(/\\(.)/g, '$1')}
-              </p>
-            )}
+            {showDescription &&
+              (editingDescription ? (
+                <textarea
+                  ref={descriptionTextareaRef}
+                  className="w-full resize-y rounded border border-border bg-surface-0 px-2 py-1.5 text-xs text-fg outline-none focus:border-fg/30 disabled:opacity-60"
+                  style={{
+                    height: descriptionEditorHeight ?? 256,
+                    minHeight: 80,
+                    maxHeight: 640,
+                  }}
+                  value={descriptionDraft}
+                  disabled={savingDescription}
+                  onChange={(e) => {
+                    captureDescriptionScroll()
+                    setSomIssueDescriptionDraft(e.target.value, {
+                      start: e.target.selectionStart,
+                      end: e.target.selectionEnd,
+                    })
+                  }}
+                  onSelect={(e) => {
+                    const target = e.currentTarget
+                    captureDescriptionScroll()
+                    setSomIssueDescriptionSelection(
+                      target.selectionStart,
+                      target.selectionEnd,
+                    )
+                  }}
+                  onScroll={captureDescriptionScroll}
+                  onMouseUp={(e) => {
+                    captureDescriptionScroll()
+                    setDescriptionEditorHeight(e.currentTarget.offsetHeight)
+                  }}
+                />
+              ) : (
+                <div className="rounded">
+                  {displayDescription ? (
+                    <p
+                      ref={descriptionViewRef}
+                      className="max-h-64 overflow-y-auto whitespace-pre-wrap text-fg-muted"
+                    >
+                      {displayDescription.replace(/\\(.)/g, '$1')}
+                    </p>
+                  ) : (
+                    <p ref={descriptionViewRef} className="text-fg-dim">
+                      Нет описания
+                    </p>
+                  )}
+                </div>
+              ))}
 
             {showComments && issue && (
               <div className="space-y-1.5 border-t border-border/60 pt-1">

@@ -168,6 +168,23 @@ func (c *Client) GetIssue(ctx context.Context, bearer, issueID string) (Issue, e
 	return out, err
 }
 
+// IssuePatch — подмножество SOM UpdateIssueRequest. Description nil в JSON
+// становится null и очищает поле, поэтому маршалим явно, без omitempty.
+type IssuePatch struct {
+	Description *string `json:"description"`
+}
+
+// UpdateIssue proxies SOM PATCH /v1/issues/{id}. Response is wrapped as
+// {data, txid}; only data is returned to callers.
+func (c *Client) UpdateIssue(ctx context.Context, bearer, issueID string, patch IssuePatch) (Issue, error) {
+	var out struct {
+		Data Issue `json:"data"`
+	}
+	err := c.doJSON(ctx, "som update issue", http.MethodPatch,
+		c.cfg.APIBaseURL+"/v1/issues/"+url.PathEscape(issueID), bearer, patch, &out)
+	return out.Data, err
+}
+
 // LinkEnvironment привязывает daemon-окружение к issue на стороне SOM —
 // последний шаг запуска, после него запуск виден в UI SOM.
 func (c *Client) LinkEnvironment(ctx context.Context, bearer, boardID, issueID, localEnvironmentID, name string) (string, error) {

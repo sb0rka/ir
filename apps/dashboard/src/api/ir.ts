@@ -402,6 +402,18 @@ export async function runSomIssue(
   )
 }
 
+export async function updateSomIssueDescription(
+  issueId: string,
+  description: string | null,
+) {
+  return throwIfError(
+    await irClient.PATCH('/som/issues/{issue_id}', {
+      params: { ...projectParams(), path: { issue_id: issueId } },
+      body: { description },
+    }),
+  )
+}
+
 export async function getSomEnvironment(localEnvironmentId: string) {
   return throwIfError(
     await irClient.GET('/som/environments/{local_environment_id}', {

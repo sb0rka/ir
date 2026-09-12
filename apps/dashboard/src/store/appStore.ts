@@ -65,6 +65,7 @@ import {
   resolveSomCatalog,
   reviewEdges,
   runSomIssue,
+  updateSomIssueDescription as updateSomIssueDescriptionRequest,
   type SomCatalog,
 } from '../api/ir'
 import {
@@ -376,6 +377,15 @@ interface AppState {
   lastNotImplemented: string | null
   somHint: string | null
   somCatalog: SomCatalog | null
+  /** Draft of the SOM issue description currently open in the agent panel editor. */
+  somIssueDescriptionEditor: {
+    issueId: string
+    draft: string
+    selectionStart: number
+    selectionEnd: number
+    /** Bumped on external inserts so the textarea can restore caret/focus. */
+    selectionEpoch: number
+  } | null
 
   addChip: (field: FilterField, value: string) => void
   setQueuePdql: (pdql: string) => void
@@ -455,6 +465,19 @@ interface AppState {
   setHypothesisDraftOpen: (open: boolean) => void
   setDetailPanelOpen: (open: boolean) => void
   loadSomCatalog: () => Promise<void>
+  updateSomIssueDescription: (
+    issueId: string,
+    description: string | null,
+  ) => Promise<boolean>
+  openSomIssueDescriptionEditor: (issueId: string, draft: string) => void
+  closeSomIssueDescriptionEditor: () => void
+  setSomIssueDescriptionDraft: (
+    draft: string,
+    selection?: { start: number; end: number },
+  ) => void
+  setSomIssueDescriptionSelection: (start: number, end: number) => void
+  /** Inserts `key: value` lines at the caret; returns false if no editor is open. */
+  insertSomIssueDescriptionSnippet: (snippet: string) => boolean
   openAgentPanel: () => Promise<void>
   loadHypotheses: (investigationId: string) => Promise<void>
   createHypothesis: (
@@ -827,6 +850,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   lastNotImplemented: null,
   somHint: null,
   somCatalog: null,
+  somIssueDescriptionEditor: null,
 
   addChip: (field, value) => {
     set({
@@ -1754,6 +1778,98 @@ export const useAppStore = create<AppState>((set, get) => ({
     } catch (err) {
       set({ lastError: errorMessage(err) })
     }
+  },
+
+  updateSomIssueDescription: async (issueId, description) => {
+    try {
+      const updated = await updateSomIssueDescriptionRequest(issueId, description)
+      const catalog = get().somCatalog
+      if (catalog) {
+        set({
+          lastError: null,
+          somCatalog: {
+            ...catalog,
+            issues: catalog.issues.map((issue) =>
+              issue.id === issueId ? updated : issue,
+            ),
+          },
+        })
+      } else {
+        set({ lastError: null })
+      }
+      return true
+    } catch (err) {
+      set({ lastError: errorMessage(err) })
+      return false
+    }
+  },
+
+  openSomIssueDescriptionEditor: (issueId, draft) => {
+    set({
+      somIssueDescriptionEditor: {
+        issueId,
+        draft,
+        selectionStart: draft.length,
+        selectionEnd: draft.length,
+        selectionEpoch: 0,
+      },
+    })
+  },
+
+  closeSomIssueDescriptionEditor: () => {
+    set({ somIssueDescriptionEditor: null })
+  },
+
+  setSomIssueDescriptionDraft: (draft, selection) => {
+    const editor = get().somIssueDescriptionEditor
+    if (!editor) return
+    set({
+      somIssueDescriptionEditor: {
+        ...editor,
+        draft,
+        selectionStart: selection?.start ?? draft.length,
+        selectionEnd: selection?.end ?? draft.length,
+      },
+    })
+  },
+
+  setSomIssueDescriptionSelection: (start, end) => {
+    const editor = get().somIssueDescriptionEditor
+    if (!editor) return
+    set({
+      somIssueDescriptionEditor: {
+        ...editor,
+        selectionStart: start,
+        selectionEnd: end,
+      },
+    })
+  },
+
+  insertSomIssueDescriptionSnippet: (snippet) => {
+    const editor = get().somIssueDescriptionEditor
+    if (!editor || !snippet) return false
+    const { draft, selectionStart, selectionEnd } = editor
+    const start = Math.min(selectionStart, selectionEnd)
+    const end = Math.max(selectionStart, selectionEnd)
+    const before = draft.slice(0, start)
+    const after = draft.slice(end)
+    const padBefore =
+      before.length > 0 && !before.endsWith('\n') && !snippet.startsWith('\n') ? '\n' : ''
+    const padAfter =
+      after.length > 0 && !after.startsWith('\n') && !snippet.endsWith('\n') ? '\n' : ''
+    const inserted = padBefore + snippet + padAfter
+    const next = before + inserted + after
+    const caret = before.length + inserted.length
+    set({
+      somIssueDescriptionEditor: {
+        ...editor,
+        draft: next,
+        selectionStart: caret,
+        selectionEnd: caret,
+        selectionEpoch: editor.selectionEpoch + 1,
+      },
+    })
+    return true
   },
 
   openAgentPanel: async () => {

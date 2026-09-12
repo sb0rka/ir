@@ -537,3 +537,27 @@ func normalizeRunTimeZone(raw *string) (string, error) {
 	}
 	return tz, nil
 }
+
+// UpdateSomIssue Update a SOM issue description
+// (PATCH /som/issues/{issue_id})
+func (s *Server) UpdateSomIssue(ctx context.Context, request som.UpdateSomIssueRequestObject) (som.UpdateSomIssueResponseObject, error) {
+	if request.Body == nil {
+		return nil, httperr.BadRequest("request body is required")
+	}
+	var updated somclient.Issue
+	err := s.withSOMBearer(ctx, false, func(bearer string) error {
+		var callErr error
+		updated, callErr = s.som.UpdateIssue(ctx, bearer, request.IssueId.String(), somclient.IssuePatch{
+			Description: request.Body.Description,
+		})
+		return callErr
+	})
+	if err != nil {
+		return nil, somError(err)
+	}
+	converted, err := convertSomIssue(updated)
+	if err != nil {
+		return nil, err
+	}
+	return som.UpdateSomIssue200JSONResponse(converted), nil
+}

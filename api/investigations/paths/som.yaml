@@ -93,6 +93,41 @@ paths:
         '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
         '502': { $ref: '../shared/responses.yaml#/components/responses/SourceUnavailable' }
 
+  /som/issues/{issue_id}:
+    parameters:
+      - $ref: '../shared/parameters.yaml#/components/parameters/ProjectId'
+      - name: issue_id
+        in: path
+        required: true
+        description: SOM issue to update.
+        schema: { type: string, format: uuid }
+    patch:
+      tags: [som]
+      summary: Update a SOM issue description
+      description: >-
+        Proxies SOM `PATCH /v1/issues/{id}` with the selected project's
+        cached `DEMO_SOM_ACCESS_TOKEN`. Only `description` is supported;
+        `null` clears the field. Returns the updated issue from SOM.
+      operationId: updateSomIssue
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SomIssueUpdateRequest' }
+      responses:
+        '200':
+          description: Updated issue
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SomIssue' }
+        '401': { $ref: '../shared/responses.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/components/responses/Forbidden' }
+        '501': { $ref: '../shared/responses.yaml#/components/responses/NotImplemented' }
+        '500': { $ref: '../shared/responses.yaml#/components/responses/InternalError' }
+        '404': { $ref: '../shared/responses.yaml#/components/responses/NotFound' }
+        '422': { $ref: '../shared/responses.yaml#/components/responses/ValidationError' }
+        '502': { $ref: '../shared/responses.yaml#/components/responses/SourceUnavailable' }
+
   /som/issues/{issue_id}/run:
     parameters:
       - $ref: '../shared/parameters.yaml#/components/parameters/ProjectId'
@@ -274,6 +309,19 @@ components:
         total_count:
           type: integer
           description: Total issues on the board, regardless of paging.
+
+    SomIssueUpdateRequest:
+      type: object
+      description: >-
+        Fields IR may change on a SOM issue. Only description is exposed;
+        null clears the description.
+      required: [description]
+      properties:
+        description:
+          type: string
+          nullable: true
+          maxLength: 20000
+          description: New description text, or null to clear.
 
     SomIssueRunRequest:
       type: object

@@ -1,17 +1,12 @@
 import { useAppStore, emptyContextQueue } from '../store/appStore'
 import { readEventQueueSnapshot } from '../api/eventQueueSnapshots'
 import { Button, Chip, Panel } from './ui'
-import { formatTime, kindLabel, statusLabel } from '../lib/utils'
+import { kindLabel, statusLabel } from '../lib/utils'
 import { EventCard } from './event-card'
 import { ResizablePanelFrame } from './ResizablePanelFrame'
 import {
-  Binary,
-  Box,
   Check,
-  Fingerprint,
-  Plus,
   Search,
-  Sparkles,
   X,
 } from 'lucide-react'
 
@@ -22,11 +17,6 @@ export function DetailPanel({ investigationId }: { investigationId: string }) {
   const inv = useAppStore((s) => s.investigations[investigationId])
   const detailPanelOpen = useAppStore((s) => s.detailPanelOpen)
   const setDetailPanelOpen = useAppStore((s) => s.setDetailPanelOpen)
-  const actionResults = useAppStore((s) => s.actionResults)
-  const runEntityAction = useAppStore((s) => s.runEntityAction)
-  const addFinding = useAppStore((s) => s.addFindingFromEntity)
-  const addContextChip = useAppStore((s) => s.addContextChip)
-  const createIssue = useAppStore((s) => s.createIssue)
   const update = useAppStore((s) => s.updateInvestigation)
   const nodeReviews = useAppStore((s) => s.nodeReviews)
   const eventReviews = useAppStore((s) => s.eventReviews)
@@ -103,8 +93,6 @@ export function DetailPanel({ investigationId }: { investigationId: string }) {
       </ResizablePanelFrame>
     )
   }
-
-  const results = entity ? (actionResults[entity.id] ?? []) : []
 
   return (
     <ResizablePanelFrame
@@ -211,80 +199,6 @@ export function DetailPanel({ investigationId }: { investigationId: string }) {
             </div>
 
             <div>
-              <div className="mb-1.5 text-[10px] uppercase tracking-wider text-fg-dim">
-                Действия
-              </div>
-              <div className="flex flex-wrap gap-1.5">
-                <Button size="sm" onClick={() => runEntityAction(entity.id, 'enrich')}>
-                  <Sparkles className="h-3 w-3" /> Обогатить
-                </Button>
-                <Button
-                  size="sm"
-                  onClick={() => runEntityAction(entity.id, 'reputation')}
-                >
-                  <Fingerprint className="h-3 w-3" /> Репутация
-                </Button>
-                <Button
-                  size="sm"
-                  onClick={() => {
-                    runEntityAction(entity.id, 'related')
-                    if (entity.kind === 'host')
-                      addContextChip(investigationId, 'host', entity.label)
-                    if (entity.kind === 'ip')
-                      addContextChip(investigationId, 'ip', entity.label)
-                    if (entity.kind === 'domain')
-                      addContextChip(
-                        investigationId,
-                        'domain',
-                        entity.label.replace(/[\[\]]/g, ''),
-                      )
-                    if (entity.attributes.hash)
-                      addContextChip(investigationId, 'hash', entity.attributes.hash)
-                  }}
-                >
-                  <Search className="h-3 w-3" /> Найти связанные
-                </Button>
-                <Button
-                  size="sm"
-                  onClick={() => addFinding(investigationId, entity.id)}
-                >
-                  <Plus className="h-3 w-3" /> В находки
-                </Button>
-                {(entity.kind === 'process' || entity.kind === 'file_hash') && (
-                  <Button
-                    size="sm"
-                    onClick={() => runEntityAction(entity.id, 'decode')}
-                  >
-                    <Binary className="h-3 w-3" /> Декодировать
-                  </Button>
-                )}
-                {(entity.kind === 'file_hash' || entity.attributes.hash) && (
-                  <Button
-                    size="sm"
-                    onClick={() => runEntityAction(entity.id, 'sandbox')}
-                  >
-                    <Box className="h-3 w-3" /> Песочница
-                  </Button>
-                )}
-              </div>
-            </div>
-
-            <div>
-              <div className="mb-1.5 text-[10px] uppercase tracking-wider text-fg-dim">
-                Исследовательская задача
-              </div>
-              <Button
-                size="sm"
-                variant="default"
-                onClick={() =>
-                  createIssue(investigationId, 'tpl-hash-hunt', [entity.id])
-                }
-              >
-                Создать issue по сущности
-              </Button>
-            </div>
-
-            <div>
               <label className="flex items-center gap-2 text-xs text-fg-muted">
                 <input
                   type="checkbox"
@@ -300,28 +214,6 @@ export function DetailPanel({ investigationId }: { investigationId: string }) {
                 Выбрано для дочернего расследования
               </label>
             </div>
-
-            {results.length > 0 && (
-              <div>
-                <div className="mb-1.5 text-[10px] uppercase tracking-wider text-fg-dim">
-                  Результаты проверок
-                </div>
-                <div className="space-y-2">
-                  {results.map((r) => (
-                    <div
-                      key={r.id}
-                      className="rounded border border-border bg-surface-2 p-2 text-xs"
-                    >
-                      <div className="flex justify-between gap-2">
-                        <span className="font-medium text-fg">{r.title}</span>
-                        <span className="text-fg-dim">{formatTime(r.time)}</span>
-                      </div>
-                      <p className="mt-1 text-fg-muted">{r.body}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
           </>
         )}
 

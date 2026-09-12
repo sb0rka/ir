@@ -207,6 +207,12 @@ type SomIssueRunResult struct {
 	SomEnvironmentId openapi_types.UUID `json:"som_environment_id"`
 }
 
+// SomIssueUpdateRequest Fields IR may change on a SOM issue. Only description is exposed; null clears the description.
+type SomIssueUpdateRequest struct {
+	// Description New description text, or null to clear.
+	Description *string `json:"description"`
+}
+
 // SomWorkspace A SOM workspace visible to the configured project account.
 type SomWorkspace struct {
 	// Id Identifier of the workspace in SOM.
@@ -273,6 +279,12 @@ type GetSomEnvironmentParams struct {
 	XProjectID ProjectId `json:"X-Project-ID"`
 }
 
+// UpdateSomIssueParams defines parameters for UpdateSomIssue.
+type UpdateSomIssueParams struct {
+	// XProjectID Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets.
+	XProjectID ProjectId `json:"X-Project-ID"`
+}
+
 // RunSomIssueParams defines parameters for RunSomIssue.
 type RunSomIssueParams struct {
 	// XProjectID Sb0rka project selected for this request. It scopes IR data, the project's external-source configuration, and project Secrets.
@@ -291,6 +303,9 @@ type ListSomBoardsParams struct {
 	XProjectID ProjectId `json:"X-Project-ID"`
 }
 
+// UpdateSomIssueJSONRequestBody defines body for UpdateSomIssue for application/json ContentType.
+type UpdateSomIssueJSONRequestBody = SomIssueUpdateRequest
+
 // RunSomIssueJSONRequestBody defines body for RunSomIssue for application/json ContentType.
 type RunSomIssueJSONRequestBody = SomIssueRunRequest
 
@@ -302,6 +317,9 @@ type ServerInterface interface {
 	// GetSomEnvironment Status of a SOM agent environment
 	// (GET /som/environments/{local_environment_id})
 	GetSomEnvironment(w http.ResponseWriter, r *http.Request, localEnvironmentId openapi_types.UUID, params GetSomEnvironmentParams)
+	// UpdateSomIssue Update a SOM issue description
+	// (PATCH /som/issues/{issue_id})
+	UpdateSomIssue(w http.ResponseWriter, r *http.Request, issueId openapi_types.UUID, params UpdateSomIssueParams)
 	// RunSomIssue Run an agent on a SOM issue
 	// (POST /som/issues/{issue_id}/run)
 	RunSomIssue(w http.ResponseWriter, r *http.Request, issueId openapi_types.UUID, params RunSomIssueParams)
@@ -447,6 +465,60 @@ func (siw *ServerInterfaceWrapper) GetSomEnvironment(w http.ResponseWriter, r *h
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetSomEnvironment(w, r, localEnvironmentId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateSomIssue operation middleware
+func (siw *ServerInterfaceWrapper) UpdateSomIssue(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "issue_id" -------------
+	var issueId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "issue_id", r.PathValue("issue_id"), &issueId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "issue_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params UpdateSomIssueParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "X-Project-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Project-ID")]; found {
+		var XProjectID ProjectId
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Project-ID", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Project-ID", valueList[0], &XProjectID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Project-ID", Err: err})
+			return
+		}
+
+		params.XProjectID = XProjectID
+
+	} else {
+		err := fmt.Errorf("Header parameter X-Project-ID is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Project-ID", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateSomIssue(w, r, issueId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -732,6 +804,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/som/workspaces", wrapper.ListSomWorkspaces)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/som/workspaces/{workspace_id}/boards", wrapper.ListSomBoards)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/som/boards/{board_id}/issues", wrapper.ListSomIssues)
+	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/som/issues/{issue_id}", wrapper.UpdateSomIssue)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/som/issues/{issue_id}/run", wrapper.RunSomIssue)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/som/environments/{local_environment_id}", wrapper.GetSomEnvironment)
 
@@ -957,6 +1030,128 @@ func (response GetSomEnvironment501JSONResponse) VisitGetSomEnvironmentResponse(
 type GetSomEnvironment502JSONResponse struct{ SourceUnavailableJSONResponse }
 
 func (response GetSomEnvironment502JSONResponse) VisitGetSomEnvironmentResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(502)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateSomIssueRequestObject struct {
+	IssueId openapi_types.UUID `json:"issue_id"`
+	Params  UpdateSomIssueParams
+	Body    *UpdateSomIssueJSONRequestBody
+}
+
+type UpdateSomIssueResponseObject interface {
+	VisitUpdateSomIssueResponse(w http.ResponseWriter) error
+}
+
+type UpdateSomIssue200JSONResponse SomIssue
+
+func (response UpdateSomIssue200JSONResponse) VisitUpdateSomIssueResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateSomIssue401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response UpdateSomIssue401JSONResponse) VisitUpdateSomIssueResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateSomIssue403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response UpdateSomIssue403JSONResponse) VisitUpdateSomIssueResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateSomIssue404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response UpdateSomIssue404JSONResponse) VisitUpdateSomIssueResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateSomIssue422JSONResponse struct{ ValidationErrorJSONResponse }
+
+func (response UpdateSomIssue422JSONResponse) VisitUpdateSomIssueResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateSomIssue500JSONResponse struct{ InternalErrorJSONResponse }
+
+func (response UpdateSomIssue500JSONResponse) VisitUpdateSomIssueResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateSomIssue501JSONResponse struct{ NotImplementedJSONResponse }
+
+func (response UpdateSomIssue501JSONResponse) VisitUpdateSomIssueResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(501)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateSomIssue502JSONResponse struct{ SourceUnavailableJSONResponse }
+
+func (response UpdateSomIssue502JSONResponse) VisitUpdateSomIssueResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -1311,6 +1506,9 @@ type StrictServerInterface interface {
 	// GetSomEnvironment Status of a SOM agent environment
 	// (GET /som/environments/{local_environment_id})
 	GetSomEnvironment(ctx context.Context, request GetSomEnvironmentRequestObject) (GetSomEnvironmentResponseObject, error)
+	// UpdateSomIssue Update a SOM issue description
+	// (PATCH /som/issues/{issue_id})
+	UpdateSomIssue(ctx context.Context, request UpdateSomIssueRequestObject) (UpdateSomIssueResponseObject, error)
 	// RunSomIssue Run an agent on a SOM issue
 	// (POST /som/issues/{issue_id}/run)
 	RunSomIssue(ctx context.Context, request RunSomIssueRequestObject) (RunSomIssueResponseObject, error)
@@ -1408,6 +1606,40 @@ func (sh *strictHandler) GetSomEnvironment(w http.ResponseWriter, r *http.Reques
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetSomEnvironmentResponseObject); ok {
 		if err := validResponse.VisitGetSomEnvironmentResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpdateSomIssue operation middleware
+func (sh *strictHandler) UpdateSomIssue(w http.ResponseWriter, r *http.Request, issueId openapi_types.UUID, params UpdateSomIssueParams) {
+	var request UpdateSomIssueRequestObject
+
+	request.IssueId = issueId
+	request.Params = params
+
+	var body UpdateSomIssueJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdateSomIssue(ctx, request.(UpdateSomIssueRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdateSomIssue")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UpdateSomIssueResponseObject); ok {
+		if err := validResponse.VisitUpdateSomIssueResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

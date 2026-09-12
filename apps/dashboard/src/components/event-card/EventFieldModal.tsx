@@ -12,6 +12,7 @@ import {
   type LogicalJoiner,
 } from '../../lib/pdql'
 import { kindLabel } from '../../lib/utils'
+import { useAppStore } from '../../store/appStore'
 import { highlightMatch } from '../pdql/highlight'
 import { Button } from '../ui'
 
@@ -117,6 +118,11 @@ export function EventFieldModal({
           .filter(Boolean)
       : []
   const canApply = selectedOrdered.length > 0 && !busy && (op !== 'in' || inValues.length > 0)
+  const somIssueDescriptionEditor = useAppStore((s) => s.somIssueDescriptionEditor)
+  const insertSomIssueDescriptionSnippet = useAppStore(
+    (s) => s.insertSomIssueDescriptionSnippet,
+  )
+  const canAddToIssue = somIssueDescriptionEditor != null
 
   const copyValue = async () => {
     try {
@@ -187,6 +193,15 @@ export function EventFieldModal({
         setBusy(false)
       }
     }
+    onClose()
+  }
+
+  const addToIssue = () => {
+    if (!canAddToIssue || selectedOrdered.length === 0) return
+    const lines = selectedOrdered.map((name) =>
+      needsValue ? `${name}: ${draftValue}` : `${name}:`,
+    )
+    if (!insertSomIssueDescriptionSnippet(lines.join('\n'))) return
     onClose()
   }
 
@@ -342,13 +357,28 @@ export function EventFieldModal({
           </section>
         </div>
 
-        <div className="flex items-center justify-end gap-2 border-t border-border px-4 py-2">
-          <Button size="sm" variant="ghost" onClick={onClose}>
-            Отмена
+        <div className="flex items-center justify-between gap-2 border-t border-border px-4 py-2">
+          <Button
+            size="sm"
+            variant="default"
+            disabled={!canAddToIssue || selectedOrdered.length === 0}
+            title={
+              canAddToIssue
+                ? 'Вставить key: value в описание открытого issue'
+                : 'Откройте редактирование описания issue (карандаш)'
+            }
+            onClick={addToIssue}
+          >
+            Добавить в Issue
           </Button>
-          <Button size="sm" variant="primary" disabled={!canApply} onClick={() => void apply()}>
-            Применить
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="ghost" onClick={onClose}>
+              Отмена
+            </Button>
+            <Button size="sm" variant="primary" disabled={!canApply} onClick={() => void apply()}>
+              Применить
+            </Button>
+          </div>
         </div>
       </div>
     </div>

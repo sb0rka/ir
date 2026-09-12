@@ -76,7 +76,7 @@ export function AddContextModal({
     mode === 'start' && eventTitles.length === 1 ? eventTitles[0] : '',
   )
   const [why, setWhy] = useState('')
-  const [expandFindings, setExpandFindings] = useState(false)
+  const [expandFindings, setExpandFindings] = useState(true)
   const copy = MODE_COPY[mode]
   const canSubmit = (mode !== 'start' || title.trim().length > 0) && !busy
 

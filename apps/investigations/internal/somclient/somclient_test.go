@@ -1,6 +1,12 @@
 package somclient
 
 import (
+	"context"
+	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -80,5 +86,74 @@ func TestExecutorConfigPayload(t *testing.T) {
 	payload = executorConfigPayload("OPENCODE", ExecutorConfig{Variant: "DEFAULT", ModelID: "openrouter/x"})
 	if payload["variant"] != "DEFAULT" || payload["model_id"] != "openrouter/x" {
 		t.Fatalf("overrides: %+v", payload)
+	}
+}
+
+func TestUpdateIssue(t *testing.T) {
+	t.Parallel()
+
+	issueID := "11111111-1111-4111-8111-111111111111"
+	boardID := "22222222-2222-4222-8222-222222222222"
+
+	for _, tc := range []struct {
+		name        string
+		description *string
+		wantBody    string
+	}{
+		{name: "set description", description: ptr("new text"), wantBody: `{"description":"new text"}`},
+		{name: "clear description", description: nil, wantBody: `{"description":null}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method != http.MethodPatch {
+					t.Fatalf("method: %s", r.Method)
+				}
+				if r.URL.Path != "/v1/issues/"+issueID {
+					t.Fatalf("path: %s", r.URL.Path)
+				}
+				if got := r.Header.Get("Authorization"); got != "Bearer test-token" {
+					t.Fatalf("authorization: %q", got)
+				}
+				body, err := io.ReadAll(r.Body)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if strings.TrimSpace(string(body)) != tc.wantBody {
+					t.Fatalf("body: got %s, want %s", body, tc.wantBody)
+				}
+				w.Header().Set("Content-Type", "application/json")
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"data": map[string]any{
+						"id":           issueID,
+						"board_id":     boardID,
+						"issue_number": 7,
+						"simple_id":    "IR-7",
+						"title":        "Task",
+						"description":  tc.description,
+					},
+					"txid": 42,
+				})
+			}))
+			defer upstream.Close()
+
+			client := New(Config{APIBaseURL: upstream.URL})
+			got, err := client.UpdateIssue(context.Background(), "test-token", issueID, IssuePatch{
+				Description: tc.description,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got.ID != issueID || got.SimpleID != "IR-7" || got.Title != "Task" {
+				t.Fatalf("issue: %+v", got)
+			}
+			if tc.description == nil {
+				if got.Description != nil {
+					t.Fatalf("description should be nil: %+v", got.Description)
+				}
+			} else if got.Description == nil || *got.Description != *tc.description {
+				t.Fatalf("description: %+v", got.Description)
+			}
+		})
 	}
 }
