@@ -290,6 +290,9 @@ func (s *Server) commitAgentBatch(
 	if len(nodes) == 0 && len(batch.Nodes) > 0 {
 		return model.ImportStats{}, validationError("Gateway did not return any selected events/entities for graph nodes")
 	}
+	if err := requireEdgesForAgentEvents(batch, skipped); err != nil {
+		return model.ImportStats{}, err
+	}
 	input.Nodes = nodes
 	for _, edge := range batch.Edges {
 		if edgeReferencesSkipped(edge, skipped) {
@@ -314,6 +317,34 @@ func (s *Server) commitAgentBatch(
 	}
 	stats.Warnings = append(append([]string{}, input.Warnings...), stats.Warnings...)
 	return stats, nil
+}
+
+// requireEdgesForAgentEvents keeps agent findings reviewable: analysts confirm or
+// reject proposed edges, so an event node written without one would land on the
+// graph with no decision point. Nodes that only link an existing node_id to the
+// issue are exempt.
+func requireEdgesForAgentEvents(batch investigations.AgentResultBatch, skipped map[string]struct{}) error {
+	linked := make(map[string]struct{}, len(batch.Edges)*2)
+	for _, edge := range batch.Edges {
+		if edgeReferencesSkipped(edge, skipped) {
+			continue
+		}
+		linked[strings.TrimSpace(edge.SourceRef)] = struct{}{}
+		linked[strings.TrimSpace(edge.TargetRef)] = struct{}{}
+	}
+	for _, node := range batch.Nodes {
+		if node.EventRef == nil && node.EventId == nil {
+			continue
+		}
+		ref := strings.TrimSpace(node.Ref)
+		if _, ok := skipped[ref]; ok {
+			continue
+		}
+		if _, ok := linked[ref]; !ok {
+			return validationError("node " + ref + ": agent event nodes need at least one proposed edge to an entity node so the analyst can review them; add edges[] with source_ref " + ref + " (e.g. relation_code actor/mentions to the host or account entity) and evidence_event_refs [" + ref + "]")
+		}
+	}
+	return nil
 }
 
 func edgeReferencesSkipped(edge investigations.AgentEdge, skipped map[string]struct{}) bool {

@@ -142,7 +142,7 @@ func (s *Server) MCPHandler() http.Handler {
 			"To import Gateway evidence manually: put events[{ref,source_code,source_event_id}] and entities[{ref,source_code,source_entity_id}], "+
 			"then nodes use event_ref/entity_ref equal to those batch-local refs (never URNs or {source_code,...} objects). "+
 			"Already-attached evidence uses event_id/entity_id/node_id instead. Never put an IR UUID into source_entity_id/source_event_id. "+
-			"Event-only writes are valid: to put selected search hits on the graph, pass events[] plus one nodes[] entry per event with event_ref and why; entities[] and edges[] may stay empty. "+
+			"Everything written here stays proposed until an analyst reviews it, and review happens on edges: every event node must have at least one edge (source_ref = that event node, evidence_event_refs = [that node]) to an entity node — the host/account the issue names, via nodes[].entity_id when it is already on the graph or entities[] with source_entity_id \"<type>:<value>\" copied from the event's entities. Event nodes without edges are rejected. "+
 			"Example: events:[{ref:\"e0\",source_code:\"mock\",source_event_id:\"evt-1\"}], "+
 			"entities:[{ref:\"a0\",source_code:\"mock\",source_entity_id:\"ent-1\"}], "+
 			"nodes:[{ref:\"n-event\",why:\"matched task evidence\",event_ref:\"e0\"},{ref:\"n-entity\",why:\"task target\",entity_ref:\"a0\"}], "+

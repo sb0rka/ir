@@ -98,7 +98,7 @@ func TestMCPInitializeAndListTools(t *testing.T) {
 		`field contains \"value\"`,
 		"Response flags (truncated, total, limit) are not filter fields",
 		"cursor=next_cursor",
-		"Event-only writes are valid",
+		"Event nodes without edges are rejected",
 	} {
 		if !strings.Contains(listed.Body.String(), hint) {
 			t.Fatalf("tools/list must describe agent/gateway identity rules (%q): %s", hint, listed.Body.String())
@@ -401,6 +401,25 @@ func TestMCPRejectsBlankNodeWhy(t *testing.T) {
 	if recorder.Code != http.StatusOK || !strings.Contains(body, `"isError":true`) ||
 		!strings.Contains(body, "node n: why is required") {
 		t.Fatalf("expected blank why rejection: status=%d body=%s", recorder.Code, body)
+	}
+}
+
+// Analyst review happens on proposed edges, so an agent event node without one
+// would bypass review entirely.
+func TestMCPRejectsAgentEventNodeWithoutEdge(t *testing.T) {
+	t.Parallel()
+	server := &Server{db: &mcpRecordingDB{}}
+	request := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(
+		`{"jsonrpc":"2.0","id":31,"method":"tools/call","params":{"name":"add_investigation_agent_results","arguments":{"investigation_id":"11111111-1111-1111-1111-111111111111","som_issue_ids":["22222222-2222-2222-2222-222222222222"],"events":[],"entities":[],"nodes":[{"ref":"n","why":"mimikatz in cmdline","event_id":"33333333-3333-3333-3333-333333333333"}],"edges":[]}}}`))
+	request.Header.Set("Accept", "application/json, text/event-stream")
+	request.Header.Set("Content-Type", "application/json")
+	ctx := socctx.WithScope(request.Context(), socctx.Scope{ProjectID: "abcdef1234"})
+	recorder := httptest.NewRecorder()
+	server.MCPHandler().ServeHTTP(recorder, request.WithContext(ctx))
+	body := recorder.Body.String()
+	if recorder.Code != http.StatusOK || !strings.Contains(body, `"isError":true`) ||
+		!strings.Contains(body, "node n: agent event nodes need at least one proposed edge") {
+		t.Fatalf("expected edge-less event node rejection: status=%d body=%s", recorder.Code, body)
 	}
 }
 
