@@ -81,6 +81,24 @@ func TestBuildEventSearchQueryOmitsPDQLLimit(t *testing.T) {
 	}
 }
 
+func TestBuildEventSearchQueryNamesRejectedFilterField(t *testing.T) {
+	_, err := buildEventSearchQuery(capability.SearchEventsRequest{
+		Filter: `event_src.host = "dkrylova.plat.form" and truncated = false`,
+		Limit:  100,
+	}, "")
+	if err == nil || !strings.Contains(err.Error(), `filter field "truncated" is not supported`) {
+		t.Fatalf("rejected field must be named: %v", err)
+	}
+
+	_, err = buildEventSearchQuery(capability.SearchEventsRequest{
+		Filter: `event_src.host = "dkrylova.plat.form" and subject.process.chain contains "splunkd.exe" and object.process.chain contains "splunkd.exe"`,
+		Limit:  100,
+	}, "")
+	if err != nil {
+		t.Fatalf("contains predicate on allowlisted fields must pass: %v", err)
+	}
+}
+
 func TestBuildEventsV3PDQL(t *testing.T) {
 	list := buildEventsV3PDQL("correlation_name != null", 100)
 	if strings.Contains(list, "limit(") {

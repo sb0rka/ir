@@ -70,7 +70,7 @@ func buildEventSearchQuery(request capability.SearchEventsRequest, entityWhere s
 		sortRules[index].Field = strings.TrimSpace(sortRules[index].Field)
 		sortRules[index].Direction = strings.ToLower(strings.TrimSpace(sortRules[index].Direction))
 		if _, ok := allowed[sortRules[index].Field]; !ok {
-			return eventSearchQuery{}, requestError("event search", "sort contains an unsupported field")
+			return eventSearchQuery{}, requestError("event search", fmt.Sprintf("sort field %q is not supported", sortRules[index].Field))
 		}
 		if sortRules[index].Direction != "asc" && sortRules[index].Direction != "desc" {
 			return eventSearchQuery{}, requestError("event search", "sort direction must be asc or desc")
@@ -241,7 +241,9 @@ func validateEventPredicateFields(value string, allowed map[string]struct{}) err
 		token := value[index:end]
 		if _, keyword := keywords[strings.ToLower(token)]; !keyword {
 			if _, ok := allowed[token]; !ok {
-				return requestError("event search", "filter contains an unsupported field")
+				// Name the token: agents otherwise retry blind (e.g. after putting
+				// a response flag such as `truncated` into the predicate).
+				return requestError("event search", fmt.Sprintf("filter field %q is not supported; use only allowlisted SIEM fields (e.g. event_src.host, subject.process.chain, object.process.cmdline, text)", token))
 			}
 		}
 		index = end
@@ -274,7 +276,7 @@ func validateEventFields(name string, values []string, allowed map[string]struct
 	for _, value := range values {
 		value = strings.TrimSpace(value)
 		if _, ok := allowed[value]; !ok {
-			return nil, requestError("event search", name+" contains an unsupported field")
+			return nil, requestError("event search", fmt.Sprintf("%s field %q is not supported", name, value))
 		}
 		if _, duplicate := seen[value]; duplicate {
 			return nil, requestError("event search", name+" fields must be unique")

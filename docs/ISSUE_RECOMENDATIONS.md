@@ -1,185 +1,161 @@
 # Рекомендации по написанию SOM issue для IR-агентов
 
-Цель issue — одно проверяемое действие, которое модель может выполнить
-через `import_entity_events` или узкий набор MCP-вызовов. Не смешивайте в одном
-тексте несколько независимых расследований.
+Issue — одно проверяемое действие. Агент читает текст сверху вниз, поэтому
+порядок блоков фиксирован:
 
-## Обязательные части
+1. **Задание** — одно предложение: что найти и что должно появиться на графе.
+   По нему агент выбирает инструмент.
+2. **Поиск** — параметры MCP-вызова в виде `ключ: значение`. Агент копирует
+   их в аргументы дословно, не интерпретируя.
+3. **Обработка** — что агент делает сам, без MCP: отбор по содержимому
+   `attributes`, дедупликация, подсчёт. Пусто, если отбор не нужен.
+4. **Запись и отчёт** — чем писать и какие числа процитировать.
 
-1. **Цель одним предложением.** Что должно появиться на графе после успеха.
-2. **Подписанные идентификаторы.** Никогда не оставляйте «голый» UUID.
-   - `entity_id: b71336ed-25f7-42fa-840a-688ceb087c74`
-   - `account: dkrylova\administrator` — ровно один backslash
-   - при необходимости `source_code: pt-maxpatrol-siem`
-3. **Окно времени.** Явный интервал вокруг интересующих событий, например
-   `2025-10-22 .. 2025-10-24`. Без окна агент уходит в широкий поиск.
-4. **Источник по capability.** Для Windows-аккаунтов / процессов / auth —
-   SIEM (`pt-maxpatrol-siem`). NAD — только для сетевых сущностей.
-5. **Стратегия отбора: `filter` и `sort`.** Лимит без фильтра означает
-   «N самых поздних сырых событий». Для активного аккаунта это срез в сотни
-   миллисекунд, почти целиком из шума (закрытие дескрипторов, завершение
-   процессов). Поэтому всегда говорите, *какие* события нужны:
-   - `filter: correlation_name != null` — только сработавшие правила (алерты);
-   - `filter: category.high = "Credential Access"` — техника по категории;
-   - `filter: correlation_name = "mimikatz_command"` — конкретное правило;
-   - `filter: subject.process.name = "chisel.exe"` — активность процесса;
-   - `sort: time asc` — начало активности, `time desc` (по умолчанию) — конец.
-   Предикат — один PDQL-фрагмент без `|`, он объединяется с условием по entity.
-6. **Лимит.** Сколько событий достаточно: «до 50 событий». Лимит имеет смысл
-   только вместе с фильтром или с ожидаемым `events_total` того же порядка.
-7. **Ожидаемые рёбра.** Либо «по ролям события (`actor`, `target`, …)», либо
-   конкретный `relation_code`.
-8. **Критерий приёмки через `events_total`.** Инструмент возвращает
-   `events_total` (сколько событий подходит под фильтр во всём окне),
-   `events_found`, `events_imported` и `truncated`. Критерий должен опираться
-   на них, а не на `> 0`:
-   - `events_imported == events_found`;
-   - `events_imported == min(limit, events_total)`; если `truncated=true`,
-     отчёт называет `events_total` и объясняет, какой срез импортирован;
-   - отчёт цитирует `events_total` / `events_found` / `events_imported`
-     дословно; на графе есть узлы событий и proposed-рёбра к entity.
+Каждый блок отвечает на один вопрос; пояснения и мотивацию в issue не
+включайте — они уводят слабую модель в рассуждения.
 
-## Как выбрать фильтр под цель
+## Два пути
 
-| Цель issue | `filter` | `sort` | `limit` |
-|---|---|---|---|
-| Какие правила сработали по аккаунту | `correlation_name != null` | `time asc` | 50–100 |
-| Только одна техника | `category.high = "Credential Access"` | `time asc` | 20–50 |
-| Одно правило подробно | `correlation_name = "lsass_memory_dump"` | — | 10 |
-| Что делал конкретный процесс | `subject.process.name = "chisel.exe"` | `time asc` | 50 |
-| С чего началась активность | без фильтра | `time asc` | 20 |
-| Зачистка в конце | `action = "stop"` или `action = "remove"` | `time desc` | 20 |
+| Задание | Через MCP | Сам |
+|---|---|---|
+| События одной entity (аккаунт, хост, процесс) | `import_entity_events` с `filter`/`sort`/`limit` — один вызов, он же пишет на граф | — |
+| События по полям SIEM с отбором по содержимому | `gateway_search_events` (`include_attributes: true`, `limit: 100`, все страницы по `next_cursor`) → `add_investigation_agent_results` только для отобранных | grep по сохранённому выводу: `cmdline`, `chain`, `object.name`, `object.path`, `text` |
 
-Если распределение неизвестно, сделайте разведочный issue без записи:
-«вызови `gateway_aggregate_events` по `correlation_name` для этого аккаунта и
-окна, отчитайся списком правил и счётчиками, ничего не пиши на граф». По его
-результату формулируются целевые issue с точными фильтрами.
+Если задание — «найди X и добавь только те, где Y», это второй путь: поиск
+даёт X целиком, Y агент проверяет локально, пишет подмножество.
 
-## Одно действие — один issue
+## Правила значений
 
-Не просите «алерты и сырые события вокруг них» в одном задании. Разбивайте:
+- `time_range` — явный интервал в RFC3339 с `Z` или смещением:
+  `2025-10-23T15:00:00Z .. 2025-10-23T17:00:00Z`. Без окна агент берёт
+  таймлайн investigation ±24h и обязан назвать это в отчёте.
+- Идентификаторы подписаны: `entity_id: <uuid>`, `account: dkrylova\administrator`
+  (один backslash), `source: pt-maxpatrol-siem`. Голый UUID запрещён.
+- `filter` — PDQL-предикат: `field = "value"`, `field != "value"`,
+  `field contains "value"`, `field in ("a", "b")`, `field is null`; условия
+  через `and`/`or`, значения в двойных кавычках. Только allowlist-поля:
+  `event_src.host`, `src.ip`, `dst.ip`, `subject.account.name`,
+  `subject.process.name|cmdline|chain`, `object.process.name|cmdline|chain`,
+  `object.name`, `object.path`, `text`, `action`, `importance`,
+  `correlation_name`, `category.high`. Флаги ответа (`truncated`, `total`)
+  полями не являются — вместо «truncated: false» пишите «прочитать все
+  страницы».
+- Источник по capability: аккаунты, процессы, auth — SIEM; NAD — только
+  сетевые сущности.
+- `limit` без `filter` для активного аккаунта — последние N миллисекунд
+  шума. Всегда говорите, *какие* события нужны.
 
-1. Алерты: `correlation_name != null`, `time asc`, до 100.
-2. Контекст конкретного алерта: `subject.process.name = "…"` в узком окне
-   ±5 минут вокруг его `occurred_at`.
-3. Сырой хвост или начало — отдельно, если действительно нужно.
+Типовые фильтры для одной entity:
 
-Каждый следующий issue ссылается на числа из предыдущего отчёта.
+| Цель | `filter` | `sort` |
+|---|---|---|
+| Сработавшие правила | `correlation_name != null` | `time asc` |
+| Одна техника | `category.high = "Credential Access"` | `time asc` |
+| Активность процесса | `subject.process.name = "chisel.exe"` | `time asc` |
+| Зачистка в конце | `action = "stop" or action = "remove"` | `time desc` |
 
-## Чего не делать
+Если распределение неизвестно — разведочный issue без записи: «вызови
+`gateway_aggregate_events` по `correlation_name` для этой entity и окна,
+отчитайся счётчиками, ничего не пиши на граф».
 
-- Не просить искать Windows-аккаунт в NAD.
-- Не подставлять IR UUID в gateway-фильтры или в `source_entity_id`.
-- Не удваивать backslash вручную (`dkrylova\\administrator` в тексте задачи —
-  риск, что модель утроит escape в JSON).
-- Не требовать «все события за всё время».
-- Не задавать `limit` без `filter` для аккаунта с тысячами событий — получите
-  последние N миллисекунд окна.
-- Не писать критерий `events>0 / nodes>0 / edges>0`: он выполняется одним
-  событием и не отличает 50 из 50 от 50 из 17 000.
-- Не просить агента «подтвердить», что сущность уже на графе, без критерия.
-
-## Шаблон
+## Шаблон A — одна entity
 
 ```text
-Найди <какие именно> events для entity и добавь их на граф investigation
+Задание: найди <какие именно> события для entity и добавь их на граф
 как nodes с proposed edges по ролям события.
 
+Поиск (import_entity_events):
 entity_id: <uuid>
-account: <DOMAIN\user>          # один backslash
+account: <DOMAIN\user>
 source: pt-maxpatrol-siem
-time_range: <YYYY-MM-DD> .. <YYYY-MM-DD>
-filter: <PDQL-предикат>          # например correlation_name != null
+time_range: <RFC3339> .. <RFC3339>
+filter: <PDQL-предикат>
 sort: time asc | time desc
-limit: до N событий
-edges: по ролям события (actor/target/…)
+limit: N
 
-Критерий приёмки:
-- один вызов import_entity_events с этими filter/sort/limit успешен;
-- events_imported == events_found и events_imported == min(limit, events_total);
-- если truncated=true — отчёт называет events_total и объясняет, какой срез
-  импортирован (первые/последние N по времени);
-- на графе есть узлы событий и proposed-рёбра к этой entity;
-- финальный отчёт цитирует events_total / events_found / events_imported
-  дословно. Если записи не было — «nothing was written».
+Запись и отчёт:
+- один вызов import_entity_events с этими параметрами;
+- процитировать events_total / events_found / events_imported дословно;
+- events_imported == events_found и == min(N, events_total); если
+  truncated=true — назвать events_total и какой срез импортирован;
+- если записи не было — «nothing was written».
+```
+
+## Шаблон B — фильтр по полям SIEM с отбором
+
+```text
+Задание: найди <какие события> и добавь на граф только те, где <критерий>.
+
+Поиск (gateway_search_events, source pt-maxpatrol-siem):
+time_range: <RFC3339> .. <RFC3339>
+filter: <field> = "<value>" and <field> contains "<value>"
+include_attributes: true
+limit: 100, читать все страницы по next_cursor
+
+Обработка (локально, без MCP):
+- в attributes (<поля>) найти <признак>;
+- отобрать только такие события.
+
+Запись и отчёт:
+- add_investigation_agent_results: только отобранные события, events[] +
+  nodes[] с event_ref и why; edges не требуются;
+- в отчёте: total поиска, сколько событий прочитано, сколько отобрано и по
+  какому признаку, их source_event_id; если ничего не подошло —
+  «nothing was written».
 ```
 
 ## Пример
 
-Плохо:
+Плохо — пояснения вперемешку с параметрами, флаг ответа выдан за фильтр,
+нет окна:
 
 ```text
-Мне необходимо чтобы ты нашел связанные events для entity
-dkrylova\administrator
-b71336ed-25f7-42fa-840a-688ceb087c74
-и добавил их на граф в виде nodes совместно с edges
+Необходимо найти события с процессом загрузки утилит через фильтр contains.
+Используй фильтры ниже для запросов events:
+event_src.host: dkrylova.plat.form
+subject.process.chain: splunkd.exe
+object.process.chain: splunkd.exe
+Если событий с фильтром меньше 1000, то используй: truncated: false
+Проанализируй список загруженных событий и добавь на граф только те, где
+присутствовала загрузка потенциально вредоносного приложения (например Mimikatz).
 ```
-
-Первая правка (подписанные идентификаторы, окно, лимит) сделала задание
-выполнимым, но без фильтра дала 50 последних сырых событий: срез в 281 мс из
-17 463 подходящих, 19 из 50 — «закрыл дескриптор объекта», 1 алерт из 186.
-Механически всё верно, но для расследования почти бесполезно.
 
 Хорошо:
 
 ```text
-Найди сработавшие правила корреляции по аккаунту и добавь их на граф как
-nodes с proposed edges по ролям события.
+Задание: найди на хосте dkrylova.plat.form события, где процессы из цепочки
+splunkd.exe загружали утилиты, и добавь на граф только те, где загружено
+потенциально вредоносное ПО (например, Mimikatz).
 
-entity_id: b71336ed-25f7-42fa-840a-688ceb087c74
-account: dkrylova\administrator
-source: pt-maxpatrol-siem
-time_range: 2025-10-23T15:30:00Z .. 2025-10-23T17:00:00Z
-filter: correlation_name != null
-sort: time asc
-limit: до 100 событий
-edges: по ролям события (actor/target/…)
+Поиск (gateway_search_events, source pt-maxpatrol-siem):
+time_range: 2025-10-23T15:00:00Z .. 2025-10-23T17:00:00Z
+filter: event_src.host = "dkrylova.plat.form" and subject.process.chain contains "splunkd.exe" and object.process.chain contains "splunkd.exe"
+include_attributes: true
+limit: 100, читать все страницы по next_cursor (ожидается менее 1000 событий)
 
-Критерий приёмки:
-- один вызов import_entity_events с этими filter/sort/limit успешен;
-- events_imported == events_found и events_imported == min(100, events_total);
-- если truncated=true — отчёт называет events_total и объясняет, что
-  импортированы первые N алертов по времени;
-- на графе есть узлы событий и proposed-рёбра к этой entity;
-- финальный отчёт цитирует events_total / events_found / events_imported
-  дословно и перечисляет уникальные correlation_name среди импортированных.
-  Если записи не было — «nothing was written».
+Обработка (локально, без MCP):
+- в attributes (subject.process.cmdline, object.process.cmdline, object.name,
+  object.path, text) найти mimikatz / Invoke-Mimikatz и другие известные
+  инструменты атаки;
+- отобрать только такие события.
+
+Запись и отчёт:
+- add_investigation_agent_results: только отобранные события, events[] +
+  nodes[] с event_ref и why; edges не требуются;
+- в отчёте: total поиска, сколько событий прочитано, сколько отобрано и по
+  какому признаку, их source_event_id; если ничего не подошло —
+  «nothing was written».
 ```
 
-Следующие issue по результату первого:
+## Чего не делать
 
-```text
-Добавь на граф активность процесса chisel.exe от этого аккаунта.
+- Смешивать несколько расследований в одном issue.
+- Объяснять мотивацию или давать альтернативы («если …, то попробуй …»).
+- Подставлять IR UUID в gateway-фильтры или `source_entity_id`.
+- Удваивать backslash в аккаунте.
+- Просить «все события за всё время» или `limit` без `filter`.
+- Писать критерий `events > 0`: он не отличает 50 из 50 от 50 из 17 000.
+- Искать Windows-аккаунты в NAD.
 
-entity_id: b71336ed-25f7-42fa-840a-688ceb087c74
-account: dkrylova\administrator
-source: pt-maxpatrol-siem
-time_range: 2025-10-23T16:00:00Z .. 2025-10-23T16:45:00Z
-filter: subject.process.name = "chisel.exe" and correlation_name = null
-sort: time asc
-limit: до 30 событий
-edges: по ролям события
-include_participants: true      # нужны узлы хоста и назначения
-
-Критерий: тот же, плюс отчёт называет events_total и подтверждает, что среди
-импортированных есть событие запуска (action = "start").
-```
-
-```text
-Добавь на граф доступ к LSASS от этого аккаунта.
-
-entity_id: b71336ed-25f7-42fa-840a-688ceb087c74
-account: dkrylova\administrator
-source: pt-maxpatrol-siem
-filter: category.high = "Credential Access"
-time_range: 2025-10-23T16:40:00Z .. 2025-10-23T16:45:00Z
-sort: time asc
-limit: до 20 событий
-```
-
-IR при запуске сам допишет `investigation_id`, `som_issue_id`, блок
-`Resolved IR references` и suggested `time_range` из таймлайна investigation.
-Задача аналитика — дать подписанный entity UUID, однозначное значение
-аккаунта, узкое окно времени и фильтр, который отвечает на вопрос issue.
-Инструмент честно скажет, сколько событий подошло; какие из них важны —
-решает формулировка задания.
+IR при запуске дописывает `investigation_id`, `som_issue_id` и блок
+`Resolved IR references`; окно времени, источник и фильтр — задача аналитика.

@@ -124,8 +124,10 @@ func (server *Server) writeServiceError(w http.ResponseWriter, err error) {
 		status, code, message = http.StatusBadGateway, "all_sources_failed", "all selected sources failed"
 		var sourcesErr *service.AllSourcesError
 		if errors.As(err, &sourcesErr) {
+			// A predicate rejected by every adapter before reaching the vendor is a
+			// client error; hiding its message behind 502 leaves agents guessing.
 			for _, item := range sourcesErr.Items {
-				if item.Code == "invalid_request" {
+				if item.Code == "invalid_request" || item.Code == "invalid_source_request" {
 					status, code, message = http.StatusBadRequest, item.Code, item.Message
 					break
 				}

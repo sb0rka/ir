@@ -142,19 +142,20 @@ func (s *Server) MCPHandler() http.Handler {
 			"To import Gateway evidence manually: put events[{ref,source_code,source_event_id}] and entities[{ref,source_code,source_entity_id}], "+
 			"then nodes use event_ref/entity_ref equal to those batch-local refs (never URNs or {source_code,...} objects). "+
 			"Already-attached evidence uses event_id/entity_id/node_id instead. Never put an IR UUID into source_entity_id/source_event_id. "+
+			"Event-only writes are valid: to put selected search hits on the graph, pass events[] plus one nodes[] entry per event with event_ref and why; entities[] and edges[] may stay empty. "+
 			"Example: events:[{ref:\"e0\",source_code:\"mock\",source_event_id:\"evt-1\"}], "+
 			"entities:[{ref:\"a0\",source_code:\"mock\",source_entity_id:\"ent-1\"}], "+
 			"nodes:[{ref:\"n-event\",why:\"matched task evidence\",event_ref:\"e0\"},{ref:\"n-entity\",why:\"task target\",entity_ref:\"a0\"}], "+
 			"edges:[{source_ref:\"n-event\",target_ref:\"n-entity\",relation_code:\"actor\",why:\"…\",evidence_event_refs:[\"n-event\"]}].",
 	), s.addInvestigationAgentResultsTool)
-	mcp.AddTool[importEntityEventsArgs, any](server, mcpTool[importEntityEventsArgs](
+	mcp.AddTool[importEntityEventsArgs, any](server, withSIEMFilterGrammar(mcpTool[importEntityEventsArgs](
 		"import_entity_events",
 		"Find Gateway events for one entity and import them onto the investigation graph with proposed role edges. "+
 			"Pass entity.entity_id when the issue/graph already has an IR UUID, or entity.type+entity.value otherwise. "+
 			"If the issue names a predicate or order, pass it via filter/sort instead of hand-building a Gateway batch. "+
 			"Never put an IR UUID into type/value. Prefer this over manually assembling add_investigation_agent_results for the common enrich-entity workflow. "+
 			"Example: entity:{entity_id:\"b71336ed-25f7-42fa-840a-688ceb087c74\"}, time_range optional, limit defaults to 50.",
-	), s.importEntityEventsTool)
+	)), s.importEntityEventsTool)
 	mcp.AddTool[struct{}, any](server, mcpTool[struct{}](
 		"get_investigation_reference",
 		"Read IR entity and relation dictionaries. Check relation endpoint kinds and direction before submitting edges.",
@@ -182,6 +183,19 @@ func mcpTool[T any](name, description string) *mcp.Tool {
 		panic(err)
 	}
 	return &mcp.Tool{Name: name, Description: description, InputSchema: schema}
+}
+
+// withSIEMFilterGrammar appends the predicate grammar to the `filter` argument;
+// struct tags cannot reference the shared constant.
+func withSIEMFilterGrammar(tool *mcp.Tool) *mcp.Tool {
+	schema, ok := tool.InputSchema.(*jsonschema.Schema)
+	if !ok || schema == nil {
+		return tool
+	}
+	if property, ok := schema.Properties["filter"]; ok && property != nil {
+		property.Description = strings.TrimSpace(property.Description + " " + siemFilterGrammar)
+	}
+	return tool
 }
 
 func (s *Server) getInvestigationGraphTool(
@@ -367,6 +381,17 @@ func mcpFailure(err error) (*mcp.CallToolResult, any, error) {
 	}, nil, nil
 }
 
+// siemFilterGrammar is repeated on every SIEM predicate argument: weak models
+// otherwise guess the syntax (`contains(...)`, `~`) or put response flags such
+// as `truncated` into the predicate.
+const siemFilterGrammar = "Syntax: field = \"value\" (exact), field != \"value\", field contains \"value\" (substring), field in (\"a\", \"b\"), field is null / is not null; " +
+	"combine with and/or/not and parentheses; values always in double quotes. " +
+	"Only allowlisted SIEM fields: event_src.host, event_src.ip, src.ip, dst.ip, src.host, dst.host, subject.account.name, subject.account.domain, " +
+	"subject.process.name, subject.process.fullpath, subject.process.cmdline, subject.process.chain, object.process.name, object.process.fullpath, " +
+	"object.process.cmdline, object.process.chain, object.name, object.path, text, action, importance, correlation_name, correlation_type. " +
+	"Response flags (truncated, total, limit) are not filter fields. " +
+	"Example: event_src.host = \"dkrylova.plat.form\" and subject.process.chain contains \"splunkd.exe\" and object.process.chain contains \"splunkd.exe\""
+
 // MCP-facing Gateway entity conditions spell out the IR-vs-source ID split that
 // generated OpenAPI structs leave undescribed.
 type mcpEntityRef struct {
@@ -378,14 +403,14 @@ type mcpSearchEventsArgs struct {
 	Sources           *[]string                    `json:"sources,omitempty" jsonschema:"Codes from gateway_list_sources. Match capability: accounts/process/auth → SIEM (pt-maxpatrol-siem); network sessions → NAD"`
 	TimeRange         gatewaycontract.TimeRange    `json:"time_range" jsonschema:"Required occurrence-time interval"`
 	Entities          *[]mcpEntityRef              `json:"entities,omitempty" jsonschema:"Prefer this to find events for an account/host/ip. Never pass IR entity UUIDs here"`
-	Filter            *string                      `json:"filter,omitempty" jsonschema:"Optional SIEM predicate. Prefer entities[] when filtering by identity"`
+	Filter            *string                      `json:"filter,omitempty" jsonschema:"Optional SIEM predicate; use it when the issue lists SIEM fields (event_src.host, subject.process.chain, ...). Prefer entities[] when filtering by identity only."`
 	Columns           *[]string                    `json:"columns,omitempty" jsonschema:"Optional allowlisted SIEM fields to expose"`
 	Sort              *[]gatewaycontract.EventSort `json:"sort,omitempty" jsonschema:"Optional SIEM sort rules"`
 	GroupBy           *[]string                    `json:"group_by,omitempty" jsonschema:"Optional SIEM group_by fields when drilling into an aggregation"`
 	GroupValues       *[]*string                   `json:"group_values,omitempty" jsonschema:"Group values aligned with group_by"`
-	Limit             *int                         `json:"limit,omitempty" jsonschema:"Max merged events per page (1-100). Defaults to 20 when omitted"`
+	Limit             *int                         `json:"limit,omitempty" jsonschema:"Max merged events per page (1-100). Defaults to 20 when omitted; use 100 when reading a whole result set"`
 	Cursor            *string                      `json:"cursor,omitempty" jsonschema:"Opaque next_cursor from the previous page with the same filters"`
-	IncludeAttributes *bool                        `json:"include_attributes,omitempty" jsonschema:"When true, keep event.attributes in the response. Default false to keep pages small"`
+	IncludeAttributes *bool                        `json:"include_attributes,omitempty" jsonschema:"Set true whenever you must inspect event content (cmdline, process chain, paths, text, alert context). Default false returns only time/title/entities, so content searches (e.g. for a tool name like mimikatz) find nothing"`
 }
 
 func (a mcpSearchEventsArgs) toContract() gatewaycontract.SearchEventsRequest {
@@ -441,7 +466,7 @@ type importEntityEventsArgs struct {
 	Entity              importEntitySelector         `json:"entity" jsonschema:"Exactly one of entity_id or type+value"`
 	TimeRange           *gatewaycontract.TimeRange   `json:"time_range,omitempty" jsonschema:"Optional search window; defaults to investigation timeline ±24h or last 30 days"`
 	Sources             *[]string                    `json:"sources,omitempty" jsonschema:"Optional source codes; defaults by entity capability (SIEM for account/host/process)"`
-	Filter              *string                      `json:"filter,omitempty" jsonschema:"Bounded SIEM predicate, e.g. correlation_name != null; combined with the entity condition"`
+	Filter              *string                      `json:"filter,omitempty" jsonschema:"Bounded SIEM predicate, e.g. correlation_name != null; combined with the entity condition."`
 	Sort                *[]gatewaycontract.EventSort `json:"sort,omitempty" jsonschema:"Defaults to time desc — the newest events; use time asc for the start of the window"`
 	Limit               *int                         `json:"limit,omitempty" jsonschema:"Max events to import (1-100, default 50)"`
 	IncludeParticipants *bool                        `json:"include_participants,omitempty" jsonschema:"When true, also import other entities mentioned on the events. Default false"`
@@ -1051,15 +1076,19 @@ func addGatewayTools(server *mcp.Server, s *Server) {
 	), gatewayHandler(s, func(ctx context.Context, _ struct{}, scope socctx.Scope, bearer string) (json.RawMessage, error) {
 		return s.gateway.ListSources(ctx, scope.ProjectID, bearer)
 	}))
-	mcp.AddTool(server, mcpTool[mcpSearchEventsArgs](
+	mcp.AddTool(server, withSIEMFilterGrammar(mcpTool[mcpSearchEventsArgs](
 		"gateway_search_events",
 		"Search normalized events across project-allowed sources. "+
 			"Filter identities with entities:[{type,value}] (e.g. account + dkrylova\\administrator) — never IR entity_id UUIDs. "+
+			"Filter by SIEM fields with filter (grammar in the filter argument; a rejected field is named in the error). "+
 			"Pick sources by capability (accounts/process/auth → pt-maxpatrol-siem, not NAD). "+
 			"Default limit is 20; attributes are omitted unless include_attributes=true. "+
+			"Recipe for a filter-driven task: sources:[\"pt-maxpatrol-siem\"], filter, include_attributes:true, limit:100; read total; "+
+			"call again with cursor=next_cursor (same arguments) until next_cursor is absent — then every source_states entry is complete and nothing is truncated. "+
+			"Inspect the collected event.attributes locally to select events, then write the selected source_code+source_event_id pairs via add_investigation_agent_results. "+
 			"Empty page with truncated source_states is not proof of absence: follow next_cursor or narrow time_range/filters and retry. "+
 			"To verify one known source_event_id use gateway_resolve_context, not a search filter.",
-	), gatewayHandler(s, func(ctx context.Context, args mcpSearchEventsArgs, scope socctx.Scope, bearer string) (json.RawMessage, error) {
+	)), gatewayHandler(s, func(ctx context.Context, args mcpSearchEventsArgs, scope socctx.Scope, bearer string) (json.RawMessage, error) {
 		raw, err := s.gateway.SearchEvents(ctx, scope.ProjectID, bearer, args.toContract())
 		if err != nil {
 			return nil, err

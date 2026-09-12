@@ -56,6 +56,13 @@ func TestBuildExpandsURLsAndHeaders(t *testing.T) {
 		"imported < total",
 		"time_range` written in the issue",
 		"Wall-clock times in the issue",
+		"If the issue gives no window",
+		"Filter-driven tasks",
+		"`gateway_search_events`",
+		"`include_attributes: true`",
+		"follow `next_cursor`",
+		"`truncated: false`",
+		"grep the saved tool output locally",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("missing %q", want)

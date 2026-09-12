@@ -94,6 +94,11 @@ func TestMCPInitializeAndListTools(t *testing.T) {
 		"never an IR entity UUID",
 		"import_entity_events",
 		"single backslash",
+		// Weak models need the predicate grammar and paging recipe on the argument itself.
+		`field contains \"value\"`,
+		"Response flags (truncated, total, limit) are not filter fields",
+		"cursor=next_cursor",
+		"Event-only writes are valid",
 	} {
 		if !strings.Contains(listed.Body.String(), hint) {
 			t.Fatalf("tools/list must describe agent/gateway identity rules (%q): %s", hint, listed.Body.String())
