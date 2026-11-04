@@ -55,17 +55,7 @@ func NewHandler(cfg config.Config, log *slog.Logger, service *service.Service) h
 	})
 
 	protected := coretransport.Chain(http.Handler(generated), projectScope(server))
-	if !cfg.Auth.Disabled {
-		protected = coretransport.Auth(coretransport.AuthConfig{
-			PublicKey: cfg.Auth.PublicKey,
-			Issuer:    cfg.Auth.Issuer,
-			Audience:  cfg.Auth.Audience,
-			Kid:       cfg.Auth.Kid,
-			Typ:       cfg.Auth.Typ,
-		}, func(w http.ResponseWriter, _ *http.Request) {
-			respondError(w, http.StatusUnauthorized, "unauthorized", "valid bearer token is required")
-		})(protected)
-	}
+	protected = gatewayAuthentication(cfg.Auth)(protected)
 
 	root := http.NewServeMux()
 	root.HandleFunc("GET /healthz", server.Healthz)
@@ -144,7 +134,10 @@ func (server *Server) writeServiceError(w http.ResponseWriter, err error) {
 func (server *Server) allowedSources(ctx context.Context) ([]string, error) {
 	allowed, restricted := server.projectSources[projectIDFromContext(ctx)]
 	if !restricted {
-		return nil, &domain.RequestError{Code: "source_forbidden", Message: "no sources are configured for this project"}
+		return nil, &domain.RequestError{
+			Code:    "source_forbidden",
+			Message: "no sources are configured for this project",
+		}
 	}
 	result := make([]string, 0, len(allowed))
 	for source := range allowed {
@@ -154,7 +147,11 @@ func (server *Server) allowedSources(ctx context.Context) ([]string, error) {
 	return result, nil
 }
 
-func (server *Server) constrainSources(ctx context.Context, requested []string, capabilityName domain.Capability) ([]string, error) {
+func (server *Server) constrainSources(
+	ctx context.Context,
+	requested []string,
+	capabilityName domain.Capability,
+) ([]string, error) {
 	allowedList, err := server.allowedSources(ctx)
 	if err != nil {
 		return nil, err
@@ -177,7 +174,12 @@ func (server *Server) constrainSources(ctx context.Context, requested []string, 
 			return nil, sourceForbidden(source)
 		}
 		if !server.service.Supports(source, capabilityName) {
-			return nil, fmt.Errorf("%w: source %q does not support %s", domain.ErrUnsupportedCapability, source, capabilityName)
+			return nil, fmt.Errorf(
+				"%w: source %q does not support %s",
+				domain.ErrUnsupportedCapability,
+				source,
+				capabilityName,
+			)
 		}
 	}
 	return requested, nil
@@ -197,7 +199,10 @@ func (server *Server) sourceInstanceAllowed(source, instance string) bool {
 }
 
 func sourceForbidden(source string) error {
-	return &domain.RequestError{Code: "source_forbidden", Message: fmt.Sprintf("source %q is not allowed for this project", source)}
+	return &domain.RequestError{
+		Code:    "source_forbidden",
+		Message: fmt.Sprintf("source %q is not allowed for this project", source),
+	}
 }
 
 func projectIDFromContext(ctx context.Context) string {
@@ -210,7 +215,12 @@ func projectScope(server *Server) coretransport.Middleware {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			projectID := strings.TrimSpace(r.Header.Get(projectIDHeader))
 			if !validProjectID(projectID) {
-				respondError(w, http.StatusBadRequest, "invalid_project_id", "X-Project-ID must be 10-12 lowercase hexadecimal characters")
+				respondError(
+					w,
+					http.StatusBadRequest,
+					"invalid_project_id",
+					"X-Project-ID must be 10-12 lowercase hexadecimal characters",
+				)
 				return
 			}
 			if _, configured := server.projectSources[projectID]; !configured {
@@ -234,7 +244,16 @@ func requestLogger(log *slog.Logger) coretransport.Middleware {
 			started := time.Now()
 			recorder := &coretransport.Recorder{ResponseWriter: w}
 			next.ServeHTTP(recorder, r)
-			fields := []any{"method", r.Method, "path", r.URL.Path, "status", recorder.Status(), "duration_ms", time.Since(started).Milliseconds()}
+			fields := []any{
+				"method",
+				r.Method,
+				"path",
+				r.URL.Path,
+				"status",
+				recorder.Status(),
+				"duration_ms",
+				time.Since(started).Milliseconds(),
+			}
 			if projectID := strings.TrimSpace(r.Header.Get(projectIDHeader)); validProjectID(projectID) {
 				fields = append(fields, "project_id", projectID)
 			}

@@ -29,7 +29,11 @@ type commonSecretResolver struct {
 	client *common.SecretsClient
 }
 
-func (resolver commonSecretResolver) Resolve(ctx context.Context, bearer, projectID string, names ...string) (map[string]string, error) {
+func (resolver commonSecretResolver) Resolve(
+	ctx context.Context,
+	bearer, projectID string,
+	names ...string,
+) (map[string]string, error) {
 	snapshot, err := resolver.client.ResolveSnapshot(ctx, bearer, projectID, names...)
 	if err != nil {
 		return nil, err
@@ -65,17 +69,8 @@ func run() error {
 		return fmt.Errorf("build provider registry: %w", err)
 	}
 	var secretResolver service.SecretResolver
-	if cfg.Sb0rkaAPIBaseURL != "" {
-		client, clientErr := common.NewSecretsClient(common.SecretsConfig{
-			BaseURL:          cfg.Sb0rkaAPIBaseURL,
-			Timeout:          cfg.Server.SourceTimeout,
-			MaxResponseBytes: 1 << 20,
-		})
-		if clientErr != nil {
-			return fmt.Errorf("build Sb0rka Secrets client: %w", clientErr)
-		}
-		secretResolver = commonSecretResolver{client: client}
-	}
+	// Secret-backed vendor integrations remain inactive in this stage.
+
 	gatewayService := service.New(providerRegistry, secretResolver, cfg.Server.RequestTimeout, cfg.Server.SourceTimeout)
 	handler := httptransport.NewHandler(cfg, log, gatewayService)
 	server := &http.Server{
@@ -91,7 +86,7 @@ func run() error {
 	go func() {
 		log.Info("gateway_started",
 			"addr", server.Addr,
-			"auth_disabled", cfg.Auth.Disabled,
+			"auth_audience", "sb0rka-ir-gateway",
 			"registered_sources", len(providerRegistry.Sources()),
 		)
 		if serveErr := server.ListenAndServe(); serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) {

@@ -1,231 +1,183 @@
-import { env } from './env'
+import { env, setProjectId } from './env'
+import type { components as AuthComponents } from '@ir/contract/domains/authentication'
 
-const ACCESS_TOKEN_KEY = 'ir.accessToken'
 const REFRESH_EARLY_MS = 30_000
-const REFRESH_RETRY_MS = 60_000
+const HANDOFF_VERIFIER_KEY = 'ir.oidcVerifier'
 
-export interface AuthSubject {
-  subject_id: string
-  kind: string
-  is_active: boolean
-  user?: {
-    user_id: string
-    username: string
-    email: string
-    phone?: string
-  }
-}
+export type AuthSubject = AuthComponents['schemas']['AuthSubject']
 
 export class AuthError extends Error {
   readonly status: number
-
-  constructor(status: number, message: string) {
-    super(message)
-    this.name = 'AuthError'
-    this.status = status
-  }
+  constructor(status: number, message: string) { super(message); this.name = 'AuthError'; this.status = status }
 }
 
-function readStoredToken(): string | null {
-  try {
-    return localStorage.getItem(ACCESS_TOKEN_KEY)
-  } catch {
-    return null
-  }
-}
+// Older dashboard tokens addressed Platform API and cannot be reused by IR.
+try { localStorage.removeItem('ir.accessToken') } catch { /* Storage can be disabled. */ }
+let authNotice: string | null = null
+export function getAuthNotice(): string | null { return authNotice }
+export function clearAuthNotice(): void { authNotice = null }
 
-let accessToken = readStoredToken()
+let accessToken: string | null = null
 let refreshPromise: Promise<string> | null = null
 let refreshTimer: ReturnType<typeof setTimeout> | null = null
 let bootstrapPromise: Promise<AuthSubject | null> | null = null
 const listeners = new Set<() => void>()
+const authChannel = typeof BroadcastChannel === 'undefined' ? null : new BroadcastChannel('sb0rka-ir-auth')
+if (authChannel) authChannel.onmessage = () => { setAccessToken(null); window.location.reload() }
+
+function principalKey(token: string): string | null {
+  try {
+    const raw = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')
+    const value = JSON.parse(atob(raw.padEnd(Math.ceil(raw.length / 4) * 4, '='))) as { sub?: unknown; sid?: unknown }
+    return typeof value.sub === 'string' && typeof value.sid === 'string' ? `${value.sub}:${value.sid}` : null
+  } catch { return null }
+}
 
 function decodeExpiry(token: string): number | null {
   try {
     const encoded = token.split('.')[1]
-    if (!encoded) return null
-    const padded = encoded.replace(/-/g, '+').replace(/_/g, '/').padEnd(
-      Math.ceil(encoded.length / 4) * 4,
-      '=',
-    )
-    const payload = JSON.parse(atob(padded)) as { exp?: unknown }
+    const normalized = encoded.replace(/-/g, '+').replace(/_/g, '/')
+    const payload = JSON.parse(atob(normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '='))) as { exp?: unknown }
     return typeof payload.exp === 'number' ? payload.exp * 1000 : null
-  } catch {
-    return null
-  }
+  } catch { return null }
 }
 
-function notify(): void {
-  for (const listener of listeners) listener()
-}
-
-function scheduleRefresh(token: string): void {
-  if (refreshTimer) clearTimeout(refreshTimer)
-  const expiry = decodeExpiry(token)
-  if (!expiry) return
-  const delay = Math.max(1_000, expiry - Date.now() - REFRESH_EARLY_MS)
-  refreshTimer = setTimeout(() => {
-    void refreshAccessToken().catch((error: unknown) => {
-      if (error instanceof AuthError && error.status === 401) return
-      if (!accessToken) return
-      refreshTimer = setTimeout(() => {
-        if (accessToken) scheduleRefresh(accessToken)
-      }, REFRESH_RETRY_MS)
-    })
-  }, delay)
-}
-
-export function getAccessToken(): string | null {
-  return accessToken
-}
-
-export function subscribeAuth(listener: () => void): () => void {
-  listeners.add(listener)
-  return () => listeners.delete(listener)
-}
+export function getAccessToken(): string | null { return accessToken }
+export function subscribeAuth(listener: () => void): () => void { listeners.add(listener); return () => listeners.delete(listener) }
 
 export function setAccessToken(token: string | null): void {
   accessToken = token
-  if (refreshTimer) {
-    clearTimeout(refreshTimer)
-    refreshTimer = null
+  if (refreshTimer) { clearTimeout(refreshTimer); refreshTimer = null }
+  if (token) {
+    const expiry = decodeExpiry(token)
+    if (expiry) refreshTimer = setTimeout(() => { void refreshAccessToken().catch(() => undefined) }, Math.max(1000, expiry - Date.now() - REFRESH_EARLY_MS))
   }
-  try {
-    if (token) localStorage.setItem(ACCESS_TOKEN_KEY, token)
-    else localStorage.removeItem(ACCESS_TOKEN_KEY)
-  } catch {
-    /* The in-memory token remains authoritative for this page. */
-  }
-  if (token) scheduleRefresh(token)
-  notify()
+  for (const listener of listeners) listener()
 }
 
 async function responseMessage(response: Response): Promise<string> {
-  const text = await response.text()
-  if (!text) return `HTTP ${response.status}`
-  try {
-    const parsed = JSON.parse(text) as { error?: { message?: string }; message?: string }
-    return parsed.error?.message || parsed.message || text
-  } catch {
-    return text
-  }
+  try { const body = await response.json() as { error?: { message?: string } }; return body.error?.message || `HTTP ${response.status}` }
+  catch { return `HTTP ${response.status}` }
 }
 
 async function readAccessToken(response: Response): Promise<string> {
   if (!response.ok) throw new AuthError(response.status, await responseMessage(response))
-  const body = (await response.json()) as { access_token?: unknown }
-  if (typeof body.access_token !== 'string' || !body.access_token) {
-    throw new AuthError(response.status, 'Auth не вернул access token')
+  const body = await response.json() as { access_token?: unknown }
+  if (typeof body.access_token !== 'string' || !body.access_token) throw new AuthError(503, 'IR не вернул access token')
+  const nextPrincipal = principalKey(body.access_token)
+  if (!nextPrincipal) throw new AuthError(503, 'IR вернул некорректное удостоверение')
+  if (accessToken && principalKey(accessToken) !== nextPrincipal) {
+    // A login in another tab may replace the shared cookie. Never combine the
+    // previous user's in-memory workspace with the new session's bearer.
+    setProjectId(null)
+    setAccessToken(null)
+    window.location.reload()
+    throw new AuthError(409, 'Сессия браузера изменилась')
   }
+  setAccessToken(body.access_token)
   return body.access_token
 }
 
 export function refreshAccessToken(): Promise<string> {
   if (!refreshPromise) {
-    refreshPromise = fetch(`${env.authUrl}/auth/refresh`, {
-      method: 'POST',
-      credentials: 'include',
-    })
+    refreshPromise = fetch(`${env.irUrl}/api/v1/auth/refresh`, { method: 'POST', credentials: 'include' })
       .then(readAccessToken)
-      .then((token) => {
-        setAccessToken(token)
-        return token
-      })
-      .catch((error: unknown) => {
-        if (error instanceof AuthError && error.status === 401) setAccessToken(null)
-        throw error
-      })
-      .finally(() => {
-        refreshPromise = null
-      })
+      .catch((error: unknown) => { if (error instanceof AuthError && error.status === 401) setAccessToken(null); throw error })
+      .finally(() => { refreshPromise = null })
   }
   return refreshPromise
 }
 
 function withToken(request: Request, token: string | null): Request {
-  if (!token) return request
   const headers = new Headers(request.headers)
-  headers.set('Authorization', `Bearer ${token}`)
+  if (token) headers.set('Authorization', `Bearer ${token}`)
   return new Request(request, { headers })
 }
 
-/** Adds the current JWT, refreshes once on 401, and never clears state for a vendor 401. */
+/** Only the IR backend receives the browser's access token. */
 export const authorizedFetch: typeof fetch = async (input, init) => {
   const original = new Request(input, init)
-  const first = original.clone()
+  const target = new URL(original.url)
+  if (target.origin !== new URL(env.irUrl).origin || !target.pathname.startsWith('/api/v1/')) throw new AuthError(403, 'Недопустимый адрес запроса IR')
   const retry = original.clone()
-  let response = await fetch(withToken(first, accessToken))
-  if (response.status !== 401 || original.url.endsWith('/auth/refresh')) return response
-
-  try {
-    const token = await refreshAccessToken()
-    response = await fetch(withToken(retry, token))
-  } catch (error) {
-    if (error instanceof AuthError && error.status === 401) {
-      throw new AuthError(401, 'Сессия истекла')
-    }
-    throw error
-  }
+  let response = await fetch(withToken(original, accessToken))
+  if (response.status !== 401 || target.pathname.endsWith('/auth/refresh')) return response
+  const token = await refreshAccessToken()
+  response = await fetch(withToken(retry, token))
   return response
 }
 
-async function getSubject(): Promise<AuthSubject> {
-  const response = await authorizedFetch(`${env.authUrl}/auth/subject`)
+function base64url(value: Uint8Array): string { return btoa(String.fromCharCode(...value)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '') }
+
+export async function login(): Promise<void> {
+  const verifier = base64url(crypto.getRandomValues(new Uint8Array(32)))
+  const challenge = base64url(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier))))
+  const response = await fetch(`${env.irUrl}/api/v1/auth/oidc/init`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ app_challenge: challenge }) })
   if (!response.ok) throw new AuthError(response.status, await responseMessage(response))
-  return response.json() as Promise<AuthSubject>
+  const body = await response.json() as { authorize_url: string }
+  sessionStorage.setItem(HANDOFF_VERIFIER_KEY, verifier)
+  window.location.assign(body.authorize_url)
 }
 
-export async function login(loginValue: string, password: string): Promise<AuthSubject> {
-  const isEmail = loginValue.includes('@')
-  const response = await fetch(`${env.authUrl}/auth/login`, {
-    method: 'POST',
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      password,
-      ...(isEmail ? { email: loginValue } : { username: loginValue }),
-    }),
-  })
-  const token = await readAccessToken(response)
-  setAccessToken(token)
-  try {
-    return await getSubject()
-  } catch (error) {
-    setAccessToken(null)
-    throw error
-  }
+async function getSubject(): Promise<AuthSubject> {
+  const response = await authorizedFetch(`${env.irUrl}/api/v1/auth/me`)
+  if (!response.ok) throw new AuthError(response.status, await responseMessage(response))
+  return response.json() as Promise<AuthSubject>
 }
 
 export function bootstrapAuth(): Promise<AuthSubject | null> {
   if (!bootstrapPromise) {
     bootstrapPromise = (async () => {
+      const url = new URL(window.location.href)
+      const handoff = url.searchParams.get('auth_handoff')
+      const loginError = url.searchParams.has('auth_error') || url.searchParams.has('integration_error')
+      if (handoff || loginError || url.searchParams.has('integration')) {
+        for (const key of ['auth_handoff', 'auth_error', 'integration_error', 'integration']) url.searchParams.delete(key)
+        window.history.replaceState(null, '', url.pathname + url.search + url.hash)
+      }
+      if (loginError) authNotice = 'Вход или подтверждение доступа не завершены. Повторите действие.'
       try {
-        if (!accessToken) await refreshAccessToken()
+        if (handoff) {
+          const verifier = sessionStorage.getItem(HANDOFF_VERIFIER_KEY)
+          sessionStorage.removeItem(HANDOFF_VERIFIER_KEY)
+          if (!verifier) throw new AuthError(401, 'Запрос входа не найден в этом браузере')
+          await readAccessToken(await fetch(`${env.irUrl}/api/v1/auth/oidc/redeem`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ handoff, app_verifier: verifier }) }))
+          authChannel?.postMessage('login')
+        } else if (!accessToken) await refreshAccessToken()
         return await getSubject()
       } catch (error) {
-        if (error instanceof AuthError && error.status === 401) {
-          setAccessToken(null)
-          return null
-        }
+        if (error instanceof AuthError && error.status === 401) { setAccessToken(null); return null }
         throw error
       }
-    })().finally(() => {
-      bootstrapPromise = null
-    })
+    })().finally(() => { bootstrapPromise = null })
   }
   return bootstrapPromise
 }
 
 export async function logout(): Promise<void> {
-  try {
-    await fetch(`${env.authUrl}/auth/logout`, {
-      method: 'POST',
-      credentials: 'include',
-      headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
-    })
-  } finally {
-    setAccessToken(null)
-  }
+  const response = await fetch(`${env.irUrl}/api/v1/auth/logout`, { method: 'POST', credentials: 'include' })
+  if (!response.ok) throw new AuthError(response.status, await responseMessage(response))
+  authChannel?.postMessage('logout')
+  setAccessToken(null)
 }
 
-if (accessToken) scheduleRefresh(accessToken)
+export type IntegrationStatus = AuthComponents['schemas']['IntegrationStatus']
+export type IntegrationKind = 'platform' | 'gateway'
+
+export async function integrationStatus(kind: IntegrationKind): Promise<IntegrationStatus> {
+  const response = await authorizedFetch(`${env.irUrl}/api/v1/integrations/${kind}/status`)
+  if (!response.ok) throw new AuthError(response.status, await responseMessage(response))
+  return response.json() as Promise<IntegrationStatus>
+}
+
+export async function connectIntegration(kind: IntegrationKind): Promise<void> {
+  const response = await authorizedFetch(`${env.irUrl}/api/v1/integrations/${kind}/connect`, { method: 'POST' })
+  if (!response.ok) throw new AuthError(response.status, await responseMessage(response))
+  const body = await response.json() as { authorize_url: string }
+  window.location.assign(body.authorize_url)
+}
+
+export async function disconnectIntegration(kind: IntegrationKind): Promise<void> {
+  const response = await authorizedFetch(`${env.irUrl}/api/v1/integrations/${kind}/disconnect`, { method: 'POST' })
+  if (!response.ok) throw new AuthError(response.status, await responseMessage(response))
+}

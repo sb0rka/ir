@@ -35,4 +35,4 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
-      description: Sb0rka access token passed as `Bearer <token>`.
+      description: Auth-issued delegated access JWT for sb0rka-ir-gateway, with ir.gateway.use, project restrictions and live introspection. Browser clients call Gateway through ir-api.

@@ -13,16 +13,21 @@ import (
 
 	corelog "github.com/sb0rka/sb0rka/packages/core/log"
 
+	"github.com/sb0rka/ir/apps/investigations/internal/authflow"
 	"github.com/sb0rka/ir/apps/investigations/internal/config"
 	"github.com/sb0rka/ir/apps/investigations/internal/gatewayclient"
 	"github.com/sb0rka/ir/apps/investigations/internal/server"
-	"github.com/sb0rka/ir/apps/investigations/internal/somclient"
 	"github.com/sb0rka/ir/apps/investigations/internal/store/psql"
 	"github.com/sb0rka/ir/apps/investigations/internal/transport"
-	"github.com/sb0rka/ir/packages/common"
+	"github.com/sb0rka/ir/packages/contract/authentication"
 )
 
 const serviceName = "ir-api"
+
+type applicationAPI struct {
+	*server.Server
+	authentication.ServerInterface
+}
 
 func main() {
 	if err := run(); err != nil {
@@ -54,32 +59,26 @@ func run() error {
 		return err
 	}
 
-	var secrets *common.SecretsClient
-	if cfg.Platform.APIBaseURL != "" {
-		secrets, err = common.NewSecretsClient(common.SecretsConfig{BaseURL: cfg.Platform.APIBaseURL})
-		if err != nil {
-			return err
-		}
+	flow, err := authflow.New(ctx, db, cfg)
+	if err != nil {
+		return err
 	}
+	go flow.RunRevocations(ctx)
 
-	api := server.New(db, log,
-		somclient.New(somclient.Config{
-			APIBaseURL:     cfg.SOM.APIBaseURL,
-			RelayBaseURL:   cfg.SOM.RelayBaseURL,
-			HostID:         cfg.SOM.HostID,
-			RepoID:         cfg.SOM.RepoID,
-			RepoParentPath: cfg.SOM.RepoParentPath,
-			RepoFolderName: cfg.SOM.RepoFolderName,
-			TargetBranch:   cfg.SOM.TargetBranch,
-			Executor:       cfg.SOM.Executor,
-		}),
-		secrets,
-		gatewayclient.New(gatewayclient.Config{BaseURL: cfg.Gateway.BaseURL}),
+	// SoM routes are not part of this authentication rollout. The domain
+	// client stays available to tests, but the process does not configure it.
+	api := server.New(
+		db,
+		log,
+		nil,
+		nil,
+		gatewayclient.New(gatewayclient.Config{BaseURL: cfg.Gateway.BaseURL, BearerResolver: flow.GatewayToken}),
 	)
 	handler := transport.NewHandler(transport.Dependencies{
-		Cfg:    cfg.Server,
-		Log:    log,
-		Server: api,
+		Cfg:      cfg.Server,
+		Log:      log,
+		Server:   applicationAPI{Server: api, ServerInterface: transport.NewAuthHandler(flow, cfg.Server.Auth, log)},
+		AuthFlow: flow,
 	})
 
 	srv := &http.Server{

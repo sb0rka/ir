@@ -1,15 +1,14 @@
 package config
 
 import (
-	"crypto/ed25519"
-	"crypto/x509"
+	"bytes"
 	"encoding/base64"
-	"encoding/pem"
 	"fmt"
 	"os"
 	"strings"
 	"time"
 
+	coreauth "github.com/sb0rka/sb0rka/packages/core/auth"
 	coreconfig "github.com/sb0rka/sb0rka/packages/core/config"
 )
 
@@ -20,18 +19,26 @@ func Load() (Config, error) {
 			Port:          coreconfig.GetStringEnv("SERVER_PORT", "8090"),
 			CORSWhitelist: coreconfig.ParseCORSWhitelist(coreconfig.GetStringEnv("SERVER_CORS_WHITELIST", "")),
 			Auth: AuthConfig{
-				Disabled:            coreconfig.GetBoolEnv("AUTH_DISABLED", false),
-				AccessTokenIssuer:   coreconfig.GetStringEnv("ACCESS_TOKEN_ISSUER", ""),
-				AccessTokenAudience: coreconfig.GetStringEnv("ACCESS_TOKEN_AUDIENCE", "api.local"),
-				AccessTokenKid:      coreconfig.GetStringEnv("ACCESS_TOKEN_KID", ""),
-				AccessTokenTyp:      coreconfig.GetStringEnv("ACCESS_TOKEN_TYP", "access+jwt"),
+				Issuer:   strings.TrimRight(coreconfig.GetStringEnv("AUTH_ISSUER", ""), "/"),
+				ClientID: coreconfig.GetStringEnv("OIDC_CLIENT_ID", coreauth.ClientIRWeb),
+				PublicBaseURL: strings.TrimRight(
+					coreconfig.GetStringEnv("IR_PUBLIC_BASE_URL", "http://localhost:8090"),
+					"/",
+				),
+				WebURL:       strings.TrimRight(coreconfig.GetStringEnv("IR_WEB_URL", "http://localhost:5174"), "/"),
+				CookieSecure: true,
 			},
 		},
 		Database: coreconfig.DatabaseConfig{
-			URI:      coreconfig.GetStringEnv("DATABASE_URI", ""),
-			MaxConns: coreconfig.GetIntEnv("DATABASE_MAX_CONNS", coreconfig.DefaultDatabaseMaxConns),
+			URI: coreconfig.GetStringEnv(
+				"DATABASE_URI",
+				"",
+			), MaxConns: coreconfig.GetIntEnv("DATABASE_MAX_CONNS", coreconfig.DefaultDatabaseMaxConns),
 			ConnMaxLifetime: coreconfig.GetDurationEnv(
-				"DATABASE_CONN_MAX_LIFETIME_SEC", coreconfig.DefaultDatabaseConnMaxLifetime, time.Second),
+				"DATABASE_CONN_MAX_LIFETIME_SEC",
+				coreconfig.DefaultDatabaseConnMaxLifetime,
+				time.Second,
+			),
 		},
 		Log: coreconfig.LoggerConfig{
 			Level:  coreconfig.GetStringEnv("LOG_LEVEL", "info"),
@@ -40,131 +47,84 @@ func Load() (Config, error) {
 		Platform: PlatformConfig{
 			APIBaseURL: strings.TrimRight(coreconfig.GetStringEnv("SB0RKA_API_BASE_URL", ""), "/"),
 		},
-		SOM: SOMConfig{
-			APIBaseURL:     strings.TrimRight(coreconfig.GetStringEnv("SOM_API_BASE_URL", ""), "/"),
-			RelayBaseURL:   strings.TrimRight(coreconfig.GetStringEnv("SOM_RELAY_BASE_URL", ""), "/"),
-			HostID:         coreconfig.GetStringEnv("SOM_HOST_ID", ""),
-			RepoID:         coreconfig.GetStringEnv("SOM_REPO_ID", ""),
-			RepoParentPath: coreconfig.GetStringEnv("SOM_REPO_PARENT_PATH", "/tmp"),
-			RepoFolderName: coreconfig.GetStringEnv("SOM_REPO_FOLDER_NAME", "ir-demo"),
-			TargetBranch:   coreconfig.GetStringEnv("SOM_TARGET_BRANCH", "main"),
-			Executor:       coreconfig.GetStringEnv("SOM_EXECUTOR", "OPENCODE"),
-		},
-		Gateway: GatewayConfig{
-			BaseURL: strings.TrimRight(coreconfig.GetStringEnv("GATEWAY_BASE_URL", ""), "/"),
-		},
+		Gateway: GatewayConfig{BaseURL: strings.TrimRight(coreconfig.GetStringEnv("GATEWAY_BASE_URL", ""), "/")},
 	}
-	key, err := loadPublicKey()
+	allowHTTP, err := coreconfig.GetBoolEnvStrict("AUTH_ALLOW_INSECURE_HTTP_ISSUER", false)
 	if err != nil {
 		return cfg, err
 	}
-	cfg.Server.Auth.AccessTokenPublicKey = key
-
-	if cfg.Database.URI == "" {
-		return cfg, fmt.Errorf("DATABASE_URI is required")
+	a := &cfg.Server.Auth
+	for _, origin := range []struct{ name, value string }{
+		{"AUTH_ISSUER", a.Issuer},
+		{"IR_PUBLIC_BASE_URL", a.PublicBaseURL},
+		{"IR_WEB_URL", a.WebURL},
+		{"SB0RKA_API_BASE_URL", cfg.Platform.APIBaseURL},
+		{"GATEWAY_BASE_URL", cfg.Gateway.BaseURL},
+	} {
+		if err := coreauth.ValidateServiceOrigin(origin.value, allowHTTP); err != nil {
+			return cfg, fmt.Errorf("%s: %w", origin.name, err)
+		}
 	}
+	a.AllowHTTP = allowHTTP
+	a.CookieSecure = strings.HasPrefix(a.PublicBaseURL, "https://")
+	a.VerificationKeys, err = coreauth.NewJWKSCache(a.Issuer)
+	if err != nil {
+		return cfg, err
+	}
+	a.ClientSecret, err = readSecret("OIDC_CLIENT_SECRET_FILE_PATH")
+	if err != nil {
+		return cfg, err
+	}
+	a.SessionKey, err = readKey("IR_SESSION_ENCRYPTION_KEY_FILE_PATH")
+	if err != nil {
+		return cfg, err
+	}
+	a.ContextKey, err = readKey("IR_OIDC_CONTEXT_ENCRYPTION_KEY_FILE_PATH")
+	if err != nil {
+		return cfg, err
+	}
+	if bytes.Equal(a.SessionKey, a.ContextKey) {
+		return cfg, fmt.Errorf("IR session and OIDC context encryption keys must differ")
+	}
+	if cfg.Database.URI == "" || a.ClientID == "" {
+		return cfg, fmt.Errorf("DATABASE_URI and OIDC_CLIENT_ID are required")
+	}
+	if cfg.Server.CORSWhitelist["*"] {
+		return cfg, fmt.Errorf("IR authentication requires explicit CORS origins")
+	}
+	// Secrets and SoM integrations are outside this authentication migration.
+	// Their configuration is deliberately not loaded into the new flow.
 	return cfg, nil
 }
 
-// loadPublicKey добывает ключ проверки. Публичный берётся как есть; приватный
-// принимается, потому что на стенде auth и ir поднимаются из одной пары, и
-// раздавать два файла вместо одного незачем — публичная половина выводится
-// из приватной. Подписывать сервис всё равно ничего не умеет.
-//
-// Отсутствие ключа не ошибка старта: сервис поднимется и отдаст /healthz,
-// но любой запрос с токеном получит 401 — так виден неполный конфиг стенда.
-func loadPublicKey() (ed25519.PublicKey, error) {
-	if key, err := loadPrivateKey(); err != nil || key != nil {
-		return key, err
+func readSecret(name string) ([]byte, error) {
+	path := strings.TrimSpace(os.Getenv(name))
+	if path == "" {
+		return nil, fmt.Errorf("%s is required", name)
 	}
-
-	raw := []byte(coreconfig.GetStringEnv("ACCESS_TOKEN_PUBLIC_KEY", ""))
-	if path := coreconfig.GetStringEnv("ACCESS_TOKEN_PUBLIC_KEY_FILE_PATH", ""); path != "" {
-		data, err := os.ReadFile(path)
-		if err != nil {
-			return nil, fmt.Errorf("read public key: %w", err)
-		}
-		raw = data
-	}
-	if len(raw) == 0 {
-		return nil, nil
-	}
-
-	block, _ := pem.Decode(raw)
-	if block == nil {
-		decoded, err := base64.StdEncoding.DecodeString(strings.TrimSpace(string(raw)))
-		if err != nil {
-			return nil, fmt.Errorf("public key is neither PEM nor base64: %w", err)
-		}
-		raw = decoded
-	} else {
-		raw = block.Bytes
-	}
-
-	parsed, err := x509.ParsePKIXPublicKey(raw)
+	raw, err := os.ReadFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("parse public key: %w", err)
+		return nil, fmt.Errorf("read %s: %w", name, err)
 	}
-	key, ok := parsed.(ed25519.PublicKey)
-	if !ok {
-		return nil, fmt.Errorf("public key is not ed25519")
+	raw = bytes.TrimSuffix(raw, []byte("\n"))
+	if len(raw) < 32 {
+		return nil, fmt.Errorf("%s requires at least 32 bytes", name)
 	}
-	return key, nil
+	return raw, nil
 }
 
-// loadPrivateKey возвращает публичную половину пары, если задан приватный ключ.
-// nil без ошибки означает «не задан» — дальше ищется публичный.
-//
-// Формат как у sb0rka Auth: ACCESS_TOKEN_PRIVATE_KEY — base64(PKCS#8 PEM).
-// Дополнительно принимаются PEM/plain base64(DER) в env и файле.
-func loadPrivateKey() (ed25519.PublicKey, error) {
-	raw := []byte(coreconfig.GetStringEnv("ACCESS_TOKEN_PRIVATE_KEY", ""))
-	if path := coreconfig.GetStringEnv("ACCESS_TOKEN_PRIVATE_KEY_FILE_PATH", ""); path != "" {
-		data, err := os.ReadFile(path)
-		if err != nil {
-			return nil, fmt.Errorf("read private key: %w", err)
-		}
-		raw = data
-	}
-	if len(raw) == 0 {
-		return nil, nil
-	}
-
-	der, err := decodePrivateKeyDER(raw)
+func readKey(name string) ([]byte, error) {
+	path := strings.TrimSpace(os.Getenv(name))
+	raw, err := os.ReadFile(path)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("read %s: %w", name, err)
 	}
-
-	parsed, err := x509.ParsePKCS8PrivateKey(der)
-	if err != nil {
-		return nil, fmt.Errorf("parse private key: %w", err)
+	if len(raw) == 32 {
+		return raw, nil
 	}
-	key, ok := parsed.(ed25519.PrivateKey)
-	if !ok {
-		return nil, fmt.Errorf("private key is not ed25519")
-	}
-	public, ok := key.Public().(ed25519.PublicKey)
-	if !ok {
-		return nil, fmt.Errorf("cannot derive public key")
-	}
-	return public, nil
-}
-
-func decodePrivateKeyDER(raw []byte) ([]byte, error) {
-	block, _ := pem.Decode(raw)
-	if block != nil {
-		return block.Bytes, nil
-	}
-
 	decoded, err := base64.StdEncoding.DecodeString(strings.TrimSpace(string(raw)))
-	if err != nil {
-		return nil, fmt.Errorf("private key is neither PEM nor base64: %w", err)
+	if err != nil || len(decoded) != 32 {
+		return nil, fmt.Errorf("%s must contain a raw or base64-encoded 32-byte key", name)
 	}
-
-	block, _ = pem.Decode(decoded)
-	if block != nil {
-		return block.Bytes, nil
-	}
-
 	return decoded, nil
 }

@@ -39,8 +39,8 @@ Redocly `join` объединяет карты `paths` из доменных д�
 
 ## Конвенции
 
-- Auth: Bearer JWT платформы проверяется по issuer/audience/kid/typ из окружения;
-  project выбирается обязательным заголовком `X-Project-ID`.
+- Auth: Auth-issued Bearer JWT для `sb0rka-ir` проверяется по публичному JWKS и локальной сессии;
+  project выбирается обязательным заголовком `X-Project-ID`, затем проверяются consent и текущий RBAC API.
 - Ошибка: `{"error":{"code","message","details?"}}`.
 - Пагинация: `limit` + `cursor`; ответ содержит массив с именем ресурса
   (`events`, `entities`, `investigations`, `nodes` или `edges`) и

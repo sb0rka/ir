@@ -1,7 +1,7 @@
 package config
 
 import (
-	"crypto/ed25519"
+	coreauth "github.com/sb0rka/sb0rka/packages/core/auth"
 
 	coreconfig "github.com/sb0rka/sb0rka/packages/core/config"
 )
@@ -12,7 +12,6 @@ type Config struct {
 	Database coreconfig.DatabaseConfig
 	Log      coreconfig.LoggerConfig
 	Platform PlatformConfig
-	SOM      SOMConfig
 	Gateway  GatewayConfig
 }
 
@@ -26,22 +25,6 @@ type GatewayConfig struct {
 	BaseURL string
 }
 
-// SOMConfig — демо-интеграция с SOM: kanban API, relay и daemon-хост.
-// Пустой APIBaseURL выключает som-домен, сервис при этом стартует.
-type SOMConfig struct {
-	APIBaseURL   string
-	RelayBaseURL string
-	// HostID — единственная ручная daemon VM демо-стенда.
-	HostID string
-	// RepoID необязателен: без него репозиторий ищется по имени папки
-	// или создаётся git init'ом на хосте.
-	RepoID         string
-	RepoParentPath string
-	RepoFolderName string
-	TargetBranch   string
-	Executor       string
-}
-
 type ServerConfig struct {
 	Addr string
 	Port string
@@ -53,14 +36,14 @@ type ServerConfig struct {
 }
 
 type AuthConfig struct {
-	// Demo-режим не проверяет подпись, но сохраняет обязательный project scope.
-	Disabled bool
-
-	// Сервис только проверяет токены платформы, поэтому держит публичный ключ.
-	// Приватный ключ верификатору не нужен.
-	AccessTokenPublicKey ed25519.PublicKey
-	AccessTokenIssuer    string
-	AccessTokenAudience  string
-	AccessTokenKid       string
-	AccessTokenTyp       string
+	Issuer           string
+	ClientID         string
+	ClientSecret     []byte
+	PublicBaseURL    string
+	WebURL           string
+	CookieSecure     bool
+	AllowHTTP        bool
+	SessionKey       []byte
+	ContextKey       []byte
+	VerificationKeys *coreauth.JWKSCache
 }

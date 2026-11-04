@@ -1,6 +1,7 @@
 go 1.25.5
 
 use (
+	../sb0rka/packages/core
 	./apps/gateway
 	./apps/investigations
 	./packages/common

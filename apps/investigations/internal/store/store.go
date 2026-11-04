@@ -27,11 +27,16 @@ func (e *ConflictError) Error() string { return "operation conflicts with curren
 func (e *ConflictError) Unwrap() error { return ErrConflict }
 
 type Database interface {
+	AuthDatabase
 	Ping(ctx context.Context) error
 	Close()
 
 	CreateInvestigation(ctx context.Context, inv model.InvestigationNew) (model.Investigation, error)
-	ListInvestigations(ctx context.Context, projectID string, filter model.InvestigationFilter) ([]model.Investigation, error)
+	ListInvestigations(
+		ctx context.Context,
+		projectID string,
+		filter model.InvestigationFilter,
+	) ([]model.Investigation, error)
 	GetInvestigation(ctx context.Context, projectID, investigationID string) (model.Investigation, error)
 	UpdateInvestigation(ctx context.Context, patch model.InvestigationPatch) (model.Investigation, error)
 	DeleteInvestigation(ctx context.Context, projectID, investigationID string) error
@@ -39,51 +44,112 @@ type Database interface {
 	ImportContext(ctx context.Context, request model.ImportRequest) (model.ImportStats, error)
 	GetGroup(ctx context.Context, scope model.GroupScope, family, groupID string) (model.Group, error)
 	MutateGroup(ctx context.Context, request model.GroupMutation) ([]model.Group, error)
-	GroupHistory(ctx context.Context, scope model.GroupScope, family, groupID string, cursor *string, limit int) (model.GroupHistory, error)
+	GroupHistory(
+		ctx context.Context,
+		scope model.GroupScope,
+		family, groupID string,
+		cursor *string,
+		limit int,
+	) (model.GroupHistory, error)
 	GraphProjection(ctx context.Context, request model.ProjectionRequest) (model.GraphProjection, error)
 
 	CreateHypothesis(ctx context.Context, hypothesis model.HypothesisNew) (model.Hypothesis, error)
-	ListHypotheses(ctx context.Context, projectID, investigationID string, filter model.HypothesisFilter) ([]model.Hypothesis, error)
+	ListHypotheses(
+		ctx context.Context,
+		projectID, investigationID string,
+		filter model.HypothesisFilter,
+	) ([]model.Hypothesis, error)
 	GetHypothesis(ctx context.Context, projectID, investigationID, hypothesisID string) (model.Hypothesis, error)
 	UpdateHypothesis(ctx context.Context, patch model.HypothesisPatch) (model.Hypothesis, error)
 	DeleteHypothesis(ctx context.Context, projectID, investigationID, hypothesisID string) error
-	HypothesisGraph(ctx context.Context, projectID, investigationID, hypothesisID string, filter model.EdgeFilter) (model.HypothesisGraph, error)
+	HypothesisGraph(
+		ctx context.Context,
+		projectID, investigationID, hypothesisID string,
+		filter model.EdgeFilter,
+	) (model.HypothesisGraph, error)
 	AddHypothesisNode(ctx context.Context, projectID, investigationID, hypothesisID, nodeID string) error
 	DeleteHypothesisNode(ctx context.Context, projectID, investigationID, hypothesisID, nodeID string) error
 	AddHypothesisEdge(ctx context.Context, projectID, investigationID, hypothesisID, edgeID string) error
 	DeleteHypothesisEdge(ctx context.Context, projectID, investigationID, hypothesisID, edgeID string) error
-	CreateHypothesisNode(ctx context.Context, projectID, investigationID, hypothesisID, nodeType string, entityID, eventID *string, origin string, somIssueIDs []string) (model.GraphNode, error)
-	CreateHypothesisGraphEdge(ctx context.Context, hypothesisID string, edge model.GraphEdgeNew) (model.GraphEdge, error)
+	CreateHypothesisNode(
+		ctx context.Context,
+		projectID, investigationID, hypothesisID, nodeType string,
+		entityID, eventID *string,
+		origin string,
+		somIssueIDs []string,
+	) (model.GraphNode, error)
+	CreateHypothesisGraphEdge(
+		ctx context.Context,
+		hypothesisID string,
+		edge model.GraphEdgeNew,
+	) (model.GraphEdge, error)
 
-	InvestigationFindings(ctx context.Context, projectID, investigationID string, filter model.ObjectFilter) ([]model.Finding, error)
+	InvestigationFindings(
+		ctx context.Context,
+		projectID, investigationID string,
+		filter model.ObjectFilter,
+	) ([]model.Finding, error)
 	GetFinding(ctx context.Context, projectID, findingID string) (model.Finding, error)
 	DetachFinding(ctx context.Context, projectID, investigationID, findingID string) error
 
-	InvestigationSessions(ctx context.Context, projectID, investigationID string, filter model.ObjectFilter) ([]model.NetworkSession, error)
+	InvestigationSessions(
+		ctx context.Context,
+		projectID, investigationID string,
+		filter model.ObjectFilter,
+	) ([]model.NetworkSession, error)
 	GetSession(ctx context.Context, projectID, sessionID string) (model.NetworkSession, error)
 	DetachSession(ctx context.Context, projectID, investigationID, sessionID string) error
 
-	InvestigationEvents(ctx context.Context, projectID, investigationID string, filter model.EventFilter) ([]model.EventSummary, error)
+	InvestigationEvents(
+		ctx context.Context,
+		projectID, investigationID string,
+		filter model.EventFilter,
+	) ([]model.EventSummary, error)
 	GetEvent(ctx context.Context, projectID, eventID string) (model.Event, error)
 	DetachEvent(ctx context.Context, projectID, investigationID, eventID string) error
 	InvestigationTimelineBounds(ctx context.Context, projectID, investigationID string) (from, to *time.Time, err error)
 
-	InvestigationEntities(ctx context.Context, projectID, investigationID string, filter model.EntityFilter) ([]model.Entity, error)
+	InvestigationEntities(
+		ctx context.Context,
+		projectID, investigationID string,
+		filter model.EntityFilter,
+	) ([]model.Entity, error)
 	GetEntityCard(ctx context.Context, projectID, entityID string) (model.EntityCard, error)
-	FindAttachedEntityBySource(ctx context.Context, projectID, investigationID, sourceCode, sourceEntityID string) (entityID string, err error)
+	FindAttachedEntityBySource(
+		ctx context.Context,
+		projectID, investigationID, sourceCode, sourceEntityID string,
+	) (entityID string, err error)
 	CreateEntity(ctx context.Context, entity model.EntityNew) (model.Entity, error)
 	DetachEntity(ctx context.Context, projectID, investigationID, entityID string) error
 
-	CreateNode(ctx context.Context, projectID, investigationID, nodeType string, entityID, eventID *string, origin string, somIssueIDs []string) (model.GraphNode, error)
-	GraphNodes(ctx context.Context, projectID, investigationID string, filter model.NodeFilter) ([]model.GraphNode, error)
+	CreateNode(
+		ctx context.Context,
+		projectID, investigationID, nodeType string,
+		entityID, eventID *string,
+		origin string,
+		somIssueIDs []string,
+	) (model.GraphNode, error)
+	GraphNodes(
+		ctx context.Context,
+		projectID, investigationID string,
+		filter model.NodeFilter,
+	) ([]model.GraphNode, error)
 	GetNode(ctx context.Context, projectID, investigationID, nodeID string) (model.GraphNode, error)
-	GraphEdges(ctx context.Context, projectID, investigationID string, filter model.EdgeFilter) ([]model.GraphEdge, error)
+	GraphEdges(
+		ctx context.Context,
+		projectID, investigationID string,
+		filter model.EdgeFilter,
+	) ([]model.GraphEdge, error)
 	CreateGraphEdge(ctx context.Context, edge model.GraphEdgeNew) (model.GraphEdge, error)
 	GetGraphEdge(ctx context.Context, projectID, investigationID, edgeID string) (model.GraphEdge, error)
 	UpdateGraphEdge(ctx context.Context, patch model.GraphEdgePatch) (model.GraphEdge, error)
 	DeleteGraphEdge(ctx context.Context, projectID, investigationID, edgeID string) error
 	GraphEdgeEvidence(ctx context.Context, projectID, investigationID, edgeID string) ([]model.EvidenceEvent, error)
-	AddGraphEdgeEvidence(ctx context.Context, projectID, investigationID, edgeID string, eventIDs []string) ([]model.EvidenceEvent, error)
+	AddGraphEdgeEvidence(
+		ctx context.Context,
+		projectID, investigationID, edgeID string,
+		eventIDs []string,
+	) ([]model.EvidenceEvent, error)
 	DeleteGraphEdgeEvidence(ctx context.Context, projectID, investigationID, edgeID, eventID string) error
 	ReviewGraphEdges(ctx context.Context, request model.EdgeReviewRequest) (model.EdgeReviewResult, error)
 	AgentResultCounts(ctx context.Context, projectID, investigationID, somIssueID string) (nodes, edges int, err error)

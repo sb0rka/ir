@@ -46,8 +46,8 @@ async function platformRequest<T>(path: string, init?: RequestInit): Promise<T> 
 }
 
 export async function listProjects(): Promise<Project[]> {
-  const result = await platformRequest<{ projects?: Project[] }>('/projects')
-  return (result.projects ?? []).filter((project) => project.is_active)
+  const result = await platformRequest<{ projects?: (Omit<Project, 'id'> & { public_id: string })[] }>('/projects')
+  return (result.projects ?? []).filter((project) => project.is_active).map((project) => ({ ...project, id: project.public_id }))
 }
 
 export async function listSecrets(projectId: string): Promise<SecretMetadata[]> {

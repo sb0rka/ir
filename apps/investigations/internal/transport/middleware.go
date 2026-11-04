@@ -9,6 +9,7 @@ import (
 	coreauth "github.com/sb0rka/sb0rka/packages/core/auth"
 	coreauthctx "github.com/sb0rka/sb0rka/packages/core/transport/authctx"
 
+	"github.com/sb0rka/ir/apps/investigations/internal/authflow"
 	"github.com/sb0rka/ir/apps/investigations/internal/config"
 	"github.com/sb0rka/ir/apps/investigations/internal/transport/httperr"
 	"github.com/sb0rka/ir/apps/investigations/internal/transport/socctx"
@@ -145,36 +146,17 @@ func mcpOriginMiddleware(cfg config.ServerConfig) middlewareChain {
 	}
 }
 
-func authMiddleware(cfg config.ServerConfig, log *slog.Logger) middlewareChain {
+func authMiddleware(flow *authflow.Service, log *slog.Logger) middlewareChain {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			ctx := r.Context()
-
-			// Demo-режим сохраняет тот же project scope, но не проверяет подпись.
-			// Если bearer передан, он нужен только для project-scoped Sb0rka API.
-			if cfg.Auth.Disabled {
-				projectID := strings.TrimSpace(r.Header.Get(projectIDHeader))
-				if !validProjectID(projectID) {
-					httperr.Write(w, log, httperr.BadRequest("X-Project-ID must be 10-12 lowercase hexadecimal characters"))
-					return
-				}
-				if token, err := coreauth.ParseBearerToken(r.Header.Get("Authorization")); err == nil {
-					ctx = socctx.WithBearer(ctx, token)
-				}
-				ctx = socctx.WithScope(ctx, socctx.Scope{ProjectID: projectID})
-				next.ServeHTTP(w, r.WithContext(ctx))
+			raw, err := coreauth.ParseBearerToken(r.Header.Get("Authorization"))
+			if err != nil {
+				writeAuthError(w, log, authflow.ErrUnauthorized)
 				return
 			}
-
-			raw, err := bearerToken(r.Header.Get("Authorization"))
+			session, identity, err := flow.Authenticate(r.Context(), raw)
 			if err != nil {
-				httperr.Write(w, log, err)
-				return
-			}
-
-			identity, err := verify(raw, cfg.Auth)
-			if err != nil {
-				httperr.Write(w, log, err)
+				writeAuthError(w, log, err)
 				return
 			}
 			projectID := strings.TrimSpace(r.Header.Get(projectIDHeader))
@@ -182,42 +164,25 @@ func authMiddleware(cfg config.ServerConfig, log *slog.Logger) middlewareChain {
 				httperr.Write(w, log, httperr.BadRequest("X-Project-ID must be 10-12 lowercase hexadecimal characters"))
 				return
 			}
-
-			ctx = coreauthctx.WithIdentity(ctx, identity)
+			if err := flow.CheckProject(r.Context(), session, raw, projectID); err != nil {
+				writeAuthError(w, log, err)
+				return
+			}
+			ctx := coreauthctx.WithIdentity(
+				r.Context(),
+				coreauthctx.Identity{
+					SubjectID:   identity.SubjectID,
+					SubjectKind: identity.SubjectKind,
+					SessionID:   identity.SessionID,
+					JTI:         identity.JTI,
+					ClientID:    identity.ClientID,
+				},
+			)
 			ctx = socctx.WithBearer(ctx, raw)
 			ctx = socctx.WithScope(ctx, socctx.Scope{ProjectID: projectID})
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
-}
-
-func bearerToken(header string) (string, error) {
-	token, err := coreauth.ParseBearerToken(header)
-	if err != nil {
-		return "", httperr.ErrUnauthorized
-	}
-	return token, nil
-}
-
-func verify(raw string, cfg config.AuthConfig) (coreauthctx.Identity, error) {
-	identity, err := coreauth.VerifyAccessToken(raw, coreauth.VerificationConfig{
-		PublicKey: cfg.AccessTokenPublicKey,
-		KeyID:     cfg.AccessTokenKid,
-		TokenType: cfg.AccessTokenTyp,
-		Issuer:    cfg.AccessTokenIssuer,
-		Audience:  cfg.AccessTokenAudience,
-	})
-	if err != nil {
-		return coreauthctx.Identity{}, httperr.ErrUnauthorized
-	}
-
-	return coreauthctx.Identity{
-		SubjectID:   identity.SubjectID,
-		SubjectKind: identity.SubjectKind,
-		SessionID:   identity.SessionID,
-		JTI:         identity.JTI,
-		ClientID:    identity.ClientID,
-	}, nil
 }
 
 func validProjectID(projectID string) bool {

@@ -22,8 +22,9 @@ const maxResponseBody = 16 << 20
 var ErrUnavailable = errors.New("gateway is not configured")
 
 type Config struct {
-	BaseURL    string
-	HTTPClient *http.Client
+	BaseURL        string
+	HTTPClient     *http.Client
+	BearerResolver func(context.Context, string, string) (string, error)
 }
 
 type Client struct {
@@ -54,16 +55,23 @@ func New(cfg Config) *Client {
 	}
 	httpClient := cfg.HTTPClient
 	if httpClient == nil {
-		httpClient = &http.Client{Timeout: 30 * time.Second}
+		httpClient = &http.Client{
+			Timeout:       30 * time.Second,
+			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+		}
 	}
 	generated, err := gatewaycontract.NewClientWithResponses(
 		baseURL,
-		gatewaycontract.WithHTTPClient(responseLimitDoer{next: httpClient}),
+		gatewaycontract.WithHTTPClient(responseLimitDoer{next: httpClient, resolver: cfg.BearerResolver}),
 	)
 	return &Client{api: generated, initErr: err}
 }
 
-func (client *Client) ResolveContext(ctx context.Context, projectID, bearer string, body ResolveContextRequest) (ResolveContextResponse, error) {
+func (client *Client) ResolveContext(
+	ctx context.Context,
+	projectID, bearer string,
+	body ResolveContextRequest,
+) (ResolveContextResponse, error) {
 	if client == nil || client.api == nil {
 		if client != nil && client.initErr != nil {
 			return ResolveContextResponse{}, fmt.Errorf("initialize Gateway client: %w", client.initErr)
@@ -86,9 +94,17 @@ func (client *Client) ResolveContext(ctx context.Context, projectID, bearer stri
 	if status != http.StatusOK {
 		var envelope gatewaycontract.ErrorEnvelope
 		if json.Unmarshal(response.Body, &envelope) != nil {
-			return ResolveContextResponse{}, &HTTPError{Status: status, Code: "gateway_error", Message: "Gateway rejected the request"}
+			return ResolveContextResponse{}, &HTTPError{
+				Status:  status,
+				Code:    "gateway_error",
+				Message: "Gateway rejected the request",
+			}
 		}
-		return ResolveContextResponse{}, &HTTPError{Status: status, Code: envelope.Error.Code, Message: envelope.Error.Message}
+		return ResolveContextResponse{}, &HTTPError{
+			Status:  status,
+			Code:    envelope.Error.Code,
+			Message: envelope.Error.Message,
+		}
 	}
 	if response.JSON200 == nil {
 		return ResolveContextResponse{}, fmt.Errorf("decode Gateway context response: expected application/json")
@@ -97,10 +113,20 @@ func (client *Client) ResolveContext(ctx context.Context, projectID, bearer stri
 }
 
 type responseLimitDoer struct {
-	next gatewaycontract.HttpRequestDoer
+	next     gatewaycontract.HttpRequestDoer
+	resolver func(context.Context, string, string) (string, error)
 }
 
 func (doer responseLimitDoer) Do(request *http.Request) (*http.Response, error) {
+	if doer.resolver == nil {
+		return nil, ErrUnavailable
+	}
+	sourceToken := strings.TrimPrefix(request.Header.Get("Authorization"), "Bearer ")
+	token, err := doer.resolver(request.Context(), sourceToken, request.Header.Get("X-Project-ID"))
+	if err != nil {
+		return nil, err
+	}
+	request.Header.Set("Authorization", "Bearer "+token)
 	response, err := doer.next.Do(request)
 	if err != nil {
 		return nil, err

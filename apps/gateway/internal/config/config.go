@@ -1,11 +1,8 @@
 package config
 
 import (
-	"crypto/ed25519"
-	"crypto/x509"
-	"encoding/base64"
+	"bytes"
 	"encoding/json"
-	"encoding/pem"
 	"fmt"
 	"net/url"
 	"os"
@@ -13,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	coreauth "github.com/sb0rka/sb0rka/packages/core/auth"
 
 	coreconfig "github.com/sb0rka/sb0rka/packages/core/config"
 )
@@ -47,12 +46,10 @@ type ServerConfig struct {
 }
 
 type AuthConfig struct {
-	Disabled  bool
-	PublicKey ed25519.PublicKey
-	Issuer    string
-	Audience  string
-	Kid       string
-	Typ       string
+	Issuer       string
+	ClientID     string
+	ClientSecret []byte
+	Keys         *coreauth.JWKSCache
 }
 
 type SourceConfig struct {
@@ -74,11 +71,8 @@ func Load() (Config, error) {
 			SourceTimeout:  coreconfig.GetDurationEnv("SOURCE_TIMEOUT_SEC", DefaultSourceTimeout, time.Second),
 		},
 		Auth: AuthConfig{
-			Disabled: coreconfig.GetBoolEnv("AUTH_DISABLED", false),
-			Issuer:   coreconfig.GetStringEnv("ACCESS_TOKEN_ISSUER", ""),
-			Audience: coreconfig.GetStringEnv("ACCESS_TOKEN_AUDIENCE", "api.local"),
-			Kid:      coreconfig.GetStringEnv("ACCESS_TOKEN_KID", ""),
-			Typ:      coreconfig.GetStringEnv("ACCESS_TOKEN_TYP", "access+jwt"),
+			Issuer:   strings.TrimRight(coreconfig.GetStringEnv("AUTH_ISSUER", ""), "/"),
+			ClientID: coreconfig.GetStringEnv("AUTH_INTROSPECTION_CLIENT_ID", coreauth.ClientIRGateway),
 		},
 		Log: coreconfig.LoggerConfig{
 			Level:  coreconfig.GetStringEnv("LOG_LEVEL", "info"),
@@ -100,18 +94,36 @@ func Load() (Config, error) {
 	if cfg.Server.SourceTimeout > cfg.Server.RequestTimeout {
 		return Config{}, fmt.Errorf("source timeout must not exceed request timeout")
 	}
-	key, err := loadPublicKey()
+	allowHTTP, err := coreconfig.GetBoolEnvStrict("AUTH_ALLOW_INSECURE_HTTP_ISSUER", false)
 	if err != nil {
 		return Config{}, err
 	}
-	cfg.Auth.PublicKey = key
-	if !cfg.Auth.Disabled && len(key) == 0 {
-		return Config{}, fmt.Errorf("access token public key is required when auth is enabled")
+	if err := coreauth.ValidateServiceOrigin(cfg.Auth.Issuer, allowHTTP); err != nil {
+		return Config{}, fmt.Errorf("AUTH_ISSUER: %w", err)
 	}
+	cfg.Auth.Keys, err = coreauth.NewJWKSCache(cfg.Auth.Issuer)
+	if err != nil {
+		return Config{}, err
+	}
+	secretPath := coreconfig.GetStringEnv("AUTH_INTROSPECTION_CLIENT_SECRET_FILE_PATH", "")
+	secret, err := os.ReadFile(secretPath)
+	if err != nil {
+		return Config{}, fmt.Errorf("read Gateway introspection credential: %w", err)
+	}
+	cfg.Auth.ClientSecret = bytes.TrimSuffix(secret, []byte("\n"))
+	if len(cfg.Auth.ClientSecret) < 32 || cfg.Auth.ClientID == "" {
+		return Config{}, fmt.Errorf("invalid Gateway introspection credential")
+	}
+	// Source credentials are intentionally not wired during the IR auth migration.
+	cfg.Sb0rkaAPIBaseURL = ""
 	cfg.Sources[PTMaxPatrolSIEM] = SourceConfig{
 		BaseURL:          coreconfig.GetStringEnv("SOURCE_PT_MAXPATROL_SIEM_BASE_URL", ""),
 		IncidentsBaseURL: coreconfig.GetStringEnv("SOURCE_PT_MAXPATROL_SIEM_INCIDENTS_BASE_URL", ""),
-		Timeout:          coreconfig.GetDurationEnv("SOURCE_PT_MAXPATROL_SIEM_TIMEOUT_SEC", cfg.Server.SourceTimeout, time.Second),
+		Timeout: coreconfig.GetDurationEnv(
+			"SOURCE_PT_MAXPATROL_SIEM_TIMEOUT_SEC",
+			cfg.Server.SourceTimeout,
+			time.Second,
+		),
 		TLSCAFile:        coreconfig.GetStringEnv("SOURCE_PT_MAXPATROL_SIEM_TLS_CA_FILE", ""),
 		CredentialSecret: PTMaxPatrolCookie,
 	}
@@ -162,8 +174,13 @@ func configuredSources(projects map[string]map[string]bool) map[string]struct{} 
 
 func validateSourceURL(source, label, raw string) error {
 	value, err := url.Parse(strings.TrimSpace(raw))
-	if err != nil || value.Scheme != "https" || value.Host == "" || value.User != nil || value.RawQuery != "" || value.Fragment != "" {
-		return fmt.Errorf("source %s %s must be an absolute HTTPS URL without credentials, query, or fragment", source, label)
+	if err != nil || value.Scheme != "https" || value.Host == "" || value.User != nil || value.RawQuery != "" ||
+		value.Fragment != "" {
+		return fmt.Errorf(
+			"source %s %s must be an absolute HTTPS URL without credentials, query, or fragment",
+			source,
+			label,
+		)
 	}
 	return nil
 }
@@ -238,100 +255,4 @@ func validProjectID(value string) bool {
 		}
 	}
 	return true
-}
-
-func loadPublicKey() (ed25519.PublicKey, error) {
-	if key, err := loadPrivateKey(); err != nil || key != nil {
-		return key, err
-	}
-
-	raw := []byte(coreconfig.GetStringEnv("ACCESS_TOKEN_PUBLIC_KEY", ""))
-	if path := coreconfig.GetStringEnv("ACCESS_TOKEN_PUBLIC_KEY_FILE_PATH", ""); path != "" {
-		data, err := os.ReadFile(path)
-		if err != nil {
-			return nil, fmt.Errorf("read public key: %w", err)
-		}
-		raw = data
-	}
-	if len(raw) == 0 {
-		return nil, nil
-	}
-
-	block, _ := pem.Decode(raw)
-	if block != nil {
-		raw = block.Bytes
-	} else {
-		decoded, err := base64.StdEncoding.DecodeString(strings.TrimSpace(string(raw)))
-		if err != nil {
-			return nil, fmt.Errorf("public key is neither PEM nor base64: %w", err)
-		}
-		raw = decoded
-	}
-	parsed, err := x509.ParsePKIXPublicKey(raw)
-	if err != nil {
-		return nil, fmt.Errorf("parse public key: %w", err)
-	}
-	key, ok := parsed.(ed25519.PublicKey)
-	if !ok {
-		return nil, fmt.Errorf("public key is not ed25519")
-	}
-	return key, nil
-}
-
-// loadPrivateKey returns the public half of a configured Ed25519 signing key.
-// Auth and API use the same private key in the demo environment, so verifier
-// services can derive the public key instead of requiring a duplicate file.
-//
-// ACCESS_TOKEN_PRIVATE_KEY follows sb0rka Auth: base64(PKCS#8 PEM). PEM files,
-// plain base64(DER), and base64(DER) files remain supported.
-func loadPrivateKey() (ed25519.PublicKey, error) {
-	raw := []byte(coreconfig.GetStringEnv("ACCESS_TOKEN_PRIVATE_KEY", ""))
-	if path := coreconfig.GetStringEnv("ACCESS_TOKEN_PRIVATE_KEY_FILE_PATH", ""); path != "" {
-		data, err := os.ReadFile(path)
-		if err != nil {
-			return nil, fmt.Errorf("read private key: %w", err)
-		}
-		raw = data
-	}
-	if len(raw) == 0 {
-		return nil, nil
-	}
-
-	der, err := decodePrivateKeyDER(raw)
-	if err != nil {
-		return nil, err
-	}
-
-	parsed, err := x509.ParsePKCS8PrivateKey(der)
-	if err != nil {
-		return nil, fmt.Errorf("parse private key: %w", err)
-	}
-	key, ok := parsed.(ed25519.PrivateKey)
-	if !ok {
-		return nil, fmt.Errorf("private key is not ed25519")
-	}
-	public, ok := key.Public().(ed25519.PublicKey)
-	if !ok {
-		return nil, fmt.Errorf("cannot derive public key")
-	}
-	return public, nil
-}
-
-func decodePrivateKeyDER(raw []byte) ([]byte, error) {
-	block, _ := pem.Decode(raw)
-	if block != nil {
-		return block.Bytes, nil
-	}
-
-	decoded, err := base64.StdEncoding.DecodeString(strings.TrimSpace(string(raw)))
-	if err != nil {
-		return nil, fmt.Errorf("private key is neither PEM nor base64: %w", err)
-	}
-
-	block, _ = pem.Decode(decoded)
-	if block != nil {
-		return block.Bytes, nil
-	}
-
-	return decoded, nil
 }

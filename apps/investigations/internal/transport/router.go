@@ -4,8 +4,10 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/sb0rka/ir/apps/investigations/internal/authflow"
 	"github.com/sb0rka/ir/apps/investigations/internal/config"
 	"github.com/sb0rka/ir/apps/investigations/internal/transport/httperr"
+	"github.com/sb0rka/ir/packages/contract/authentication"
 	"github.com/sb0rka/ir/packages/contract/entities"
 	"github.com/sb0rka/ir/packages/contract/events"
 	"github.com/sb0rka/ir/packages/contract/findings"
@@ -22,6 +24,11 @@ const baseURL = "/api/v1"
 
 // API — интерфейс на домен, а не один общий: забытый домен виден сразу.
 type API interface {
+	authentication.ServerInterface
+	DomainAPI
+}
+
+type DomainAPI interface {
 	entities.StrictServerInterface
 	events.StrictServerInterface
 	findings.StrictServerInterface
@@ -36,9 +43,10 @@ type API interface {
 }
 
 type Dependencies struct {
-	Cfg    config.ServerConfig
-	Log    *slog.Logger
-	Server API
+	Cfg      config.ServerConfig
+	Log      *slog.Logger
+	Server   API
+	AuthFlow *authflow.Service
 }
 
 func NewHandler(deps Dependencies) http.Handler {
@@ -55,10 +63,11 @@ func NewHandler(deps Dependencies) http.Handler {
 	// то есть неаутентифицированный запрос успевал бы получить 400 от
 	// валидации вместо 401.
 	api := http.NewServeMux()
-	registerDomains(api, deps)
-	public.Handle(baseURL+"/", authMiddleware(deps.Cfg, deps.Log)(api))
+	registerDomains(api, public, deps)
+	public.Handle(baseURL+"/gateway/", gatewayProxy(deps))
+	public.Handle(baseURL+"/", authMiddleware(deps.AuthFlow, deps.Log)(api))
 	mcp := deps.Server.MCPHandler()
-	public.Handle("/mcp", mcpOriginMiddleware(deps.Cfg)(authMiddleware(deps.Cfg, deps.Log)(mcp)))
+	public.Handle("/mcp", mcpOriginMiddleware(deps.Cfg)(authMiddleware(deps.AuthFlow, deps.Log)(mcp)))
 
 	// Логгер снаружи recover: он оборачивает ResponseWriter, а recover по этой
 	// обёртке понимает, была ли уже запись в ответ.
@@ -69,13 +78,17 @@ func NewHandler(deps Dependencies) http.Handler {
 	)
 }
 
-func registerDomains(mux *http.ServeMux, deps Dependencies) {
+func registerDomains(mux, public *http.ServeMux, deps Dependencies) {
 	onRequestError := func(w http.ResponseWriter, _ *http.Request, err error) {
 		httperr.Write(w, deps.Log, httperr.BadRequest(err.Error()))
 	}
 	onResponseError := func(w http.ResponseWriter, _ *http.Request, err error) {
 		httperr.Write(w, deps.Log, err)
 	}
+	authentication.HandlerWithOptions(
+		deps.Server,
+		authentication.StdHTTPServerOptions{BaseURL: baseURL, BaseRouter: public, ErrorHandlerFunc: onRequestError},
+	)
 	groups.HandlerWithOptions(
 		groups.NewStrictHandlerWithOptions(deps.Server, nil, groups.StrictHTTPServerOptions{
 			RequestErrorHandlerFunc: onRequestError, ResponseErrorHandlerFunc: onResponseError,
@@ -150,15 +163,6 @@ func registerDomains(mux *http.ServeMux, deps Dependencies) {
 			ResponseErrorHandlerFunc: onResponseError,
 		}),
 		sessions.StdHTTPServerOptions{
-			BaseURL: baseURL, BaseRouter: mux, ErrorHandlerFunc: onRequestError,
-		})
-
-	som.HandlerWithOptions(
-		som.NewStrictHandlerWithOptions(deps.Server, nil, som.StrictHTTPServerOptions{
-			RequestErrorHandlerFunc:  onRequestError,
-			ResponseErrorHandlerFunc: onResponseError,
-		}),
-		som.StdHTTPServerOptions{
 			BaseURL: baseURL, BaseRouter: mux, ErrorHandlerFunc: onRequestError,
 		})
 

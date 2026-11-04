@@ -117,12 +117,14 @@ tasks:
       # шага, которого в `task gen` быть не должно.
       - for: sources
         cmd: >-
+          test '{{trimSuffix ".yaml" (osBase .ITEM)}}' = authentication && exit 0;
           cd {{.SERVER_DIR}} &&
           { test -s '{{trimSuffix ".yaml" (osBase .ITEM)}}.go' ||
           printf 'package server\n' > '{{trimSuffix ".yaml" (osBase .ITEM)}}.go' ; }
       # impl дописывает только отсутствующие методы, готовый код не трогает.
       - for: sources
         cmd: >-
+          test '{{trimSuffix ".yaml" (osBase .ITEM)}}' = authentication && exit 0;
           cd {{.SERVER_DIR}} && {{.IMPL}} 's *Server'
           {{.MODULE}}/{{trimSuffix ".yaml" (osBase .ITEM)}}.StrictServerInterface
           >> {{trimSuffix ".yaml" (osBase .ITEM)}}.go
@@ -261,6 +263,14 @@ tasks:
   apps:up:
     desc: Start local apps (ir-api, gateway)
     cmds:
+      # som_selfrun is the shared SoM/selfrun bridge (deploy_default). Create it
+      # when SoM is not running so local apps:up does not depend on that stack.
+      - >
+        docker network inspect deploy_default >/dev/null 2>&1
+        || docker network create deploy_default
+      # AEAD keys must exist as files before compose bind-mounts them; otherwise
+      # Docker creates empty directories and ir-api fails on startup.
+      - bash deploy/dev/generate-auth-keys.sh
       - docker compose --profile apps up -d --build
 
   apps:logs:
@@ -272,6 +282,7 @@ tasks:
     desc: Stop local apps
     cmds:
       - docker compose --profile apps down
+      # Leave deploy_default in place: SoM/selfrun or a later apps:up may still use it.
 
   exec:gateway:
     desc: Execute gateway

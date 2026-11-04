@@ -17,6 +17,9 @@
 - Общий код для `api`, `auth` и `ir-api` сначала проверять в
   `github.com/sb0rka/sb0rka/packages/core`. Не копировать конфиг, логирование,
   PostgreSQL-пул и auth context.
+- `authentication` обслуживается HTTP transport: cookies и redirects не входят
+  в business Server. Его generated ServerInterface входит в transport.API через
+  композицию с DomainAPI; gen-stubs пропускает этот домен.
 - Сгенерированный роутер регистрируется в `registerDomains`; один новый домен
   требует обновить также интерфейс `transport.API`.
 
@@ -25,8 +28,10 @@
 - `project_id` берётся только из проверенного `X-Project-ID`; любой запрос по
   идентификатору фильтруется по нему.
 - Отсутствующая и чужая запись обе отвечают `404`.
-- Все прошедшие JWT-проверку пользователи имеют одинаковые права IR; границу
-  данных задаёт обязательный `X-Project-ID`.
+- Внутри разрешённого проекта пользователи имеют одинаковые права IR. JWT имеет
+  аудиторию `sb0rka-ir`; локальная сессия, отдельный consent и текущий RBAC API
+  проверяются перед каждым project-scoped REST/MCP запросом. `X-Project-ID`
+  выбирает проект, но не предоставляет доступ.
 - Group decisions дополнительно ограничены корнем `parent_id` дерева:
   `(project_id, root_investigation_id)`. Независимые roots не разделяют группы,
   review, lineage или idempotency. Group scope не расширяет graph view и не

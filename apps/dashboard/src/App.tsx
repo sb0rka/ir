@@ -11,7 +11,9 @@ import { ThemeToggle } from './components/theme-toggle'
 import {
   bootstrapAuth,
   getAccessToken,
+  getAuthNotice,
   login,
+  integrationStatus,
   logout,
   subscribeAuth,
   type AuthSubject,
@@ -19,7 +21,7 @@ import {
 import { getProjectId, setProjectId } from './api/env'
 import { listProjects, type Project } from './api/platform'
 import { LoginPage } from './components/LoginPage'
-import { ConfigurationModal } from './components/ConfigurationModal'
+import { AuthConnections } from './components/AuthConnections'
 import { InvestigationHeader } from './components/InvestigationHeader'
 import { HeaderSearch } from './components/HeaderSearch'
 import { parseQueuePdql, queueSelectFields } from './lib/pdql'
@@ -43,7 +45,8 @@ export default function App() {
 
   const loadProjectSession = async (authenticatedSubject: AuthSubject) => {
     setSubject(authenticatedSubject)
-    const available = await listProjects()
+    const integration = await integrationStatus('platform')
+    const available = integration.connected ? await listProjects() : []
     setProjects(available)
     if (available.length) {
       const stored = getProjectId()
@@ -114,36 +117,12 @@ export default function App() {
     return (
       <LoginPage
         error={sessionError}
-        onLogin={async (loginValue, password) => {
-          setSessionError(null)
-          const authenticatedSubject = await login(loginValue, password)
-          try {
-            await loadProjectSession(authenticatedSubject)
-          } catch (reason) {
-            setSessionError(reason instanceof Error ? reason.message : 'Не удалось загрузить проекты')
-            setPhase('error')
-          }
-        }}
+        onLogin={login}
       />
     )
   }
 
-  if (!projects.length) {
-    return (
-      <LoadingScreen
-        label="У пользователя нет активных проектов"
-        action={
-          <Button
-            onClick={() => {
-              void logout().finally(() => window.location.reload())
-            }}
-          >
-            Выйти
-          </Button>
-        }
-      />
-    )
-  }
+  if (!projects.length) return <AuthConnections projects={[]} />
 
   const currentProject = projects.find((project) => project.id === getProjectId()) ?? projects[0]
   return <Dashboard subject={subject} projects={projects} currentProject={currentProject} />
@@ -198,7 +177,7 @@ function Dashboard({
       : null,
   )
   const bootstrapped = useRef(false)
-  const [configurationOpen, setConfigurationOpen] = useState(false)
+  const [configurationOpen, setConfigurationOpen] = useState(Boolean(getAuthNotice()))
   const investigationOpen =
     activeTab !== 'queue' && activeTab !== 'investigations'
   const contextQueueSearchOpen = investigationOpen && investigationView === 'queue'
@@ -373,7 +352,7 @@ function Dashboard({
         )}
       </main>
       {configurationOpen && (
-        <ConfigurationModal
+        <AuthConnections
           projects={projects}
           currentProjectId={currentProject.id}
           onClose={(appliedProjectId) => {

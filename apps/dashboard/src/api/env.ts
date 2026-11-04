@@ -14,11 +14,11 @@ function readStorage(key: string): string | null {
   }
 }
 
+const irUrl = stripSlash(import.meta.env.VITE_IR_URL || 'http://localhost:8090')
 export const env = {
-  authUrl: stripSlash(import.meta.env.VITE_AUTH_BASE_URL || 'http://localhost:8020'),
-  platformUrl: stripSlash(import.meta.env.VITE_PLATFORM_API_BASE_URL || 'http://localhost:8080'),
-  irUrl: stripSlash(import.meta.env.VITE_IR_URL || 'http://localhost:8090'),
-  gatewayUrl: stripSlash(import.meta.env.VITE_GATEWAY_URL || 'http://localhost:8091'),
+  irUrl,
+  platformUrl: `${irUrl}/api/v1/platform`,
+  gatewayUrl: `${irUrl}/api/v1/gateway`,
 }
 
 let activeProjectId = readStorage(PROJECT_ID_KEY)?.trim() || null
