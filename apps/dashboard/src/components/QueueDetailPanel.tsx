@@ -150,7 +150,7 @@ export function QueueDetailPanel({
               eventInContext={inContext}
               onActiveAlertChange={rememberActiveAlert}
               onAddFilter={(fields, value, op, joiner) =>
-                appendPdqlFilter(investigationId ?? null, fields, value, op, joiner)
+                appendPdqlFilter(investigationId ?? null, fields, value, op, joiner, alert.source)
               }
               onFilterFindingUuid={(uuid, recordType) =>
                 filterByFindingUuid(investigationId ?? null, uuid, recordType)

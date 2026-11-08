@@ -12,6 +12,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -28,6 +29,7 @@ import (
 	"github.com/sb0rka/ir/apps/investigations/internal/config"
 	"github.com/sb0rka/ir/apps/investigations/internal/domain/model"
 	"github.com/sb0rka/ir/apps/investigations/internal/store"
+	"github.com/sb0rka/ir/packages/common/agentaccess"
 	coreauth "github.com/sb0rka/sb0rka/packages/core/auth"
 )
 
@@ -42,7 +44,6 @@ var (
 const tokenTypeURN = "urn:ietf:params:oauth:token-type:access_token"
 const exchangeGrant = "urn:ietf:params:oauth:grant-type:token-exchange"
 const delegationGrant = "urn:sb0rka:params:oauth:grant-type:delegation"
-const maxAuthRevocationAttempts = 8
 const authRevocationBatch = 50
 
 type Service struct {
@@ -56,6 +57,8 @@ type Service struct {
 	cacheMu        sync.Mutex
 	tokens         map[string]cachedToken
 	revocationWake chan struct{}
+	agentDB        store.AgentAccessDatabase
+	agentCipher    *agentaccess.Cipher
 }
 
 type cachedToken struct {
@@ -110,7 +113,7 @@ func New(ctx context.Context, db store.AuthDatabase, cfg config.Config) (*Servic
 		oidc.NewRemoteKeySet(oidcContext, auth.Issuer+"/oauth2/jwks"),
 		&oidc.Config{ClientID: auth.ClientID, SupportedSigningAlgs: []string{"RS256"}},
 	)
-	return &Service{
+	service := &Service{
 		db:            db,
 		cfg:           cfg,
 		http:          client,
@@ -130,7 +133,18 @@ func New(ctx context.Context, db store.AuthDatabase, cfg config.Config) (*Servic
 		},
 		tokens:         map[string]cachedToken{},
 		revocationWake: make(chan struct{}, 1),
-	}, nil
+	}
+	if len(cfg.Gateway.ConfigurationKey) != 0 {
+		service.agentDB, _ = db.(store.AgentAccessDatabase)
+		if service.agentDB == nil {
+			return nil, fmt.Errorf("agent access storage is unavailable")
+		}
+		service.agentCipher, err = agentaccess.NewCipher(cfg.Gateway.ConfigurationKey)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return service, nil
 }
 
 func newCipher(key []byte) (cipher.AEAD, error) {
@@ -370,6 +384,7 @@ func (s *Service) Verify(ctx context.Context, raw string) (coreauth.AccessTokenI
 			Issuer:   s.cfg.Server.Auth.Issuer,
 			Audience: coreauth.AudienceIR,
 			Keys:     s.cfg.Server.Auth.VerificationKeys,
+			Policy:   s.cfg.Server.Auth.AccessTokenPolicy,
 		},
 	)
 	if errors.Is(err, coreauth.ErrKeysUnavailable) {
@@ -393,13 +408,6 @@ func (s *Service) Authenticate(
 	session, err := s.db.LoginSessionByIdentity(ctx, id.SessionID, id.SubjectID)
 	if err != nil {
 		return session, id, upstreamError(err)
-	}
-	active, err := s.introspect(ctx, raw)
-	if err != nil {
-		return session, id, err
-	}
-	if !active.Active {
-		return session, id, ErrUnauthorized
 	}
 	return session, id, nil
 }
@@ -431,16 +439,17 @@ func (s *Service) Refresh(ctx context.Context, handle string) (model.LoginSessio
 		if open(s.sessionCipher, "ir:session:"+session.ID, session.EncryptedTokens, &tokens) != nil {
 			return session, "", ErrUnauthorized
 		}
-		if id, err := s.Verify(ctx, tokens.AccessToken); err == nil &&
-			id.ExpiresAt.After(time.Now().Add(30*time.Second)) {
-			active, err := s.introspect(ctx, tokens.AccessToken)
-			if err != nil {
-				return session, "", err
-			}
-			if !active.Active {
+		id, verifyErr := s.Verify(ctx, tokens.AccessToken)
+		if errors.Is(verifyErr, ErrUnavailable) {
+			return session, "", verifyErr
+		}
+		if verifyErr == nil {
+			if id.SubjectID != session.SubjectID || id.SessionID != session.ExternalSID {
 				return session, "", ErrUnauthorized
 			}
-			return session, tokens.AccessToken, nil
+			if id.ExpiresAt.After(time.Now().Add(30 * time.Second)) {
+				return session, tokens.AccessToken, nil
+			}
 		}
 		operation := uuid.NewString()
 		reserved, err := s.db.ReserveLoginRefresh(ctx, session.ID, session.Generation, operation)
@@ -487,6 +496,11 @@ func (s *Service) rotate(
 		return "", err
 	}
 	identity, err := s.Verify(ctx, next.AccessToken)
+	if errors.Is(err, ErrUnavailable) {
+		// Auth rotated successfully; replay the same idempotent operation once
+		// verification keys recover instead of revoking the usable session.
+		return "", err
+	}
 	if err != nil || identity.SubjectID != session.SubjectID || identity.SessionID != session.ExternalSID ||
 		next.RefreshToken == "" {
 		s.queueRevocation(ctx, session.ID, next)
@@ -503,11 +517,24 @@ func (s *Service) rotate(
 	if !saved {
 		current, currentErr := s.db.LoginSessionByID(ctx, session.ID)
 		if currentErr != nil {
-			s.queueRevocation(ctx, session.ID, next)
+			if errors.Is(currentErr, pgx.ErrNoRows) {
+				s.queueRevocation(ctx, session.ID, next)
+			}
 			return "", upstreamError(currentErr)
+		}
+		if current.Generation <= session.Generation {
+			return "", ErrUnavailable
 		}
 		var committed tokenSet
 		if open(s.sessionCipher, "ir:session:"+current.ID, current.EncryptedTokens, &committed) != nil {
+			return "", ErrUnavailable
+		}
+		winner, verifyErr := s.Verify(ctx, committed.AccessToken)
+		if errors.Is(verifyErr, ErrUnavailable) {
+			return "", verifyErr
+		}
+		if verifyErr != nil || winner.SubjectID != session.SubjectID || winner.SessionID != session.ExternalSID ||
+			!winner.ExpiresAt.After(time.Now().Add(30*time.Second)) {
 			return "", ErrUnavailable
 		}
 		return committed.AccessToken, nil
@@ -520,6 +547,13 @@ func (s *Service) Logout(ctx context.Context, handle string) error {
 		return nil
 	}
 	session, err := s.db.LoginSessionByRefresh(ctx, hash(handle))
+	if errors.Is(err, pgx.ErrNoRows) {
+		previous, previousErr := s.db.PreviousLoginRefresh(ctx, hash(handle))
+		if previousErr == nil {
+			session = previous.Session
+		}
+		err = previousErr
+	}
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil
 	}
@@ -606,30 +640,14 @@ func (s *Service) retryRevocations(ctx context.Context) {
 			"",
 			nil,
 		)
-		// RFC 7009: an already-revoked token is not a retryable failure.
-		terminal := status == http.StatusBadRequest || status == http.StatusUnauthorized
-		if err == nil || terminal {
-			if terminal {
-				slog.Warn(
-					"auth_revocation_dropped",
-					"session_id", item.SessionID,
-					"reason", "terminal_status",
-					"status", status,
-				)
-			}
+		// Auth returns 200 for unknown or already-revoked tokens. A 400/401
+		// response can recover after configuration or credential repair.
+		if err == nil {
 			_ = s.db.CompleteAuthRevocation(ctx, item.ID)
 			continue
 		}
-		if item.Attempts >= maxAuthRevocationAttempts {
-			slog.Warn(
-				"auth_revocation_dropped",
-				"session_id", item.SessionID,
-				"reason", "attempts_exhausted",
-				"status", status,
-				"attempts", item.Attempts,
-			)
-			_ = s.db.CompleteAuthRevocation(ctx, item.ID)
-		}
+		slog.Warn("auth_revocation_deferred", "session_id", item.SessionID,
+			"status", status, "attempts", item.Attempts)
 	}
 }
 
@@ -666,7 +684,9 @@ func (s *Service) authForm(
 		return response.StatusCode, ErrUnavailable
 	}
 	if response.StatusCode == http.StatusUnauthorized {
-		return response.StatusCode, ErrUnauthorized
+		// OAuth backchannels use 401 for invalid_client, not user-session
+		// revocation. Preserve the local session while credentials recover.
+		return response.StatusCode, ErrUnavailable
 	}
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
 		if response.StatusCode == http.StatusBadRequest && path == "/oauth2/token" {
@@ -703,6 +723,30 @@ func validIDTokenHeader(raw string) bool {
 		Algorithm string `json:"alg"`
 		Type      string `json:"typ"`
 		KeyID     string `json:"kid"`
+	}
+	decoder := json.NewDecoder(strings.NewReader(string(header)))
+	first, err := decoder.Token()
+	if err != nil || first != json.Delim('{') {
+		return false
+	}
+	seen := map[string]bool{}
+	for decoder.More() {
+		token, err := decoder.Token()
+		key, ok := token.(string)
+		if err != nil || !ok || seen[key] || key == "crit" {
+			return false
+		}
+		seen[key] = true
+		var value json.RawMessage
+		if decoder.Decode(&value) != nil {
+			return false
+		}
+		if key == "b64" && string(value) != "true" {
+			return false
+		}
+	}
+	if _, err := decoder.Token(); err != nil || decoder.Decode(new(any)) != io.EOF {
+		return false
 	}
 	return json.Unmarshal(header, &fields) == nil && fields.Algorithm == "RS256" && fields.Type == "JWT" &&
 		fields.KeyID != "" &&

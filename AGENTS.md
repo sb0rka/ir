@@ -28,17 +28,26 @@
 - `project_id` берётся только из проверенного `X-Project-ID`; любой запрос по
   идентификатору фильтруется по нему.
 - Отсутствующая и чужая запись обе отвечают `404`.
-- Внутри разрешённого проекта пользователи имеют одинаковые права IR. JWT имеет
+- Внутри разрешённого проекта пользователи имеют одинаковые права IR. Пользовательский JWT имеет
   аудиторию `sb0rka-ir`; локальная сессия, отдельный consent и текущий RBAC API
   проверяются перед каждым project-scoped REST/MCP запросом. `X-Project-ID`
   выбирает проект, но не предоставляет доступ.
+- Проектный ключ `s0_ir_agent_…` открывает доменные REST/MCP операции после
+  проверки активного SHA-256 и проекта в БД IR на каждом запросе. Управление
+  ключом, OIDC и конфигурацией остаётся пользовательским. Ротация сразу
+  инвалидирует прежний ключ; исходное значение хранится в Platform Secrets.
+- Агентская запись результатов и предложений групп не зависит от SoM issue.
+  Автор аудита берётся из проверенного auth context, а не из входного JSON.
 - Group decisions дополнительно ограничены корнем `parent_id` дерева:
   `(project_id, root_investigation_id)`. Независимые roots не разделяют группы,
   review, lineage или idempotency. Group scope не расширяет graph view и не
   является новым ACL. Инварианты и frontend API — в [docs/grouping.md](docs/grouping.md).
-- Gateway использует `PROJECT_SOURCE_ALLOWLISTS` как границу доступных проекту
-  источников и не принимает credentials или vendor URL из пользовательских
-  запросов.
+- Gateway определяет источники по серверной конфигурации backend и credentials
+  проекта. Пользовательский путь проверяет grants/RBAC; агентский проверяет тот
+  же Bearer в БД IR и читает локальную AES-GCM-копию конфигурации без Auth или
+  Platform calls. Копия обновляется при сохранении/перечитывании через IR;
+  `IR_GATEWAY_CONFIGURATION_KEY` общий для IR/Gateway и независим от session/OIDC
+  ключей. Vendor URL и NAD store IDs остаются серверными параметрами.
 
 ## Проверки
 
@@ -59,7 +68,7 @@ README и AGENTS содержат только актуальные правил
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **ir** (9299 symbols, 22004 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **ir** (12456 symbols, 30466 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > Index stale? Run `node .gitnexus/run.cjs analyze` from the project root — it auto-selects an available runner. No `.gitnexus/run.cjs` yet? `npx gitnexus analyze` (npm 11 crash → `npm i -g gitnexus`; #1939).
 

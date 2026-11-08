@@ -14,9 +14,16 @@ CREATE TABLE IF NOT EXISTS ir_login_sessions (
     generation BIGINT DEFAULT 0 NOT NULL,
     refresh_operation UUID,
     refresh_lease_until TIMESTAMPTZ,
+    previous_refresh_hash BYTEA,
+    refresh_handle_rotated_at TIMESTAMPTZ,
+    encrypted_refresh_handle BYTEA,
     created_at TIMESTAMPTZ DEFAULT now() NOT NULL,
     CONSTRAINT ck_ir_login_sessions_refresh_hash CHECK (octet_length(refresh_hash) = 32)
 );
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_ir_login_sessions_previous_refresh
+    ON ir_login_sessions(previous_refresh_hash) WHERE previous_refresh_hash IS NOT NULL;
+COMMIT;
 
 CREATE TABLE IF NOT EXISTS ir_login_requests (
     id UUID PRIMARY KEY,
@@ -45,6 +52,33 @@ CREATE TABLE IF NOT EXISTS ir_auth_revocations (
 
 CREATE INDEX IF NOT EXISTS ix_ir_auth_revocations_due
     ON ir_auth_revocations (next_attempt_at, created_at);
+
+CREATE TABLE IF NOT EXISTS ir_agent_secret_digests (
+    project_id VARCHAR(12) NOT NULL,
+    secret_id UUID NOT NULL,
+    version_no INT NOT NULL CHECK (version_no > 0),
+    digest_alg VARCHAR(16) NOT NULL CHECK (digest_alg = 'sha256'),
+    digest BYTEA NOT NULL CHECK (octet_length(digest) = 32),
+    prefix VARCHAR(14) NOT NULL,
+    postfix VARCHAR(3) NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT now() NOT NULL,
+    updated_at TIMESTAMPTZ DEFAULT now() NOT NULL,
+
+    CONSTRAINT pk_ir_agent_secret_digests PRIMARY KEY (secret_id, version_no),
+    CONSTRAINT uq_ir_agent_secret_digests_project UNIQUE (project_id),
+    CONSTRAINT uq_ir_agent_secret_digests_digest UNIQUE (digest)
+);
+
+CREATE TABLE IF NOT EXISTS ir_gateway_configurations (
+    project_id VARCHAR(12) PRIMARY KEY,
+    secret_id UUID,
+    version_no INT NOT NULL CHECK (version_no >= 0),
+    encrypted_config BYTEA NOT NULL,
+    updated_at TIMESTAMPTZ DEFAULT now() NOT NULL,
+    CONSTRAINT ck_ir_gateway_configurations_version CHECK (
+        (secret_id IS NULL AND version_no = 0) OR (secret_id IS NOT NULL AND version_no > 0)
+    )
+);
 
 UPDATE version_investigations SET version_num = '202611030001';
 COMMIT;

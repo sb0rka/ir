@@ -17,6 +17,7 @@ import {
   type Investigation,
   type InvestigationListFilter,
   type Issue,
+  type EventQuery,
   type QueueItem,
   type QueueSource,
   type QueueSourceResultSnapshot,
@@ -35,11 +36,22 @@ import {
 import { appendCondition, appendConditions, alignGroupValues, astToFilterChips, defaultQuery, entityKindForField, findingUuidFromAst, findingUuidQuery, isEntityQueueField, parseQueuePdql, serialize, withExplicitLimit, type CompareOp, type FindingFilterField, type LogicalJoiner } from '../lib/pdql'
 import { pdqlFieldForFilterField } from '../lib/filters'
 import { filterFingerprint } from '../lib/queryFingerprint'
+import {
+  appendEventQueryCondition,
+  describeEventQuery,
+  emptyEventQuery,
+  eventQueryFingerprint,
+  eventQueryFromLegacy,
+  eventQueryHasEntityScope,
+} from '../lib/eventQuery'
+import { loadConnectedSourceCodes } from '../api/connectedSources'
+import { loadEventFields, peekEventFields } from '../api/eventFields'
+import { coerceQueueSource, withoutFindingsUnavailableError } from '../lib/queueSources'
 import { findingRefForImport } from '../lib/queueContext'
 import {
   activeTimeZone,
   defaultWorkingTimeZone,
-  demoDayInterval,
+  todayInterval,
   resolve,
   type DisplayZone,
   type TimeInterval,
@@ -116,7 +128,7 @@ export const DEFAULT_INVESTIGATION_FILTER: InvestigationListFilter = {
 }
 
 const DEFAULT_QUEUE_PDQL = serialize(defaultQuery())
-const DEFAULT_TIME_INTERVAL = demoDayInterval()
+const DEFAULT_TIME_INTERVAL = todayInterval()
 const HISTORY_LIMIT = 8
 
 export const emptyContextQueue: ContextQueueState = {
@@ -168,6 +180,19 @@ function snapshotContextQueue(state: ContextQueueState): ContextSourceResultSnap
     executedFingerprint: state.executedFingerprint,
     ...(typeof state.total === 'number' ? { total: state.total } : {}),
   }
+}
+
+/** PDQL text a card filter should extend. Applied PDQL wins; otherwise the visible pipeline. */
+function eventsPdqlBase(query: EventQuery | undefined): string {
+  const current = query ?? emptyEventQuery()
+  if (current.appliedLanguage === 'pt_pdql') return current.pdql
+  const parsed = parseQueuePdql(current.pdql)
+  if (parsed.ok && parsed.ast.filter.length === 0) return serialize(parsed.ast)
+  return serialize(defaultQuery())
+}
+
+function eventQueryWithPdql(query: EventQuery | undefined, pdql: string): EventQuery {
+  return { ...(query ?? emptyEventQuery()), pdql, appliedLanguage: 'pt_pdql' }
 }
 
 /** Save current source results and restore the target source cache (or empty). */
@@ -279,6 +304,14 @@ function keepRowsOnEventsSource<T extends {
   }
 }
 
+async function readConnectedSources(): Promise<ReadonlySet<string> | null> {
+  try {
+    return await loadConnectedSourceCodes()
+  } catch {
+    return null
+  }
+}
+
 function groupFieldsFromPdql(pdql: string): string[] | undefined {
   const parsed = parseQueuePdql(pdql)
   return parsed.ok ? parsed.ast.groups.map((group) => group.field) : undefined
@@ -288,17 +321,16 @@ function pushQueryHistory(
   history: QueryHistoryEntry[],
   entry: QueryHistoryEntry,
 ): QueryHistoryEntry[] {
-  const key = filterFingerprint(
-    entry.pdql,
-    entry.timeInterval,
-    entry.queueSource,
-    entry.groupValues,
-  )
+  const key =
+    filterFingerprint(entry.pdql, entry.timeInterval, entry.queueSource, entry.groupValues) +
+    (entry.eventQuery ? `\n${JSON.stringify(entry.eventQuery)}` : '')
   return [
     entry,
     ...history.filter(
       (item) =>
-        filterFingerprint(item.pdql, item.timeInterval, item.queueSource, item.groupValues) !== key,
+        filterFingerprint(item.pdql, item.timeInterval, item.queueSource, item.groupValues) +
+          (item.eventQuery ? `\n${JSON.stringify(item.eventQuery)}` : '') !==
+        key,
     ),
   ].slice(0, HISTORY_LIMIT)
 }
@@ -311,6 +343,8 @@ interface AppState {
   /** Working IANA zone when displayTimeZone === 'working' (e.g. Europe/Moscow). */
   workingTimeZone: string
   queuePdql: string
+  eventQuery: EventQuery
+  queueSourceErrors: string[]
   queueSource: QueueSource
   /** Last executed table results per QueueSource for tab switches without refetch. */
   queueSourceCache: Partial<Record<QueueSource, QueueSourceResultSnapshot>>
@@ -389,6 +423,7 @@ interface AppState {
 
   addChip: (field: FilterField, value: string) => void
   setQueuePdql: (pdql: string) => void
+  setEventQuery: (query: EventQuery) => void
   setQueueTextFilter: (q: string) => void
   setQueueTextFilterColumn: (column: string) => void
   setInvestigationTextFilterColumn: (column: string) => void
@@ -450,6 +485,7 @@ interface AppState {
     value: string,
     op?: CompareOp,
     joiner?: LogicalJoiner,
+    eventSource?: string,
   ) => void
   filterByFindingUuid: (
     investigationId: string | null,
@@ -791,6 +827,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   displayTimeZone: 'working',
   workingTimeZone: defaultWorkingTimeZone(),
   queuePdql: DEFAULT_QUEUE_PDQL,
+  eventQuery: emptyEventQuery(),
+  queueSourceErrors: [],
   queueSource: DEFAULT_QUEUE_SOURCE,
   queueSourceCache: {},
   groupValues: [],
@@ -866,6 +904,20 @@ export const useAppStore = create<AppState>((set, get) => ({
         : get().groupValues,
     })
   },
+  setEventQuery: (eventQuery) => {
+    const previous = describeEventQuery(get().eventQuery).nativeAst
+    const next = describeEventQuery(eventQuery).nativeAst
+    set({
+      eventQuery,
+      groupValues: next
+        ? alignGroupValues(
+            next,
+            get().groupValues,
+            previous?.groups.map((group) => group.field),
+          )
+        : [],
+    })
+  },
   setQueueTextFilter: (queueTextFilter) => set({ queueTextFilter }),
   setQueueTextFilterColumn: (queueTextFilterColumn) => set({ queueTextFilterColumn }),
   setInvestigationTextFilterColumn: (column) => {
@@ -888,9 +940,13 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
   applyQueueHistory: (entry) => {
     const nextSource = entry.queueSource ?? DEFAULT_QUEUE_SOURCE
+    const eventQuery =
+      entry.eventQuery ??
+      (nextSource === 'events' ? eventQueryFromLegacy(entry.pdql) : get().eventQuery)
     set({
       ...swapGlobalQueueSource(get(), nextSource),
       queuePdql: entry.pdql,
+      eventQuery,
       timeInterval: entry.timeInterval,
       groupValues: entry.groupValues ?? [],
     })
@@ -991,9 +1047,97 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   loadQueue: async () => {
+    const connected = await readConnectedSources()
+    if (connected) {
+      const next = coerceQueueSource(get().queueSource, connected)
+      if (next !== get().queueSource) {
+        set({
+          ...swapGlobalQueueSource(get(), next),
+          lastError: withoutFindingsUnavailableError(get().lastError),
+        })
+      }
+    }
+    const source = get().queueSource
+    const still = () => get().queueSource === source
+    const eventQuery = get().eventQuery
+    if (source === 'events' || (source === 'entities' && eventQueryHasEntityScope(eventQuery))) {
+      const timeInterval = get().timeInterval
+      const described = describeEventQuery(eventQuery, [], get().groupValues)
+      if (described.error) {
+        if (!still()) return
+        set({ lastError: described.error, queueLoading: false })
+        return
+      }
+      const groupValues = described.nativeAst
+        ? alignGroupValues(described.nativeAst, get().groupValues)
+        : []
+      if (!still()) return
+      set({ queueLoading: true, lastError: null, mockSources: [], groupValues, queueSourceErrors: [] })
+      try {
+        const fields = await loadEventFields()
+        const result = await searchQueue(describeEventQuery(eventQuery).nativeAst ?? defaultQuery(), timeInterval, source, groupValues, eventQuery)
+        const hosts = new Set(get().filterValueOptions.host ?? [])
+        const ips = new Set(get().filterValueOptions.ip ?? [])
+        for (const entity of Object.values(result.entities)) {
+          if (entity.kind === 'host') hosts.add(entity.label)
+          if (entity.kind === 'ip') ips.add(entity.label)
+        }
+        const effectiveTime = result.effectiveTimeInterval ?? timeInterval
+        if (!still()) return
+        const executedFingerprint = eventQueryFingerprint(eventQuery, effectiveTime, groupValues, fields)
+        const snapshot: QueueSourceResultSnapshot = {
+          alerts: result.alerts,
+          correlations: result.correlations,
+          queueOrder: result.queueOrder,
+          eventGroups: result.eventGroups,
+          executedFingerprint,
+          mockSources: result.mockSources,
+          ...(typeof result.total === 'number' ? { total: result.total } : {}),
+        }
+        set({
+          groupValues,
+          timeInterval: effectiveTime,
+          executedFingerprint,
+          queryHistory: pushQueryHistory(get().queryHistory, {
+            pdql: describeEventQuery(eventQuery, fields, groupValues).preview,
+            eventQuery,
+            timeInterval: effectiveTime,
+            queueSource: source,
+            groupValues,
+          }),
+          alerts: result.alerts,
+          correlations: result.correlations,
+          queueOrder: result.queueOrder,
+          queueTotal: result.total,
+          eventGroups: result.eventGroups,
+          queueSourceCache: { ...get().queueSourceCache, [source]: snapshot },
+          entities: mergeEntities(get().entities, result.entities),
+          contextEvents: { ...get().contextEvents, ...result.contextEvents },
+          expandedCorrelationIds: result.queueOrder
+            .filter((item) => item.kind === 'correlation')
+            .map((item) => item.id)
+            .slice(0, 3),
+          filterValueOptions: {
+            ...get().filterValueOptions,
+            host: [...hosts],
+            ip: [...ips],
+            source: result.availableSources,
+          },
+          mockSources: result.mockSources,
+          queueSourceErrors: result.sourceErrors,
+          queueLoading: false,
+          lastError: result.sourceErrors.length ? result.sourceErrors.join('; ') : null,
+        })
+      } catch (err) {
+        if (!still()) return
+        set({ queueLoading: false, lastError: errorMessage(err), mockSources: [], queueSourceErrors: [] })
+      }
+      return
+    }
     const parsed = parseQueuePdql(get().queuePdql)
     if (parsed.ok === false) {
       const { error } = parsed
+      if (!still()) return
       set({
         lastError: `${error.message}${error.position > 0 ? ` (позиция ${error.position})` : ''}`,
       })
@@ -1003,6 +1147,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const timeInterval = get().timeInterval
     const queueSource = get().queueSource
     const groupValues = alignGroupValues(parsed.ast, get().groupValues)
+    if (!still()) return
     set({ queueLoading: true, lastError: null, mockSources: [], groupValues })
     try {
       const result = await searchQueue(parsed.ast, timeInterval, queueSource, groupValues)
@@ -1013,6 +1158,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         if (e.kind === 'ip') ips.add(e.label)
       }
       // Canonical PDQL always shows limit(N): the loaded row count is never a hidden constant.
+      if (!still()) return
       const canonical = serialize(withExplicitLimit(parsed.ast))
       const effectiveTime = result.effectiveTimeInterval ?? timeInterval
       const executedFingerprint = filterFingerprint(canonical, effectiveTime, queueSource, groupValues)
@@ -1060,6 +1206,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         lastError: result.sourceErrors.length ? result.sourceErrors.join('; ') : null,
       })
     } catch (err) {
+      if (!still()) return
       set({ queueLoading: false, lastError: errorMessage(err), mockSources: [] })
     }
   },
@@ -1488,10 +1635,111 @@ export const useAppStore = create<AppState>((set, get) => ({
     })
   },
   executeContextQuery: async (investigationId) => {
+    const connected = await readConnectedSources()
+    if (connected) {
+      const current = get().contextQueue[investigationId] ?? emptyContextQueue
+      const next = coerceQueueSource(current.queueSource, connected)
+      if (next !== current.queueSource) {
+        get().setContextQueue(investigationId, { queueSource: next, sourceErrors: [] })
+        set({ lastError: withoutFindingsUnavailableError(get().lastError) })
+      }
+    }
     const cur = get().contextQueue[investigationId] ?? emptyContextQueue
+    const source = cur.queueSource
+    const still = () => (get().contextQueue[investigationId] ?? emptyContextQueue).queueSource === source
+    const eventQuery = cur.eventQuery ?? emptyEventQuery()
+    if (source === 'events' || (source === 'entities' && eventQueryHasEntityScope(eventQuery))) {
+      const described = describeEventQuery(eventQuery, [], cur.groupValues)
+      if (described.error) {
+        if (!still()) return false
+        set({ lastError: described.error })
+        return false
+      }
+      const groupValues = described.nativeAst
+        ? alignGroupValues(described.nativeAst, cur.groupValues)
+        : []
+      if (!still()) return false
+      set({
+        lastError: null,
+        contextQueue: {
+          ...get().contextQueue,
+          [investigationId]: { ...cur, eventQuery, groupValues, loading: true, sourceErrors: [] },
+        },
+      })
+      try {
+        const fields = await loadEventFields()
+        const result = await searchQueue(defaultQuery(), cur.timeInterval, cur.queueSource, groupValues, eventQuery)
+        const hosts = new Set(get().filterValueOptions.host ?? [])
+        const ips = new Set(get().filterValueOptions.ip ?? [])
+        for (const entity of Object.values(result.entities)) {
+          if (entity.kind === 'host') hosts.add(entity.label)
+          if (entity.kind === 'ip') ips.add(entity.label)
+        }
+        if (!still()) return false
+        const latest = get().contextQueue[investigationId] ?? emptyContextQueue
+        const effectiveTime = result.effectiveTimeInterval ?? cur.timeInterval
+        const executedFingerprint = eventQueryFingerprint(eventQuery, effectiveTime, groupValues, fields)
+        const sourceSnapshot = {
+          alerts: result.alerts,
+          queueOrder: result.queueOrder,
+          eventGroups: result.eventGroups,
+          executedFingerprint,
+          ...(typeof result.total === 'number' ? { total: result.total } : {}),
+        }
+        set({
+          entities: mergeEntities(get().entities, result.entities),
+          filterValueOptions: {
+            ...get().filterValueOptions,
+            host: [...hosts],
+            ip: [...ips],
+            source: result.availableSources,
+          },
+          lastError: result.sourceErrors.length ? result.sourceErrors.join('; ') : null,
+          contextQueue: {
+            ...get().contextQueue,
+            [investigationId]: {
+              ...latest,
+              eventQuery,
+              queueSource: cur.queueSource,
+              groupValues,
+              timeInterval: effectiveTime,
+              eventGroups: result.eventGroups,
+              alerts: result.alerts,
+              queueOrder: result.queueOrder,
+              total: result.total,
+              loading: false,
+              sourceErrors: result.sourceErrors,
+              executedFingerprint,
+              sourceResults: { ...(latest.sourceResults ?? {}), [source]: sourceSnapshot },
+              queryHistory: pushQueryHistory(latest.queryHistory, {
+                pdql: describeEventQuery(eventQuery, fields, groupValues).preview,
+                eventQuery,
+                timeInterval: effectiveTime,
+                queueSource: cur.queueSource,
+                groupValues,
+              }),
+              selectedIds: [],
+            },
+          },
+        })
+        return true
+      } catch (err) {
+        if (!still()) return false
+        const latest = get().contextQueue[investigationId] ?? emptyContextQueue
+        set({
+          lastError: errorMessage(err),
+          contextQueue: {
+            ...get().contextQueue,
+            [investigationId]: { ...latest, loading: false },
+          },
+        })
+        return false
+      }
+    }
     const parsed = parseQueuePdql(cur.pdql)
     if (parsed.ok === false) {
       const { error } = parsed
+      if (!still()) return false
       set({
         lastError: `${error.message}${error.position > 0 ? ` (позиция ${error.position})` : ''}`,
       })
@@ -1502,6 +1750,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const queueSource = cur.queueSource
     const groupValues = alignGroupValues(parsed.ast, cur.groupValues)
     const canonical = serialize(withExplicitLimit(parsed.ast))
+    if (!still()) return false
     set({
       lastError: null,
       contextQueue: {
@@ -1517,6 +1766,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         if (e.kind === 'host') hosts.add(e.label)
         if (e.kind === 'ip') ips.add(e.label)
       }
+      if (!still()) return false
       const latest = get().contextQueue[investigationId] ?? emptyContextQueue
       const effectiveTime = result.effectiveTimeInterval ?? timeInterval
       const executedFingerprint = filterFingerprint(
@@ -1569,6 +1819,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       })
       return true
     } catch (err) {
+      if (!still()) return false
       const latest = get().contextQueue[investigationId] ?? emptyContextQueue
       set({
         lastError: errorMessage(err),
@@ -1635,10 +1886,19 @@ export const useAppStore = create<AppState>((set, get) => ({
     return true
   },
 
-  appendPdqlFilter: (investigationId, field, value, op = '=', joiner = 'and') => {
-    const pdql = investigationId
-      ? (get().contextQueue[investigationId] ?? emptyContextQueue).pdql
-      : get().queuePdql
+  appendPdqlFilter: (investigationId, field, value, op = '=', joiner = 'and', eventSource) => {
+    const context = investigationId ? (get().contextQueue[investigationId] ?? emptyContextQueue) : null
+    const onEvents = investigationId ? context!.queueSource === 'events' : get().queueSource === 'events'
+    const eventQuery = onEvents
+      ? investigationId
+        ? context!.eventQuery
+        : get().eventQuery
+      : undefined
+    const pdql = onEvents
+      ? eventsPdqlBase(eventQuery)
+      : investigationId
+        ? context!.pdql
+        : get().queuePdql
     const parsed = parseQueuePdql(pdql)
     const fields = typeof field === 'string' ? [field] : [...field]
     const nextPdql = appendConditions(pdql, fields, op, value, joiner)
@@ -1648,6 +1908,36 @@ export const useAppStore = create<AppState>((set, get) => ({
       fields.length > 0 &&
       fields.every(isEntityQueueField) &&
       !(parsed.ok && findingUuidFromAst(parsed.ast))
+    if (onEvents && !switchToEntities) {
+      const nextQuery = appendEventQueryCondition(
+        eventQuery,
+        fields,
+        op,
+        value,
+        joiner,
+        peekEventFields(),
+        eventSource,
+      )
+      if (!investigationId) {
+        set({
+          ...(nextQuery.appliedLanguage === 'pt_pdql' ? { queuePdql: nextQuery.pdql } : {}),
+          eventQuery: nextQuery,
+        })
+        return
+      }
+      const cur = context!
+      set({
+        contextQueue: {
+          ...get().contextQueue,
+          [investigationId]: {
+            ...cur,
+            ...(nextQuery.appliedLanguage === 'pt_pdql' ? { pdql: nextQuery.pdql } : {}),
+            eventQuery: nextQuery,
+          },
+        },
+      })
+      return
+    }
     if (!investigationId) {
       if (switchToEntities) {
         set({
@@ -1661,7 +1951,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       set({ queuePdql: nextPdql })
       return
     }
-    const cur = get().contextQueue[investigationId] ?? emptyContextQueue
+    const cur = context!
     if (switchToEntities) {
       set({
         contextQueue: {
@@ -1679,10 +1969,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({
       contextQueue: {
         ...get().contextQueue,
-        [investigationId]: {
-          ...cur,
-          pdql: nextPdql,
-        },
+        [investigationId]: { ...cur, pdql: nextPdql },
       },
     })
   },
@@ -1698,6 +1985,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       set({
         ...kept,
         queuePdql: pdql,
+        eventQuery: eventQueryWithPdql(state.eventQuery, pdql),
         groupValues: [],
         eventGroups: [],
         queueTotal: state.queueTotal,
@@ -1716,6 +2004,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         [investigationId]: {
           ...keepRowsOnEventsSource(cur, swapped),
           pdql,
+          eventQuery: eventQueryWithPdql(cur.eventQuery, pdql),
           groupValues: [],
           eventGroups: [],
           total: cur.total,

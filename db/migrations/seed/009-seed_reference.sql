@@ -1,4 +1,4 @@
--- Ядро типов сущностей, связей и два реально поддержанных PT-источника.
+-- Ядро типов сущностей, связей и источники.
 
 BEGIN;
 
@@ -54,6 +54,7 @@ INSERT INTO relation_types (code, title, source_kind, target_kind, directed) VAL
 ON CONFLICT (code) DO NOTHING;
 
 INSERT INTO sources (code, kind, title) VALUES
+    ('wazuh', 'siem', 'Wazuh'),
     ('pt-maxpatrol-siem', 'siem', 'MaxPatrol SIEM'),
     ('pt-nad',            'ndr',  'PT Network Attack Discovery')
 ON CONFLICT (code) DO NOTHING;

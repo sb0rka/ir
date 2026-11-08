@@ -9,7 +9,9 @@ info:
 servers:
   - url: .
 security:
+  - agentBearer: []
   - bearerAuth: []
+    configurationToken: []
 tags:
   - name: evidence
     description: Explicit source evidence exports.
@@ -31,8 +33,18 @@ tags:
     description: Endpoint search and response capabilities.
 components:
   securitySchemes:
+    agentBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: s0_ir_agent_
+      description: Project agent key, exactly 64 characters starting with s0_ir_agent_. The active SHA-256 digest and X-Project-ID are checked in the IR database on every request. Source configuration is decrypted from the local project copy; no user session, introspection or configuration token is required. Never forwarded to vendors.
+    configurationToken:
+      type: apiKey
+      in: header
+      name: X-IR-Config-Token
+      description: Required only with the user Gateway JWT. Backend-supplied Bearer JWT for sb0rka-api with exactly secrets.read (metadata) and secrets.reveal (value). Its user, session, client and actor must match the Gateway JWT. Never forwarded to vendors.
     bearerAuth:
       type: http
       scheme: bearer
       bearerFormat: JWT
-      description: Auth-issued delegated access JWT for sb0rka-ir-gateway, with ir.gateway.use, project restrictions and live introspection. Browser clients call Gateway through ir-api.
+      description: User path. Auth-issued delegated access JWT for sb0rka-ir-gateway, with ir.gateway.use, project restrictions and live introspection. Requires configurationToken. Browser clients call Gateway through ir-api.

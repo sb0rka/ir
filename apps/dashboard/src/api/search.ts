@@ -20,6 +20,7 @@ import {
   type FindingResolveResult,
 } from './findingResolveCache'
 import { pickFindingAccounts, pickFindingChildEvents, pickFindingHosts, type FindingResolveKey } from '../lib/correlationSubevents'
+import { ruleLevelBucketClause } from '../lib/ruleLevel'
 import { matchesChips } from '../lib/filters'
 import {
   alertMatchesPdql,
@@ -35,7 +36,15 @@ import {
   type QueryAst,
   type PdqlSearchEntity,
 } from '../lib/pdql'
+import { loadEventFields } from './eventFields'
 import { sortQueueAlerts, type QueueSort } from '../lib/queueSort'
+import {
+  describeEventQuery,
+  eventQueryHasEntityScope,
+  eventTimeInterval,
+  type EventQuery,
+  type EventSourceMeta,
+} from '../lib/eventQuery'
 import { inResolvedInterval, resolve, type TimeInterval } from '../components/time-interval/model'
 import type { components as Gw } from '@ir/contract/gateway'
 
@@ -278,7 +287,7 @@ function mergeEventGroups(groups: Gw['schemas']['EventGroup'][]): EventGroupItem
   const merged = new Map<string, EventGroupItem>()
   for (const group of groups) {
     const values = group.values ?? []
-    const key = JSON.stringify(values)
+    const key = `${group.source_code}\n${JSON.stringify(values)}`
     const prev = merged.get(key)
     if (prev) {
       prev.count += group.count
@@ -675,12 +684,241 @@ async function searchEventsQueue(
   )
 }
 
+async function searchEventQuery(
+  query: EventQuery,
+  timeInterval: TimeInterval,
+  groupValues: (string | null)[] | undefined,
+  sourcesMeta: EventSourceMeta[],
+): Promise<QueueSearchResult> {
+  const sources = await capableSources('events')
+  const described = describeEventQuery(query, sourcesMeta, groupValues)
+  if (described.error) throw new Error(described.error)
+  const online = sources.defaults.length ? sources.defaults : sources.available
+  const allowed = described.language
+    ? (described.sources ?? []).filter((code) => online.includes(code))
+    : online
+  if (!allowed.length) {
+    return emptyQueue(
+      [
+        described.language
+          ? 'Нет подключённых источников для выбранного языка'
+          : 'Нет доступных online-источников events',
+      ],
+      sources.available,
+    )
+  }
+
+  if (described.language === 'pt_pdql' && described.nativeAst) {
+    const finding = findingUuidFromAst(described.nativeAst)
+    if (finding) {
+      const resolved = await resolveUuidFindingQueue(
+        described.nativeAst,
+        finding.uuid,
+        finding.recordType,
+        timeInterval,
+        allowed,
+        sources.available,
+      )
+      if (resolved) return resolved
+    }
+  }
+
+  const sourceErrors: string[] = []
+  let eventGroups: EventGroupItem[] = []
+  const commonFilter =
+    described.hosts.length || described.ips.length
+      ? {
+          ...(described.hosts.length ? { hosts: described.hosts } : {}),
+          ...(described.ips.length ? { ips: described.ips } : {}),
+        }
+      : undefined
+  if (described.aggregateGroupBy && described.language) {
+    const aggregate: AggregateBody = {
+      time_range: resolve(timeInterval),
+      limit: described.limit,
+      sources: allowed,
+      group_by: described.aggregateGroupBy,
+    }
+    if (commonFilter) aggregate.common_filter = commonFilter
+    if (described.language) aggregate.filter_language = described.language
+    if (described.filter) aggregate.filter = described.filter
+    const { data, error, response } = await gatewayClient.POST('/api/v1/events/aggregate', {
+      params: projectHeader(),
+      body: aggregate,
+    })
+    if (error || !data) throw unwrapError(error, response.status)
+    eventGroups = mergeEventGroups(data.groups ?? [])
+    for (const err of data.source_errors ?? []) sourceErrors.push(`${err.source}: ${err.message}`)
+    if (!described.group_by) {
+      return { ...emptyQueue([...new Set(sourceErrors)], sources.available), eventGroups }
+    }
+  }
+
+  const limit = described.limit
+  const { pageLimit, maxPages } = pagePlan(limit)
+  const body: EventsBody = {
+    time_range: resolve(timeInterval),
+    limit: pageLimit,
+    sources: allowed,
+  }
+  if (commonFilter) body.common_filter = commonFilter
+  if (described.language) body.filter_language = described.language
+  if (described.filter) body.filter = described.filter
+  if (described.columns) body.columns = described.columns
+  if (described.sort) body.sort = described.sort
+  const levelBucket =
+    described.language === 'wazuh_dql' &&
+    described.group_by?.length === 1 &&
+    described.group_by[0] === 'rule.level'
+      ? ruleLevelBucketClause(described.group_values?.[0])
+      : null
+  if (levelBucket) {
+    // One group value cannot name a severity bucket. The range filters the
+    // event page only; the aggregate above stays split by raw rule.level.
+    body.filter = described.filter ? `(${described.filter}) AND (${levelBucket})` : levelBucket
+  } else if (described.group_by && described.group_values) {
+    body.group_by = described.group_by
+    body.group_values = described.group_values
+  }
+
+  const events: Gw['schemas']['Event'][] = []
+  const gatewayEntities: Gw['schemas']['Entity'][] = []
+  let cursor: string | undefined
+  let total: number | undefined
+  for (let page = 0; page < maxPages && events.length < limit; page++) {
+    const { data, error, response } = await gatewayClient.POST('/api/v1/events/search', {
+      params: projectHeader(),
+      body: { ...body, limit: Math.min(GATEWAY_PAGE_MAX, limit - events.length), cursor },
+    })
+    if (error || !data) throw unwrapError(error, response.status)
+    events.push(...(data.events ?? []))
+    gatewayEntities.push(...(data.entities ?? []))
+    if (total === undefined) total = gatewaySearchTotal(data)
+    for (const err of data.source_errors ?? []) {
+      sourceErrors.push(`${err.source}: ${err.message}`)
+    }
+    if (!data.next_cursor) break
+    cursor = data.next_cursor
+  }
+  if (events.length > limit) events.length = limit
+
+  const { alertList, entities } = entitiesFromGateway(events, gatewayEntities)
+  return finishQueue(
+    alertList,
+    entities,
+    [],
+    undefined,
+    sourceErrors,
+    sources.available,
+    described.sort,
+    eventGroups,
+    total,
+  )
+}
+
+async function searchEntitiesFromEventQuery(
+  query: EventQuery,
+  timeInterval: TimeInterval,
+  groupValues: (string | null)[] | undefined,
+  sourcesMeta: EventSourceMeta[],
+): Promise<QueueSearchResult> {
+  const sources = await capableSources('events')
+  const described = describeEventQuery(query, sourcesMeta, groupValues)
+  if (described.error) throw new Error(described.error)
+  const online = sources.defaults.length ? sources.defaults : sources.available
+  if (!eventQueryHasEntityScope(query, sourcesMeta)) {
+    return emptyQueue(['Добавьте фильтр сущности (host / account / ip)'], sources.available)
+  }
+  const allowed = described.language
+    ? (described.sources ?? []).filter((code) => online.includes(code))
+    : online
+  if (!allowed.length) {
+    return emptyQueue(
+      [
+        described.language
+          ? 'Нет подключённых источников для выбранного языка'
+          : 'Нет доступных online-источников events',
+      ],
+      sources.available,
+    )
+  }
+
+  const commonFilter =
+    described.hosts.length || described.ips.length
+      ? {
+          ...(described.hosts.length ? { hosts: described.hosts } : {}),
+          ...(described.ips.length ? { ips: described.ips } : {}),
+        }
+      : undefined
+  const limit = described.limit
+  const { pageLimit, maxPages } = pagePlan(limit)
+  const body: EventsBody = {
+    time_range: resolve(timeInterval),
+    limit: pageLimit,
+    sources: allowed,
+  }
+  if (commonFilter) body.common_filter = commonFilter
+  if (described.language) body.filter_language = described.language
+  if (described.filter) body.filter = described.filter
+  if (described.sort) body.sort = described.sort
+  const levelBucket =
+    described.language === 'wazuh_dql' &&
+    described.group_by?.length === 1 &&
+    described.group_by[0] === 'rule.level'
+      ? ruleLevelBucketClause(described.group_values?.[0])
+      : null
+  if (levelBucket) {
+    body.filter = described.filter ? `(${described.filter}) AND (${levelBucket})` : levelBucket
+  } else if (described.group_by && described.group_values) {
+    body.group_by = described.group_by
+    body.group_values = described.group_values
+  }
+
+  const sourceErrors: string[] = []
+  const events: Gw['schemas']['Event'][] = []
+  const pageEntities: Gw['schemas']['Entity'][] = []
+  let cursor: string | undefined
+  for (let page = 0; page < maxPages && events.length < limit; page++) {
+    const { data, error, response } = await gatewayClient.POST('/api/v1/events/search', {
+      params: projectHeader(),
+      body: { ...body, limit: Math.min(GATEWAY_PAGE_MAX, limit - events.length), cursor },
+    })
+    if (error || !data) throw unwrapError(error, response.status)
+    events.push(...(data.events ?? []))
+    pageEntities.push(...(data.entities ?? []))
+    for (const err of data.source_errors ?? []) {
+      sourceErrors.push(`${err.source}: ${err.message}`)
+    }
+    if (!data.next_cursor) break
+    cursor = data.next_cursor
+  }
+  if (events.length > limit) events.length = limit
+
+  const { entities } = entitiesFromGateway(events, pageEntities)
+  return finishEntityQueue(entities, sourceErrors, sources.available)
+}
+
 export async function searchQueue(
   ast: QueryAst,
   timeInterval: TimeInterval,
   queueSource: QueueSource = DEFAULT_QUEUE_SOURCE,
   groupValues?: (string | null)[],
+  eventQuery?: EventQuery,
 ): Promise<QueueSearchResult> {
+  if (queueSource === 'entities' && eventQuery && eventQueryHasEntityScope(eventQuery)) {
+    const sourcesMeta = await loadEventFields()
+    const effective = eventTimeInterval(eventQuery, timeInterval, sourcesMeta)
+    const rewritten = JSON.stringify(effective) !== JSON.stringify(timeInterval)
+    const result = await searchEntitiesFromEventQuery(eventQuery, effective, groupValues, sourcesMeta)
+    return rewritten ? { ...result, effectiveTimeInterval: effective } : result
+  }
+  if (queueSource === 'events' && eventQuery) {
+    const sourcesMeta = await loadEventFields()
+    const effective = eventTimeInterval(eventQuery, timeInterval, sourcesMeta)
+    const rewritten = JSON.stringify(effective) !== JSON.stringify(timeInterval)
+    const result = await searchEventQuery(eventQuery, effective, groupValues, sourcesMeta)
+    return rewritten ? { ...result, effectiveTimeInterval: effective } : result
+  }
   const { interval: effective, rewritten } = timeIntervalFromAst(ast, timeInterval)
   if (queueSource === 'events') {
     const result = await searchEventsQueue(ast, effective, groupValues)

@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/oapi-codegen/runtime"
 	openapi_types "github.com/oapi-codegen/runtime/types"
@@ -109,6 +110,36 @@ type AccessTokenResponse struct {
 	AccessToken string `json:"access_token"`
 }
 
+// AgentAccessIssued defines model for AgentAccessIssued.
+type AgentAccessIssued struct {
+	Configured bool                `json:"configured"`
+	CreatedAt  *time.Time          `json:"created_at,omitempty"`
+	Postfix    *string             `json:"postfix,omitempty"`
+	Prefix     *string             `json:"prefix,omitempty"`
+	SecretId   *openapi_types.UUID `json:"secret_id,omitempty"`
+
+	// Token Returned only by generation and rotation; stored as plaintext in Platform Secrets.
+	Token     string     `json:"token"`
+	UpdatedAt *time.Time `json:"updated_at,omitempty"`
+	Version   *int32     `json:"version,omitempty"`
+}
+
+// AgentAccessMetadata defines model for AgentAccessMetadata.
+type AgentAccessMetadata struct {
+	Configured bool                `json:"configured"`
+	CreatedAt  *time.Time          `json:"created_at,omitempty"`
+	Postfix    *string             `json:"postfix,omitempty"`
+	Prefix     *string             `json:"prefix,omitempty"`
+	SecretId   *openapi_types.UUID `json:"secret_id,omitempty"`
+	UpdatedAt  *time.Time          `json:"updated_at,omitempty"`
+	Version    *int32              `json:"version,omitempty"`
+}
+
+// AgentAccessRotate defines model for AgentAccessRotate.
+type AgentAccessRotate struct {
+	ExpectedVersion int32 `json:"expected_version"`
+}
+
 // AuthSubject defines model for AuthSubject.
 type AuthSubject struct {
 	IsActive  bool               `json:"is_active"`
@@ -130,6 +161,32 @@ type AuthorizeResponse struct {
 	AuthorizeUrl string `json:"authorize_url"`
 }
 
+// ConfigurationDocument defines model for ConfigurationDocument.
+type ConfigurationDocument struct {
+	Configured bool       `json:"configured"`
+	UpdatedAt  *time.Time `json:"updated_at,omitempty"`
+
+	// Value Original JSON text, preserving indentation, whitespace, key order and escapes. An absent secret returns '[]'.
+	Value   string `json:"value"`
+	Version int32  `json:"version"`
+}
+
+// ConfigurationMetadata defines model for ConfigurationMetadata.
+type ConfigurationMetadata struct {
+	Configured bool       `json:"configured"`
+	UpdatedAt  *time.Time `json:"updated_at,omitempty"`
+	Version    int32      `json:"version"`
+}
+
+// ConfigurationUpdate Sources with unique nonempty names and string fields; compact UTF-8 JSON at most 64 KiB, request body at most 512 KiB. Original JSON text is preserved. The entire array replaces the previous version; an empty array clears the configuration.
+type ConfigurationUpdate = []ConfigurationUpdate_Item
+
+// ConfigurationUpdate_Item defines model for ConfigurationUpdate.Item.
+type ConfigurationUpdate_Item struct {
+	Name                 string            `json:"name"`
+	AdditionalProperties map[string]string `json:"-"`
+}
+
 // InitLoginRequest defines model for InitLoginRequest.
 type InitLoginRequest struct {
 	AppChallenge string `json:"app_challenge"`
@@ -149,6 +206,26 @@ type IntegrationStatus struct {
 type RedeemLoginRequest struct {
 	AppVerifier string `json:"app_verifier"`
 	Handoff     string `json:"handoff"`
+}
+
+// GetIRAgentAccessParams defines parameters for GetIRAgentAccess.
+type GetIRAgentAccessParams struct {
+	XProjectID string `json:"X-Project-ID"`
+}
+
+// CreateIRAgentAccessParams defines parameters for CreateIRAgentAccess.
+type CreateIRAgentAccessParams struct {
+	// Origin Exact configured IR web origin
+	Origin     string `json:"Origin"`
+	XProjectID string `json:"X-Project-ID"`
+}
+
+// RotateIRAgentAccessParams defines parameters for RotateIRAgentAccess.
+type RotateIRAgentAccessParams struct {
+	XProjectID string `json:"X-Project-ID"`
+
+	// Origin Exact configured IR web origin
+	Origin string `json:"Origin"`
 }
 
 // LogoutIRSessionParams defines parameters for LogoutIRSession.
@@ -182,6 +259,17 @@ type RefreshIRSessionParams struct {
 	Origin string `json:"Origin"`
 }
 
+// GetIRConfigurationParams defines parameters for GetIRConfiguration.
+type GetIRConfigurationParams struct {
+	XProjectID string `json:"X-Project-ID"`
+}
+
+// PutIRConfigurationParams defines parameters for PutIRConfiguration.
+type PutIRConfigurationParams struct {
+	Origin     string `json:"Origin"`
+	XProjectID string `json:"X-Project-ID"`
+}
+
 // IrIntegrationCallbackParams defines parameters for IrIntegrationCallback.
 type IrIntegrationCallbackParams struct {
 	State string  `form:"state" json:"state"`
@@ -213,14 +301,95 @@ type DisconnectIRIntegrationParamsIntegration string
 // IrIntegrationStatusParamsIntegration defines parameters for IrIntegrationStatus.
 type IrIntegrationStatusParamsIntegration string
 
+// RotateIRAgentAccessJSONRequestBody defines body for RotateIRAgentAccess for application/json ContentType.
+type RotateIRAgentAccessJSONRequestBody = AgentAccessRotate
+
 // InitIRLoginJSONRequestBody defines body for InitIRLogin for application/json ContentType.
 type InitIRLoginJSONRequestBody = InitLoginRequest
 
 // RedeemIRLoginJSONRequestBody defines body for RedeemIRLogin for application/json ContentType.
 type RedeemIRLoginJSONRequestBody = RedeemLoginRequest
 
+// PutIRConfigurationJSONRequestBody defines body for PutIRConfiguration for application/json ContentType.
+type PutIRConfigurationJSONRequestBody = ConfigurationUpdate
+
+// Getter for additional properties for ConfigurationUpdate_Item. Returns the specified
+// element and whether it was found
+func (a ConfigurationUpdate_Item) Get(fieldName string) (value string, found bool) {
+	if a.AdditionalProperties != nil {
+		value, found = a.AdditionalProperties[fieldName]
+	}
+	return
+}
+
+// Setter for additional properties for ConfigurationUpdate_Item
+func (a *ConfigurationUpdate_Item) Set(fieldName string, value string) {
+	if a.AdditionalProperties == nil {
+		a.AdditionalProperties = make(map[string]string)
+	}
+	a.AdditionalProperties[fieldName] = value
+}
+
+// Override default JSON handling for ConfigurationUpdate_Item to handle AdditionalProperties
+func (a *ConfigurationUpdate_Item) UnmarshalJSON(b []byte) error {
+	object := make(map[string]json.RawMessage)
+	err := json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["name"]; found {
+		err = json.Unmarshal(raw, &a.Name)
+		if err != nil {
+			return fmt.Errorf("error reading 'name': %w", err)
+		}
+		delete(object, "name")
+	}
+
+	if len(object) != 0 {
+		a.AdditionalProperties = make(map[string]string)
+		for fieldName, fieldBuf := range object {
+			var fieldVal string
+			err := json.Unmarshal(fieldBuf, &fieldVal)
+			if err != nil {
+				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
+			}
+			a.AdditionalProperties[fieldName] = fieldVal
+		}
+	}
+	return nil
+}
+
+// Override default JSON handling for ConfigurationUpdate_Item to handle AdditionalProperties
+func (a ConfigurationUpdate_Item) MarshalJSON() ([]byte, error) {
+	var err error
+	object := make(map[string]json.RawMessage)
+
+	object["name"], err = json.Marshal(a.Name)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'name': %w", err)
+	}
+
+	for fieldName, field := range a.AdditionalProperties {
+		object[fieldName], err = json.Marshal(field)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
+		}
+	}
+	return json.Marshal(object)
+}
+
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
+	// GetIRAgentAccess Read the selected project's agent access metadata
+	// (GET /agent-access)
+	GetIRAgentAccess(w http.ResponseWriter, r *http.Request, params GetIRAgentAccessParams)
+	// CreateIRAgentAccess Create the project's agent access secret and return its token once
+	// (POST /agent-access)
+	CreateIRAgentAccess(w http.ResponseWriter, r *http.Request, params CreateIRAgentAccessParams)
+	// RotateIRAgentAccess Rotate the project's agent access secret and return its token once
+	// (POST /agent-access/rotate)
+	RotateIRAgentAccess(w http.ResponseWriter, r *http.Request, params RotateIRAgentAccessParams)
 	// LogoutIRSession End the current IR and Auth login session
 	// (POST /auth/logout)
 	LogoutIRSession(w http.ResponseWriter, r *http.Request, params LogoutIRSessionParams)
@@ -239,6 +408,12 @@ type ServerInterface interface {
 	// RefreshIRSession Refresh the IR session using its local cookie
 	// (POST /auth/refresh)
 	RefreshIRSession(w http.ResponseWriter, r *http.Request, params RefreshIRSessionParams)
+	// GetIRConfiguration Read the selected project's IR/SOURCE_CONFIGURATION JSON
+	// (GET /configuration)
+	GetIRConfiguration(w http.ResponseWriter, r *http.Request, params GetIRConfigurationParams)
+	// PutIRConfiguration Save the source array as a new IR/SOURCE_CONFIGURATION version tagged source:ir
+	// (PUT /configuration)
+	PutIRConfiguration(w http.ResponseWriter, r *http.Request, params PutIRConfigurationParams)
 	// IrIntegrationCallback Redeem a client and session-bound consent callback
 	// (GET /integrations/{integration}/callback)
 	IrIntegrationCallback(w http.ResponseWriter, r *http.Request, integration IrIntegrationCallbackParamsIntegration, params IrIntegrationCallbackParams)
@@ -264,6 +439,187 @@ type ServerInterfaceWrapper struct {
 }
 
 type MiddlewareFunc func(http.Handler) http.Handler
+
+// GetIRAgentAccess operation middleware
+func (siw *ServerInterfaceWrapper) GetIRAgentAccess(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetIRAgentAccessParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "X-Project-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Project-ID")]; found {
+		var XProjectID string
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Project-ID", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Project-ID", valueList[0], &XProjectID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Project-ID", Err: err})
+			return
+		}
+
+		params.XProjectID = XProjectID
+
+	} else {
+		err := fmt.Errorf("Header parameter X-Project-ID is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Project-ID", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetIRAgentAccess(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateIRAgentAccess operation middleware
+func (siw *ServerInterfaceWrapper) CreateIRAgentAccess(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params CreateIRAgentAccessParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Origin" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Origin")]; found {
+		var Origin string
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Origin", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Origin", valueList[0], &Origin, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: "uri"})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Origin", Err: err})
+			return
+		}
+
+		params.Origin = Origin
+
+	} else {
+		err := fmt.Errorf("Header parameter Origin is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Origin", Err: err})
+		return
+	}
+
+	// ------------- Required header parameter "X-Project-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Project-ID")]; found {
+		var XProjectID string
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Project-ID", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Project-ID", valueList[0], &XProjectID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Project-ID", Err: err})
+			return
+		}
+
+		params.XProjectID = XProjectID
+
+	} else {
+		err := fmt.Errorf("Header parameter X-Project-ID is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Project-ID", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateIRAgentAccess(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RotateIRAgentAccess operation middleware
+func (siw *ServerInterfaceWrapper) RotateIRAgentAccess(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params RotateIRAgentAccessParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "X-Project-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Project-ID")]; found {
+		var XProjectID string
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Project-ID", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Project-ID", valueList[0], &XProjectID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Project-ID", Err: err})
+			return
+		}
+
+		params.XProjectID = XProjectID
+
+	} else {
+		err := fmt.Errorf("Header parameter X-Project-ID is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Project-ID", Err: err})
+		return
+	}
+
+	// ------------- Required header parameter "Origin" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Origin")]; found {
+		var Origin string
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Origin", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Origin", valueList[0], &Origin, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: "uri"})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Origin", Err: err})
+			return
+		}
+
+		params.Origin = Origin
+
+	} else {
+		err := fmt.Errorf("Header parameter Origin is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Origin", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RotateIRAgentAccess(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
 
 // LogoutIRSession operation middleware
 func (siw *ServerInterfaceWrapper) LogoutIRSession(w http.ResponseWriter, r *http.Request) {
@@ -509,6 +865,119 @@ func (siw *ServerInterfaceWrapper) RefreshIRSession(w http.ResponseWriter, r *ht
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.RefreshIRSession(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetIRConfiguration operation middleware
+func (siw *ServerInterfaceWrapper) GetIRConfiguration(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetIRConfigurationParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "X-Project-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Project-ID")]; found {
+		var XProjectID string
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Project-ID", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Project-ID", valueList[0], &XProjectID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Project-ID", Err: err})
+			return
+		}
+
+		params.XProjectID = XProjectID
+
+	} else {
+		err := fmt.Errorf("Header parameter X-Project-ID is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Project-ID", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetIRConfiguration(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PutIRConfiguration operation middleware
+func (siw *ServerInterfaceWrapper) PutIRConfiguration(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PutIRConfigurationParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Origin" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Origin")]; found {
+		var Origin string
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Origin", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Origin", valueList[0], &Origin, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Origin", Err: err})
+			return
+		}
+
+		params.Origin = Origin
+
+	} else {
+		err := fmt.Errorf("Header parameter Origin is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Origin", Err: err})
+		return
+	}
+
+	// ------------- Required header parameter "X-Project-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Project-ID")]; found {
+		var XProjectID string
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Project-ID", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Project-ID", valueList[0], &XProjectID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Project-ID", Err: err})
+			return
+		}
+
+		params.XProjectID = XProjectID
+
+	} else {
+		err := fmt.Errorf("Header parameter X-Project-ID is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Project-ID", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PutIRConfiguration(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -854,6 +1323,11 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 		ErrorHandlerFunc:   options.ErrorHandlerFunc,
 	}
 
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/agent-access", wrapper.GetIRAgentAccess)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/agent-access", wrapper.CreateIRAgentAccess)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/agent-access/rotate", wrapper.RotateIRAgentAccess)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/configuration", wrapper.GetIRConfiguration)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/configuration", wrapper.PutIRConfiguration)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/auth/oidc/init", wrapper.InitIRLogin)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/auth/oidc/callback", wrapper.IrLoginCallback)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/auth/oidc/redeem", wrapper.RedeemIRLogin)
@@ -867,6 +1341,209 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/platform/projects", wrapper.ListIRProjects)
 
 	return m
+}
+
+type GetIRAgentAccessRequestObject struct {
+	Params GetIRAgentAccessParams
+}
+
+type GetIRAgentAccessResponseObject interface {
+	VisitGetIRAgentAccessResponse(w http.ResponseWriter) error
+}
+
+type GetIRAgentAccess200JSONResponse AgentAccessMetadata
+
+func (response GetIRAgentAccess200JSONResponse) VisitGetIRAgentAccessResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetIRAgentAccess400Response struct {
+}
+
+func (response GetIRAgentAccess400Response) VisitGetIRAgentAccessResponse(w http.ResponseWriter) error {
+	w.WriteHeader(400)
+	return nil
+}
+
+type GetIRAgentAccess401Response struct {
+}
+
+func (response GetIRAgentAccess401Response) VisitGetIRAgentAccessResponse(w http.ResponseWriter) error {
+	w.WriteHeader(401)
+	return nil
+}
+
+type GetIRAgentAccess403Response struct {
+}
+
+func (response GetIRAgentAccess403Response) VisitGetIRAgentAccessResponse(w http.ResponseWriter) error {
+	w.WriteHeader(403)
+	return nil
+}
+
+type GetIRAgentAccess404Response struct {
+}
+
+func (response GetIRAgentAccess404Response) VisitGetIRAgentAccessResponse(w http.ResponseWriter) error {
+	w.WriteHeader(404)
+	return nil
+}
+
+type GetIRAgentAccess503Response struct {
+}
+
+func (response GetIRAgentAccess503Response) VisitGetIRAgentAccessResponse(w http.ResponseWriter) error {
+	w.WriteHeader(503)
+	return nil
+}
+
+type CreateIRAgentAccessRequestObject struct {
+	Params CreateIRAgentAccessParams
+}
+
+type CreateIRAgentAccessResponseObject interface {
+	VisitCreateIRAgentAccessResponse(w http.ResponseWriter) error
+}
+
+type CreateIRAgentAccess201JSONResponse AgentAccessIssued
+
+func (response CreateIRAgentAccess201JSONResponse) VisitCreateIRAgentAccessResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateIRAgentAccess400Response struct {
+}
+
+func (response CreateIRAgentAccess400Response) VisitCreateIRAgentAccessResponse(w http.ResponseWriter) error {
+	w.WriteHeader(400)
+	return nil
+}
+
+type CreateIRAgentAccess401Response struct {
+}
+
+func (response CreateIRAgentAccess401Response) VisitCreateIRAgentAccessResponse(w http.ResponseWriter) error {
+	w.WriteHeader(401)
+	return nil
+}
+
+type CreateIRAgentAccess403Response struct {
+}
+
+func (response CreateIRAgentAccess403Response) VisitCreateIRAgentAccessResponse(w http.ResponseWriter) error {
+	w.WriteHeader(403)
+	return nil
+}
+
+type CreateIRAgentAccess404Response struct {
+}
+
+func (response CreateIRAgentAccess404Response) VisitCreateIRAgentAccessResponse(w http.ResponseWriter) error {
+	w.WriteHeader(404)
+	return nil
+}
+
+type CreateIRAgentAccess409Response struct {
+}
+
+func (response CreateIRAgentAccess409Response) VisitCreateIRAgentAccessResponse(w http.ResponseWriter) error {
+	w.WriteHeader(409)
+	return nil
+}
+
+type CreateIRAgentAccess503Response struct {
+}
+
+func (response CreateIRAgentAccess503Response) VisitCreateIRAgentAccessResponse(w http.ResponseWriter) error {
+	w.WriteHeader(503)
+	return nil
+}
+
+type RotateIRAgentAccessRequestObject struct {
+	Params RotateIRAgentAccessParams
+	Body   *RotateIRAgentAccessJSONRequestBody
+}
+
+type RotateIRAgentAccessResponseObject interface {
+	VisitRotateIRAgentAccessResponse(w http.ResponseWriter) error
+}
+
+type RotateIRAgentAccess200JSONResponse AgentAccessIssued
+
+func (response RotateIRAgentAccess200JSONResponse) VisitRotateIRAgentAccessResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RotateIRAgentAccess400Response struct {
+}
+
+func (response RotateIRAgentAccess400Response) VisitRotateIRAgentAccessResponse(w http.ResponseWriter) error {
+	w.WriteHeader(400)
+	return nil
+}
+
+type RotateIRAgentAccess401Response struct {
+}
+
+func (response RotateIRAgentAccess401Response) VisitRotateIRAgentAccessResponse(w http.ResponseWriter) error {
+	w.WriteHeader(401)
+	return nil
+}
+
+type RotateIRAgentAccess403Response struct {
+}
+
+func (response RotateIRAgentAccess403Response) VisitRotateIRAgentAccessResponse(w http.ResponseWriter) error {
+	w.WriteHeader(403)
+	return nil
+}
+
+type RotateIRAgentAccess404Response struct {
+}
+
+func (response RotateIRAgentAccess404Response) VisitRotateIRAgentAccessResponse(w http.ResponseWriter) error {
+	w.WriteHeader(404)
+	return nil
+}
+
+type RotateIRAgentAccess409Response struct {
+}
+
+func (response RotateIRAgentAccess409Response) VisitRotateIRAgentAccessResponse(w http.ResponseWriter) error {
+	w.WriteHeader(409)
+	return nil
+}
+
+type RotateIRAgentAccess503Response struct {
+}
+
+func (response RotateIRAgentAccess503Response) VisitRotateIRAgentAccessResponse(w http.ResponseWriter) error {
+	w.WriteHeader(503)
+	return nil
 }
 
 type LogoutIRSessionRequestObject struct {
@@ -1216,6 +1893,139 @@ func (response RefreshIRSession503Response) VisitRefreshIRSessionResponse(w http
 	return nil
 }
 
+type GetIRConfigurationRequestObject struct {
+	Params GetIRConfigurationParams
+}
+
+type GetIRConfigurationResponseObject interface {
+	VisitGetIRConfigurationResponse(w http.ResponseWriter) error
+}
+
+type GetIRConfiguration200JSONResponse ConfigurationDocument
+
+func (response GetIRConfiguration200JSONResponse) VisitGetIRConfigurationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetIRConfiguration401Response struct {
+}
+
+func (response GetIRConfiguration401Response) VisitGetIRConfigurationResponse(w http.ResponseWriter) error {
+	w.WriteHeader(401)
+	return nil
+}
+
+type GetIRConfiguration403Response struct {
+}
+
+func (response GetIRConfiguration403Response) VisitGetIRConfigurationResponse(w http.ResponseWriter) error {
+	w.WriteHeader(403)
+	return nil
+}
+
+type GetIRConfiguration404Response struct {
+}
+
+func (response GetIRConfiguration404Response) VisitGetIRConfigurationResponse(w http.ResponseWriter) error {
+	w.WriteHeader(404)
+	return nil
+}
+
+type GetIRConfiguration409Response struct {
+}
+
+func (response GetIRConfiguration409Response) VisitGetIRConfigurationResponse(w http.ResponseWriter) error {
+	w.WriteHeader(409)
+	return nil
+}
+
+type GetIRConfiguration503Response struct {
+}
+
+func (response GetIRConfiguration503Response) VisitGetIRConfigurationResponse(w http.ResponseWriter) error {
+	w.WriteHeader(503)
+	return nil
+}
+
+type PutIRConfigurationRequestObject struct {
+	Params PutIRConfigurationParams
+	Body   *PutIRConfigurationJSONRequestBody
+}
+
+type PutIRConfigurationResponseObject interface {
+	VisitPutIRConfigurationResponse(w http.ResponseWriter) error
+}
+
+type PutIRConfiguration200JSONResponse ConfigurationMetadata
+
+func (response PutIRConfiguration200JSONResponse) VisitPutIRConfigurationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PutIRConfiguration400Response struct {
+}
+
+func (response PutIRConfiguration400Response) VisitPutIRConfigurationResponse(w http.ResponseWriter) error {
+	w.WriteHeader(400)
+	return nil
+}
+
+type PutIRConfiguration401Response struct {
+}
+
+func (response PutIRConfiguration401Response) VisitPutIRConfigurationResponse(w http.ResponseWriter) error {
+	w.WriteHeader(401)
+	return nil
+}
+
+type PutIRConfiguration403Response struct {
+}
+
+func (response PutIRConfiguration403Response) VisitPutIRConfigurationResponse(w http.ResponseWriter) error {
+	w.WriteHeader(403)
+	return nil
+}
+
+type PutIRConfiguration404Response struct {
+}
+
+func (response PutIRConfiguration404Response) VisitPutIRConfigurationResponse(w http.ResponseWriter) error {
+	w.WriteHeader(404)
+	return nil
+}
+
+type PutIRConfiguration409Response struct {
+}
+
+func (response PutIRConfiguration409Response) VisitPutIRConfigurationResponse(w http.ResponseWriter) error {
+	w.WriteHeader(409)
+	return nil
+}
+
+type PutIRConfiguration503Response struct {
+}
+
+func (response PutIRConfiguration503Response) VisitPutIRConfigurationResponse(w http.ResponseWriter) error {
+	w.WriteHeader(503)
+	return nil
+}
+
 type IrIntegrationCallbackRequestObject struct {
 	Integration IrIntegrationCallbackParamsIntegration `json:"integration"`
 	Params      IrIntegrationCallbackParams
@@ -1492,6 +2302,15 @@ func (response ListIRProjects503Response) VisitListIRProjectsResponse(w http.Res
 
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
+	// GetIRAgentAccess Read the selected project's agent access metadata
+	// (GET /agent-access)
+	GetIRAgentAccess(ctx context.Context, request GetIRAgentAccessRequestObject) (GetIRAgentAccessResponseObject, error)
+	// CreateIRAgentAccess Create the project's agent access secret and return its token once
+	// (POST /agent-access)
+	CreateIRAgentAccess(ctx context.Context, request CreateIRAgentAccessRequestObject) (CreateIRAgentAccessResponseObject, error)
+	// RotateIRAgentAccess Rotate the project's agent access secret and return its token once
+	// (POST /agent-access/rotate)
+	RotateIRAgentAccess(ctx context.Context, request RotateIRAgentAccessRequestObject) (RotateIRAgentAccessResponseObject, error)
 	// LogoutIRSession End the current IR and Auth login session
 	// (POST /auth/logout)
 	LogoutIRSession(ctx context.Context, request LogoutIRSessionRequestObject) (LogoutIRSessionResponseObject, error)
@@ -1510,6 +2329,12 @@ type StrictServerInterface interface {
 	// RefreshIRSession Refresh the IR session using its local cookie
 	// (POST /auth/refresh)
 	RefreshIRSession(ctx context.Context, request RefreshIRSessionRequestObject) (RefreshIRSessionResponseObject, error)
+	// GetIRConfiguration Read the selected project's IR/SOURCE_CONFIGURATION JSON
+	// (GET /configuration)
+	GetIRConfiguration(ctx context.Context, request GetIRConfigurationRequestObject) (GetIRConfigurationResponseObject, error)
+	// PutIRConfiguration Save the source array as a new IR/SOURCE_CONFIGURATION version tagged source:ir
+	// (PUT /configuration)
+	PutIRConfiguration(ctx context.Context, request PutIRConfigurationRequestObject) (PutIRConfigurationResponseObject, error)
 	// IrIntegrationCallback Redeem a client and session-bound consent callback
 	// (GET /integrations/{integration}/callback)
 	IrIntegrationCallback(ctx context.Context, request IrIntegrationCallbackRequestObject) (IrIntegrationCallbackResponseObject, error)
@@ -1564,6 +2389,91 @@ type strictHandler struct {
 	ssi         StrictServerInterface
 	middlewares []StrictMiddlewareFunc
 	options     StrictHTTPServerOptions
+}
+
+// GetIRAgentAccess operation middleware
+func (sh *strictHandler) GetIRAgentAccess(w http.ResponseWriter, r *http.Request, params GetIRAgentAccessParams) {
+	var request GetIRAgentAccessRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetIRAgentAccess(ctx, request.(GetIRAgentAccessRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetIRAgentAccess")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetIRAgentAccessResponseObject); ok {
+		if err := validResponse.VisitGetIRAgentAccessResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateIRAgentAccess operation middleware
+func (sh *strictHandler) CreateIRAgentAccess(w http.ResponseWriter, r *http.Request, params CreateIRAgentAccessParams) {
+	var request CreateIRAgentAccessRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateIRAgentAccess(ctx, request.(CreateIRAgentAccessRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateIRAgentAccess")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateIRAgentAccessResponseObject); ok {
+		if err := validResponse.VisitCreateIRAgentAccessResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// RotateIRAgentAccess operation middleware
+func (sh *strictHandler) RotateIRAgentAccess(w http.ResponseWriter, r *http.Request, params RotateIRAgentAccessParams) {
+	var request RotateIRAgentAccessRequestObject
+
+	request.Params = params
+
+	var body RotateIRAgentAccessJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.RotateIRAgentAccess(ctx, request.(RotateIRAgentAccessRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RotateIRAgentAccess")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RotateIRAgentAccessResponseObject); ok {
+		if err := validResponse.VisitRotateIRAgentAccessResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
 }
 
 // LogoutIRSession operation middleware
@@ -1727,6 +2637,65 @@ func (sh *strictHandler) RefreshIRSession(w http.ResponseWriter, r *http.Request
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(RefreshIRSessionResponseObject); ok {
 		if err := validResponse.VisitRefreshIRSessionResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetIRConfiguration operation middleware
+func (sh *strictHandler) GetIRConfiguration(w http.ResponseWriter, r *http.Request, params GetIRConfigurationParams) {
+	var request GetIRConfigurationRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetIRConfiguration(ctx, request.(GetIRConfigurationRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetIRConfiguration")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetIRConfigurationResponseObject); ok {
+		if err := validResponse.VisitGetIRConfigurationResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PutIRConfiguration operation middleware
+func (sh *strictHandler) PutIRConfiguration(w http.ResponseWriter, r *http.Request, params PutIRConfigurationParams) {
+	var request PutIRConfigurationRequestObject
+
+	request.Params = params
+
+	var body PutIRConfigurationJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PutIRConfiguration(ctx, request.(PutIRConfigurationRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PutIRConfiguration")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PutIRConfigurationResponseObject); ok {
+		if err := validResponse.VisitPutIRConfigurationResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

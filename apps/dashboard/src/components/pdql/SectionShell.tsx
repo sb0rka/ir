@@ -1,7 +1,7 @@
 import { useDroppable } from '@dnd-kit/core'
 import type { ReactNode } from 'react'
 import type { ActiveSection } from '../../lib/pdql'
-import { usePdqlStore } from '../../store/pdqlStore'
+import { useBuilder } from './queryBuilder'
 import { clsx } from '../../lib/utils'
 import { FieldSearchPopover } from './FieldSearchPopover'
 
@@ -14,8 +14,7 @@ export function SectionShell({
   title: string
   children: ReactNode
 }) {
-  const activeSection = usePdqlStore((s) => s.activeSection)
-  const setActiveSection = usePdqlStore((s) => s.setActiveSection)
+  const { activeSection, setActiveSection } = useBuilder()
   const { setNodeRef, isOver } = useDroppable({
     id: `drop-${section}`,
     data: { type: 'section', section },

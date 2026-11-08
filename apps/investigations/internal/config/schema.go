@@ -22,7 +22,8 @@ type PlatformConfig struct {
 // GatewayConfig — внутренний адрес для получения выбранных записей по их
 // исходным идентификаторам.
 type GatewayConfig struct {
-	BaseURL string
+	BaseURL          string
+	ConfigurationKey []byte
 }
 
 type ServerConfig struct {
@@ -36,14 +37,15 @@ type ServerConfig struct {
 }
 
 type AuthConfig struct {
-	Issuer           string
-	ClientID         string
-	ClientSecret     []byte
-	PublicBaseURL    string
-	WebURL           string
-	CookieSecure     bool
-	AllowHTTP        bool
-	SessionKey       []byte
-	ContextKey       []byte
-	VerificationKeys *coreauth.JWKSCache
+	Issuer            string
+	ClientID          string
+	ClientSecret      []byte
+	PublicBaseURL     string
+	WebURL            string
+	CookieSecure      bool
+	AllowHTTP         bool
+	SessionKey        []byte
+	ContextKey        []byte
+	VerificationKeys  *coreauth.JWKSCache
+	AccessTokenPolicy *coreauth.AccessTokenPolicy
 }

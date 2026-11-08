@@ -12,7 +12,6 @@ type Context struct {
 	HypothesisID          string
 	HypothesisStatement   string
 	HypothesisDescription string
-	SomIssueID            string
 	TimeZone              string
 	ResolvedEntities      []ResolvedEntity
 	ResolvedEvents        []ResolvedEvent
@@ -53,7 +52,6 @@ func Build(title, description string, c Context) string {
 			fmt.Fprintf(&b, "- hypothesis_description: %s\n", c.HypothesisDescription)
 		}
 	}
-	fmt.Fprintf(&b, "- som_issue_id: %s\n", c.SomIssueID)
 	if tz := strings.TrimSpace(c.TimeZone); tz != "" {
 		fmt.Fprintf(&b, "- display_time_zone: %s\n", tz)
 	}
@@ -73,13 +71,13 @@ func Build(title, description string, c Context) string {
 	b.WriteString("9. Filter-driven tasks: when the issue lists SIEM fields (`event_src.host`, `subject.process.chain`, `object.process.cmdline`, …) instead of one entity, skip `import_entity_events`. Call `gateway_search_events` with `sources: [\"pt-maxpatrol-siem\"]`, `filter` copied from the issue (`field = \"value\"` for exact match, `field contains \"value\"` when the issue says contains or the field is a chain/cmdline/path; join conditions with `and`), `include_attributes: true`, `limit: 100`, and follow `next_cursor` with the same arguments until it is absent — the response `total` tells how many pages to expect. Then apply the analytical criterion (e.g. a tool name such as mimikatz) to the collected `attributes` (`subject.process.cmdline`, `object.process.cmdline`, `object.name`, `object.path`, `text`, process chains): grep the saved tool output locally or add one more `contains` predicate; do not judge from titles alone. Write only the selected events with `add_investigation_agent_results`: `events[]`, one `nodes[]` per event with `event_ref` and `why`, and for every event node one proposed edge (`relation_code` `actor`/`mentions`, `evidence_event_refs` = that node) to the entity the issue is about — the host or account, via `nodes[].entity_id` when it is already on the graph (see Resolved IR references / `get_investigation_graph`) or `entities[]` with `source_entity_id` `<type>:<value>` copied from the event's `entities`. The analyst reviews those edges; event nodes without an edge are rejected. A filter rejected for an unknown field is a syntax problem, not an empty result. Phrases like `truncated: false` in an issue refer to the response state: read every page so no `source_states` entry stays `truncated` — they are not filter fields.\n\n")
 
 	if c.HypothesisID != "" {
-		fmt.Fprintf(&b, "Workflow: `list_investigation_events` (investigation-wide) → `get_investigation_graph` without hypothesis_id, then with hypothesis_id %s → `get_investigation_reference` → prefer `import_entity_events` for one entity, `gateway_search_events` for SIEM field filters, other `gateway_*` as needed → `add_investigation_agent_results` only for leftover edges, with investigation_id %s, hypothesis_id %s, som_issue_ids [\"%s\"] → re-read hypothesis graph. Only listed nodes/edges gain hypothesis membership. Treat the hypothesis as unverified: seek supporting and contradicting evidence; do not turn correlation into causation.\n",
-			c.HypothesisID, c.InvestigationID, c.HypothesisID, c.SomIssueID)
+		fmt.Fprintf(&b, "Workflow: `list_investigation_events` (investigation-wide) → `get_investigation_graph` without hypothesis_id, then with hypothesis_id %s → `get_investigation_reference` → prefer `import_entity_events` for one entity, `gateway_search_events` for SIEM field filters, other `gateway_*` as needed → `add_investigation_agent_results` only for leftover edges, with investigation_id %s, hypothesis_id %s → re-read hypothesis graph. Only listed nodes/edges gain hypothesis membership. Treat the hypothesis as unverified: seek supporting and contradicting evidence; do not turn correlation into causation.\n",
+			c.HypothesisID, c.InvestigationID, c.HypothesisID)
 		return b.String()
 	}
 
-	fmt.Fprintf(&b, "Workflow: `list_investigation_events` for investigation_id %s (timeline window) + `get_investigation_graph` only when the issue refers to existing nodes or you need `entity_id`s → `get_investigation_reference` only before proposing edges → prefer `import_entity_events` for one entity, `gateway_search_events` for SIEM field filters, other `gateway_*` as needed (`gateway_list_sources` only if the source code is unknown) → `add_investigation_agent_results` only when needed, with investigation_id %s and som_issue_ids [\"%s\"] → re-read graph/timeline. Replay is safe. Keep reasoning short: one search, one local selection pass, one write, one report.\n",
-		c.InvestigationID, c.InvestigationID, c.SomIssueID)
+	fmt.Fprintf(&b, "Workflow: `list_investigation_events` for investigation_id %s (timeline window) + `get_investigation_graph` only when the issue refers to existing nodes or you need `entity_id`s → `get_investigation_reference` only before proposing edges → prefer `import_entity_events` for one entity, `gateway_search_events` for SIEM field filters, other `gateway_*` as needed (`gateway_list_sources` only if the source code is unknown) → `add_investigation_agent_results` only when needed, with investigation_id %s → re-read graph/timeline. Replay is safe. Keep reasoning short: one search, one local selection pass, one write, one report.\n",
+		c.InvestigationID, c.InvestigationID)
 	return b.String()
 }
 

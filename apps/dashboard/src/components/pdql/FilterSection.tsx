@@ -10,7 +10,7 @@ import {
   type FilterNode,
   type LogicalJoiner,
 } from '../../lib/pdql'
-import { usePdqlStore } from '../../store/pdqlStore'
+import { useBuilder } from './queryBuilder'
 import {
   DateTimeParts,
   defaultWorkingTimeZone,
@@ -39,8 +39,7 @@ const OP_LABELS: Record<CompareOp, string> = {
 const IP_RE = /^(\d{1,3}\.){3}\d{1,3}$/
 
 function FilterDatetimeInput({ id, value }: { id: string; value: string }) {
-  const updateCondition = usePdqlStore((s) => s.updateCondition)
-  const fallbackIso = usePdqlStore((s) => s.defaultDatetimeIso)
+  const { updateCondition, defaultDatetimeIso: fallbackIso } = useBuilder()
   const zone = useMemo(() => defaultWorkingTimeZone(), [])
   const iso = parseTimestamp(value, zone) ?? fallbackIso
 
@@ -70,8 +69,7 @@ function JoinerRow({
   joinerIndex: number
   joiner: LogicalJoiner
 }) {
-  const setJoiner = usePdqlStore((s) => s.setJoiner)
-  const wrapAdjacent = usePdqlStore((s) => s.wrapAdjacent)
+  const { setJoiner, wrapAdjacent } = useBuilder()
   return (
     <div className="flex items-center gap-1 self-start pl-7">
       <button
@@ -102,13 +100,10 @@ function ConditionRow({
   parentId: string | null
   index: number
 }) {
-  const fields = usePdqlStore((s) => s.fields)
-  const updateCondition = usePdqlStore((s) => s.updateCondition)
-  const removeCondition = usePdqlStore((s) => s.removeCondition)
-  const moveCondition = usePdqlStore((s) => s.moveCondition)
+  const { fields, updateCondition, removeCondition, moveCondition } = useBuilder()
   const field = fields.find((item) => item.name === condition.field)
   const type = field?.type ?? 'string'
-  const ops = operatorsForType(type)
+  const ops = field?.operators?.length ? field.operators : operatorsForType(type)
   const needsValue = condition.op !== 'is_null' && condition.op !== 'is_not_null'
   const ipInvalid =
     type === 'ip' &&
@@ -239,10 +234,7 @@ function GroupRow({
   parentId: string | null
   index: number
 }) {
-  const removeCondition = usePdqlStore((s) => s.removeCondition)
-  const moveCondition = usePdqlStore((s) => s.moveCondition)
-  const ungroup = usePdqlStore((s) => s.ungroup)
-  const toggleGroupNegated = usePdqlStore((s) => s.toggleGroupNegated)
+  const { removeCondition, moveCondition, ungroup, toggleGroupNegated } = useBuilder()
   return (
     <SortableRow id={group.id} section="filter" index={index} parentId={parentId}>
       <div className="rounded border border-dashed border-fg/30 bg-surface-2/40 p-1.5">
@@ -319,7 +311,7 @@ function FilterNodeList({
 }
 
 export function FilterSection() {
-  const query = usePdqlStore((s) => s.query)
+  const query = useBuilder().query
 
   return (
     <SectionShell section="filter" title="Фильтр">

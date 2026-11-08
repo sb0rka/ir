@@ -11,8 +11,8 @@ import (
 )
 
 func TestRootOnlyContextStillRequiresProjectAndSourceAccess(t *testing.T) {
-	server := &Server{projectSources: map[string]map[string]bool{"aabbccddee": {}}}
-	handler := projectScope(server)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := &Server{}
+	handler := projectScope()(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		server.ResolveContext(w, r, api.ResolveContextParams{})
 	}))
 	for _, tc := range []struct {

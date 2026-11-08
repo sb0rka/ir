@@ -21,6 +21,11 @@ export interface EventFieldDef {
   type: FieldType
   description: string
   enumValues?: string[]
+  /** Semantic operators from events/fields. Absent means the local type defaults. */
+  operators?: CompareOp[]
+  column?: boolean
+  sort?: boolean
+  group?: boolean
 }
 
 export interface Condition {

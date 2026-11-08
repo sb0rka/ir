@@ -14,10 +14,12 @@ import (
 
 	"github.com/sb0rka/ir/apps/gateway/internal/capability"
 	"github.com/sb0rka/ir/apps/gateway/internal/domain"
+	"github.com/sb0rka/ir/apps/gateway/internal/fieldmap"
 	"github.com/sb0rka/ir/apps/gateway/internal/registry"
 )
 
 const (
+	SourceCode            = "pt-maxpatrol-siem"
 	CredentialSecretName  = "DEMO_PT_SIEM_COOKIE"
 	IncidentRecordType    = "siem_incident"
 	CorrelationRecordType = "siem_correlation"
@@ -249,13 +251,13 @@ func (provider *Provider) SearchEvents(ctx context.Context, access capability.Ac
 	if err != nil {
 		return capability.EventPage{}, err
 	}
-	where, err := eventWhere(request.Entities)
+	where, err := eventQueryWhere(request.Entities, request.CommonFilter)
 	if err != nil {
 		return capability.EventPage{}, err
 	}
 	query, err := buildEventSearchQuery(request, where)
 	if err != nil {
-		return capability.EventPage{}, err
+		return capability.EventPage{}, eventQueryError(err)
 	}
 	query.Offset = cursor.Offset
 	vendorRange := TimeRange{From: request.TimeFrom, To: request.TimeTo}
@@ -640,12 +642,28 @@ func eventWhere(entities []domain.EntityRef) (string, error) {
 			if normalizeIP(value) == "" {
 				return "", sourceRequestError("invalid_entity", "IP entity value is invalid")
 			}
-			predicates = append(predicates, "(src.ip = "+quoted+" or dst.ip = "+quoted+" or event_src.ip = "+quoted+")")
+			paths, err := fieldmap.Paths(SourceCode, "ip")
+			if err != nil {
+				return "", err
+			}
+			parts := []string{}
+			for _, path := range paths {
+				parts = append(parts, path.Path+" = "+quoted)
+			}
+			predicates = append(predicates, "("+strings.Join(parts, " or ")+")")
 		case "host", "hostname":
 			if !safeHost(value) {
 				return "", sourceRequestError("invalid_entity", "host entity value is invalid")
 			}
-			predicates = append(predicates, "(src.host = "+quoted+" or dst.host = "+quoted+" or event_src.host = "+quoted+")")
+			paths, err := fieldmap.Paths(SourceCode, "host")
+			if err != nil {
+				return "", err
+			}
+			parts := []string{}
+			for _, path := range paths {
+				parts = append(parts, path.Path+" = "+quoted)
+			}
+			predicates = append(predicates, "("+strings.Join(parts, " or ")+")")
 		case "account":
 			if strings.ContainsAny(value, "\r\n\x00") {
 				return "", sourceRequestError("invalid_entity", "account entity value is invalid")

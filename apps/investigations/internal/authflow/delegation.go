@@ -20,7 +20,7 @@ import (
 func integrationTarget(kind string) (string, []string, error) {
 	switch kind {
 	case "platform":
-		return coreauth.AudienceAPI, []string{coreauth.ScopeProjectsRead, coreauth.ScopeResourcesRead}, nil
+		return coreauth.AudienceAPI, []string{coreauth.ScopeProjectsRead, coreauth.ScopeResourcesRead, coreauth.ScopeSecretsRead, coreauth.ScopeSecretsReveal, coreauth.ScopeSecretsCreate, coreauth.ScopeSecretsWrite}, nil
 	case "gateway":
 		return coreauth.AudienceIRGateway, []string{coreauth.ScopeIRGatewayUse}, nil
 	default:
@@ -232,6 +232,7 @@ func (s *Service) DelegatedToken(
 			Issuer:   s.cfg.Server.Auth.Issuer,
 			Audience: audience,
 			Keys:     s.cfg.Server.Auth.VerificationKeys,
+			Policy:   s.cfg.Server.Auth.AccessTokenPolicy,
 		},
 	)
 	if err != nil || id.SubjectID != session.SubjectID || id.SessionID != session.ExternalSID ||
@@ -315,6 +316,12 @@ func (s *Service) platformGET(ctx context.Context, token, path string) (json.Raw
 func (s *Service) GatewayBaseURL() string { return s.cfg.Gateway.BaseURL }
 
 func (s *Service) GatewayToken(ctx context.Context, raw, project string) (string, error) {
+	if IsAgentBearer(raw) {
+		if _, err := s.VerifyAgent(ctx, raw, project); err != nil {
+			return "", err
+		}
+		return raw, nil
+	}
 	session, _, err := s.Authenticate(ctx, raw)
 	if err != nil {
 		return "", err

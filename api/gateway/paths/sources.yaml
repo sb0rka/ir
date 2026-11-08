@@ -5,27 +5,29 @@ info:
 servers:
   - url: .
 security:
+  - agentBearer: []
   - bearerAuth: []
+    configurationToken: []
 
 paths:
   /api/v1/sources:
     get:
       tags: [sources]
-      summary: List registered sources
-      description: Returns project-allowed sources and probes every configured backend or store through a short cache.
+      summary: List available sources
+      description: Returns server-configured sources with usable project credentials. User requests read the current Platform configuration; agent requests use the encrypted copy synchronized by IR on save or reload. Missing or invalid credentials exclude a source without a vendor call. Authorization and availability are checked on every request; backend status probes use a short cache.
       operationId: listSources
       parameters:
         - $ref: '../shared/parameters.yaml#/ProjectId'
         - name: refresh
           in: query
           required: false
-          description: Bypass cached statuses and reload current project credentials before probing.
+          description: Bypass cached backend statuses. Agent credentials still come from the configuration last saved or reloaded through IR.
           schema:
             type: boolean
             default: false
       responses:
         '200':
-          description: Registered sources.
+          description: Sources available to the selected project.
           content:
             application/json:
               schema:
@@ -34,7 +36,7 @@ paths:
                 properties:
                   items:
                     type: array
-                    description: External security products registered for use through the Gateway.
+                    description: Server-configured security products with usable credentials for this project.
                     items:
                       $ref: '#/components/schemas/Source'
         '401': { $ref: '../shared/responses.yaml#/Unauthorized' }

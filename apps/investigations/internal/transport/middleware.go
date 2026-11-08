@@ -149,14 +149,13 @@ func mcpOriginMiddleware(cfg config.ServerConfig) middlewareChain {
 func authMiddleware(flow *authflow.Service, log *slog.Logger) middlewareChain {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			raw, err := coreauth.ParseBearerToken(r.Header.Get("Authorization"))
-			if err != nil {
+			if len(r.Header.Values("Authorization")) != 1 || len(r.Header.Values(projectIDHeader)) > 1 {
 				writeAuthError(w, log, authflow.ErrUnauthorized)
 				return
 			}
-			session, identity, err := flow.Authenticate(r.Context(), raw)
+			raw, err := coreauth.ParseBearerToken(r.Header.Get("Authorization"))
 			if err != nil {
-				writeAuthError(w, log, err)
+				writeAuthError(w, log, authflow.ErrUnauthorized)
 				return
 			}
 			projectID := strings.TrimSpace(r.Header.Get(projectIDHeader))
@@ -164,7 +163,8 @@ func authMiddleware(flow *authflow.Service, log *slog.Logger) middlewareChain {
 				httperr.Write(w, log, httperr.BadRequest("X-Project-ID must be 10-12 lowercase hexadecimal characters"))
 				return
 			}
-			if err := flow.CheckProject(r.Context(), session, raw, projectID); err != nil {
+			identity, err := flow.AuthenticateProjectRequest(r.Context(), raw, projectID)
+			if err != nil {
 				writeAuthError(w, log, err)
 				return
 			}

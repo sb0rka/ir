@@ -240,11 +240,26 @@ export const QUEUE_SOURCE_OPTIONS: { id: QueueSource; label: string }[] = [
   { id: 'entities', label: 'Сущности' },
 ]
 
+export type AppliedEventLanguage = 'common' | 'pt_pdql' | 'wazuh_dql'
+
+/** Structured multi-source event search. Native drafts stay stored; only appliedLanguage is sent. */
+export interface EventQuery {
+  hosts: string[]
+  ips: string[]
+  /** MaxPatrol pipeline. A draft stays here even when another language is applied. */
+  pdql: string
+  /** Encoded Wazuh AST. Empty means the default timestamp sort. */
+  wazuh: string
+  appliedLanguage: AppliedEventLanguage
+}
+
 export interface QueryHistoryEntry {
   pdql: string
   timeInterval: TimeInterval
   queueSource?: QueueSource
   groupValues?: (string | null)[]
+  /** Present for multi-source event searches. Older entries stay PDQL-only. */
+  eventQuery?: EventQuery
 }
 
 /** One source-local (or merged) event group from Gateway aggregate. */
@@ -290,6 +305,9 @@ export interface ContextQueueState {
   eventGroups: EventGroupItem[]
   executedFingerprint: string | null
   queryHistory: QueryHistoryEntry[]
+  /** Structured event search. Ignored unless queueSource is events. */
+  eventQuery?: EventQuery
+  sourceErrors?: string[]
   selectedIds: string[]
   /** Filter rows by whether they are already in the investigation context. */
   addedFilter: AddedFilter

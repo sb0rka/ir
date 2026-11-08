@@ -22,6 +22,8 @@ export const env = {
 }
 
 let activeProjectId = readStorage(PROJECT_ID_KEY)?.trim() || null
+let projectEpoch = 0
+export function getProjectEpoch(): number { return projectEpoch }
 
 export function irBaseUrl(): string {
   return `${env.irUrl}/api/v1`
@@ -33,6 +35,7 @@ export function getProjectId(): string | null {
 
 export function setProjectId(projectId: string | null): void {
   const changed = projectId !== activeProjectId
+  if (changed) projectEpoch++
   activeProjectId = projectId
   try {
     if (projectId) localStorage.setItem(PROJECT_ID_KEY, projectId)

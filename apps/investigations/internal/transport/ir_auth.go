@@ -44,6 +44,8 @@ func writeAuthError(w http.ResponseWriter, log *slog.Logger, err error) {
 		status, code, message = http.StatusNotFound, httperr.CodeNotFound, "Project not found"
 	case errors.Is(err, authflow.ErrInvalid):
 		status, code, message = http.StatusBadRequest, httperr.CodeValidation, "Invalid authentication request"
+	case errors.Is(err, authflow.ErrConflict):
+		status, code, message = http.StatusConflict, httperr.CodeValidation, "Configuration changed; reload before saving"
 	}
 	w.Header().Set("Cache-Control", "no-store")
 	httperr.Write(w, log, httperr.New(status, code, message))
@@ -172,7 +174,7 @@ func (h *AuthHandler) RefreshIRSession(
 	if !h.origin(w, r) {
 		return
 	}
-	session, access, err := h.flow.Refresh(r.Context(), h.localHandle(r))
+	session, access, handle, err := h.flow.RefreshRotating(r.Context(), h.localHandle(r))
 	if err != nil {
 		if errors.Is(err, authflow.ErrUnauthorized) {
 			h.cookie(w, "", time.Unix(1, 0))
@@ -180,7 +182,7 @@ func (h *AuthHandler) RefreshIRSession(
 		writeAuthError(w, h.log, err)
 		return
 	}
-	h.cookie(w, h.localHandle(r), session.ExpiresAt)
+	h.cookie(w, handle, session.ExpiresAt)
 	authJSON(w, authentication.AccessTokenResponse{AccessToken: access})
 }
 

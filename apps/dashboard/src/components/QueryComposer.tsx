@@ -1,5 +1,5 @@
 import { DndContext, PointerSensor, useSensor, useSensors } from '@dnd-kit/core'
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { Braces, Check, Eye, EyeOff, History, Loader2, Pencil, Play, Plus, Search } from 'lucide-react'
 import {
   addFieldToPdql,
@@ -13,7 +13,36 @@ import {
   type ParseError,
   type ParseResult,
 } from '../lib/pdql'
+import {
+  addEventQueryField,
+  describeEventQuery,
+  emptyEventQuery,
+  eventQueryChips,
+  eventQueryFingerprint,
+  eventQueryFromLegacy,
+  eventQueryLine,
+  eventQueryHasEntityScope,
+  fieldsForLanguage,
+  readLimitClause,
+  removeEventQueryChip,
+  replacePdqlText,
+  replaceWazuhPredicate,
+  setEventQueryLimit,
+  toggleEventQuerySort,
+  type EventSourceMeta,
+} from '../lib/eventQuery'
+import {
+  getConnectedSourceRevision,
+  loadConnectedSourceCodes,
+  subscribeConnectedSources,
+} from '../api/connectedSources'
+import { loadEventFields } from '../api/eventFields'
 import { filterFingerprint } from '../lib/queryFingerprint'
+import {
+  coerceQueueSource,
+  visibleQueueSourceGroups,
+  withoutFindingsUnavailableError,
+} from '../lib/queueSources'
 import { clsx } from '../lib/utils'
 import { emptyContextQueue, useAppStore } from '../store/appStore'
 import { usePdqlStore } from '../store/pdqlStore'
@@ -21,10 +50,12 @@ import {
   DEFAULT_QUEUE_SOURCE,
   QUEUE_SOURCE_OPTIONS,
   type AddedFilter,
+  type EventQuery,
   type QueryHistoryEntry,
   type QueueSource,
 } from '../types'
 import { AlertSelectionActions } from './AlertSelectionActions'
+import { EventQueryModal } from './pdql/EventQueryModal'
 import { PdqlBuilderModal } from './pdql/PdqlBuilderModal'
 import { FieldSearchList } from './pdql/FieldSearchList'
 import {
@@ -63,25 +94,19 @@ function queueSourceLabel(source: QueueSource | undefined): string | undefined {
   return QUEUE_SOURCE_OPTIONS.find((option) => option.id === source)?.label
 }
 
-const QUEUE_SOURCE_GROUPS: Array<{
-  category?: string
-  ids: QueueSource[]
-}> = [
-  { category: 'SIEM', ids: ['siem_incident', 'siem_correlation'] },
-  { category: 'NAD', ids: ['nad_attack'] },
-  { ids: ['events', 'entities'] },
-]
-
 function QueueSourceToggle({
   value,
+  connected,
   onChange,
 }: {
   value: QueueSource
+  connected: ReadonlySet<string> | null
   onChange: (value: QueueSource) => void
 }) {
+  const groups = visibleQueueSourceGroups(connected)
   return (
     <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Тип сущности">
-      {QUEUE_SOURCE_GROUPS.map((group) => {
+      {groups.map((group) => {
         const options = group.ids
           .map((id) => QUEUE_SOURCE_OPTIONS.find((option) => option.id === id))
           .filter((option): option is (typeof QUEUE_SOURCE_OPTIONS)[number] => option != null)
@@ -192,6 +217,67 @@ function AddedFilterToggle({
   )
 }
 
+function useConnectedSources(): ReadonlySet<string> | null {
+  const revision = useSyncExternalStore(
+    subscribeConnectedSources,
+    getConnectedSourceRevision,
+    getConnectedSourceRevision,
+  )
+  const [codes, setCodes] = useState<ReadonlySet<string> | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    void loadConnectedSourceCodes()
+      .then((next) => {
+        if (!cancelled) setCodes(next)
+      })
+      .catch(() => {
+        if (!cancelled) setCodes(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [revision])
+  return codes
+}
+
+/** Leave incidents, correlations, or attacks when their source is not connected. */
+function useCoerceQueueSource(
+  source: QueueSource,
+  connected: ReadonlySet<string> | null,
+  apply: (source: QueueSource) => void,
+) {
+  const applyRef = useRef(apply)
+  applyRef.current = apply
+  useEffect(() => {
+    if (!connected) return
+    const next = coerceQueueSource(source, connected)
+    if (next === source) return
+    applyRef.current(next)
+    const error = useAppStore.getState().lastError
+    const cleared = withoutFindingsUnavailableError(error)
+    if (cleared !== error) useAppStore.setState({ lastError: cleared })
+  }, [connected, source])
+}
+
+function useEventSources(enabled: boolean): EventSourceMeta[] {
+  const [sources, setSources] = useState<EventSourceMeta[]>([])
+  useEffect(() => {
+    if (!enabled) return
+    let cancelled = false
+    void loadEventFields()
+      .then((next) => {
+        if (!cancelled) setSources(next)
+      })
+      .catch(() => {
+        if (!cancelled) setSources([])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [enabled])
+  return sources
+}
+
 export function QueryComposer({
   pdql,
   timeInterval,
@@ -207,6 +293,10 @@ export function QueryComposer({
   onQueueSourceChange,
   onExecute,
   onApplyHistory,
+  eventQuery,
+  eventSources,
+  onEventQueryChange,
+  connectedSources = null,
 }: {
   pdql: string
   timeInterval: TimeInterval
@@ -222,6 +312,10 @@ export function QueryComposer({
   onQueueSourceChange?: (source: QueueSource) => void
   onExecute: () => void
   onApplyHistory: (entry: QueryHistoryEntry) => void
+  eventQuery?: EventQuery
+  eventSources?: EventSourceMeta[]
+  onEventQueryChange?: (query: EventQuery) => void
+  connectedSources?: ReadonlySet<string> | null
 }) {
   const loadFields = usePdqlStore((s) => s.loadFields)
   const fields = usePdqlStore((s) => s.fields)
@@ -237,15 +331,12 @@ export function QueryComposer({
   const [editError, setEditError] = useState<string | null>(null)
   const [focusCaret, setFocusCaret] = useState<number | null>(null)
   const draftInputRef = useRef<HTMLInputElement>(null)
+  const draftKind = useRef<'pdql' | 'dql'>('pdql')
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }))
 
   useEffect(() => {
     void loadFields()
   }, [loadFields])
-
-  useEffect(() => {
-    if (!editing) setDraft(pdql)
-  }, [editing, pdql])
 
   useLayoutEffect(() => {
     if (!editing || focusCaret == null) return
@@ -260,25 +351,83 @@ export function QueryComposer({
     return () => cancelAnimationFrame(id)
   }, [editing, draft, focusCaret])
 
+  const eventsMode =
+    eventQuery != null &&
+    onEventQueryChange != null &&
+    (queueSource === 'events' || (queueSource === 'entities' && eventQueryHasEntityScope(eventQuery)))
+  const knownSources = eventSources ?? []
+  const described = eventsMode ? describeEventQuery(eventQuery, knownSources, groupValues) : null
+  const editDql =
+    eventsMode &&
+    described?.language !== 'pt_pdql' &&
+    (described?.language === 'wazuh_dql' ||
+      (knownSources.some((source) => source.languages.includes('wazuh_dql')) &&
+        !knownSources.some((source) => source.languages.includes('pt_pdql'))))
   const parsed = parseQueuePdql(pdql)
-  const chips = parsed.ok ? pdqlToChips(parsed.ast) : []
+  const chips = eventsMode ? eventQueryChips(eventQuery, knownSources) : parsed.ok ? pdqlToChips(parsed.ast) : []
   const filters = chips.filter((chip) => chip.kind === 'filter')
   const columns = chips.filter((chip) => chip.kind === 'column')
   const groups = chips.filter((chip) => chip.kind === 'group')
-  const stale = filterFingerprint(pdql, timeInterval, queueSource, groupValues) !== executedFingerprint
-  const parseError = parseErrorText(parsed)
+  const stale = eventsMode
+    ? eventQueryFingerprint(eventQuery, timeInterval, groupValues, knownSources) !== executedFingerprint
+    : filterFingerprint(pdql, timeInterval, queueSource, groupValues) !== executedFingerprint
+  const parseError = eventsMode ? (described?.error ?? null) : parseErrorText(parsed)
+  const preview = eventsMode ? eventQueryLine(eventQuery, knownSources, groupValues) : pdql
+  const addFields = !eventsMode
+    ? fields
+    : described?.language === 'wazuh_dql' || editDql
+      ? fieldsForLanguage(knownSources, 'wazuh_dql')
+      : described?.language === 'pt_pdql'
+        ? fieldsForLanguage(knownSources, 'pt_pdql')
+        : [
+            { name: 'host', type: 'string' as const, description: 'Хост' },
+            { name: 'ip', type: 'ip' as const, description: 'IP-адрес' },
+          ]
+
+  useEffect(() => {
+    if (!editing) setDraft(eventsMode ? preview : pdql)
+  }, [editing, eventsMode, pdql, preview])
 
   const removeChip = (id: string) => {
+    if (eventsMode) {
+      onEventQueryChange(removeEventQueryChip(eventQuery, id, eventSources ?? []))
+      return
+    }
     if (!parsed.ok) return
     onPdqlChange(serializeWithoutChip(parsed.ast, id))
   }
 
   const toggleSortChip = (id: string) => {
+    if (eventsMode) {
+      onEventQueryChange(toggleEventQuerySort(eventQuery, id, eventSources ?? []))
+      return
+    }
     if (!parsed.ok) return
     onPdqlChange(serializeToggledChipSort(parsed.ast, id))
   }
 
   const addField = (name: string) => {
+    if (eventsMode) {
+      const base =
+        editDql && eventQuery.appliedLanguage !== 'wazuh_dql' && name !== 'host' && name !== 'ip'
+          ? { ...eventQuery, appliedLanguage: 'wazuh_dql' as const }
+          : eventQuery
+      const next = addEventQueryField(base, name, described?.language || editDql ? addSection : 'filter', addFields)
+      onEventQueryChange(next)
+      setAddOpen(false)
+      setAddQuery('')
+      const nextDescribed = describeEventQuery(next, knownSources)
+      if (!nextDescribed.language) {
+        setBuilderOpen(true)
+        return
+      }
+      draftKind.current = nextDescribed.language === 'wazuh_dql' ? 'dql' : 'pdql'
+      setDraft(eventQueryLine(next, knownSources))
+      setEditError(null)
+      setFocusCaret(null)
+      setEditing(true)
+      return
+    }
     const next = addFieldToPdql(pdql, name, addSection, fields)
     onPdqlChange(next)
     setAddOpen(false)
@@ -292,6 +441,43 @@ export function QueryComposer({
   }
 
   const exitEdit = () => {
+    if (eventsMode) {
+      if (draftKind.current === 'dql') {
+        const read = readLimitClause(draft)
+        if (read.error) {
+          setEditError(read.error)
+          return
+        }
+        if (!read.predicate) {
+          const cleared = { ...eventQuery, wazuh: '', appliedLanguage: 'common' as const }
+          onEventQueryChange(read.limit != null ? setEventQueryLimit(cleared, read.limit) : cleared)
+          setEditError(null)
+          setFocusCaret(null)
+          setEditing(false)
+          return
+        }
+        const result = replaceWazuhPredicate(eventQuery, read.predicate)
+        if (result.error) {
+          setEditError(result.error)
+          return
+        }
+        onEventQueryChange(read.limit != null ? setEventQueryLimit(result.query, read.limit) : result.query)
+        setEditError(null)
+        setFocusCaret(null)
+        setEditing(false)
+        return
+      }
+      const result = replacePdqlText(eventQuery, draft)
+      if (result.error) {
+        setEditError(result.error)
+        return
+      }
+      onEventQueryChange(result.query)
+      setEditError(null)
+      setFocusCaret(null)
+      setEditing(false)
+      return
+    }
     const result = parseQueuePdql(draft)
     if (result.ok === false) {
       setEditError(formatParseError(result.error))
@@ -315,7 +501,11 @@ export function QueryComposer({
           }}
         />
         {queueSource && onQueueSourceChange && (
-          <QueueSourceToggle value={queueSource} onChange={onQueueSourceChange} />
+          <QueueSourceToggle
+            value={queueSource}
+            connected={connectedSources}
+            onChange={onQueueSourceChange}
+          />
         )}
         {headerEnd}
       </div>
@@ -356,6 +546,7 @@ export function QueryComposer({
             <>
               <div className="fixed inset-0 z-20" onClick={() => setAddOpen(false)} />
               <div className="absolute left-0 top-full z-30 mt-1 w-80 overflow-hidden rounded border border-border bg-surface-2 shadow-xl">
+                {(!eventsMode || described?.language || editDql) && (
                 <div className="grid grid-cols-3 gap-1 border-b border-border p-1">
                   {SECTION_LABELS.map((section) => (
                     <button
@@ -373,6 +564,7 @@ export function QueryComposer({
                     </button>
                   ))}
                 </div>
+                )}
                 <label className="flex items-center gap-1.5 border-b border-border px-2 py-1.5">
                   <Search className="h-3.5 w-3.5 text-fg-dim" />
                   <input
@@ -390,7 +582,7 @@ export function QueryComposer({
                   <DndContext sensors={sensors}>
                     <FieldSearchList
                       idPrefix="composer"
-                      fields={fields}
+                      fields={addFields}
                       freq={fieldFreq}
                       query={addQuery}
                       onChoose={addField}
@@ -478,7 +670,7 @@ export function QueryComposer({
             onKeyDown={(e) => {
               if (e.key === 'Enter') exitEdit()
               if (e.key === 'Escape') {
-                setDraft(pdql)
+                setDraft(preview)
                 setEditError(null)
                 setFocusCaret(null)
                 setEditing(false)
@@ -489,21 +681,28 @@ export function QueryComposer({
         ) : (
           <div
             className="min-w-0 flex-1 truncate rounded border border-transparent px-2 py-1.5 font-mono text-xs text-fg-muted"
-            title={pdql}
+            title={preview}
           >
-            {pdql || serialize(defaultQuery())}
+            {eventsMode ? preview : preview || serialize(defaultQuery())}
           </div>
         )}
         <Button
           size="sm"
           variant="ghost"
-          title={editing ? 'Выйти из редактирования' : 'Редактировать PDQL'}
+          title={
+            editing
+              ? 'Выйти из редактирования'
+              : editDql
+                ? 'Редактировать DQL'
+                : 'Редактировать PDQL'
+          }
           onClick={() => {
             if (editing) {
               exitEdit()
               return
             }
-            setDraft(pdql)
+            draftKind.current = editDql ? 'dql' : 'pdql'
+            setDraft(preview)
             setEditError(null)
             setFocusCaret(null)
             setEditing(true)
@@ -514,7 +713,7 @@ export function QueryComposer({
         <Button
           size="sm"
           variant="default"
-          title="Конструктор PDQL"
+          title={eventsMode ? 'Конструктор запроса' : 'Конструктор PDQL'}
           onClick={() => setBuilderOpen(true)}
         >
           <Braces className="h-3.5 w-3.5" />
@@ -539,6 +738,24 @@ export function QueryComposer({
         <div className="mt-1 text-[11px] text-critical">{editError ?? parseError}</div>
       )}
 
+      {eventsMode ? (
+        <EventQueryModal
+          open={builderOpen}
+          query={eventQuery}
+          sources={eventSources ?? []}
+          timeInterval={timeInterval}
+          onClose={() => setBuilderOpen(false)}
+          onApply={(next) => {
+            onEventQueryChange(next)
+            setBuilderOpen(false)
+          }}
+          onExecute={(next) => {
+            onEventQueryChange(next)
+            setBuilderOpen(false)
+            onExecute()
+          }}
+        />
+      ) : (
       <PdqlBuilderModal
         open={builderOpen}
         initialPdql={pdql}
@@ -554,6 +771,7 @@ export function QueryComposer({
           onExecute()
         }}
       />
+      )}
     </div>
   )
 }
@@ -571,6 +789,13 @@ export function GlobalQueryComposer() {
   const setQueueSource = useAppStore((s) => s.setQueueSource)
   const applyQueueHistory = useAppStore((s) => s.applyQueueHistory)
   const loadQueue = useAppStore((s) => s.loadQueue)
+  const eventQuery = useAppStore((s) => s.eventQuery)
+  const setEventQuery = useAppStore((s) => s.setEventQuery)
+  const eventSources = useEventSources(
+    queueSource === 'events' || (queueSource === 'entities' && eventQueryHasEntityScope(eventQuery)),
+  )
+  const connectedSources = useConnectedSources()
+  useCoerceQueueSource(queueSource, connectedSources, setQueueSource)
 
   return (
     <QueryComposer
@@ -587,6 +812,10 @@ export function GlobalQueryComposer() {
       onQueueSourceChange={setQueueSource}
       onApplyHistory={applyQueueHistory}
       onExecute={() => void loadQueue()}
+      eventQuery={eventQuery}
+      eventSources={eventSources}
+      onEventQueryChange={setEventQuery}
+      connectedSources={connectedSources}
     />
   )
 }
@@ -601,6 +830,15 @@ export function ContextQueryComposer({
   const queue = useAppStore((s) => s.contextQueue[investigationId]) ?? emptyContextQueue
   const setContextQueue = useAppStore((s) => s.setContextQueue)
   const executeContextQuery = useAppStore((s) => s.executeContextQuery)
+  const eventQuery = queue.eventQuery ?? emptyEventQuery()
+  const eventSources = useEventSources(
+    queue.queueSource === 'events' ||
+      (queue.queueSource === 'entities' && eventQueryHasEntityScope(eventQuery)),
+  )
+  const connectedSources = useConnectedSources()
+  useCoerceQueueSource(queue.queueSource, connectedSources, (queueSource) => {
+    setContextQueue(investigationId, { queueSource, sourceErrors: [] })
+  })
 
   return (
     <QueryComposer
@@ -612,6 +850,9 @@ export function ContextQueryComposer({
       history={queue.queryHistory}
       executing={queue.loading}
       extra={extra}
+      eventQuery={eventQuery}
+      eventSources={eventSources}
+      onEventQueryChange={(next) => setContextQueue(investigationId, { eventQuery: next })}
       headerEnd={
         <>
           <AddedFilterToggle
@@ -630,11 +871,17 @@ export function ContextQueryComposer({
           timeInterval: entry.timeInterval,
           queueSource: entry.queueSource ?? DEFAULT_QUEUE_SOURCE,
           groupValues: entry.groupValues ?? [],
+          eventQuery:
+            entry.eventQuery ??
+            ((entry.queueSource ?? queue.queueSource) === 'events'
+              ? eventQueryFromLegacy(entry.pdql)
+              : queue.eventQuery),
         })
       }
       onExecute={() => {
         void executeContextQuery(investigationId)
       }}
+      connectedSources={connectedSources}
     />
   )
 }

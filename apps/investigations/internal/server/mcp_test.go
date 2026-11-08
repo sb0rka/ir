@@ -14,6 +14,7 @@ import (
 	"github.com/sb0rka/ir/apps/investigations/internal/store"
 	"github.com/sb0rka/ir/apps/investigations/internal/transport/socctx"
 	gatewaycontract "github.com/sb0rka/ir/packages/contract/gateway"
+	coreauthctx "github.com/sb0rka/sb0rka/packages/core/transport/authctx"
 )
 
 type mcpRecordingDB struct {
@@ -68,6 +69,9 @@ func TestMCPInitializeAndListTools(t *testing.T) {
 	}
 
 	listed := mcpPost(t, handler, `{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}`)
+	if strings.Contains(listed.Body.String(), `"som_issue_ids"`) {
+		t.Fatal("agent tools must not request a SoM issue")
+	}
 	for _, name := range []string{
 		"get_investigation_graph", "list_investigation_events", "add_investigation_agent_results", "import_entity_events", "get_investigation_reference",
 		"gateway_list_sources", "gateway_search_events", "gateway_aggregate_events",
@@ -169,7 +173,7 @@ func TestMCPGatewayToolsForwardProjectAndBearer(t *testing.T) {
 		}
 	}))
 	defer gateway.Close()
-	server := &Server{db: &mcpRecordingDB{}, gateway: gatewayclient.New(gatewayclient.Config{BaseURL: gateway.URL})}
+	server := &Server{db: &mcpRecordingDB{}, gateway: gatewayclient.New(gatewayclient.Config{BearerResolver: fixtureGatewayBearer, BaseURL: gateway.URL})}
 
 	for _, body := range []string{
 		`{"jsonrpc":"2.0","id":20,"method":"tools/call","params":{"name":"gateway_list_sources","arguments":{}}}`,
@@ -181,6 +185,7 @@ func TestMCPGatewayToolsForwardProjectAndBearer(t *testing.T) {
 		request.Header.Set("Content-Type", "application/json")
 		ctx := socctx.WithScope(request.Context(), socctx.Scope{ProjectID: "abcdef1234"})
 		ctx = socctx.WithBearer(ctx, "user-access-jwt")
+		ctx = coreauthctx.WithIdentity(ctx, coreauthctx.Identity{SubjectID: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", SubjectKind: "agent"})
 		recorder := httptest.NewRecorder()
 		server.MCPHandler().ServeHTTP(recorder, request.WithContext(ctx))
 		if recorder.Code != http.StatusOK || strings.Contains(recorder.Body.String(), `"isError":true`) {
@@ -211,6 +216,7 @@ func TestMCPGatewayValidationError(t *testing.T) {
 	request.Header.Set("Content-Type", "application/json")
 	ctx := socctx.WithScope(request.Context(), socctx.Scope{ProjectID: "abcdef1234"})
 	ctx = socctx.WithBearer(ctx, "user-access-jwt")
+	ctx = coreauthctx.WithIdentity(ctx, coreauthctx.Identity{SubjectID: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", SubjectKind: "agent"})
 	recorder := httptest.NewRecorder()
 	(&Server{}).MCPHandler().ServeHTTP(recorder, request.WithContext(ctx))
 	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), "invalid arguments") || strings.Contains(recorder.Body.String(), "Gateway is unavailable") {
@@ -261,10 +267,11 @@ func TestMCPAgentResultsUsesLocalIDsWithoutGateway(t *testing.T) {
 	db := &hypothesisFakeDB{hypothesis: model.Hypothesis{Status: "active"}}
 	server := &Server{db: db, gateway: nil}
 	request := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(
-		`{"jsonrpc":"2.0","id":10,"method":"tools/call","params":{"name":"add_investigation_agent_results","arguments":{"investigation_id":"11111111-1111-1111-1111-111111111111","hypothesis_id":"55555555-5555-5555-5555-555555555555","som_issue_ids":["22222222-2222-2222-2222-222222222222"],"events":[],"entities":[],"nodes":[{"ref":"event","why":"event evidence for the task","event_id":"33333333-3333-3333-3333-333333333333"},{"ref":"entity","why":"entity target for the task","entity_id":"44444444-4444-4444-4444-444444444444"},{"ref":"existing","why":"existing node relevant to the task","node_id":"66666666-6666-6666-6666-666666666666"}],"edges":[{"source_ref":"event","target_ref":"entity","relation_code":"mentions","why":"event evidence","evidence_event_refs":["event"]}]}}}`))
+		`{"jsonrpc":"2.0","id":10,"method":"tools/call","params":{"name":"add_investigation_agent_results","arguments":{"investigation_id":"11111111-1111-1111-1111-111111111111","hypothesis_id":"55555555-5555-5555-5555-555555555555","events":[],"entities":[],"nodes":[{"ref":"event","why":"event evidence for the task","event_id":"33333333-3333-3333-3333-333333333333"},{"ref":"entity","why":"entity target for the task","entity_id":"44444444-4444-4444-4444-444444444444"},{"ref":"existing","why":"existing node relevant to the task","node_id":"66666666-6666-6666-6666-666666666666"}],"edges":[{"source_ref":"event","target_ref":"entity","relation_code":"mentions","why":"event evidence","evidence_event_refs":["event"]}]}}}`))
 	request.Header.Set("Accept", "application/json, text/event-stream")
 	request.Header.Set("Content-Type", "application/json")
 	ctx := socctx.WithScope(request.Context(), socctx.Scope{ProjectID: "abcdef1234"})
+	ctx = coreauthctx.WithIdentity(ctx, coreauthctx.Identity{SubjectID: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", SubjectKind: "agent"})
 	recorder := httptest.NewRecorder()
 	server.MCPHandler().ServeHTTP(recorder, request.WithContext(ctx))
 	if recorder.Code != http.StatusOK || strings.Contains(recorder.Body.String(), `"isError":true`) {
@@ -281,6 +288,9 @@ func TestMCPAgentResultsUsesLocalIDsWithoutGateway(t *testing.T) {
 	}
 	if db.lastImport.Nodes[0].Why != "event evidence for the task" {
 		t.Fatalf("node why was not preserved: %#v", db.lastImport.Nodes)
+	}
+	if db.lastImport.Actor != "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" {
+		t.Fatalf("verified actor was not preserved: %q", db.lastImport.Actor)
 	}
 }
 
@@ -301,14 +311,15 @@ func TestMCPAgentResultsImportsGatewaySelections(t *testing.T) {
 	db := &mcpRecordingDB{}
 	server := &Server{
 		db:      db,
-		gateway: gatewayclient.New(gatewayclient.Config{BaseURL: gateway.URL}),
+		gateway: gatewayclient.New(gatewayclient.Config{BearerResolver: fixtureGatewayBearer, BaseURL: gateway.URL}),
 	}
 	request := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(
-		`{"jsonrpc":"2.0","id":12,"method":"tools/call","params":{"name":"add_investigation_agent_results","arguments":{"investigation_id":"11111111-1111-1111-1111-111111111111","som_issue_ids":["22222222-2222-2222-2222-222222222222"],"events":[{"ref":"selected-event","source_code":"mock","source_event_id":"event-1"}],"entities":[{"ref":"selected-entity","source_code":"mock","source_entity_id":"entity-1"}],"nodes":[{"ref":"event-node","why":"selected suspicious event","event_ref":"selected-event"},{"ref":"entity-node","why":"target named by event","entity_ref":"selected-entity"}],"edges":[{"source_ref":"event-node","target_ref":"entity-node","relation_code":"targets","why":"event names the target","evidence_event_refs":["event-node"]}]}}}`))
+		`{"jsonrpc":"2.0","id":12,"method":"tools/call","params":{"name":"add_investigation_agent_results","arguments":{"investigation_id":"11111111-1111-1111-1111-111111111111","events":[{"ref":"selected-event","source_code":"mock","source_event_id":"event-1"}],"entities":[{"ref":"selected-entity","source_code":"mock","source_entity_id":"entity-1"}],"nodes":[{"ref":"event-node","why":"selected suspicious event","event_ref":"selected-event"},{"ref":"entity-node","why":"target named by event","entity_ref":"selected-entity"}],"edges":[{"source_ref":"event-node","target_ref":"entity-node","relation_code":"targets","why":"event names the target","evidence_event_refs":["event-node"]}]}}}`))
 	request.Header.Set("Accept", "application/json, text/event-stream")
 	request.Header.Set("Content-Type", "application/json")
 	ctx := socctx.WithScope(request.Context(), socctx.Scope{ProjectID: "abcdef1234"})
 	ctx = socctx.WithBearer(ctx, "user-access-jwt")
+	ctx = coreauthctx.WithIdentity(ctx, coreauthctx.Identity{SubjectID: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", SubjectKind: "agent"})
 	recorder := httptest.NewRecorder()
 	server.MCPHandler().ServeHTTP(recorder, request.WithContext(ctx))
 	if recorder.Code != http.StatusOK || strings.Contains(recorder.Body.String(), `"isError":true`) {
@@ -335,13 +346,14 @@ func TestMCPAgentResultsPartialResolveSkipsMissing(t *testing.T) {
 	}))
 	defer gateway.Close()
 	db := &mcpRecordingDB{}
-	server := &Server{db: db, gateway: gatewayclient.New(gatewayclient.Config{BaseURL: gateway.URL})}
+	server := &Server{db: db, gateway: gatewayclient.New(gatewayclient.Config{BearerResolver: fixtureGatewayBearer, BaseURL: gateway.URL})}
 	request := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(
-		`{"jsonrpc":"2.0","id":13,"method":"tools/call","params":{"name":"add_investigation_agent_results","arguments":{"investigation_id":"11111111-1111-1111-1111-111111111111","som_issue_ids":["22222222-2222-2222-2222-222222222222"],"events":[{"ref":"e-ok","source_code":"mock","source_event_id":"event-ok"},{"ref":"e-miss","source_code":"mock","source_event_id":"event-missing"}],"entities":[{"ref":"a0","source_code":"mock","source_entity_id":"account:user"}],"nodes":[{"ref":"n-ok","why":"returned event","event_ref":"e-ok"},{"ref":"n-miss","why":"requested missing event","event_ref":"e-miss"},{"ref":"n-ent","why":"target account","entity_ref":"a0"}],"edges":[{"source_ref":"n-ok","target_ref":"n-ent","relation_code":"actor","why":"ok edge","evidence_event_refs":["n-ok"]},{"source_ref":"n-miss","target_ref":"n-ent","relation_code":"actor","why":"missing edge","evidence_event_refs":["n-miss"]}]}}}`))
+		`{"jsonrpc":"2.0","id":13,"method":"tools/call","params":{"name":"add_investigation_agent_results","arguments":{"investigation_id":"11111111-1111-1111-1111-111111111111","events":[{"ref":"e-ok","source_code":"mock","source_event_id":"event-ok"},{"ref":"e-miss","source_code":"mock","source_event_id":"event-missing"}],"entities":[{"ref":"a0","source_code":"mock","source_entity_id":"account:user"}],"nodes":[{"ref":"n-ok","why":"returned event","event_ref":"e-ok"},{"ref":"n-miss","why":"requested missing event","event_ref":"e-miss"},{"ref":"n-ent","why":"target account","entity_ref":"a0"}],"edges":[{"source_ref":"n-ok","target_ref":"n-ent","relation_code":"actor","why":"ok edge","evidence_event_refs":["n-ok"]},{"source_ref":"n-miss","target_ref":"n-ent","relation_code":"actor","why":"missing edge","evidence_event_refs":["n-miss"]}]}}}`))
 	request.Header.Set("Accept", "application/json, text/event-stream")
 	request.Header.Set("Content-Type", "application/json")
 	ctx := socctx.WithScope(request.Context(), socctx.Scope{ProjectID: "abcdef1234"})
 	ctx = socctx.WithBearer(ctx, "user-access-jwt")
+	ctx = coreauthctx.WithIdentity(ctx, coreauthctx.Identity{SubjectID: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", SubjectKind: "agent"})
 	recorder := httptest.NewRecorder()
 	server.MCPHandler().ServeHTTP(recorder, request.WithContext(ctx))
 	body := recorder.Body.String()
@@ -374,7 +386,7 @@ func TestMCPRejectsUUIDSourceEntityID(t *testing.T) {
 	t.Parallel()
 	server := &Server{db: &mcpRecordingDB{}, gateway: nil}
 	request := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(
-		`{"jsonrpc":"2.0","id":30,"method":"tools/call","params":{"name":"add_investigation_agent_results","arguments":{"investigation_id":"11111111-1111-1111-1111-111111111111","som_issue_ids":["22222222-2222-2222-2222-222222222222"],"events":[],"entities":[{"ref":"bad","source_code":"mock","source_entity_id":"b71336ed-25f7-42fa-840a-688ceb087c74"}],"nodes":[{"ref":"n","why":"bad source identity","entity_ref":"bad"}],"edges":[]}}}`))
+		`{"jsonrpc":"2.0","id":30,"method":"tools/call","params":{"name":"add_investigation_agent_results","arguments":{"investigation_id":"11111111-1111-1111-1111-111111111111","events":[],"entities":[{"ref":"bad","source_code":"mock","source_entity_id":"b71336ed-25f7-42fa-840a-688ceb087c74"}],"nodes":[{"ref":"n","why":"bad source identity","entity_ref":"bad"}],"edges":[]}}}`))
 	request.Header.Set("Accept", "application/json, text/event-stream")
 	request.Header.Set("Content-Type", "application/json")
 	ctx := socctx.WithScope(request.Context(), socctx.Scope{ProjectID: "abcdef1234"})
@@ -391,7 +403,7 @@ func TestMCPRejectsBlankNodeWhy(t *testing.T) {
 	t.Parallel()
 	server := &Server{db: &mcpRecordingDB{}}
 	request := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(
-		`{"jsonrpc":"2.0","id":30,"method":"tools/call","params":{"name":"add_investigation_agent_results","arguments":{"investigation_id":"11111111-1111-1111-1111-111111111111","som_issue_ids":["22222222-2222-2222-2222-222222222222"],"events":[],"entities":[],"nodes":[{"ref":"n","why":" ","event_id":"33333333-3333-3333-3333-333333333333"}],"edges":[]}}}`))
+		`{"jsonrpc":"2.0","id":30,"method":"tools/call","params":{"name":"add_investigation_agent_results","arguments":{"investigation_id":"11111111-1111-1111-1111-111111111111","events":[],"entities":[],"nodes":[{"ref":"n","why":" ","event_id":"33333333-3333-3333-3333-333333333333"}],"edges":[]}}}`))
 	request.Header.Set("Accept", "application/json, text/event-stream")
 	request.Header.Set("Content-Type", "application/json")
 	ctx := socctx.WithScope(request.Context(), socctx.Scope{ProjectID: "abcdef1234"})
@@ -410,7 +422,7 @@ func TestMCPRejectsAgentEventNodeWithoutEdge(t *testing.T) {
 	t.Parallel()
 	server := &Server{db: &mcpRecordingDB{}}
 	request := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(
-		`{"jsonrpc":"2.0","id":31,"method":"tools/call","params":{"name":"add_investigation_agent_results","arguments":{"investigation_id":"11111111-1111-1111-1111-111111111111","som_issue_ids":["22222222-2222-2222-2222-222222222222"],"events":[],"entities":[],"nodes":[{"ref":"n","why":"mimikatz in cmdline","event_id":"33333333-3333-3333-3333-333333333333"}],"edges":[]}}}`))
+		`{"jsonrpc":"2.0","id":31,"method":"tools/call","params":{"name":"add_investigation_agent_results","arguments":{"investigation_id":"11111111-1111-1111-1111-111111111111","events":[],"entities":[],"nodes":[{"ref":"n","why":"mimikatz in cmdline","event_id":"33333333-3333-3333-3333-333333333333"}],"edges":[]}}}`))
 	request.Header.Set("Accept", "application/json, text/event-stream")
 	request.Header.Set("Content-Type", "application/json")
 	ctx := socctx.WithScope(request.Context(), socctx.Scope{ProjectID: "abcdef1234"})
@@ -474,13 +486,14 @@ func TestMCPImportEntityEventsByEntityID(t *testing.T) {
 		timelineFrom: &from,
 		timelineTo:   &to,
 	}
-	server := &Server{db: db, gateway: gatewayclient.New(gatewayclient.Config{BaseURL: gateway.URL})}
+	server := &Server{db: db, gateway: gatewayclient.New(gatewayclient.Config{BearerResolver: fixtureGatewayBearer, BaseURL: gateway.URL})}
 	request := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(
-		`{"jsonrpc":"2.0","id":31,"method":"tools/call","params":{"name":"import_entity_events","arguments":{"investigation_id":"11111111-1111-1111-1111-111111111111","som_issue_ids":["22222222-2222-2222-2222-222222222222"],"entity":{"entity_id":"b71336ed-25f7-42fa-840a-688ceb087c74"},"time_range":{"from":"2025-10-22T00:00:00Z","to":"2025-10-24T00:00:00Z"},"filter":"correlation_name != null","sort":[{"field":"time","direction":"asc"}],"limit":10}}}`))
+		`{"jsonrpc":"2.0","id":31,"method":"tools/call","params":{"name":"import_entity_events","arguments":{"investigation_id":"11111111-1111-1111-1111-111111111111","entity":{"entity_id":"b71336ed-25f7-42fa-840a-688ceb087c74"},"time_range":{"from":"2025-10-22T00:00:00Z","to":"2025-10-24T00:00:00Z"},"filter":"correlation_name != null","sort":[{"field":"time","direction":"asc"}],"limit":10}}}`))
 	request.Header.Set("Accept", "application/json, text/event-stream")
 	request.Header.Set("Content-Type", "application/json")
 	ctx := socctx.WithScope(request.Context(), socctx.Scope{ProjectID: "abcdef1234"})
 	ctx = socctx.WithBearer(ctx, "user-access-jwt")
+	ctx = coreauthctx.WithIdentity(ctx, coreauthctx.Identity{SubjectID: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", SubjectKind: "agent"})
 	recorder := httptest.NewRecorder()
 	server.MCPHandler().ServeHTTP(recorder, request.WithContext(ctx))
 	body := recorder.Body.String()
@@ -548,13 +561,14 @@ func TestMCPImportEntityEventsEmptySearch(t *testing.T) {
 		Entity:      model.Entity{ID: "b71336ed-25f7-42fa-840a-688ceb087c74", TypeCode: "account", CanonicalKey: `dkrylova\administrator`},
 		Occurrences: []model.EntityOccurrence{{InvestigationID: "11111111-1111-1111-1111-111111111111"}},
 	}}
-	server := &Server{db: db, gateway: gatewayclient.New(gatewayclient.Config{BaseURL: gateway.URL})}
+	server := &Server{db: db, gateway: gatewayclient.New(gatewayclient.Config{BearerResolver: fixtureGatewayBearer, BaseURL: gateway.URL})}
 	request := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(
-		`{"jsonrpc":"2.0","id":32,"method":"tools/call","params":{"name":"import_entity_events","arguments":{"investigation_id":"11111111-1111-1111-1111-111111111111","som_issue_ids":["22222222-2222-2222-2222-222222222222"],"entity":{"entity_id":"b71336ed-25f7-42fa-840a-688ceb087c74"},"time_range":{"from":"2025-10-22T00:00:00Z","to":"2025-10-24T00:00:00Z"}}}}`))
+		`{"jsonrpc":"2.0","id":32,"method":"tools/call","params":{"name":"import_entity_events","arguments":{"investigation_id":"11111111-1111-1111-1111-111111111111","entity":{"entity_id":"b71336ed-25f7-42fa-840a-688ceb087c74"},"time_range":{"from":"2025-10-22T00:00:00Z","to":"2025-10-24T00:00:00Z"}}}}`))
 	request.Header.Set("Accept", "application/json, text/event-stream")
 	request.Header.Set("Content-Type", "application/json")
 	ctx := socctx.WithScope(request.Context(), socctx.Scope{ProjectID: "abcdef1234"})
 	ctx = socctx.WithBearer(ctx, "user-access-jwt")
+	ctx = coreauthctx.WithIdentity(ctx, coreauthctx.Identity{SubjectID: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", SubjectKind: "agent"})
 	recorder := httptest.NewRecorder()
 	server.MCPHandler().ServeHTTP(recorder, request.WithContext(ctx))
 	body := recorder.Body.String()
@@ -616,7 +630,7 @@ func TestMCPEvidenceToolsForwardProjectAndReadDefaults(t *testing.T) {
 		w.Write([]byte(`{"export_id":"11111111-2222-4333-8444-555555555555","state":"ready"}`))
 	}))
 	defer gateway.Close()
-	server := &Server{gateway: gatewayclient.New(gatewayclient.Config{BaseURL: gateway.URL})}
+	server := &Server{gateway: gatewayclient.New(gatewayclient.Config{BearerResolver: fixtureGatewayBearer, BaseURL: gateway.URL})}
 	args := map[string]string{
 		"gateway_create_evidence_export": `{"kind":"file","object_id":"synthetic-dump","ref":{"source_code":"pt-nad","record_type":"nad_session","external_id":"flow","source_instance":"23","time_range":{"from":"2023-06-10T00:00:00Z","to":"2023-06-11T00:00:00Z"}}}`,
 		"gateway_get_evidence_export":    `{"export_id":"11111111-2222-4333-8444-555555555555"}`,
@@ -628,6 +642,7 @@ func TestMCPEvidenceToolsForwardProjectAndReadDefaults(t *testing.T) {
 		request.Header.Set("Content-Type", "application/json")
 		ctx := socctx.WithScope(request.Context(), socctx.Scope{ProjectID: "abcdef1234"})
 		ctx = socctx.WithBearer(ctx, "user-access-jwt")
+		ctx = coreauthctx.WithIdentity(ctx, coreauthctx.Identity{SubjectID: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", SubjectKind: "agent"})
 		recorder := httptest.NewRecorder()
 		server.MCPHandler().ServeHTTP(recorder, request.WithContext(ctx))
 		if recorder.Code != http.StatusOK || strings.Contains(recorder.Body.String(), `"isError":true`) || strings.Contains(recorder.Body.String(), `"error":`) {

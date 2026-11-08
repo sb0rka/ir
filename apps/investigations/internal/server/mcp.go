@@ -76,7 +76,6 @@ type mcpAgentEdge struct {
 type addAgentResultsArgs struct {
 	InvestigationID      openapi_types.UUID                   `json:"investigation_id" jsonschema:"Investigation UUID"`
 	HypothesisID         *openapi_types.UUID                  `json:"hypothesis_id,omitempty" jsonschema:"Optional active hypothesis UUID; when set, add explicit results to its graph projection"`
-	SomIssueIds          []openapi_types.UUID                 `json:"som_issue_ids" jsonschema:"SOM issue UUIDs that produced these results"`
 	Events               []mcpAgentEventSelection             `json:"events" jsonschema:"Gateway events to import; empty when nodes use event_id or node_id only"`
 	Entities             []mcpAgentEntitySelection            `json:"entities" jsonschema:"Gateway entities to import; empty when nodes use entity_id or node_id only"`
 	Nodes                []mcpAgentNode                       `json:"nodes" jsonschema:"Each node needs ref plus exactly one locator: event_ref, entity_ref, event_id, entity_id, or node_id"`
@@ -87,7 +86,6 @@ type addAgentResultsArgs struct {
 
 func (args addAgentResultsArgs) toBatch() investigations.AgentResultBatch {
 	batch := investigations.AgentResultBatch{
-		SomIssueIds:          args.SomIssueIds,
 		Events:               make([]investigations.AgentEventSelection, len(args.Events)),
 		Entities:             make([]investigations.AgentEntitySelection, len(args.Entities)),
 		Nodes:                make([]investigations.AgentNode, len(args.Nodes)),
@@ -136,7 +134,7 @@ func (s *Server) MCPHandler() http.Handler {
 	mcp.AddTool[addAgentResultsArgs, any](server, mcpTool[addAgentResultsArgs](
 		"add_investigation_agent_results",
 		"Atomically add graph nodes, proposed evidence-backed edges, and optional entity/event group proposals. "+
-			"Group proposals require batch-local node references, evidence, reasons and SOM provenance; they never confirm grouping. "+
+			"Group proposals require batch-local node references, evidence and reasons; they never confirm grouping. "+
 			"Optionally scope the nodes to an active hypothesis. "+
 			"Prefer import_entity_events when the task is to find events for one entity and put them on the graph. "+
 			"To import Gateway evidence manually: put events[{ref,source_code,source_event_id}] and entities[{ref,source_code,source_entity_id}], "+
@@ -148,7 +146,7 @@ func (s *Server) MCPHandler() http.Handler {
 			"nodes:[{ref:\"n-event\",why:\"matched task evidence\",event_ref:\"e0\"},{ref:\"n-entity\",why:\"task target\",entity_ref:\"a0\"}], "+
 			"edges:[{source_ref:\"n-event\",target_ref:\"n-entity\",relation_code:\"actor\",why:\"…\",evidence_event_refs:[\"n-event\"]}].",
 	), s.addInvestigationAgentResultsTool)
-	mcp.AddTool[importEntityEventsArgs, any](server, withSIEMFilterGrammar(mcpTool[importEntityEventsArgs](
+	mcp.AddTool[importEntityEventsArgs, any](server, withEventQueryGrammar(mcpTool[importEntityEventsArgs](
 		"import_entity_events",
 		"Find Gateway events for one entity and import them onto the investigation graph with proposed role edges. "+
 			"Pass entity.entity_id when the issue/graph already has an IR UUID, or entity.type+entity.value otherwise. "+
@@ -183,6 +181,17 @@ func mcpTool[T any](name, description string) *mcp.Tool {
 		panic(err)
 	}
 	return &mcp.Tool{Name: name, Description: description, InputSchema: schema}
+}
+
+// Both import and search expose the same explicit native-language boundary.
+func withEventQueryGrammar(tool *mcp.Tool) *mcp.Tool {
+	tool = withSIEMFilterGrammar(tool)
+	if schema, ok := tool.InputSchema.(*jsonschema.Schema); ok {
+		if property, exists := schema.Properties["filter"]; exists {
+			property.Description = "Choose filter_language before writing the native predicate. wazuh_dql: field:value, field >= number/date, AND/OR/NOT, parentheses, field:*, unquoted * wildcard on keyword values; no raw DSL or pipelines. pt_pdql: field = value, !=, ranges, contains, null checks, and/or/not; no in operator or pipelines. Without filter_language only the legacy bounded predicate follows: " + property.Description
+		}
+	}
+	return tool
 }
 
 // withSIEMFilterGrammar appends the predicate grammar to the `filter` argument;
@@ -290,13 +299,8 @@ func (s *Server) addInvestigationAgentResultsTool(
 	if err := requireMCPHypothesis(args.HypothesisID); err != nil {
 		return mcpFailure(err)
 	}
-	if len(args.SomIssueIds) == 0 || len(args.Events) > 500 || len(args.Entities) > 2000 {
-		return mcpFailure(errors.New("invalid arguments: expected at least one SOM issue, at most 500 events and at most 2000 entities"))
-	}
-	for _, id := range args.SomIssueIds {
-		if id == uuid.Nil {
-			return mcpFailure(errors.New("invalid arguments: som_issue_ids must contain non-zero UUIDs"))
-		}
+	if len(args.Events) > 500 || len(args.Entities) > 2000 {
+		return mcpFailure(errors.New("invalid arguments: expected at most 500 events and at most 2000 entities"))
 	}
 
 	body := investigations.AddAgentResultsJSONRequestBody(args.toBatch())
@@ -400,17 +404,19 @@ type mcpEntityRef struct {
 }
 
 type mcpSearchEventsArgs struct {
-	Sources           *[]string                    `json:"sources,omitempty" jsonschema:"Codes from gateway_list_sources. Match capability: accounts/process/auth → SIEM (pt-maxpatrol-siem); network sessions → NAD"`
-	TimeRange         gatewaycontract.TimeRange    `json:"time_range" jsonschema:"Required occurrence-time interval"`
-	Entities          *[]mcpEntityRef              `json:"entities,omitempty" jsonschema:"Prefer this to find events for an account/host/ip. Never pass IR entity UUIDs here"`
-	Filter            *string                      `json:"filter,omitempty" jsonschema:"Optional SIEM predicate; use it when the issue lists SIEM fields (event_src.host, subject.process.chain, ...). Prefer entities[] when filtering by identity only."`
-	Columns           *[]string                    `json:"columns,omitempty" jsonschema:"Optional allowlisted SIEM fields to expose"`
-	Sort              *[]gatewaycontract.EventSort `json:"sort,omitempty" jsonschema:"Optional SIEM sort rules"`
-	GroupBy           *[]string                    `json:"group_by,omitempty" jsonschema:"Optional SIEM group_by fields when drilling into an aggregation"`
-	GroupValues       *[]*string                   `json:"group_values,omitempty" jsonschema:"Group values aligned with group_by"`
-	Limit             *int                         `json:"limit,omitempty" jsonschema:"Max merged events per page (1-100). Defaults to 20 when omitted; use 100 when reading a whole result set"`
-	Cursor            *string                      `json:"cursor,omitempty" jsonschema:"Opaque next_cursor from the previous page with the same filters"`
-	IncludeAttributes *bool                        `json:"include_attributes,omitempty" jsonschema:"Set true whenever you must inspect event content (cmdline, process chain, paths, text, alert context). Default false returns only time/title/entities, so content searches (e.g. for a tool name like mimikatz) find nothing"`
+	CommonFilter      *gatewaycontract.CommonEventFilter                 `json:"common_filter,omitempty" jsonschema:"Exact hosts and ips. Values within a field are OR; hosts and ips are AND."`
+	FilterLanguage    *gatewaycontract.SearchEventsRequestFilterLanguage `json:"filter_language,omitempty" jsonschema:"pt_pdql for MaxPatrol, wazuh_dql for Wazuh. Discover fields with gateway_list_event_fields."`
+	Sources           *[]string                                          `json:"sources,omitempty" jsonschema:"Codes from gateway_list_sources. Match capability: accounts/process/auth → SIEM (pt-maxpatrol-siem); network sessions → NAD"`
+	TimeRange         gatewaycontract.TimeRange                          `json:"time_range" jsonschema:"Required occurrence-time interval"`
+	Entities          *[]mcpEntityRef                                    `json:"entities,omitempty" jsonschema:"Prefer this to find events for an account/host/ip. Never pass IR entity UUIDs here"`
+	Filter            *string                                            `json:"filter,omitempty" jsonschema:"Optional SIEM predicate; use it when the issue lists SIEM fields (event_src.host, subject.process.chain, ...). Prefer entities[] when filtering by identity only."`
+	Columns           *[]string                                          `json:"columns,omitempty" jsonschema:"Optional allowlisted SIEM fields to expose"`
+	Sort              *[]gatewaycontract.EventSort                       `json:"sort,omitempty" jsonschema:"Optional SIEM sort rules"`
+	GroupBy           *[]string                                          `json:"group_by,omitempty" jsonschema:"Optional SIEM group_by fields when drilling into an aggregation"`
+	GroupValues       *[]*string                                         `json:"group_values,omitempty" jsonschema:"Group values aligned with group_by"`
+	Limit             *int                                               `json:"limit,omitempty" jsonschema:"Max merged events per page (1-100). Defaults to 20 when omitted; use 100 when reading a whole result set"`
+	Cursor            *string                                            `json:"cursor,omitempty" jsonschema:"Opaque next_cursor from the previous page with the same filters"`
+	IncludeAttributes *bool                                              `json:"include_attributes,omitempty" jsonschema:"Set true whenever you must inspect event content (cmdline, process chain, paths, text, alert context). Default false returns only time/title/entities, so content searches (e.g. for a tool name like mimikatz) find nothing"`
 }
 
 func (a mcpSearchEventsArgs) toContract() gatewaycontract.SearchEventsRequest {
@@ -420,7 +426,7 @@ func (a mcpSearchEventsArgs) toContract() gatewaycontract.SearchEventsRequest {
 		limit = &defaultLimit
 	}
 	out := gatewaycontract.SearchEventsRequest{
-		Sources: a.Sources, TimeRange: a.TimeRange, Filter: a.Filter, Columns: a.Columns,
+		CommonFilter: a.CommonFilter, FilterLanguage: a.FilterLanguage, Sources: a.Sources, TimeRange: a.TimeRange, Filter: a.Filter, Columns: a.Columns,
 		Sort: a.Sort, GroupBy: a.GroupBy, GroupValues: a.GroupValues, Limit: limit, Cursor: a.Cursor,
 	}
 	if a.Entities != nil {
@@ -460,16 +466,17 @@ type importEntitySelector struct {
 }
 
 type importEntityEventsArgs struct {
-	InvestigationID     openapi_types.UUID           `json:"investigation_id" jsonschema:"Investigation UUID"`
-	HypothesisID        *openapi_types.UUID          `json:"hypothesis_id,omitempty" jsonschema:"Optional active hypothesis UUID"`
-	SomIssueIds         []openapi_types.UUID         `json:"som_issue_ids" jsonschema:"SOM issue UUIDs that produced these results"`
-	Entity              importEntitySelector         `json:"entity" jsonschema:"Exactly one of entity_id or type+value"`
-	TimeRange           *gatewaycontract.TimeRange   `json:"time_range,omitempty" jsonschema:"Optional search window; defaults to investigation timeline ±24h or last 30 days"`
-	Sources             *[]string                    `json:"sources,omitempty" jsonschema:"Optional source codes; defaults by entity capability (SIEM for account/host/process)"`
-	Filter              *string                      `json:"filter,omitempty" jsonschema:"Bounded SIEM predicate, e.g. correlation_name != null; combined with the entity condition."`
-	Sort                *[]gatewaycontract.EventSort `json:"sort,omitempty" jsonschema:"Defaults to time desc — the newest events; use time asc for the start of the window"`
-	Limit               *int                         `json:"limit,omitempty" jsonschema:"Max events to import (1-100, default 50)"`
-	IncludeParticipants *bool                        `json:"include_participants,omitempty" jsonschema:"When true, also import other entities mentioned on the events. Default false"`
+	CommonFilter        *gatewaycontract.CommonEventFilter                 `json:"common_filter,omitempty"`
+	FilterLanguage      *gatewaycontract.SearchEventsRequestFilterLanguage `json:"filter_language,omitempty" jsonschema:"pt_pdql or wazuh_dql; omit only for legacy predicates"`
+	InvestigationID     openapi_types.UUID                                 `json:"investigation_id" jsonschema:"Investigation UUID"`
+	HypothesisID        *openapi_types.UUID                                `json:"hypothesis_id,omitempty" jsonschema:"Optional active hypothesis UUID"`
+	Entity              importEntitySelector                               `json:"entity" jsonschema:"Exactly one of entity_id or type+value"`
+	TimeRange           *gatewaycontract.TimeRange                         `json:"time_range,omitempty" jsonschema:"Optional search window; defaults to investigation timeline ±24h or last 30 days"`
+	Sources             *[]string                                          `json:"sources,omitempty" jsonschema:"Optional source codes; defaults by entity capability (SIEM for account/host/process)"`
+	Filter              *string                                            `json:"filter,omitempty" jsonschema:"Bounded SIEM predicate, e.g. correlation_name != null; combined with the entity condition."`
+	Sort                *[]gatewaycontract.EventSort                       `json:"sort,omitempty" jsonschema:"Defaults to time desc — the newest events; use time asc for the start of the window"`
+	Limit               *int                                               `json:"limit,omitempty" jsonschema:"Max events to import (1-100, default 50)"`
+	IncludeParticipants *bool                                              `json:"include_participants,omitempty" jsonschema:"When true, also import other entities mentioned on the events. Default false"`
 }
 
 type importEntityEventsSummary struct {
@@ -508,14 +515,6 @@ func (s *Server) importEntityEventsTool(
 	}
 	if err := requireMCPHypothesis(args.HypothesisID); err != nil {
 		return mcpFailure(err)
-	}
-	if len(args.SomIssueIds) == 0 {
-		return mcpFailure(errors.New("invalid arguments: expected at least one SOM issue"))
-	}
-	for _, id := range args.SomIssueIds {
-		if id == uuid.Nil {
-			return mcpFailure(errors.New("invalid arguments: som_issue_ids must contain non-zero UUIDs"))
-		}
 	}
 	limit := 50
 	if args.Limit != nil {
@@ -556,7 +555,7 @@ func (s *Server) importEntityEventsTool(
 		return mcpFailure(err)
 	}
 	sources := args.Sources
-	if sources == nil {
+	if sources == nil && args.FilterLanguage == nil {
 		defaultSources := defaultSourcesForEntityType(resolvedEntity.Type)
 		if len(defaultSources) > 0 {
 			sources = &defaultSources
@@ -566,11 +565,9 @@ func (s *Server) importEntityEventsTool(
 		Type:  resolvedEntity.Type,
 		Value: resolvedEntity.Value,
 	}}
-	eventsTotal, eventsTotalExact, aggregateSourceErrors, aggregateWarnings := s.importEntityEventsTotal(
-		ctx, scope.ProjectID, bearer, sources, timeRange, entities, args.Filter,
-	)
 
 	searchReq := gatewaycontract.SearchEventsRequest{
+		CommonFilter: args.CommonFilter, FilterLanguage: args.FilterLanguage,
 		Sources:   sources,
 		TimeRange: timeRange,
 		Entities:  entities,
@@ -579,14 +576,20 @@ func (s *Server) importEntityEventsTool(
 		Limit:     &limit,
 	}
 	var (
-		foundEvents  []gatewaycontract.Event
-		pageEntities []gatewaycontract.Entity
-		sourceStates []gatewaycontract.SourceState
-		sourceErrors = append([]gatewaycontract.SourceError{}, aggregateSourceErrors...)
-		nextCursor   *string
-		truncated    bool
+		foundEvents      []gatewaycontract.Event
+		pageEntities     []gatewaycontract.Entity
+		sourceStates     []gatewaycontract.SourceState
+		sourceErrors     []gatewaycontract.SourceError
+		eventsTotal      *int64
+		eventsTotalExact bool
+		totalWarnings    []string
+		firstPage        = true
+		nextCursor       *string
+		truncated        bool
 	)
 	for {
+		remaining := limit - len(foundEvents)
+		searchReq.Limit = &remaining
 		raw, err := s.gateway.SearchEvents(ctx, scope.ProjectID, bearer, searchReq)
 		if err != nil {
 			var upstream *gatewayclient.HTTPError
@@ -599,9 +602,19 @@ func (s *Server) importEntityEventsTool(
 		if err := json.Unmarshal(raw, &page); err != nil {
 			return mcpFailure(err)
 		}
+		if firstPage {
+			eventsTotal, eventsTotalExact, totalWarnings = searchEventsTotal(page)
+			firstPage = false
+		} else {
+			_, pageExact, _ := searchEventsTotal(page)
+			eventsTotalExact = eventsTotalExact && pageExact
+		}
 		sourceStates = append(sourceStates, page.SourceStates...)
 		sourceErrors = append(sourceErrors, page.SourceErrors...)
 		pageEntities = append(pageEntities, page.Entities...)
+		for _, state := range page.SourceStates {
+			truncated = truncated || state.Status != "complete"
+		}
 		for _, event := range page.Events {
 			foundEvents = append(foundEvents, event)
 			if len(foundEvents) >= limit {
@@ -609,7 +622,13 @@ func (s *Server) importEntityEventsTool(
 			}
 		}
 		if len(foundEvents) >= limit {
-			truncated = page.NextCursor != nil || len(page.Events) > 0
+			truncated = truncated || page.NextCursor != nil && *page.NextCursor != ""
+			nextCursor = page.NextCursor
+			break
+		}
+		if len(page.Events) == 0 && len(page.SourceErrors) > 0 {
+			// Return the retry position instead of spinning on a failed source.
+			truncated = true
 			nextCursor = page.NextCursor
 			break
 		}
@@ -645,11 +664,11 @@ func (s *Server) importEntityEventsTool(
 	}
 
 	if len(foundEvents) == 0 {
-		empty := investigations.ContextImportResult{Warnings: aggregateWarnings}
+		empty := investigations.ContextImportResult{Warnings: totalWarnings}
 		return nil, importEntityEventsResult{ContextImportResult: empty, Summary: summary}, nil
 	}
 
-	batch, err := buildEntityEventsBatch(args.SomIssueIds, resolvedEntity, foundEvents, includeParticipants, timeRange, args.Filter, args.Sort)
+	batch, err := buildEntityEventsBatch(resolvedEntity, foundEvents, includeParticipants, timeRange, args.Filter, args.Sort)
 	if err != nil {
 		return mcpImportFailure(summary, err)
 	}
@@ -691,37 +710,22 @@ func (s *Server) importEntityEventsTool(
 	if err != nil {
 		return mcpImportFailure(summary, err)
 	}
-	result.Warnings = append(aggregateWarnings, result.Warnings...)
+	result.Warnings = append(totalWarnings, result.Warnings...)
 	summary.EventsImported = result.Events
 	return nil, importEntityEventsResult{ContextImportResult: result, Summary: summary}, nil
 }
 
-func (s *Server) importEntityEventsTotal(
-	ctx context.Context,
-	projectID, bearer string,
-	sources *[]string,
-	timeRange gatewaycontract.TimeRange,
-	entities *[]gatewaycontract.EntityRef,
-	filter *string,
-) (*int64, bool, []gatewaycontract.SourceError, []string) {
-	groupLimit := 50
-	raw, err := s.gateway.AggregateEvents(ctx, projectID, bearer, gatewaycontract.AggregateEventsRequest{
-		Sources: sources, TimeRange: timeRange, Entities: entities, Filter: filter,
-		GroupBy: []string{"correlation_type"}, Limit: &groupLimit,
-	})
-	if err != nil {
-		return nil, false, nil, []string{"events_total unavailable: " + err.Error()}
+// The search response reports match totals independently of vendor field names.
+func searchEventsTotal(page gatewaycontract.SearchEventsResponse) (*int64, bool, []string) {
+	if page.Total == nil || *page.Total < 0 {
+		return nil, false, []string{"events_total unavailable: source search did not report a match total"}
 	}
-	var aggregate gatewaycontract.AggregateEventsResponse
-	if err := json.Unmarshal(raw, &aggregate); err != nil {
-		return nil, false, nil, []string{"events_total unavailable: invalid Gateway aggregate response"}
+	exact := len(page.SourceErrors) == 0 && len(page.SourceStates) > 0
+	for _, state := range page.SourceStates {
+		exact = exact && state.Status == "complete" && state.Total != nil
 	}
-	var total int64
-	for _, group := range aggregate.Groups {
-		total += group.Count
-	}
-	exact := len(aggregate.Groups) < groupLimit && len(aggregate.SourceErrors) == 0
-	return &total, exact, aggregate.SourceErrors, nil
+	total := *page.Total
+	return &total, exact, nil
 }
 
 func markSearchEntityDirect(resolved *resolvedGatewayContext, typeCode, value string) {
@@ -838,7 +842,6 @@ func defaultSourcesForEntityType(typeCode string) []string {
 }
 
 func buildEntityEventsBatch(
-	somIssueIDs []openapi_types.UUID,
 	entity resolvedImportEntity,
 	events []gatewaycontract.Event,
 	includeParticipants bool,
@@ -847,16 +850,15 @@ func buildEntityEventsBatch(
 	sortRules *[]gatewaycontract.EventSort,
 ) (investigations.AgentResultBatch, error) {
 	batch := investigations.AgentResultBatch{
-		SomIssueIds: somIssueIDs,
-		Events:      make([]investigations.AgentEventSelection, 0, len(events)),
-		Entities:    nil,
-		Nodes:       nil,
-		Edges:       nil,
+		Events:   make([]investigations.AgentEventSelection, 0, len(events)),
+		Entities: nil,
+		Nodes:    nil,
+		Edges:    nil,
 	}
 	entityNodeRef := "n-entity"
 	entitySelectionRef := "a0"
 	confidence := float32(1)
-	targetWhy := fmt.Sprintf("target entity of import_entity_events (issue %s)", formatIssueIDs(somIssueIDs))
+	targetWhy := fmt.Sprintf("target entity of import_entity_events: %s %s", entity.Type, entity.Value)
 
 	if entity.Attached && entity.EntityID != "" {
 		entityUUID, err := uuid.Parse(entity.EntityID)
@@ -967,14 +969,6 @@ func buildEntityEventsBatch(
 	return batch, nil
 }
 
-func formatIssueIDs(ids []openapi_types.UUID) string {
-	values := make([]string, 0, len(ids))
-	for _, id := range ids {
-		values = append(values, id.String())
-	}
-	return strings.Join(values, ", ")
-}
-
 func importEventNodeWhy(
 	entity resolvedImportEntity,
 	event gatewaycontract.Event,
@@ -1055,6 +1049,9 @@ type mcpEvidenceReadArgs struct {
 }
 
 func addGatewayTools(server *mcp.Server, s *Server) {
+	mcp.AddTool(server, mcpTool[struct{}]("gateway_list_event_fields", "List project-available common fields, native fields, operators and filter languages. Native Wazuh uses wazuh_dql; MaxPatrol uses pt_pdql. NAD event filters are bounded common identity filters."), gatewayHandler(s, func(ctx context.Context, _ struct{}, scope socctx.Scope, bearer string) (json.RawMessage, error) {
+		return s.gateway.ListEventFields(ctx, scope.ProjectID, bearer)
+	}))
 	mcp.AddTool(server, mcpTool[gatewaycontract.EvidenceReference](
 		"gateway_create_evidence_export", "Explicitly request full payload or file evidence from a source object ref. For this pilot, do not download malware or suspicious attachments; use supplied dumps or synthetic content for checks. NAD session PCAP export is unsupported; a supplied PCAP is analyzed separately. Poll status until ready or partial. Exports expire after one hour and after a Gateway restart.",
 	), gatewayHandler(s, func(ctx context.Context, args gatewaycontract.EvidenceReference, scope socctx.Scope, bearer string) (json.RawMessage, error) {
@@ -1076,12 +1073,12 @@ func addGatewayTools(server *mcp.Server, s *Server) {
 	), gatewayHandler(s, func(ctx context.Context, _ struct{}, scope socctx.Scope, bearer string) (json.RawMessage, error) {
 		return s.gateway.ListSources(ctx, scope.ProjectID, bearer)
 	}))
-	mcp.AddTool(server, withSIEMFilterGrammar(mcpTool[mcpSearchEventsArgs](
+	mcp.AddTool(server, withEventQueryGrammar(mcpTool[mcpSearchEventsArgs](
 		"gateway_search_events",
-		"Search normalized events across project-allowed sources. "+
+		"Search normalized events across project-allowed sources. Discover fields using gateway_list_event_fields. Use filter_language:wazuh_dql for Wazuh DQL or pt_pdql for MaxPatrol; common_filter hosts and ips are AND. "+
 			"Filter identities with entities:[{type,value}] (e.g. account + dkrylova\\administrator) — never IR entity_id UUIDs. "+
-			"Filter by SIEM fields with filter (grammar in the filter argument; a rejected field is named in the error). "+
-			"Pick sources by capability (accounts/process/auth → pt-maxpatrol-siem, not NAD). "+
+			"Filter with source-native fields and the selected language (grammar in filter; a rejected field is named in the error). "+
+			"Pick sources by discovered capabilities and languages; Wazuh supports accounts/process/auth, NAD only bounded network identities. "+
 			"Default limit is 20; attributes are omitted unless include_attributes=true. "+
 			"Recipe for a filter-driven task: sources:[\"pt-maxpatrol-siem\"], filter, include_attributes:true, limit:100; read total; "+
 			"call again with cursor=next_cursor (same arguments) until next_cursor is absent — then every source_states entry is complete and nothing is truncated. "+

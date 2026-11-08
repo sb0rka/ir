@@ -12,7 +12,11 @@ export default defineConfig({
     copyPublicDir: true,
   },
   server: {
-    port: 5173,
+    port: 3400,
+    strictPort: true,
+  },
+  preview: {
+    port: 3300,
     strictPort: true,
   },
 })

@@ -109,6 +109,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/events/fields": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List project-available event query fields and languages */
+        get: operations["listEventFields"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/events/search": {
         parameters: {
             query?: never;
@@ -324,8 +341,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * List registered sources
-         * @description Returns project-allowed sources and probes every configured backend or store through a short cache.
+         * List available sources
+         * @description Returns server-configured sources with usable project credentials. User requests read the current Platform configuration; agent requests use the encrypted copy synchronized by IR on save or reload. Missing or invalid credentials exclude a source without a vendor call. Authorization and availability are checked on every request; backend status probes use a short cache.
          */
         get: operations["listSources"];
         put?: never;
@@ -666,6 +683,51 @@ export interface components {
             /** @enum {string} */
             direction: "asc" | "desc";
         };
+        /** @description Positive exact identity filters. Values within each array are OR; nonempty hosts and ips are AND. Existing entities remains an independent OR condition. */
+        CommonEventFilter: {
+            hosts?: string[];
+            ips?: string[];
+        };
+        EventFieldMetadata: {
+            name: string;
+            type: string;
+            operators: string[];
+            column: boolean;
+            sort: boolean;
+            group: boolean;
+        };
+        CommonEventFieldMetadata: {
+            name: string;
+            type: string;
+            label: string;
+            operators: string[];
+        };
+        CommonFieldPath: {
+            path: string;
+            case_insensitive?: boolean;
+        };
+        /** @description How common time, host and IP conditions map onto this source. Absent when the source has no field-map entry. */
+        CommonFieldMappings: {
+            time: string;
+            /** @enum {string} */
+            strategy: "native" | "entities";
+            host: components["schemas"]["CommonFieldPath"][];
+            ip: components["schemas"]["CommonFieldPath"][];
+        };
+        SourceEventFields: {
+            source_code: string;
+            source_name: string;
+            languages: string[];
+            fields: components["schemas"]["EventFieldMetadata"][];
+            common_filter: boolean;
+            bounded: boolean;
+            common_mappings?: components["schemas"]["CommonFieldMappings"];
+        };
+        EventFieldsResponse: {
+            mapping_version: string;
+            common_fields: components["schemas"]["CommonEventFieldMetadata"][];
+            sources: components["schemas"]["SourceEventFields"][];
+        };
         /** @description Filters for source-local event group counts. */
         AggregateEventsRequest: {
             /** @description Source codes to query; omit to use every allowed event source. */
@@ -674,7 +736,13 @@ export interface components {
             time_range: components["schemas"]["TimeRange"];
             /** @description Entity conditions; an event matches when it contains at least one listed entity. */
             entities?: components["schemas"]["EntityRef"][];
-            /** @description Bounded source predicate without a query pipeline. Pipeline separators, comments, and control characters are rejected. */
+            common_filter?: components["schemas"]["CommonEventFilter"];
+            /**
+             * @description Explicit native predicate syntax and source scope. Omit for the legacy bounded predicate. Does not enable raw vendor pipelines or DSL.
+             * @enum {string}
+             */
+            filter_language?: "pt_pdql" | "wazuh_dql";
+            /** @description Native predicate in the explicit filter_language, or the legacy bounded predicate when no language is supplied. Discover fields and operations through events/fields. Pipelines, raw DSL and control characters are rejected. */
             filter?: string;
             /** @description Allowlisted source event fields whose values form each group. */
             group_by: string[];
@@ -713,22 +781,28 @@ export interface components {
             time_range: components["schemas"]["TimeRange"];
             /** @description Entity conditions; an event matches when it contains at least one listed entity. */
             entities?: components["schemas"]["EntityRef"][];
-            /** @description Bounded source predicate without a query pipeline. Currently supported by pt-maxpatrol-siem; pipeline separators and control characters are rejected. */
+            common_filter?: components["schemas"]["CommonEventFilter"];
+            /**
+             * @description Explicit native predicate syntax and source scope. Omit for the legacy bounded predicate. Does not enable raw vendor pipelines or DSL.
+             * @enum {string}
+             */
+            filter_language?: "pt_pdql" | "wazuh_dql";
+            /** @description Native predicate in filter_language syntax: pt_pdql for MaxPatrol, wazuh_dql for the documented bounded Wazuh DQL subset. With no language, uses the legacy bounded predicate. Discover fields and operations through events/fields. Pipelines, raw DSL and control characters are rejected. */
             filter?: string;
-            /** @description Allowlisted source event fields to fetch and expose through canonical event fields or attributes. Currently supported by pt-maxpatrol-siem. */
+            /** @description Allowlisted source event fields to fetch and expose through canonical event fields or attributes. Currently supported by pt-maxpatrol-siem and wazuh. */
             columns?: string[];
-            /** @description Ordered source event sort rules. Currently supported by pt-maxpatrol-siem. */
+            /** @description Ordered source event sort rules. Currently supported by pt-maxpatrol-siem and wazuh. */
             sort?: components["schemas"]["EventSort"][];
-            /** @description Allowlisted source fields whose selected group is searched. Currently supported by pt-maxpatrol-siem. */
+            /** @description Allowlisted source fields whose selected group is searched. Currently supported by pt-maxpatrol-siem and wazuh. */
             group_by?: string[];
-            /** @description Group values aligned by position with group_by. A null item selects the source null group. Currently supported by pt-maxpatrol-siem. */
+            /** @description Group values aligned by position with group_by. A null item selects the source null group. Currently supported by pt-maxpatrol-siem and wazuh. */
             group_values?: (string | null)[];
             /**
              * @description Maximum number of events returned after merging all sources.
              * @default 50
              */
             limit: number;
-            /** @description Opaque next_cursor from the previous response with the same filters. */
+            /** @description Opaque project-bound next_cursor from the previous response with the same filters. Event cursors expire after five minutes without continuation; start a new search on invalid_cursor. */
             cursor?: string;
         };
         /** @description Merged event page with the entities and relations needed to interpret it. */
@@ -1144,7 +1218,7 @@ export interface components {
         };
     };
     parameters: {
-        /** @description Sb0rka project whose integration allowlist is used. */
+        /** @description Selected Sb0rka project. Must match the project agent key or both delegated JWTs. */
         ProjectId: string;
         ExportId: string;
     };
@@ -1158,7 +1232,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Sb0rka project whose integration allowlist is used. */
+                /** @description Selected Sb0rka project. Must match the project agent key or both delegated JWTs. */
                 "X-Project-ID": components["parameters"]["ProjectId"];
             };
             path: {
@@ -1192,7 +1266,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Sb0rka project whose integration allowlist is used. */
+                /** @description Selected Sb0rka project. Must match the project agent key or both delegated JWTs. */
                 "X-Project-ID": components["parameters"]["ProjectId"];
             };
             path?: never;
@@ -1227,7 +1301,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Sb0rka project whose integration allowlist is used. */
+                /** @description Selected Sb0rka project. Must match the project agent key or both delegated JWTs. */
                 "X-Project-ID": components["parameters"]["ProjectId"];
             };
             path: {
@@ -1261,7 +1335,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Sb0rka project whose integration allowlist is used. */
+                /** @description Selected Sb0rka project. Must match the project agent key or both delegated JWTs. */
                 "X-Project-ID": components["parameters"]["ProjectId"];
             };
             path?: never;
@@ -1297,7 +1371,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Sb0rka project whose integration allowlist is used. */
+                /** @description Selected Sb0rka project. Must match the project agent key or both delegated JWTs. */
                 "X-Project-ID": components["parameters"]["ProjectId"];
             };
             path: {
@@ -1335,7 +1409,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Sb0rka project whose integration allowlist is used. */
+                /** @description Selected Sb0rka project. Must match the project agent key or both delegated JWTs. */
                 "X-Project-ID": components["parameters"]["ProjectId"];
             };
             path?: never;
@@ -1367,11 +1441,38 @@ export interface operations {
             default: components["responses"]["ErrorResponse"];
         };
     };
+    listEventFields: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Selected Sb0rka project. Must match the project agent key or both delegated JWTs. */
+                "X-Project-ID": components["parameters"]["ProjectId"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Reviewed field vocabulary; no vendor requests are made. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EventFieldsResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            500: components["responses"]["InternalError"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
     searchEvents: {
         parameters: {
             query?: never;
             header: {
-                /** @description Sb0rka project whose integration allowlist is used. */
+                /** @description Selected Sb0rka project. Must match the project agent key or both delegated JWTs. */
                 "X-Project-ID": components["parameters"]["ProjectId"];
             };
             path?: never;
@@ -1407,7 +1508,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Sb0rka project whose integration allowlist is used. */
+                /** @description Selected Sb0rka project. Must match the project agent key or both delegated JWTs. */
                 "X-Project-ID": components["parameters"]["ProjectId"];
             };
             path?: never;
@@ -1443,7 +1544,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Sb0rka project whose integration allowlist is used. */
+                /** @description Selected Sb0rka project. Must match the project agent key or both delegated JWTs. */
                 "X-Project-ID": components["parameters"]["ProjectId"];
             };
             path?: never;
@@ -1479,7 +1580,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Sb0rka project whose integration allowlist is used. */
+                /** @description Selected Sb0rka project. Must match the project agent key or both delegated JWTs. */
                 "X-Project-ID": components["parameters"]["ProjectId"];
             };
             path?: never;
@@ -1510,7 +1611,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Sb0rka project whose integration allowlist is used. */
+                /** @description Selected Sb0rka project. Must match the project agent key or both delegated JWTs. */
                 "X-Project-ID": components["parameters"]["ProjectId"];
             };
             path: {
@@ -1543,7 +1644,7 @@ export interface operations {
                 limit?: number;
             };
             header: {
-                /** @description Sb0rka project whose integration allowlist is used. */
+                /** @description Selected Sb0rka project. Must match the project agent key or both delegated JWTs. */
                 "X-Project-ID": components["parameters"]["ProjectId"];
             };
             path: {
@@ -1578,7 +1679,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Sb0rka project whose integration allowlist is used. */
+                /** @description Selected Sb0rka project. Must match the project agent key or both delegated JWTs. */
                 "X-Project-ID": components["parameters"]["ProjectId"];
             };
             path?: never;
@@ -1616,7 +1717,7 @@ export interface operations {
                 to: string;
             };
             header: {
-                /** @description Sb0rka project whose integration allowlist is used. */
+                /** @description Selected Sb0rka project. Must match the project agent key or both delegated JWTs. */
                 "X-Project-ID": components["parameters"]["ProjectId"];
             };
             path: {
@@ -1686,7 +1787,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Sb0rka project whose integration allowlist is used. */
+                /** @description Selected Sb0rka project. Must match the project agent key or both delegated JWTs. */
                 "X-Project-ID": components["parameters"]["ProjectId"];
             };
             path?: never;
@@ -1724,7 +1825,7 @@ export interface operations {
                 to: string;
             };
             header: {
-                /** @description Sb0rka project whose integration allowlist is used. */
+                /** @description Selected Sb0rka project. Must match the project agent key or both delegated JWTs. */
                 "X-Project-ID": components["parameters"]["ProjectId"];
             };
             path: {
@@ -1759,11 +1860,11 @@ export interface operations {
     listSources: {
         parameters: {
             query?: {
-                /** @description Bypass cached statuses and reload current project credentials before probing. */
+                /** @description Bypass cached backend statuses. Agent credentials still come from the configuration last saved or reloaded through IR. */
                 refresh?: boolean;
             };
             header: {
-                /** @description Sb0rka project whose integration allowlist is used. */
+                /** @description Selected Sb0rka project. Must match the project agent key or both delegated JWTs. */
                 "X-Project-ID": components["parameters"]["ProjectId"];
             };
             path?: never;
@@ -1771,14 +1872,14 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Registered sources. */
+            /** @description Sources available to the selected project. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": {
-                        /** @description External security products registered for use through the Gateway. */
+                        /** @description Server-configured security products with usable credentials for this project. */
                         items: components["schemas"]["Source"][];
                     };
                 };

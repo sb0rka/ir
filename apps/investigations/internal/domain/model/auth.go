@@ -25,6 +25,12 @@ type LoginRequest struct {
 	ExpiresAt        time.Time
 }
 
+type PreviousRefresh struct {
+	Session         LoginSession
+	EncryptedHandle []byte
+	RotatedAt       time.Time
+}
+
 type AuthRevocation struct {
 	ID              string
 	SessionID       string

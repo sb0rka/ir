@@ -36,6 +36,7 @@ func TestEvidenceHTTPUsesExportWriteDeadline(t *testing.T) {
 	path := registerExport(t, h)
 	r := httptest.NewRequest("GET", path+"/content", nil)
 	r.Header.Set("X-Project-ID", "aabbccddee")
+	r.Header.Set("X-IR-Config-Token", "Bearer test")
 	w := &deadlineRecorder{ResponseRecorder: httptest.NewRecorder()}
 	h.ServeHTTP(w, r)
 	if w.Code != 200 || w.Body.String() != "content" {
@@ -46,9 +47,12 @@ func TestEvidenceHTTPUsesExportWriteDeadline(t *testing.T) {
 	}
 }
 
-type exportSecrets struct{}
+type exportSecrets map[string]bool
 
-func (exportSecrets) Resolve(context.Context, string, string, ...string) (map[string]string, error) {
+func (secrets exportSecrets) Resolve(_ context.Context, _ string, project string, _ ...string) (map[string]string, error) {
+	if !secrets[project] {
+		return nil, errors.New("project credentials unavailable")
+	}
 	return map[string]string{"cookie": "test"}, nil
 }
 
@@ -75,21 +79,23 @@ func (p *exportProvider) OpenEvidence(_ context.Context, _ capability.Access, _ 
 type failingReader struct{}
 
 func (failingReader) Read([]byte) (int, error) { return 0, io.ErrUnexpectedEOF }
-func exportHTTP(t *testing.T, p *exportProvider) (http.Handler, map[string]map[string]bool) {
+func exportHTTP(t *testing.T, p *exportProvider) (http.Handler, exportSecrets) {
 	t.Helper()
 	reg, err := registry.New(registry.Provider{Source: domain.Source{Code: "nad"}, CredentialSecret: "cookie", Evidence: p})
 	if err != nil {
 		t.Fatal(err)
 	}
-	sources := map[string]map[string]bool{"aabbccddee": {"nad": true}, "1122334455": {"nad": true}}
-	handler := NewHandler(config.Config{Auth: config.AuthConfig{Disabled: true}, ProjectSources: sources, Sources: map[string]config.SourceConfig{"nad": {StoreIDs: []string{"23"}}}}, slog.New(slog.NewTextHandler(io.Discard, nil)), service.New(reg, exportSecrets{}, time.Second, time.Second))
-	return handler, sources
+	secrets := exportSecrets{"aabbccddee": true, "1122334455": true}
+	cfg := config.Config{Sources: map[string]config.SourceConfig{"nad": {StoreIDs: []string{"23"}}}}
+	handler := apiHandler(newGatewayServer(cfg, slog.New(slog.NewTextHandler(io.Discard, nil)), service.New(reg, secrets, time.Second, time.Second)))
+	return handler, secrets
 }
 func exportRequest(t *testing.T, h http.Handler, method, path, project, body string) *httptest.ResponseRecorder {
 	t.Helper()
 	req := httptest.NewRequest(method, path, strings.NewReader(body))
 	req.Header.Set("X-Project-ID", project)
 	req.Header.Set("Authorization", "Bearer test")
+	req.Header.Set("X-IR-Config-Token", "Bearer test")
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, req)
@@ -136,7 +142,7 @@ func TestEvidenceHTTPBoundedBytesAccessAndState(t *testing.T) {
 			t.Fatal("foreign project", w.Code)
 		}
 	}
-	sources["aabbccddee"] = map[string]bool{}
+	sources["aabbccddee"] = false
 	for _, suffix := range []string{"", "/content"} {
 		w := exportRequest(t, h, "GET", path+suffix, "aabbccddee", "")
 		if w.Code != 404 {
@@ -167,6 +173,7 @@ func TestEvidenceHTTPInterruptedDownloadIsNotSuccessfulJSON(t *testing.T) {
 	defer server.Close()
 	req, _ := http.NewRequest("GET", server.URL+path+"/content", nil)
 	req.Header.Set("X-Project-ID", "aabbccddee")
+	req.Header.Set("X-IR-Config-Token", "Bearer test")
 	resp, err := server.Client().Do(req)
 	if err != nil {
 		return

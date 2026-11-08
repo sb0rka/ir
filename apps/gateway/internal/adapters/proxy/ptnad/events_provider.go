@@ -27,7 +27,7 @@ func (provider *Provider) SearchEvents(ctx context.Context, access capability.Ac
 		return capability.EventPage{}, err
 	}
 	vendorLimit := limit
-	if len(request.Entities) > 0 {
+	if len(request.Entities) > 0 || !request.CommonFilter.Empty() {
 		vendorLimit = MaxLimit
 	}
 	sessionResults, sessionPartial, sessionErr := fanOutStores(ctx, provider, func(storeID int64) (SessionSearchResult, error) {
@@ -52,7 +52,7 @@ func (provider *Provider) SearchEvents(ctx context.Context, access capability.Ac
 		total += result.Total
 		for _, session := range result.Sessions {
 			event := sessionEvent(session)
-			if !eventMatchesEntities(event, request.Entities) {
+			if !eventMatchesEntities(event, request.Entities) || !request.CommonFilter.Matches(event) {
 				continue
 			}
 			page.Events = append(page.Events, event)
@@ -65,7 +65,7 @@ func (provider *Provider) SearchEvents(ctx context.Context, access capability.Ac
 		total += result.Total
 		for _, attack := range result.Attacks {
 			event := attackEvent(attack)
-			if !eventMatchesEntities(event, request.Entities) {
+			if !eventMatchesEntities(event, request.Entities) || !request.CommonFilter.Matches(event) {
 				continue
 			}
 			page.Events = append(page.Events, event)
@@ -73,7 +73,7 @@ func (provider *Provider) SearchEvents(ctx context.Context, access capability.Ac
 		}
 	}
 	// Entity filters drop rows after the vendor counted them, so the sum is not a match total.
-	if totalsComplete && len(request.Entities) == 0 {
+	if totalsComplete && len(request.Entities) == 0 && request.CommonFilter.Empty() {
 		page.Total = &total
 	}
 	page.Events = normalization.Events(page.Events)

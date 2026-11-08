@@ -11,7 +11,9 @@ vars:
   INVESTIGATIONS_API: api/investigations
   GATEWAY_API: api/gateway
   REDOCLY: npx --yes @redocly/cli@2.5.0
-  CODEGEN: go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@v2.8.0
+  # Deflate embedded-spec зависит от версии Go; фиксируем toolchain генератора,
+  # чтобы обновление Go сервисов не меняло байты неизменённого контракта.
+  CODEGEN: env GOWORK=off GOTOOLCHAIN=go1.26.10 go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@v2.8.0
   IMPL: go run github.com/josharian/impl@v1.5.0
   GOIMPORTS: go run golang.org/x/tools/cmd/goimports@v0.40.0
   OPENAPI_TS: npx --yes openapi-typescript@7.13.0
@@ -248,7 +250,7 @@ tasks:
   db:migrate:
     desc: Apply investigations database migrations
     cmds:
-      - docker compose --profile migrate run --rm --build migrate-inv
+      - docker compose --profile container-db --profile migrate run --rm migrate
 
   db:down:
     desc: Stop local Postgres
@@ -263,14 +265,6 @@ tasks:
   apps:up:
     desc: Start local apps (ir-api, gateway)
     cmds:
-      # som_selfrun is the shared SoM/selfrun bridge (deploy_default). Create it
-      # when SoM is not running so local apps:up does not depend on that stack.
-      - >
-        docker network inspect deploy_default >/dev/null 2>&1
-        || docker network create deploy_default
-      # AEAD keys must exist as files before compose bind-mounts them; otherwise
-      # Docker creates empty directories and ir-api fails on startup.
-      - bash deploy/dev/generate-auth-keys.sh
       - docker compose --profile apps up -d --build
 
   apps:logs:
@@ -282,7 +276,6 @@ tasks:
     desc: Stop local apps
     cmds:
       - docker compose --profile apps down
-      # Leave deploy_default in place: SoM/selfrun or a later apps:up may still use it.
 
   exec:gateway:
     desc: Execute gateway

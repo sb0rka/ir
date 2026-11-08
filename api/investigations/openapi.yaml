@@ -13,7 +13,7 @@ security:
 
 tags:
   - name: authentication
-    description: OIDC sessions and explicit integration consent.
+    description: OIDC sessions, integration consent and project agent access.
   - name: groups
     description: Entity and event groups isolated to one root investigation and its descendants.
   - name: investigations
@@ -45,8 +45,10 @@ components:
     bearerAuth:
       type: http
       scheme: bearer
-      bearerFormat: JWT
       description: >-
-        Auth-issued Ed25519 at+jwt access token for the sb0rka-ir audience.
-        IR validates the local login session, consent and current project RBAC.
+        Auth-issued Ed25519 at+jwt access token for the sb0rka-ir audience,
+        or a project agent token beginning with s0_ir_agent_. User JWTs require
+        a local login session, consent and current project RBAC. Agent tokens
+        are checked against the project's active digest and cannot manage
+        configuration, agent access or OIDC sessions.
         X-Project-ID selects an authorized project; it does not grant access.

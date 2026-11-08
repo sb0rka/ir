@@ -1,0 +1,24 @@
+# Optional: docker compose -f docker-compose.yml -f docker-compose.vpn.yml --profile vpn up -d openvpn
+services:
+  openvpn:
+    build:
+      context: docker/openvpn-client
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun
+    volumes:
+      - type: bind
+        source: ${OPENVPN_CONFIG_FILE:-./external.ovpn}
+        target: /vpn/vpn.conf
+        read_only: true
+    healthcheck:
+      test: ["CMD-SHELL", "ip link show tun0 >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 45s
+    profiles:
+      - vpn

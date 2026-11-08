@@ -1,6 +1,6 @@
 ## Compose supplies packages/core via additional_contexts.
 ## Build: docker build -f apps/gateway/Dockerfile --build-context core=../sb0rka/packages/core .
-FROM golang:1.25-alpine AS build
+FROM golang:1.27.3-alpine AS build
 
 WORKDIR /src
 

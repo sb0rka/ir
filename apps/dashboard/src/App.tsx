@@ -11,13 +11,14 @@ import { ThemeToggle } from './components/theme-toggle'
 import {
   bootstrapAuth,
   getAccessToken,
-  getAuthNotice,
   login,
   integrationStatus,
+  isSigningOut,
   logout,
   subscribeAuth,
   type AuthSubject,
 } from './api/auth'
+import { invalidateConnectedSources } from './api/connectedSources'
 import { getProjectId, setProjectId } from './api/env'
 import { listProjects, type Project } from './api/platform'
 import { LoginPage } from './components/LoginPage'
@@ -82,13 +83,13 @@ export default function App() {
   }, [])
 
   useEffect(() => {
-    if (!token && phase === 'ready') {
+    if (!token && phase === 'ready' && !isSigningOut()) {
       // Drop the module-level Zustand workspace before another user can sign in.
       window.location.reload()
     }
   }, [phase, token])
 
-  if (phase === 'loading') return <LoadingScreen label="Проверка сессии" />
+  if (phase === 'loading') return <LoginPage error={null} onLogin={login} loading />
 
   if (phase === 'error' && token) {
     return (
@@ -122,8 +123,6 @@ export default function App() {
     )
   }
 
-  if (!projects.length) return <AuthConnections projects={[]} />
-
   const currentProject = projects.find((project) => project.id === getProjectId()) ?? projects[0]
   return <Dashboard subject={subject} projects={projects} currentProject={currentProject} />
 }
@@ -135,7 +134,7 @@ function Dashboard({
 }: {
   subject: AuthSubject
   projects: Project[]
-  currentProject: Project
+  currentProject?: Project
 }) {
   const activeTab = useAppStore((state) => state.activeTab)
   const lastError = useAppStore((state) => state.lastError)
@@ -177,7 +176,7 @@ function Dashboard({
       : null,
   )
   const bootstrapped = useRef(false)
-  const [configurationOpen, setConfigurationOpen] = useState(Boolean(getAuthNotice()))
+  const [configurationOpen, setConfigurationOpen] = useState(false)
   const investigationOpen =
     activeTab !== 'queue' && activeTab !== 'investigations'
   const contextQueueSearchOpen = investigationOpen && investigationView === 'queue'
@@ -270,10 +269,10 @@ function Dashboard({
   ])
 
   useEffect(() => {
-    if (bootstrapped.current) return
+    if (!currentProject || bootstrapped.current) return
     bootstrapped.current = true
     void bootstrap()
-  }, [bootstrap])
+  }, [bootstrap, currentProject])
 
   return (
     <div className="flex h-full flex-col bg-surface-0 text-fg">
@@ -292,10 +291,10 @@ function Dashboard({
             />
           </div>
           <PrimaryNav />
-          {investigationOpen ? (
+          {currentProject && investigationOpen ? (
             <InvestigationHeader investigationId={activeTab} />
           ) : null}
-          {listSearchOpen ? (
+          {currentProject && listSearchOpen ? (
             <HeaderSearch
               key={activeTab}
               value={listSearchValue}
@@ -343,7 +342,9 @@ function Dashboard({
       </ToastStack>
       <TabBar />
       <main className="min-h-0 flex-1">
-        {activeTab === 'queue' ? (
+        {!currentProject ? (
+          <div className="flex h-full items-center justify-center text-sm text-fg-muted">Проект не выбран</div>
+        ) : activeTab === 'queue' ? (
           <QueuePage />
         ) : activeTab === 'investigations' ? (
           <InvestigationsPage />
@@ -354,13 +355,14 @@ function Dashboard({
       {configurationOpen && (
         <AuthConnections
           projects={projects}
-          currentProjectId={currentProject.id}
+          currentProjectId={currentProject?.id}
           onClose={(appliedProjectId) => {
-            if (appliedProjectId && appliedProjectId !== currentProject.id) {
+            if (appliedProjectId && appliedProjectId !== currentProject?.id) {
               setProjectId(appliedProjectId)
               window.location.reload()
               return
             }
+            invalidateConnectedSources()
             setConfigurationOpen(false)
           }}
         />

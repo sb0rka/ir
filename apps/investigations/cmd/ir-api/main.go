@@ -72,7 +72,7 @@ func run() error {
 		log,
 		nil,
 		nil,
-		gatewayclient.New(gatewayclient.Config{BaseURL: cfg.Gateway.BaseURL, BearerResolver: flow.GatewayToken}),
+		gatewayclient.New(gatewayclient.Config{BaseURL: cfg.Gateway.BaseURL, BearerResolver: flow.GatewayToken, ConfigBearerResolver: flow.GatewayConfigToken}),
 	)
 	handler := transport.NewHandler(transport.Dependencies{
 		Cfg:      cfg.Server,

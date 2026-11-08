@@ -13,8 +13,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sb0rka/ir/apps/gateway/internal/capability"
-	"github.com/sb0rka/ir/apps/gateway/internal/domain"
 	"github.com/sb0rka/ir/apps/gateway/internal/proxy"
 )
 
@@ -57,22 +55,6 @@ type ClientConfig struct {
 	ChildPageSize    int
 	MaxChildItems    int
 	Now              func() time.Time
-}
-
-// AccountAdapter maps the real client to the canonical account capability.
-type AccountAdapter struct {
-	Client *Client
-}
-
-func (adapter AccountAdapter) GetAccountUserinfo(ctx context.Context, access capability.Access) (domain.AccountUserinfo, error) {
-	if adapter.Client == nil {
-		return domain.AccountUserinfo{}, &RequestError{Operation: "account userinfo", Message: "client is not configured"}
-	}
-	userinfo, err := adapter.Client.GetAccountUserinfo(ctx, Access{Cookie: access.Cookie})
-	if err != nil {
-		return domain.AccountUserinfo{}, err
-	}
-	return domain.AccountUserinfo{SourceCode: SourceCode, UserName: userinfo.UserName}, nil
 }
 
 type Client struct {
@@ -159,8 +141,6 @@ func (client *Client) GetAccountUserinfo(ctx context.Context, access Access) (Ac
 	if userinfo.UserName == "" {
 		return AccountUserinfo{}, &ResponseError{Operation: "account userinfo", Message: "userName is missing"}
 	}
-	// Roles and vendor identifiers are intentionally not copied to canonical
-	// output by AccountAdapter.
 	return userinfo, nil
 }
 

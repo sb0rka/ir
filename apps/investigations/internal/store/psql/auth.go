@@ -109,7 +109,7 @@ func (d *DB) RevokeLoginSession(ctx context.Context, id string) error {
         SET revoked_at = now()
         WHERE id = $1
           AND revoked_at IS NULL
-        RETURNING id, encrypted_tokens) INSERT INTO ir_auth_revocations (id, session_id, encrypted_tokens) SELECT gen_random_uuid(), id, encrypted_tokens
+        RETURNING id, encrypted_tokens) INSERT INTO ir_auth_revocations (id, session_id, encrypted_tokens, expires_at) SELECT gen_random_uuid(), id, encrypted_tokens, now() + interval '7 days'
         FROM revoked
     `, id)
 	return err

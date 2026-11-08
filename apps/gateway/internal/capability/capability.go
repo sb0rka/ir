@@ -5,12 +5,19 @@ import (
 	"time"
 
 	"github.com/sb0rka/ir/apps/gateway/internal/domain"
+	"github.com/sb0rka/ir/apps/gateway/internal/fieldmap"
 )
 
 // Access is constructed by the service from project-scoped Secrets. Public
 // request bodies never provide credentials, vendor URLs, or source instances.
 type Access struct {
 	Cookie string
+	Basic  *BasicCredentials
+}
+
+type BasicCredentials struct {
+	Username string
+	Password string
 }
 
 type SearchFindingsRequest struct {
@@ -56,16 +63,18 @@ type SessionSource interface {
 }
 
 type SearchEventsRequest struct {
-	TimeFrom    time.Time
-	TimeTo      time.Time
-	Entities    []domain.EntityRef
-	Filter      string
-	Columns     []string
-	Sort        []EventSort
-	GroupBy     []string
-	GroupValues []*string
-	Limit       int
-	Cursor      string
+	CommonFilter   fieldmap.CommonFilter
+	FilterLanguage string
+	TimeFrom       time.Time
+	TimeTo         time.Time
+	Entities       []domain.EntityRef
+	Filter         string
+	Columns        []string
+	Sort           []EventSort
+	GroupBy        []string
+	GroupValues    []*string
+	Limit          int
+	Cursor         string
 }
 
 type EventSort struct {
@@ -74,11 +83,13 @@ type EventSort struct {
 }
 
 type EventPage struct {
-	Events     []domain.Event
-	Entities   []domain.Entity
-	Relations  []domain.Relation
-	Status     string
-	NextCursor string
+	// ReplayCursor fixes the start of this page, including a newly opened PIT.
+	ReplayCursor string
+	Events       []domain.Event
+	Entities     []domain.Entity
+	Relations    []domain.Relation
+	Status       string
+	NextCursor   string
 	// Total is the vendor match count when known; nil when the source did not report one.
 	Total *int64
 }
@@ -88,19 +99,26 @@ type ResolveContextRequest struct {
 	EntityIDs []string
 }
 
+// EventCursorCloser releases a vendor snapshot after its stream is consumed.
+type EventCursorCloser interface {
+	CloseEventCursor(context.Context, Access, string) error
+}
+
 type EventSource interface {
 	SearchEvents(context.Context, Access, SearchEventsRequest) (EventPage, error)
 	ResolveContext(context.Context, Access, ResolveContextRequest) (ContextPage, error)
 }
 
 type AggregateEventsRequest struct {
-	TimeFrom time.Time
-	TimeTo   time.Time
-	Entities []domain.EntityRef
-	Filter   string
-	GroupBy  []string
-	Sort     []EventSort
-	Limit    int
+	CommonFilter   fieldmap.CommonFilter
+	FilterLanguage string
+	TimeFrom       time.Time
+	TimeTo         time.Time
+	Entities       []domain.EntityRef
+	Filter         string
+	GroupBy        []string
+	Sort           []EventSort
+	Limit          int
 }
 
 type EventGroupPage struct {

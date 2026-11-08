@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sb0rka/ir/packages/common/irconfig"
 	gatewaycontract "github.com/sb0rka/ir/packages/contract/gateway"
 )
 
@@ -22,9 +23,10 @@ const maxResponseBody = 16 << 20
 var ErrUnavailable = errors.New("gateway is not configured")
 
 type Config struct {
-	BaseURL        string
-	HTTPClient     *http.Client
-	BearerResolver func(context.Context, string, string) (string, error)
+	BaseURL              string
+	HTTPClient           *http.Client
+	BearerResolver       func(context.Context, string, string) (string, error)
+	ConfigBearerResolver func(context.Context, string, string) (string, error)
 }
 
 type Client struct {
@@ -62,7 +64,7 @@ func New(cfg Config) *Client {
 	}
 	generated, err := gatewaycontract.NewClientWithResponses(
 		baseURL,
-		gatewaycontract.WithHTTPClient(responseLimitDoer{next: httpClient, resolver: cfg.BearerResolver}),
+		gatewaycontract.WithHTTPClient(responseLimitDoer{next: httpClient, resolver: cfg.BearerResolver, configResolver: cfg.ConfigBearerResolver}),
 	)
 	return &Client{api: generated, initErr: err}
 }
@@ -113,8 +115,9 @@ func (client *Client) ResolveContext(
 }
 
 type responseLimitDoer struct {
-	next     gatewaycontract.HttpRequestDoer
-	resolver func(context.Context, string, string) (string, error)
+	next           gatewaycontract.HttpRequestDoer
+	resolver       func(context.Context, string, string) (string, error)
+	configResolver func(context.Context, string, string) (string, error)
 }
 
 func (doer responseLimitDoer) Do(request *http.Request) (*http.Response, error) {
@@ -127,6 +130,16 @@ func (doer responseLimitDoer) Do(request *http.Request) (*http.Response, error) 
 		return nil, err
 	}
 	request.Header.Set("Authorization", "Bearer "+token)
+	request.Header.Del(irconfig.TokenHeader)
+	if doer.configResolver != nil {
+		configToken, err := doer.configResolver(request.Context(), sourceToken, request.Header.Get("X-Project-ID"))
+		if err != nil {
+			return nil, err
+		}
+		if configToken != "" {
+			request.Header.Set(irconfig.TokenHeader, "Bearer "+configToken)
+		}
+	}
 	response, err := doer.next.Do(request)
 	if err != nil {
 		return nil, err

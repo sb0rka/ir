@@ -19,7 +19,7 @@ func Load() (Config, error) {
 			Port:          coreconfig.GetStringEnv("SERVER_PORT", "8090"),
 			CORSWhitelist: coreconfig.ParseCORSWhitelist(coreconfig.GetStringEnv("SERVER_CORS_WHITELIST", "")),
 			Auth: AuthConfig{
-				Issuer:   strings.TrimRight(coreconfig.GetStringEnv("AUTH_ISSUER", ""), "/"),
+				Issuer:   strings.TrimRight(coreconfig.GetStringEnv("SB0RKA_AUTH_BASE_URL", ""), "/"),
 				ClientID: coreconfig.GetStringEnv("OIDC_CLIENT_ID", coreauth.ClientIRWeb),
 				PublicBaseURL: strings.TrimRight(
 					coreconfig.GetStringEnv("IR_PUBLIC_BASE_URL", "http://localhost:8090"),
@@ -54,8 +54,12 @@ func Load() (Config, error) {
 		return cfg, err
 	}
 	a := &cfg.Server.Auth
+	a.AccessTokenPolicy, err = coreauth.AccessTokenPolicyFromEnv()
+	if err != nil {
+		return cfg, err
+	}
 	for _, origin := range []struct{ name, value string }{
-		{"AUTH_ISSUER", a.Issuer},
+		{"SB0RKA_AUTH_BASE_URL", a.Issuer},
 		{"IR_PUBLIC_BASE_URL", a.PublicBaseURL},
 		{"IR_WEB_URL", a.WebURL},
 		{"SB0RKA_API_BASE_URL", cfg.Platform.APIBaseURL},
@@ -71,20 +75,29 @@ func Load() (Config, error) {
 	if err != nil {
 		return cfg, err
 	}
-	a.ClientSecret, err = readSecret("OIDC_CLIENT_SECRET_FILE_PATH")
+	a.ClientSecret, err = secretFromEnv("SB0RKA_IR_WEB_CLIENT_SECRET")
 	if err != nil {
 		return cfg, err
 	}
-	a.SessionKey, err = readKey("IR_SESSION_ENCRYPTION_KEY_FILE_PATH")
+	a.SessionKey, err = keyFromEnv("IR_SESSION_ENCRYPTION_KEY")
 	if err != nil {
 		return cfg, err
 	}
-	a.ContextKey, err = readKey("IR_OIDC_CONTEXT_ENCRYPTION_KEY_FILE_PATH")
+	a.ContextKey, err = keyFromEnv("IR_OIDC_CONTEXT_ENCRYPTION_KEY")
 	if err != nil {
 		return cfg, err
 	}
 	if bytes.Equal(a.SessionKey, a.ContextKey) {
 		return cfg, fmt.Errorf("IR session and OIDC context encryption keys must differ")
+	}
+	if strings.TrimSpace(os.Getenv("IR_GATEWAY_CONFIGURATION_KEY")) != "" {
+		cfg.Gateway.ConfigurationKey, err = keyFromEnv("IR_GATEWAY_CONFIGURATION_KEY")
+		if err != nil {
+			return cfg, err
+		}
+		if bytes.Equal(cfg.Gateway.ConfigurationKey, a.SessionKey) || bytes.Equal(cfg.Gateway.ConfigurationKey, a.ContextKey) {
+			return cfg, fmt.Errorf("IR gateway configuration key must differ from authentication keys")
+		}
 	}
 	if cfg.Database.URI == "" || a.ClientID == "" {
 		return cfg, fmt.Errorf("DATABASE_URI and OIDC_CLIENT_ID are required")
@@ -92,39 +105,28 @@ func Load() (Config, error) {
 	if cfg.Server.CORSWhitelist["*"] {
 		return cfg, fmt.Errorf("IR authentication requires explicit CORS origins")
 	}
-	// Secrets and SoM integrations are outside this authentication migration.
-	// Their configuration is deliberately not loaded into the new flow.
 	return cfg, nil
 }
 
-func readSecret(name string) ([]byte, error) {
-	path := strings.TrimSpace(os.Getenv(name))
-	if path == "" {
+func secretFromEnv(name string) ([]byte, error) {
+	raw := strings.TrimSpace(os.Getenv(name))
+	if raw == "" {
 		return nil, fmt.Errorf("%s is required", name)
 	}
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("read %s: %w", name, err)
-	}
-	raw = bytes.TrimSuffix(raw, []byte("\n"))
 	if len(raw) < 32 {
 		return nil, fmt.Errorf("%s requires at least 32 bytes", name)
 	}
-	return raw, nil
+	return []byte(raw), nil
 }
 
-func readKey(name string) ([]byte, error) {
-	path := strings.TrimSpace(os.Getenv(name))
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("read %s: %w", name, err)
+func keyFromEnv(name string) ([]byte, error) {
+	raw := strings.TrimSpace(os.Getenv(name))
+	if raw == "" {
+		return nil, fmt.Errorf("%s is required", name)
 	}
-	if len(raw) == 32 {
-		return raw, nil
-	}
-	decoded, err := base64.StdEncoding.DecodeString(strings.TrimSpace(string(raw)))
+	decoded, err := base64.StdEncoding.DecodeString(raw)
 	if err != nil || len(decoded) != 32 {
-		return nil, fmt.Errorf("%s must contain a raw or base64-encoded 32-byte key", name)
+		return nil, fmt.Errorf("%s must be a base64-encoded 32-byte key", name)
 	}
 	return decoded, nil
 }

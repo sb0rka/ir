@@ -8,10 +8,11 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
+	"github.com/sb0rka/ir/packages/common/irconfig"
 	coretransport "github.com/sb0rka/sb0rka/packages/core/transport"
 
 	"github.com/sb0rka/ir/apps/gateway/api"
@@ -25,37 +26,35 @@ const (
 	maxRequestBody  = 1 << 20
 )
 
-type projectIDKey struct{}
+type projectAccessKey struct{}
 
 type Server struct {
 	service         *service.Service
 	log             *slog.Logger
-	projectSources  map[string]map[string]bool
 	sourceInstances map[string]map[string]bool
 }
 
-func NewHandler(cfg config.Config, log *slog.Logger, service *service.Service) http.Handler {
+func newGatewayServer(cfg config.Config, log *slog.Logger, service *service.Service) *Server {
 	instances := make(map[string]map[string]bool)
 	for source, sourceConfig := range cfg.Sources {
-		if len(sourceConfig.StoreIDs) == 0 {
+		if len(sourceConfig.InstanceIDs) == 0 {
 			continue
 		}
-		instances[source] = make(map[string]bool, len(sourceConfig.StoreIDs))
-		for _, storeID := range sourceConfig.StoreIDs {
+		instances[source] = make(map[string]bool, len(sourceConfig.InstanceIDs))
+		for _, storeID := range sourceConfig.InstanceIDs {
 			instances[source][storeID] = true
 		}
 	}
-	server := &Server{service: service, log: log, projectSources: cfg.ProjectSources, sourceInstances: instances}
-	generated := http.NewServeMux()
-	api.HandlerWithOptions(server, api.StdHTTPServerOptions{
-		BaseRouter: generated,
-		ErrorHandlerFunc: func(w http.ResponseWriter, _ *http.Request, err error) {
-			respondError(w, http.StatusBadRequest, "bad_request", err.Error())
-		},
-	})
+	return &Server{service: service, log: log, sourceInstances: instances}
+}
 
-	protected := coretransport.Chain(http.Handler(generated), projectScope(server))
-	protected = gatewayAuthentication(cfg.Auth)(protected)
+func NewHandler(cfg config.Config, log *slog.Logger, service *service.Service, options ...HandlerOption) http.Handler {
+	server := newGatewayServer(cfg, log, service)
+	var dependencies handlerDependencies
+	for _, option := range options {
+		option(&dependencies)
+	}
+	protected := gatewayAuthentication(cfg.Auth, dependencies.agentAccess)(apiHandler(server))
 
 	root := http.NewServeMux()
 	root.HandleFunc("GET /healthz", server.Healthz)
@@ -71,6 +70,19 @@ func NewHandler(cfg config.Config, log *slog.Logger, service *service.Service) h
 		}),
 		cors(cfg.Server.CORSWhitelist),
 	)
+}
+
+// apiHandler is the project-scoped API without Gateway token checks.
+// Tests call it directly; production always wraps it in gatewayAuthentication.
+func apiHandler(server *Server) http.Handler {
+	generated := http.NewServeMux()
+	api.HandlerWithOptions(server, api.StdHTTPServerOptions{
+		BaseRouter: generated,
+		ErrorHandlerFunc: func(w http.ResponseWriter, _ *http.Request, err error) {
+			respondError(w, http.StatusBadRequest, "bad_request", err.Error())
+		},
+	})
+	return coretransport.Chain(http.Handler(generated), projectScope())
 }
 
 func (server *Server) Healthz(w http.ResponseWriter, _ *http.Request) {
@@ -132,19 +144,10 @@ func (server *Server) writeServiceError(w http.ResponseWriter, err error) {
 }
 
 func (server *Server) allowedSources(ctx context.Context) ([]string, error) {
-	allowed, restricted := server.projectSources[projectIDFromContext(ctx)]
-	if !restricted {
-		return nil, &domain.RequestError{
-			Code:    "source_forbidden",
-			Message: "no sources are configured for this project",
-		}
+	if server.service == nil {
+		return []string{}, nil
 	}
-	result := make([]string, 0, len(allowed))
-	for source := range allowed {
-		result = append(result, source)
-	}
-	sort.Strings(result)
-	return result, nil
+	return server.service.AvailableSources(ctx, projectAccessFromContext(ctx)), nil
 }
 
 func (server *Server) constrainSources(
@@ -156,7 +159,6 @@ func (server *Server) constrainSources(
 	if err != nil {
 		return nil, err
 	}
-	allowed := server.projectSources[projectIDFromContext(ctx)]
 	if len(requested) == 0 {
 		result := make([]string, 0, len(allowedList))
 		for _, source := range allowedList {
@@ -170,7 +172,7 @@ func (server *Server) constrainSources(
 		return result, nil
 	}
 	for _, source := range requested {
-		if !allowed[source] {
+		if !slices.Contains(allowedList, source) {
 			return nil, sourceForbidden(source)
 		}
 		if !server.service.Supports(source, capabilityName) {
@@ -186,8 +188,7 @@ func (server *Server) constrainSources(
 }
 
 func (server *Server) sourceAllowed(ctx context.Context, source string) bool {
-	allowed, restricted := server.projectSources[projectIDFromContext(ctx)]
-	return restricted && allowed[source]
+	return server.service != nil && server.service.SourceAvailable(ctx, projectAccessFromContext(ctx), source)
 }
 
 func (server *Server) sourceInstanceAllowed(source, instance string) bool {
@@ -205,12 +206,12 @@ func sourceForbidden(source string) error {
 	}
 }
 
-func projectIDFromContext(ctx context.Context) string {
-	value, _ := ctx.Value(projectIDKey{}).(string)
+func projectAccessFromContext(ctx context.Context) service.ProjectAccess {
+	value, _ := ctx.Value(projectAccessKey{}).(service.ProjectAccess)
 	return value
 }
 
-func projectScope(server *Server) coretransport.Middleware {
+func projectScope() coretransport.Middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			projectID := strings.TrimSpace(r.Header.Get(projectIDHeader))
@@ -223,19 +224,22 @@ func projectScope(server *Server) coretransport.Middleware {
 				)
 				return
 			}
-			if _, configured := server.projectSources[projectID]; !configured {
-				respondError(w, http.StatusForbidden, "forbidden", "access to project is forbidden")
-				return
+			bearer, _ := coretransport.BearerToken(r.Header.Get(irconfig.TokenHeader))
+			if agent, ok := r.Context().Value(agentAccessContextKey{}).(agentRequestAccess); ok {
+				if agent.project != projectID {
+					respondError(w, http.StatusUnauthorized, "unauthorized", "agent project does not match")
+					return
+				}
+				bearer = agent.bearer
 			}
-			ctx := context.WithValue(r.Context(), projectIDKey{}, projectID)
+			ctx := context.WithValue(r.Context(), projectAccessKey{}, service.ProjectAccess{ProjectID: projectID, Bearer: bearer})
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
 }
 
 func projectAccess(r *http.Request) service.ProjectAccess {
-	bearer, _ := coretransport.BearerToken(r.Header.Get("Authorization"))
-	return service.ProjectAccess{ProjectID: projectIDFromContext(r.Context()), Bearer: bearer}
+	return projectAccessFromContext(r.Context())
 }
 
 func requestLogger(log *slog.Logger) coretransport.Middleware {

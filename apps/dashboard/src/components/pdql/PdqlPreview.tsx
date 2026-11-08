@@ -1,13 +1,10 @@
 import { Check, Copy } from 'lucide-react'
 import { useState } from 'react'
-import { usePdqlStore } from '../../store/pdqlStore'
+import { useBuilder } from './queryBuilder'
 import { Button } from '../ui'
 
 export function PdqlPreview() {
-  const pdqlDraft = usePdqlStore((s) => s.pdqlDraft)
-  const parseError = usePdqlStore((s) => s.parseError)
-  const setPdqlDraft = usePdqlStore((s) => s.setPdqlDraft)
-  const applyPdql = usePdqlStore((s) => s.applyPdql)
+  const { pdqlDraft, parseError, setPdqlDraft, applyPdql, syntaxLabel } = useBuilder()
   const [copied, setCopied] = useState(false)
 
   const copy = async () => {
@@ -23,7 +20,7 @@ export function PdqlPreview() {
   return (
     <div className="border-t border-border bg-surface-1 p-3">
       <div className="mb-1.5 flex items-center justify-between">
-        <div className="text-xs font-semibold uppercase tracking-wider text-fg-muted">PDQL</div>
+        <div className="text-xs font-semibold uppercase tracking-wider text-fg-muted">{syntaxLabel}</div>
         <div className="flex items-center gap-1">
           <Button size="sm" variant="ghost" onClick={() => void copy()}>
             {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}

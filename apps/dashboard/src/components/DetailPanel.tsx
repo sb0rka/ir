@@ -261,7 +261,7 @@ export function DetailPanel({ investigationId }: { investigationId: string }) {
                 void executeContextQuery(investigationId)
               }}
               onAddFilter={(fields, value, op, joiner) =>
-                appendPdqlFilter(investigationId, fields, value, op, joiner)
+                appendPdqlFilter(investigationId, fields, value, op, joiner, event.source)
               }
               onFilterFindingUuid={(uuid, recordType) =>
                 filterByFindingUuid(investigationId, uuid, recordType)

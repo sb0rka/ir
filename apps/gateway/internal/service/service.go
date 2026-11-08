@@ -20,7 +20,7 @@ import (
 const credentialCacheLimit = 256
 
 type SecretResolver interface {
-	Resolve(ctx context.Context, bearer, projectID string, names ...string) (map[string]string, error)
+	Resolve(ctx context.Context, bearer, projectID string, names ...string) (map[string]capability.Access, error)
 }
 
 type ProjectAccess struct {
@@ -34,12 +34,7 @@ type credentialKey struct {
 }
 
 type credentialSnapshot struct {
-	cookie string
-}
-
-type credentialLoad struct {
-	mu   sync.Mutex
-	refs int
+	access capability.Access
 }
 
 type sourceStatusSnapshot struct {
@@ -48,30 +43,30 @@ type sourceStatusSnapshot struct {
 }
 
 type Service struct {
-	exportsMu       sync.Mutex
-	exports         map[string]*evidenceEntry
-	registry        *registry.Registry
-	secrets         SecretResolver
-	requestTimeout  time.Duration
-	sourceTimeout   time.Duration
-	cacheMu         sync.Mutex
-	credentials     map[credentialKey]credentialSnapshot
-	credentialKeys  []credentialKey
-	credentialLoads map[credentialKey]*credentialLoad
-	statusMu        sync.Mutex
-	statuses        map[credentialKey]sourceStatusSnapshot
+	eventCursorKey     []byte
+	eventCursorBinding string
+	exportsMu          sync.Mutex
+	exports            map[string]*evidenceEntry
+	registry           *registry.Registry
+	secrets            SecretResolver
+	requestTimeout     time.Duration
+	sourceTimeout      time.Duration
+	statusMu           sync.Mutex
+	statuses           map[credentialKey]sourceStatusSnapshot
 }
 
-func New(registry *registry.Registry, secrets SecretResolver, requestTimeout, sourceTimeout time.Duration) *Service {
-	return &Service{
-		registry:        registry,
-		secrets:         secrets,
-		requestTimeout:  requestTimeout,
-		sourceTimeout:   sourceTimeout,
-		credentials:     make(map[credentialKey]credentialSnapshot),
-		credentialLoads: make(map[credentialKey]*credentialLoad),
-		statuses:        make(map[credentialKey]sourceStatusSnapshot),
+func New(registry *registry.Registry, secrets SecretResolver, requestTimeout, sourceTimeout time.Duration, options ...Option) *Service {
+	service := &Service{
+		registry:       registry,
+		secrets:        secrets,
+		requestTimeout: requestTimeout,
+		sourceTimeout:  sourceTimeout,
+		statuses:       make(map[credentialKey]sourceStatusSnapshot),
 	}
+	for _, option := range options {
+		option(service)
+	}
+	return service
 }
 
 type AllSourcesError struct {
@@ -189,33 +184,9 @@ func appendPendingErrors(items *[]domain.SourceError, pending map[string]struct{
 	}
 }
 
-// loadCredentials serializes Secret resolution per project/source key. Different
-// providers resolve concurrently so one slow Secret cannot consume another
-// provider's request budget.
-func (service *Service) loadCredentials(ctx context.Context, access ProjectAccess, provider registry.Provider, force bool) (credentialSnapshot, error) {
-	key := credentialKey{projectID: access.ProjectID, sourceCode: provider.Source.Code}
-	if force {
-		service.invalidateSourceStatus(key)
-	}
-	release := service.acquireCredentialLoad(key)
-	defer release()
-
-	service.cacheMu.Lock()
-	if force {
-		delete(service.credentials, key)
-		for index, cachedKey := range service.credentialKeys {
-			if cachedKey == key {
-				service.credentialKeys = append(service.credentialKeys[:index], service.credentialKeys[index+1:]...)
-				break
-			}
-		}
-	}
-	if snapshot, ok := service.credentials[key]; ok {
-		service.cacheMu.Unlock()
-		return snapshot, nil
-	}
-	service.cacheMu.Unlock()
-
+// loadCredentials never retains plaintext between requests. The resolver shares
+// one configuration snapshot within the authenticated incoming request only.
+func (service *Service) loadCredentials(ctx context.Context, access ProjectAccess, provider registry.Provider) (credentialSnapshot, error) {
 	if service.secrets == nil || strings.TrimSpace(access.Bearer) == "" || strings.TrimSpace(provider.CredentialSecret) == "" {
 		return credentialSnapshot{}, sourceUnavailable()
 	}
@@ -223,43 +194,15 @@ func (service *Service) loadCredentials(ctx context.Context, access ProjectAcces
 	if err != nil {
 		return credentialSnapshot{}, sourceUnavailable()
 	}
-	cookie := strings.TrimSpace(values[provider.CredentialSecret])
-	if cookie == "" || strings.ContainsAny(cookie, "\r\n") {
+	credentials := values[provider.CredentialSecret]
+	if (credentials.Cookie == "") == (credentials.Basic == nil) || strings.ContainsAny(credentials.Cookie, "\r\n") {
 		return credentialSnapshot{}, sourceUnavailable()
 	}
-	snapshot := credentialSnapshot{cookie: cookie}
-	service.cacheMu.Lock()
-	defer service.cacheMu.Unlock()
-	if len(service.credentials) >= credentialCacheLimit {
-		oldest := service.credentialKeys[0]
-		service.credentialKeys = service.credentialKeys[1:]
-		delete(service.credentials, oldest)
+	if credentials.Basic != nil {
+		copy := *credentials.Basic
+		credentials.Basic = &copy
 	}
-	service.credentials[key] = snapshot
-	service.credentialKeys = append(service.credentialKeys, key)
-	return snapshot, nil
-}
-
-func (service *Service) acquireCredentialLoad(key credentialKey) func() {
-	service.cacheMu.Lock()
-	load := service.credentialLoads[key]
-	if load == nil {
-		load = &credentialLoad{}
-		service.credentialLoads[key] = load
-	}
-	load.refs++
-	service.cacheMu.Unlock()
-
-	load.mu.Lock()
-	return func() {
-		load.mu.Unlock()
-		service.cacheMu.Lock()
-		defer service.cacheMu.Unlock()
-		load.refs--
-		if load.refs == 0 {
-			delete(service.credentialLoads, key)
-		}
-	}
+	return credentialSnapshot{access: credentials}, nil
 }
 
 func sourceUnavailable() error {
@@ -310,16 +253,12 @@ func providerError(err error) error {
 }
 
 func (service *Service) callProvider(ctx context.Context, access ProjectAccess, provider registry.Provider, call func(context.Context, capability.Access) error) error {
-	return service.callProviderWithCredentialReload(ctx, access, provider, false, call)
-}
-
-func (service *Service) callProviderWithCredentialReload(ctx context.Context, access ProjectAccess, provider registry.Provider, force bool, call func(context.Context, capability.Access) error) error {
-	credentials, err := service.loadCredentials(ctx, access, provider, force)
+	credentials, err := service.loadCredentials(ctx, access, provider)
 	if err != nil {
 		return err
 	}
 	attemptCtx, cancel := context.WithTimeout(ctx, service.sourceTimeout)
-	err = call(attemptCtx, capability.Access{Cookie: credentials.cookie})
+	err = call(attemptCtx, credentials.access)
 	cancel()
 	if err == nil {
 		return nil
@@ -327,12 +266,9 @@ func (service *Service) callProviderWithCredentialReload(ctx context.Context, ac
 	if !retryableProviderError(ctx, err) {
 		return providerError(err)
 	}
-	credentials, reloadErr := service.loadCredentials(ctx, access, provider, true)
-	if reloadErr != nil {
-		return reloadErr
-	}
+	service.invalidateSourceStatus(credentialKey{projectID: access.ProjectID, sourceCode: provider.Source.Code})
 	attemptCtx, cancel = context.WithTimeout(ctx, service.sourceTimeout)
-	err = call(attemptCtx, capability.Access{Cookie: credentials.cookie})
+	err = call(attemptCtx, credentials.access)
 	cancel()
 	if err != nil {
 		return providerError(err)

@@ -358,7 +358,7 @@ func TestGroupingAgentProposalsAtomicAndScoped(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	request := model.ImportRequest{ProjectID: project, InvestigationID: root, Origin: "agent", SomIssueIDs: []string{uuid.NewString()}}
+	request := model.ImportRequest{ProjectID: project, InvestigationID: root, Origin: "agent", Actor: uuid.NewString()}
 	proposal := model.GroupProposal{ProposalID: uuid.NewString(), Kind: "same_event", Title: "one occurrence", Why: "same source record", EvidenceEventRefs: []string{"ev0"}}
 	for _, n := range raw {
 		if n.NodeType != "event" {
@@ -380,7 +380,7 @@ func TestGroupingAgentProposalsAtomicAndScoped(t *testing.T) {
 	}
 	g := importedGroup(t, db, scope, stats, "event")
 	for _, m := range g.Members {
-		if m.Status != "proposed" || m.Assertions[0].Origin != "agent" {
+		if m.Status != "proposed" || m.Assertions[0].Origin != "agent" || m.Assertions[0].OriginRef != request.Actor {
 			t.Fatal("agent confirmed membership")
 		}
 	}
@@ -524,7 +524,7 @@ func TestGroupingIdentityConflictsAreTreeLocal(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		request := model.ImportRequest{ProjectID: project, InvestigationID: inv, Origin: "agent", SomIssueIDs: []string{uuid.NewString()}}
+		request := model.ImportRequest{ProjectID: project, InvestigationID: inv, Origin: "agent", Actor: uuid.NewString()}
 		p := model.GroupProposal{ProposalID: uuid.NewString(), Kind: "same_event", Title: "same occurrence", Why: "explicit evidence", EvidenceEventRefs: []string{"event"}}
 		for _, n := range nodes {
 			if n.EventID != nil {

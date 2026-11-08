@@ -3,17 +3,17 @@ services:
     image: postgres:18
     restart: unless-stopped
     shm_size: 128mb
-    env_file:
-      - .env
     environment:
-      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
       POSTGRES_DB: investigations
+      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "55432:5432"
     volumes:
       - pgdata:/var/lib/postgresql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d investigations"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d investigations"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -21,48 +21,17 @@ services:
     profiles:
       - container-db
 
-  # Migrations
-
-  migrate-inv-schema:
-    build:
-      context: .
-      dockerfile: db/Dockerfile
-    restart: no
-    env_file:
-      - .env
-    environment:
-      POSTGRES_DB: investigations
-      POSTGRES_USER: ${DB_ADMIN_USER}
-      POSTGRES_PASSWORD: ${DB_ADMIN_PASSWORD}
-      POSTGRES_PORT: "5432"
-      DB_INV_SCHEMA_NAME: ${DB_INV_SCHEMA_NAME}
-    command:
-      - /app/migrations/investigations/007-extensions.sql
-      - /app/migrations/investigations/008-schema.sql
-    profiles:
-      - migrate
-  
-  migrate-inv:
-    build:
-      context: .
-      dockerfile: db/Dockerfile
+  migrate:
+    image: postgres:18
     depends_on:
-      migrate-inv-schema:
-        condition: service_completed_successfully
-    restart: no
-    env_file:
-      - .env
-    environment:
-      POSTGRES_DB: investigations
-      POSTGRES_USER: ${DB_ADMIN_USER}
-      POSTGRES_PASSWORD: ${DB_ADMIN_PASSWORD}
-      POSTGRES_PORT: "5432"
-      DB_INV_SCHEMA_NAME: ${DB_INV_SCHEMA_NAME}
-    command:
-      - /app/migrations/investigations/009-version.sql
-      - /app/migrations/investigations/010-initial_schema.sql
-      - /app/migrations/investigations/011-oidc_sessions.sql
-      - /app/migrations/investigations/901-seed_reference.sql
+      postgres:
+        condition: service_healthy
+    command: ["bash", "/migrate.sh"]
+    volumes:
+      - ./db/migrations/investigations:/migrations:ro
+      - ./db/migrations/seed:/migrations-seed:ro
+      - ./deploy/dev/migrate.sh:/migrate.sh:ro
+    restart: "no"
     profiles:
       - migrate
 
@@ -78,68 +47,16 @@ services:
         BINARY: ir-api
     restart: unless-stopped
     env_file:
-      - .env
-    environment:
-      SERVER_ADDR: "0.0.0.0"
-      SERVER_PORT: "8090"
-      SERVER_CORS_WHITELIST: "${SERVER_CORS_WHITELIST:-http://localhost:5174}"
-      DATABASE_URI: "postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:5432/investigations?search_path=${DB_INV_SCHEMA_NAME}"
-      LOG_FORMAT: "${LOG_FORMAT:-text}"
-      SB0RKA_API_BASE_URL: "${SB0RKA_API_BASE_URL:-https://api.sb0rka.internal}"
-      AUTH_ISSUER: "${AUTH_ISSUER:?set canonical AUTH_ISSUER}"
-      AUTH_ALLOW_INSECURE_HTTP_ISSUER: "${AUTH_ALLOW_INSECURE_HTTP_ISSUER:-false}"
-      OIDC_CLIENT_ID: "${OIDC_CLIENT_ID:-sb0rka-ir-web}"
-      OIDC_CLIENT_SECRET_FILE_PATH: /run/secrets/ir-web.secret
-      IR_PUBLIC_BASE_URL: "${IR_PUBLIC_BASE_URL:?set IR_PUBLIC_BASE_URL}"
-      IR_WEB_URL: "${IR_WEB_URL:?set IR_WEB_URL}"
-      IR_SESSION_ENCRYPTION_KEY_FILE_PATH: /run/secrets/ir-session.key
-      IR_OIDC_CONTEXT_ENCRYPTION_KEY_FILE_PATH: /run/secrets/ir-oidc-context.key
-      GATEWAY_BASE_URL: "${GATEWAY_BASE_URL:-https://ir-gateway.sb0rka.internal}"
+      - ./apps/investigations/.env
     ports:
-      - "${API_PORT:-8090}:8090"
-    volumes:
-      - ${OIDC_CLIENT_SECRET_FILE_PATH:-../sb0rka/.local/auth-client-secrets/ir-web.secret}:/run/secrets/ir-web.secret:ro
-      - ${IR_SESSION_ENCRYPTION_KEY_FILE_PATH:-./.local/auth/ir-session.key}:/run/secrets/ir-session.key:ro
-      - ${IR_OIDC_CONTEXT_ENCRYPTION_KEY_FILE_PATH:-./.local/auth/ir-oidc-context.key}:/run/secrets/ir-oidc-context.key:ro
+      - "8090:8090"
     extra_hosts:
       - "host.docker.internal:host-gateway"
-      # AUTH_ISSUER=http://localhost:8020: reach host-published Auth from the container
+      # SB0RKA_AUTH_BASE_URL=http://localhost:8020: reach host-published Auth from the container
       # without remapping 127.0.0.1 (healthchecks stay on loopback).
       - "localhost:host-gateway"
-    networks:
-      - default
-      - som_selfrun
-    healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8090/ping || exit 1"]
-      interval: 10s
-      timeout: 3s
-      retries: 5
     profiles:
       - apps
-
-  openvpn:
-    build:
-      context: docker/openvpn-client
-      dockerfile: Dockerfile
-    restart: unless-stopped
-    cap_add:
-      - NET_ADMIN
-    devices:
-      - /dev/net/tun
-    volumes:
-      # Bind mount: a bare filename is a named volume and fails project validation.
-      - type: bind
-        source: ${OPENVPN_CONFIG_FILE:?set OPENVPN_CONFIG_FILE in .env}
-        target: /vpn/vpn.conf
-        read_only: true
-    healthcheck:
-      test: ["CMD-SHELL", "ip link show tun0 >/dev/null 2>&1"]
-      interval: 10s
-      timeout: 5s
-      retries: 12
-      start_period: 45s
-    profiles:
-      - vpn
 
   gateway:
     build:
@@ -149,43 +66,16 @@ services:
         core: ../sb0rka/packages/core
     restart: unless-stopped
     env_file:
-      - .env
-    environment:
-      SERVER_ADDR: "0.0.0.0"
-      SERVER_PORT: "${GATEWAY_PORT:-8091}"
-      SERVER_CORS_WHITELIST: "${SERVER_CORS_WHITELIST:-http://localhost:5174}"
-      AUTH_ISSUER: "${AUTH_ISSUER:?set canonical AUTH_ISSUER}"
-      AUTH_ALLOW_INSECURE_HTTP_ISSUER: "${AUTH_ALLOW_INSECURE_HTTP_ISSUER:-false}"
-      AUTH_INTROSPECTION_CLIENT_ID: "${AUTH_INTROSPECTION_CLIENT_ID:-sb0rka-ir-gateway}"
-      AUTH_INTROSPECTION_CLIENT_SECRET_FILE_PATH: /run/secrets/ir-gateway.secret
-      PROJECT_SOURCE_ALLOWLISTS: '${PROJECT_SOURCE_ALLOWLISTS:-{}}'
-      LOG_FORMAT: "${LOG_FORMAT:-text}"
-      SOURCE_PT_MAXPATROL_SIEM_BASE_URL: "${SOURCE_PT_MAXPATROL_SIEM_BASE_URL:-}"
-      SOURCE_PT_MAXPATROL_SIEM_INCIDENTS_BASE_URL: "${SOURCE_PT_MAXPATROL_SIEM_INCIDENTS_BASE_URL:-}"
-      SOURCE_PT_NAD_BASE_URL: "${SOURCE_PT_NAD_BASE_URL:-}"
-      SOURCE_PT_NAD_STORE_IDS: "${SOURCE_PT_NAD_STORE_IDS:-}"
-      GATEWAY_SKIP_TLS_VERIFY: "${GATEWAY_SKIP_TLS_VERIFY:-false}"
-    volumes:
-      - ${AUTH_INTROSPECTION_CLIENT_SECRET_FILE_PATH:-../sb0rka/.local/auth-client-secrets/ir-gateway.secret}:/run/secrets/ir-gateway.secret:ro
+      - ./apps/gateway/.env
     ports:
-      - "127.0.0.1:${GATEWAY_PORT:-8091}:8091"
+      - "127.0.0.1:8091:8091"
     extra_hosts:
       - "host.docker.internal:host-gateway"
       - "localhost:host-gateway"
-      # Lab DNS may not publish these hosts; set IPs in .env when needed.
+      # Lab DNS may not publish these hosts. Compose interpolates the project
+      # .env only; these two addresses are not process settings.
       - "pt-nad.edtechlab.local:${PT_NAD_HOST_IP:-127.0.0.1}"
       - "mp-siem.edtechlab.local:${PT_SIEM_HOST_IP:-127.0.0.1}"
-    networks:
-      default: {}
-      som_selfrun:
-        aliases:
-          - gateway
-    healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8091/ping || exit 1"]
-      interval: 10s
-      timeout: 3s
-      retries: 5
-      start_period: 15s
     profiles:
       - apps
 
@@ -197,6 +87,3 @@ networks:
     ipam:
       config:
         - subnet: 172.25.0.0/16
-  som_selfrun:
-    external: true
-    name: deploy_default

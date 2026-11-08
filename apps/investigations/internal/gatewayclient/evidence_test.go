@@ -31,7 +31,7 @@ func TestEvidenceChunksReassembleEveryByte(t *testing.T) {
 		w.Write(content[offset:end])
 	}))
 	defer server.Close()
-	client := New(Config{BaseURL: server.URL})
+	client := New(Config{BaseURL: server.URL, BearerResolver: evidenceTestBearer})
 	for _, limit := range []int{0, 65536} {
 		var result []byte
 		var offset int64
@@ -85,7 +85,7 @@ func TestEvidenceClientPendingErrorAndInvalidChunk(t *testing.T) {
 		w.Header().Set("X-Evidence-EOF", "false")
 	}))
 	defer server.Close()
-	client := New(Config{BaseURL: server.URL})
+	client := New(Config{BaseURL: server.URL, BearerResolver: evidenceTestBearer})
 	_, err := client.ReadEvidenceContent(context.Background(), "aabbccddee", "token", "11111111-2222-4333-8444-555555555555", 0, 0)
 	upstream, ok := err.(*HTTPError)
 	if !ok || upstream.Code != "evidence_not_ready" {
@@ -96,3 +96,5 @@ func TestEvidenceClientPendingErrorAndInvalidChunk(t *testing.T) {
 		t.Fatal("zero-length nonfinal chunk accepted")
 	}
 }
+
+func evidenceTestBearer(_ context.Context, raw, _ string) (string, error) { return raw, nil }

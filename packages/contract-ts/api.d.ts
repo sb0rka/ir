@@ -4,6 +4,63 @@
  */
 
 export interface paths {
+    "/agent-access": {
+        parameters: {
+            query?: never;
+            header: {
+                "X-Project-ID": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        /** Read the selected project's agent access metadata */
+        get: operations["getIRAgentAccess"];
+        put?: never;
+        /** Create the project's agent access secret and return its token once */
+        post: operations["createIRAgentAccess"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/agent-access/rotate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Rotate the project's agent access secret and return its token once */
+        post: operations["rotateIRAgentAccess"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/configuration": {
+        parameters: {
+            query?: never;
+            header: {
+                "X-Project-ID": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        /** Read the selected project's IR/SOURCE_CONFIGURATION JSON */
+        get: operations["getIRConfiguration"];
+        /** Save the source array as a new IR/SOURCE_CONFIGURATION version tagged source:ir */
+        put: operations["putIRConfiguration"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/oidc/init": {
         parameters: {
             query?: never;
@@ -1682,6 +1739,44 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        AgentAccessMetadata: {
+            configured: boolean;
+            /** Format: uuid */
+            secret_id?: string;
+            /** Format: int32 */
+            version?: number;
+            prefix?: string;
+            postfix?: string;
+            /** Format: date-time */
+            created_at?: string;
+            /** Format: date-time */
+            updated_at?: string;
+        };
+        AgentAccessIssued: components["schemas"]["AgentAccessMetadata"] & {
+            /** @description Returned only by generation and rotation; stored as plaintext in Platform Secrets. */
+            token: string;
+        };
+        AgentAccessRotate: {
+            /** Format: int32 */
+            expected_version: number;
+        };
+        ConfigurationMetadata: {
+            configured: boolean;
+            /** Format: int32 */
+            version: number;
+            /** Format: date-time */
+            updated_at?: string;
+        };
+        ConfigurationDocument: components["schemas"]["ConfigurationMetadata"] & {
+            /** @description Original JSON text, preserving indentation, whitespace, key order and escapes. An absent secret returns '[]'. */
+            value: string;
+        };
+        /** @description Sources with unique nonempty names and string fields; compact UTF-8 JSON at most 64 KiB, request body at most 512 KiB. Original JSON text is preserved. The entire array replaces the previous version; an empty array clears the configuration. */
+        ConfigurationUpdate: ({
+            name: string;
+        } & {
+            [key: string]: string;
+        })[];
         InitLoginRequest: {
             app_challenge: string;
         };
@@ -2688,7 +2783,6 @@ export interface components {
             entity_group_proposals?: components["schemas"]["AgentGroupProposal"][];
             /** @description Proposed same_event/composite/sequence/correlation groups; never shared across independent roots. */
             event_group_proposals?: components["schemas"]["AgentGroupProposal"][];
-            som_issue_ids: string[];
             events: components["schemas"]["AgentEventSelection"][];
             entities: components["schemas"]["AgentEntitySelection"][];
             nodes: components["schemas"]["AgentNode"][];
@@ -3172,6 +3266,325 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    getIRAgentAccess: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-Project-ID": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current agent access metadata without the token */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentAccessMetadata"];
+                };
+            };
+            /** @description Invalid project header */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description User authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Platform consent or role permission required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Project not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Agent access or authorization unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    createIRAgentAccess: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-Project-ID": string;
+                /** @description Exact configured IR web origin */
+                Origin: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Agent access created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentAccessIssued"];
+                };
+            };
+            /** @description Invalid project header */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description User authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Platform consent or role permission required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Project not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Agent access already exists */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Agent access, configuration or authorization unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    rotateIRAgentAccess: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-Project-ID": string;
+                /** @description Exact configured IR web origin */
+                Origin: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentAccessRotate"];
+            };
+        };
+        responses: {
+            /** @description Agent access rotated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentAccessIssued"];
+                };
+            };
+            /** @description Invalid project header or expected version */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description User authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Platform consent or role permission required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Project or agent access not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Version conflict; reload the metadata before rotating */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Agent access, configuration or authorization unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    getIRConfiguration: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-Project-ID": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current configuration or an empty unsaved document */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfigurationDocument"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Configuration consent or role permission required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Project not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Stored text is not a valid IR configuration */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Authorization unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    putIRConfiguration: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-Project-ID": string;
+                Origin: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConfigurationUpdate"];
+            };
+        };
+        responses: {
+            /** @description Saved version metadata */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfigurationMetadata"];
+                };
+            };
+            /** @description Invalid source array, duplicate keys or names, or size limit exceeded */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Configuration consent or role permission required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Project not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Version conflict; reload before saving */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Authorization unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     initIRLogin: {
         parameters: {
             query?: never;

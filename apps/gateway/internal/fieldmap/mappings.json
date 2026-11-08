@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "fields": [
+    {"name":"time","type":"datetime","label":"Время события","operators":["range"]},
+    {"name":"source","type":"string","label":"Источник","operators":["in"]},
+    {"name":"host","type":"string","label":"Хост","operators":["=","in"]},
+    {"name":"ip","type":"ip","label":"IP-адрес","operators":["=","in"]}
+  ],
+  "sources": {
+    "pt-maxpatrol-siem": {
+      "time":"time", "strategy":"native",
+      "host":[{"path":"event_src.host"},{"path":"src.host"},{"path":"dst.host"}],
+      "ip":[{"path":"src.ip"},{"path":"dst.ip"},{"path":"event_src.ip"}]
+    },
+    "wazuh": {
+      "time":"timestamp", "strategy":"native",
+      "host":[{"path":"agent.name","case_insensitive":true},{"path":"data.win.system.computer","case_insensitive":true},{"path":"data.system_name","case_insensitive":true},{"path":"data.gcp.jsonPayload.vmInstanceName","case_insensitive":true}],
+      "ip":[{"path":"agent.ip"},{"path":"data.srcip"},{"path":"data.dstip"},{"path":"data.win.eventdata.ipAddress"},{"path":"data.office365.ClientIP"},{"path":"data.gcp.jsonPayload.sourceIP"},{"path":"data.aws.service.action.networkConnectionAction.remoteIpDetails.ipAddressV4"},{"path":"data.aws.service.action.awsApiCallAction.remoteIpDetails.ipAddressV4"},{"path":"data.ms-graph.ipAddress"}]
+    },
+    "pt-nad": {"time":"start/ts","strategy":"entities","host":[],"ip":[]}
+  }
+}

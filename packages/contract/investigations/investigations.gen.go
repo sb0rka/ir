@@ -331,7 +331,6 @@ type AgentResultBatch struct {
 	EventGroupProposals *[]AgentGroupProposal `json:"event_group_proposals,omitempty"`
 	Events              []AgentEventSelection `json:"events"`
 	Nodes               []AgentNode           `json:"nodes"`
-	SomIssueIds         []openapi_types.UUID  `json:"som_issue_ids"`
 }
 
 // ContextImportResult defines model for ContextImportResult.

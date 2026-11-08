@@ -1,17 +1,13 @@
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { ArrowDown, ArrowUp, ArrowUpDown, ChevronDown, ChevronUp, X } from 'lucide-react'
 import { AGGREGATES, groupCountColumn } from '../../lib/pdql'
-import { usePdqlStore } from '../../store/pdqlStore'
+import { useBuilder } from './queryBuilder'
 import { Button } from '../ui'
 import { SectionShell } from './SectionShell'
 import { SortableRow } from './SortableRow'
 
 export function GroupsSection() {
-  const query = usePdqlStore((s) => s.query)
-  const removeGroup = usePdqlStore((s) => s.removeGroup)
-  const moveGroup = usePdqlStore((s) => s.moveGroup)
-  const setGroupAggregate = usePdqlStore((s) => s.setGroupAggregate)
-  const setGroupSort = usePdqlStore((s) => s.setGroupSort)
+  const { query, removeGroup, moveGroup, setGroupAggregate, setGroupSort } = useBuilder()
   const countCol = groupCountColumn(query)
 
   return (

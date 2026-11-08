@@ -116,13 +116,13 @@ func (provider *Provider) AggregateEvents(ctx context.Context, access capability
 	if request.Limit < 1 || request.Limit > 1000 {
 		return capability.EventGroupPage{}, sourceRequestError("invalid_limit", "limit must be between 1 and 1000")
 	}
-	where, err := eventWhere(request.Entities)
+	where, err := eventQueryWhere(request.Entities, request.CommonFilter)
 	if err != nil {
 		return capability.EventGroupPage{}, err
 	}
 	query, err := buildEventAggregationQuery(request, where)
 	if err != nil {
-		return capability.EventGroupPage{}, err
+		return capability.EventGroupPage{}, eventQueryError(err)
 	}
 	response, err := provider.client.aggregateEventsWithQuery(ctx, Access{Cookie: access.Cookie}, TimeRange{From: request.TimeFrom, To: request.TimeTo}, query)
 	if err != nil {

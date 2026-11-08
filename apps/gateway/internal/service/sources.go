@@ -10,6 +10,27 @@ import (
 
 const sourceStatusTTL = 15 * time.Second
 
+// Source availability follows current project credentials and registered
+// server-owned backends. It never calls a vendor or caches plaintext.
+func (service *Service) SourceAvailable(ctx context.Context, access ProjectAccess, source string) bool {
+	provider, registered := service.registry.Provider(source)
+	if !registered || access.ProjectID == "" || access.Bearer == "" {
+		return false
+	}
+	_, err := service.loadCredentials(ctx, access, provider)
+	return err == nil
+}
+
+func (service *Service) AvailableSources(ctx context.Context, access ProjectAccess) []string {
+	available := []string{}
+	for _, source := range service.registry.Sources() {
+		if service.SourceAvailable(ctx, access, source.Code) {
+			available = append(available, source.Code)
+		}
+	}
+	return available
+}
+
 func (service *Service) Supports(sourceCode string, capabilityName domain.Capability) bool {
 	provider, ok := service.registry.Provider(sourceCode)
 	if !ok {
@@ -59,7 +80,7 @@ func (service *Service) ListSources(ctx context.Context, access ProjectAccess, a
 				return
 			}
 			status := "offline"
-			err := service.callProviderWithCredentialReload(requestCtx, access, provider, refresh, func(attemptCtx context.Context, providerAccess capability.Access) error {
+			err := service.callProvider(requestCtx, access, provider, func(attemptCtx context.Context, providerAccess capability.Access) error {
 				var innerErr error
 				status, innerErr = provider.Prober.Probe(attemptCtx, providerAccess)
 				return innerErr

@@ -7,6 +7,7 @@ import (
 
 	"github.com/sb0rka/ir/apps/gateway/internal/capability"
 	"github.com/sb0rka/ir/apps/gateway/internal/domain"
+	"github.com/sb0rka/ir/apps/gateway/internal/fieldmap"
 	"github.com/sb0rka/ir/apps/gateway/internal/registry"
 )
 
@@ -16,13 +17,15 @@ const (
 )
 
 type AggregateEventsRequest struct {
-	Sources   []string
-	TimeRange domain.TimeRange
-	Entities  []domain.EntityRef
-	Filter    string
-	GroupBy   []string
-	Sort      []capability.EventSort
-	Limit     int
+	CommonFilter   fieldmap.CommonFilter
+	FilterLanguage string
+	Sources        []string
+	TimeRange      domain.TimeRange
+	Entities       []domain.EntityRef
+	Filter         string
+	GroupBy        []string
+	Sort           []capability.EventSort
+	Limit          int
 }
 
 type AggregateEventsResult struct {
@@ -32,7 +35,12 @@ type AggregateEventsResult struct {
 }
 
 func (service *Service) AggregateEvents(ctx context.Context, access ProjectAccess, request AggregateEventsRequest) (AggregateEventsResult, error) {
-	selectedProviders, err := service.registry.Select(request.Sources, domain.CapabilityEvents)
+	normalized, err := fieldmap.Normalize(request.CommonFilter)
+	if err != nil {
+		return AggregateEventsResult{}, err
+	}
+	request.CommonFilter = normalized
+	selectedProviders, err := service.planEventQuery(request.Sources, capability.SearchEventsRequest{TimeFrom: request.TimeRange.From, TimeTo: request.TimeRange.To, Entities: request.Entities, CommonFilter: request.CommonFilter, Filter: request.Filter, FilterLanguage: request.FilterLanguage, GroupBy: request.GroupBy, Sort: request.Sort, Limit: request.Limit}, true)
 	if err != nil {
 		return AggregateEventsResult{}, err
 	}
@@ -73,13 +81,13 @@ func (service *Service) AggregateEvents(ctx context.Context, access ProjectAcces
 			callErr := service.callProvider(requestCtx, access, provider, func(attemptCtx context.Context, providerAccess capability.Access) error {
 				var innerErr error
 				page, innerErr = provider.EventAggregation.AggregateEvents(attemptCtx, providerAccess, capability.AggregateEventsRequest{
-					TimeFrom: request.TimeRange.From,
-					TimeTo:   request.TimeRange.To,
-					Entities: request.Entities,
-					Filter:   request.Filter,
-					GroupBy:  request.GroupBy,
-					Sort:     request.Sort,
-					Limit:    limit,
+					TimeFrom:     request.TimeRange.From,
+					TimeTo:       request.TimeRange.To,
+					Entities:     request.Entities,
+					CommonFilter: request.CommonFilter, FilterLanguage: request.FilterLanguage, Filter: request.Filter,
+					GroupBy: request.GroupBy,
+					Sort:    request.Sort,
+					Limit:   limit,
 				})
 				return innerErr
 			})

@@ -6,9 +6,9 @@ import {
   useSensors,
   type DragEndEvent,
 } from '@dnd-kit/core'
-import { useEffect } from 'react'
+import { useEffect, type ReactNode } from 'react'
 import { X } from 'lucide-react'
-import { usePdqlStore } from '../../store/pdqlStore'
+import { useBuilder } from './queryBuilder'
 import { Button } from '../ui'
 import { ColumnsSection } from './ColumnsSection'
 import { FieldCatalogPanel } from './FieldCatalogPanel'
@@ -16,10 +16,16 @@ import { FilterSection } from './FilterSection'
 import { GroupsSection } from './GroupsSection'
 import { PdqlPreview } from './PdqlPreview'
 
-export function PdqlBuilder({ onClose }: { onClose: () => void }) {
-  const loadFields = usePdqlStore((s) => s.loadFields)
-  const addField = usePdqlStore((s) => s.addField)
-  const reorder = usePdqlStore((s) => s.reorder)
+export function PdqlBuilder({
+  onClose,
+  heading = 'Конструктор PDQL',
+  toolbar,
+}: {
+  onClose: () => void
+  heading?: string
+  toolbar?: ReactNode
+}) {
+  const { loadFields, addField, reorder, query } = useBuilder()
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }))
 
   useEffect(() => {
@@ -47,7 +53,7 @@ export function PdqlBuilder({ onClose }: { onClose: () => void }) {
       return
     }
     if (activeData?.type === 'row' && activeData.section === 'columns' && overData?.section === 'groups') {
-      const column = usePdqlStore.getState().query.columns[activeData.index]
+      const column = query.columns[activeData.index]
       if (column?.field) addField(column.field, 'groups')
       return
     }
@@ -75,8 +81,9 @@ export function PdqlBuilder({ onClose }: { onClose: () => void }) {
         <FieldCatalogPanel />
         <div className="flex min-w-0 flex-1 flex-col">
           <div className="flex items-center justify-between gap-3 border-b border-border px-3 py-2">
-            <div className="text-sm text-fg">Конструктор PDQL</div>
+            <div className="text-sm text-fg">{heading}</div>
             <div className="flex items-center gap-2">
+              {toolbar}
               <Button
                 size="icon"
                 variant="ghost"

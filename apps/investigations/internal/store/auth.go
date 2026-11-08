@@ -10,6 +10,8 @@ import (
 type AuthDatabase interface {
 	CreateLoginSession(context.Context, model.LoginSession) error
 	LoginSessionByRefresh(context.Context, []byte) (model.LoginSession, error)
+	PreviousLoginRefresh(context.Context, []byte) (model.PreviousRefresh, error)
+	RotateLoginHandle(context.Context, string, []byte, []byte, []byte) (bool, error)
 	LoginSessionByIdentity(context.Context, string, string) (model.LoginSession, error)
 	LoginSessionByID(context.Context, string) (model.LoginSession, error)
 	ReserveLoginRefresh(context.Context, string, int64, string) (bool, error)
