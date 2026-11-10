@@ -4,14 +4,12 @@ ARG BINARY=ir-api
 
 WORKDIR /src
 
-COPY --from=core / ./community-core
 COPY packages/common/go.mod ./packages/common/
 COPY packages/contract/go.mod packages/contract/go.sum* ./packages/contract/
 COPY apps/investigations/go.mod apps/investigations/go.sum* ./apps/investigations/
 
 WORKDIR /src/apps/investigations
-RUN go mod edit -replace=github.com/sb0rka/sb0rka/packages/core=/src/community-core \
- && GOWORK=off go mod download
+RUN GOWORK=off go mod download
 
 WORKDIR /src
 COPY packages/common ./packages/common

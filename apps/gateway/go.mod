@@ -7,7 +7,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/oapi-codegen/runtime v1.6.0
 	github.com/sb0rka/ir/packages/common v0.0.0
-	github.com/sb0rka/sb0rka/packages/core v0.0.5
+	github.com/sb0rka/sb0rka/packages/core v0.0.7
 )
 
 replace github.com/sb0rka/ir/packages/common => ../../packages/common

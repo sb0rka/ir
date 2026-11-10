@@ -41,8 +41,6 @@ services:
     build:
       context: .
       dockerfile: apps/investigations/Dockerfile
-      additional_contexts:
-        core: ../sb0rka/packages/core
       args:
         BINARY: ir-api
     restart: unless-stopped
@@ -62,8 +60,6 @@ services:
     build:
       context: .
       dockerfile: apps/gateway/Dockerfile
-      additional_contexts:
-        core: ../sb0rka/packages/core
     restart: unless-stopped
     env_file:
       - ./apps/gateway/.env
