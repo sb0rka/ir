@@ -1,5 +1,6 @@
 -- Migration: 202611030001
 BEGIN;
+
 SET LOCAL search_path = :"DB_INV_SCHEMA_NAME", pg_temp;
 
 CREATE TABLE IF NOT EXISTS ir_login_sessions (
@@ -23,7 +24,6 @@ CREATE TABLE IF NOT EXISTS ir_login_sessions (
 
 CREATE UNIQUE INDEX IF NOT EXISTS uq_ir_login_sessions_previous_refresh
     ON ir_login_sessions(previous_refresh_hash) WHERE previous_refresh_hash IS NOT NULL;
-COMMIT;
 
 CREATE TABLE IF NOT EXISTS ir_login_requests (
     id UUID PRIMARY KEY,
@@ -81,4 +81,5 @@ CREATE TABLE IF NOT EXISTS ir_gateway_configurations (
 );
 
 UPDATE version_investigations SET version_num = '202611030001';
+
 COMMIT;
