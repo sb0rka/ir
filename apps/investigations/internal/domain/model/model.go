@@ -256,7 +256,7 @@ type ImportRequest struct {
 	RequireActiveHypothesis bool
 	Selection               GatewaySelection
 	Origin                  string
-	SomIssueIDs             []string
+	Actor                   string
 	Nodes                   []AgentNode
 	Edges                   []AgentEdge
 	Warnings                []string

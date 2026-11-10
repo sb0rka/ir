@@ -138,7 +138,7 @@ func TestAggregateEventsReloadsCredentialsOnce(t *testing.T) {
 	if _, err := service.AggregateEvents(context.Background(), ProjectAccess{ProjectID: "aabbccddee", Bearer: "token"}, validServiceAggregationRequest()); err != nil {
 		t.Fatalf("aggregate events: %v", err)
 	}
-	if provider.calls.Load() != 2 || secrets.calls.Load() != 2 {
+	if provider.calls.Load() != 2 || secrets.calls.Load() != 1 {
 		t.Fatalf("calls: provider=%d secrets=%d", provider.calls.Load(), secrets.calls.Load())
 	}
 }

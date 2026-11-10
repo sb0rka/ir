@@ -1,7 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import {
-  Background,
-  BackgroundVariant,
   ControlButton,
   Controls,
   MiniMap,
@@ -16,10 +14,11 @@ import {
   type NodeMouseHandler,
   type OnNodeDrag,
 } from '@xyflow/react'
-import { LayoutGrid } from 'lucide-react'
+import { LayoutGrid, RefreshCw } from 'lucide-react'
 import { useTheme } from '../theme-provider'
 import { EMPTY_LAYER_IDS } from '../../lib/hypotheses'
 import { useWorkspaceStore } from '../../state/useWorkspaceStore'
+import { useAppStore } from '../../store/appStore'
 import { SEVERITY_COLOR } from './constants'
 import { buildVisibleGraph, type GraphNodeData } from './graph-adapters'
 import { useHypothesisGraphView } from './useHypothesisGraphView'
@@ -44,6 +43,8 @@ function formatNodeCount(n: number): string {
 
 function GraphInner({ fitToken }: { fitToken: FitToken }) {
   const { resolvedAppearance } = useTheme()
+  const loadInvestigation = useAppStore((s) => s.loadInvestigation)
+  const refreshing = useAppStore((s) => s.investigationLoading)
   const {
     activeInvestigation: session,
     selection,
@@ -230,12 +231,6 @@ function GraphInner({ fitToken }: { fitToken: FitToken }) {
       colorMode={resolvedAppearance}
       style={{ width: '100%', height: '100%' }}
     >
-      <Background
-        variant={BackgroundVariant.Dots}
-        gap={18}
-        size={1}
-        color="var(--grid-dot)"
-      />
       <Controls
         showInteractive={false}
         position="top-right"
@@ -243,6 +238,17 @@ function GraphInner({ fitToken }: { fitToken: FitToken }) {
       >
         <ControlButton onClick={onArrange} title="Arrange nodes" aria-label="Arrange nodes">
           <LayoutGrid size={16} />
+        </ControlButton>
+        <ControlButton
+          onClick={() => {
+            if (session) void loadInvestigation(session.id)
+          }}
+          disabled={!session || refreshing}
+          title={refreshing ? 'Обновление…' : 'Обновить граф'}
+          aria-label="Обновить граф"
+          aria-busy={refreshing}
+        >
+          <RefreshCw size={16} className={refreshing ? 'animate-spin' : undefined} />
         </ControlButton>
       </Controls>
       <MiniMap

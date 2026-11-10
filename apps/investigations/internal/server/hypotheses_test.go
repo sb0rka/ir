@@ -227,7 +227,6 @@ func TestHypothesisHandlers(t *testing.T) {
 	agentBody := investigations.AgentResultBatch{
 		Edges: []investigations.AgentEdge{}, Entities: []investigations.AgentEntitySelection{},
 		Events: []investigations.AgentEventSelection{}, Nodes: []investigations.AgentNode{},
-		SomIssueIds: []uuid.UUID{uuid.New()},
 	}
 	if _, err := s.AddHypothesisAgentResults(ctx, investigations.AddHypothesisAgentResultsRequestObject{
 		InvestigationId: investigationID, HypothesisId: hypothesisID, Body: &agentBody,
@@ -265,7 +264,7 @@ func TestHypothesisContextHandlerAndResolvedWrites(t *testing.T) {
 		})
 	}))
 	defer gateway.Close()
-	s := &Server{db: fake, gateway: gatewayclient.New(gatewayclient.Config{BaseURL: gateway.URL, HTTPClient: gateway.Client()})}
+	s := &Server{db: fake, gateway: gatewayclient.New(gatewayclient.Config{BearerResolver: fixtureGatewayBearer, BaseURL: gateway.URL, HTTPClient: gateway.Client()})}
 	ctx := socctx.WithScope(context.Background(), socctx.Scope{ProjectID: "aabbccddee"})
 	body := investigations.ContextSelection{
 		Entities: []investigations.EntitySourceRef{}, Findings: []investigations.SourceObjectRef{}, Sessions: []investigations.SourceObjectRef{},

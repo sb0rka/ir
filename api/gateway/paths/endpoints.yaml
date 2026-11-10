@@ -5,7 +5,9 @@ info:
 servers:
   - url: .
 security:
+  - agentBearer: []
   - bearerAuth: []
+    configurationToken: []
 
 paths:
   /api/v1/endpoints/search:

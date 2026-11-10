@@ -70,10 +70,10 @@ func (service *Service) StartEvidence(ctx context.Context, access ProjectAccess,
 	}
 	service.exports[id] = entry
 	service.exportsMu.Unlock()
-	credentials, err := service.loadCredentials(ctx, access, provider, false)
+	credentials, err := service.loadCredentials(ctx, access, provider)
 	if err == nil {
 		taskCtx, cancel := context.WithTimeout(ctx, service.sourceTimeout)
-		entry.handle, err = provider.Evidence.StartEvidence(taskCtx, capability.Access{Cookie: credentials.cookie}, ref)
+		entry.handle, err = provider.Evidence.StartEvidence(taskCtx, credentials.access, ref)
 		cancel()
 	}
 	if err != nil {
@@ -99,7 +99,7 @@ func (service *Service) evidenceEntry(access ProjectAccess, id string) (*evidenc
 }
 
 // EvidenceSourceCode does not poll NAD. Transport uses it to recheck the current
-// allowlist on status and content requests, including already-ready exports.
+// credential availability on status/content requests, including ready exports.
 func (service *Service) EvidenceSourceCode(access ProjectAccess, id string) (string, error) {
 	entry, err := service.evidenceEntry(access, id)
 	if err != nil {
@@ -156,7 +156,7 @@ func (service *Service) ReadEvidence(ctx context.Context, access ProjectAccess, 
 	if !ok || provider.Evidence == nil {
 		return domain.ErrNotFound
 	}
-	credentials, err := service.loadCredentials(ctx, access, provider, false)
+	credentials, err := service.loadCredentials(ctx, access, provider)
 	if err != nil {
 		return err
 	}
@@ -164,7 +164,7 @@ func (service *Service) ReadEvidence(ctx context.Context, access ProjectAccess, 
 	// Once bytes have been sent a retry would corrupt the stream.
 	downloadCtx, cancel := context.WithDeadline(ctx, export.ExpiresAt)
 	defer cancel()
-	content, err := provider.Evidence.OpenEvidence(downloadCtx, capability.Access{Cookie: credentials.cookie}, export.Handle)
+	content, err := provider.Evidence.OpenEvidence(downloadCtx, credentials.access, export.Handle)
 	if err != nil {
 		return providerError(err)
 	}

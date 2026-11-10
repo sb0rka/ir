@@ -62,7 +62,7 @@ func TestContextImportForwardsResolve(t *testing.T) {
 					_, _ = w.Write([]byte(`{"findings":[{"ref":{"source_code":"pt-maxpatrol-siem","record_type":"siem_incident","external_id":"11111111-1111-4111-8111-111111111111","time_range":{"from":"2026-09-01T00:00:00Z","to":"2026-09-02T00:00:00Z"}},"kind":"siem_incident","title":"Incident","severity":"high","occurred_at":"2026-09-01T12:00:00Z","fetched_at":"2026-09-01T12:00:00Z"}],"events":[],"entities":[],"sessions":[],"relations":[],"resolutions":[],"source_errors":[]}`))
 				}))
 				defer gateway.Close()
-				server := &Server{gateway: gatewayclient.New(gatewayclient.Config{BaseURL: gateway.URL})}
+				server := &Server{gateway: gatewayclient.New(gatewayclient.Config{BearerResolver: fixtureGatewayBearer, BaseURL: gateway.URL})}
 				ctx := socctx.WithScope(context.Background(), socctx.Scope{ProjectID: "aabbccddee"})
 				id := uuid.New()
 				var imported model.ImportRequest
@@ -103,7 +103,7 @@ func TestContextImportForwardsWhy(t *testing.T) {
 				_, _ = w.Write([]byte(`{"findings":[{"ref":{"source_code":"pt-maxpatrol-siem","record_type":"siem_incident","external_id":"11111111-1111-4111-8111-111111111111","time_range":{"from":"2026-09-01T00:00:00Z","to":"2026-09-02T00:00:00Z"}},"kind":"siem_incident","title":"Incident","severity":"high","occurred_at":"2026-09-01T12:00:00Z","fetched_at":"2026-09-01T12:00:00Z"}],"events":[],"entities":[],"sessions":[],"relations":[],"resolutions":[],"source_errors":[]}`))
 			}))
 			defer gateway.Close()
-			server := &Server{gateway: gatewayclient.New(gatewayclient.Config{BaseURL: gateway.URL})}
+			server := &Server{gateway: gatewayclient.New(gatewayclient.Config{BearerResolver: fixtureGatewayBearer, BaseURL: gateway.URL})}
 			ctx := socctx.WithScope(context.Background(), socctx.Scope{ProjectID: "aabbccddee"})
 			id := uuid.New()
 			var imported model.ImportRequest

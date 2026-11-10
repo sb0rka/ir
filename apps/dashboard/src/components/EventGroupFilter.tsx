@@ -2,28 +2,17 @@ import { useMemo, useState } from 'react'
 import { Search, X } from 'lucide-react'
 import { emptyContextQueue, useAppStore } from '../store/appStore'
 import { hasGroupValueSelection, parseQueuePdql } from '../lib/pdql'
+import { describeEventQuery, emptyEventQuery } from '../lib/eventQuery'
+import { collapseRuleLevelGroups, ruleLevelRowSelected } from '../lib/ruleLevel'
 import { clsx } from '../lib/utils'
-import type { EventGroupItem } from '../types'
 import { Button } from './ui'
 
-const NULL_LABEL = 'Нет данных'
-
-function groupValueLabel(value: string | null | undefined): string {
-  return value == null || value === '' ? NULL_LABEL : value
-}
-
-function groupKey(values: (string | null)[]): string {
-  return JSON.stringify(values)
-}
-
-function isSelected(group: EventGroupItem, selected: (string | null)[]): boolean {
-  if (!hasGroupValueSelection(selected)) return false
-  return groupKey(group.values) === groupKey(selected)
-}
+export { ruleLevelSeverity } from '../lib/ruleLevel'
 
 export function EventGroupFilter({ investigationId }: { investigationId?: string } = {}) {
   const [query, setQuery] = useState('')
   const globalPdql = useAppStore((s) => s.queuePdql)
+  const globalEventQuery = useAppStore((s) => s.eventQuery)
   const globalSource = useAppStore((s) => s.queueSource)
   const globalGroups = useAppStore((s) => s.eventGroups)
   const globalValues = useAppStore((s) => s.groupValues)
@@ -35,22 +24,27 @@ export function EventGroupFilter({ investigationId }: { investigationId?: string
   const clearGroupSelection = useAppStore((s) => s.clearGroupSelection)
 
   const pdql = queue?.pdql ?? globalPdql
+  const eventQuery = investigationId ? (queue?.eventQuery ?? emptyEventQuery()) : globalEventQuery
   const queueSource = queue?.queueSource ?? globalSource
   const eventGroups = queue?.eventGroups ?? globalGroups
   const groupValues = queue?.groupValues ?? globalValues
   const loading = queue?.loading ?? globalLoading
   const parsed = parseQueuePdql(pdql)
-  const groupField = parsed.ok ? parsed.ast.groups[0]?.field : undefined
+  const groupField =
+    queueSource === 'events'
+      ? describeEventQuery(eventQuery).aggregateGroupBy?.[0]
+      : parsed.ok
+        ? parsed.ast.groups[0]?.field
+        : undefined
 
   const visible = queueSource === 'events' && Boolean(groupField)
+  const rows = useMemo(() => collapseRuleLevelGroups(groupField, eventGroups), [eventGroups, groupField])
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase()
-    if (!needle) return eventGroups
-    return eventGroups.filter((group) =>
-      groupValueLabel(group.values[0]).toLowerCase().includes(needle),
-    )
-  }, [eventGroups, query])
-  const maxCount = filtered.reduce((max, group) => Math.max(max, group.count), 0)
+    if (!needle) return rows
+    return rows.filter((row) => `${row.label} ${row.annotation}`.toLowerCase().includes(needle))
+  }, [query, rows])
+  const maxCount = filtered.reduce((max, row) => Math.max(max, row.count), 0)
   const selected = hasGroupValueSelection(groupValues)
 
   if (!visible) return null
@@ -96,17 +90,17 @@ export function EventGroupFilter({ investigationId }: { investigationId?: string
         {!loading && eventGroups.length === 0 && (
           <div className="px-3 py-8 text-center text-xs text-fg-dim">Нет групп по текущему запросу</div>
         )}
-        {filtered.map((group) => {
-          const value = group.values[0] ?? null
-          const label = groupValueLabel(value)
-          const active = isSelected(group, groupValues)
-          const width = maxCount > 0 ? Math.max(4, (group.count / maxCount) * 100) : 0
+        {filtered.map((row) => {
+          const active = ruleLevelRowSelected(row, groupValues)
+          const width = maxCount > 0 ? Math.max(4, (row.count / maxCount) * 100) : 0
           return (
             <button
-              key={groupKey(group.values)}
+              key={row.key}
               type="button"
-              title={label}
-              onClick={() => selectGroupValue(investigationId ?? null, value)}
+              title={row.annotation ? `${row.label} ${row.annotation}` : row.label}
+              onClick={() =>
+                selectGroupValue(investigationId ?? null, active ? (groupValues[0] ?? null) : row.selectValue)
+              }
               className={clsx(
                 'relative flex w-full flex-col gap-1 border-b border-border/60 px-3 py-2 text-left hover:bg-surface-2/80',
                 active && 'bg-surface-3/70',
@@ -120,13 +114,16 @@ export function EventGroupFilter({ investigationId }: { investigationId?: string
                 <span
                   className={clsx(
                     'min-w-0 truncate font-mono text-xs',
-                    value == null ? 'italic text-fg-dim' : 'text-fg',
+                    row.selectValue == null ? 'italic text-fg-dim' : 'text-fg',
                   )}
                 >
-                  {label}
+                  {row.label}
+                  {row.annotation && (
+                    <span className="ml-2 font-sans text-[10px] text-fg-dim">{row.annotation}</span>
+                  )}
                 </span>
                 <span className="shrink-0 font-mono text-[11px] tabular-nums text-fg-muted">
-                  {group.count.toLocaleString('ru-RU')}
+                  {row.count.toLocaleString('ru-RU')}
                 </span>
               </span>
             </button>
@@ -137,7 +134,7 @@ export function EventGroupFilter({ investigationId }: { investigationId?: string
         )}
       </div>
       <div className="border-t border-border px-3 py-1.5 text-[11px] text-fg-dim">
-        {eventGroups.length} групп
+        {rows.length} групп
         {loading && eventGroups.length > 0 ? ' · обновление…' : ''}
       </div>
     </div>

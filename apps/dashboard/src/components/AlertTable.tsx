@@ -201,10 +201,12 @@ function SelectFieldCell({
   field,
   value,
   investigationId,
+  eventSource,
 }: {
   field: string
   value: string
   investigationId?: string
+  eventSource?: string
 }) {
   const appendPdqlFilter = useAppStore((s) => s.appendPdqlFilter)
   const display = formatQueueFieldValue(field, value)
@@ -217,7 +219,7 @@ function SelectFieldCell({
           className="block w-full truncate text-left font-mono text-xs text-fg hover:underline"
           onClick={(ev) => {
             ev.stopPropagation()
-            appendPdqlFilter(investigationId ?? null, field, value)
+            appendPdqlFilter(investigationId ?? null, field, value, '=', 'and', eventSource)
           }}
         >
           {display}
@@ -358,6 +360,7 @@ function AlertRow({
           field={field}
           value={queueFieldValue(alert, field)}
           investigationId={investigationId}
+          eventSource={alert.source}
         />
       ))}
       <td className={clsx(COL_FIT, 'px-3 py-2')} title={alert.source}>

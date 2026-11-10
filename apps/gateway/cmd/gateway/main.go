@@ -9,36 +9,37 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"strconv"
 	"syscall"
 	"time"
 
 	corelog "github.com/sb0rka/sb0rka/packages/core/log"
+	corestore "github.com/sb0rka/sb0rka/packages/core/store"
 
-	"github.com/sb0rka/ir/apps/gateway/internal/adapters/proxy/maxpatrol"
-	"github.com/sb0rka/ir/apps/gateway/internal/adapters/proxy/ptnad"
+	"github.com/sb0rka/ir/apps/gateway/internal/capability"
 	"github.com/sb0rka/ir/apps/gateway/internal/config"
-	gatewayproxy "github.com/sb0rka/ir/apps/gateway/internal/proxy"
 	"github.com/sb0rka/ir/apps/gateway/internal/registry"
 	"github.com/sb0rka/ir/apps/gateway/internal/service"
+	"github.com/sb0rka/ir/apps/gateway/internal/sources"
 	httptransport "github.com/sb0rka/ir/apps/gateway/internal/transport/http"
 	"github.com/sb0rka/ir/packages/common"
+	"github.com/sb0rka/ir/packages/common/agentaccess"
 )
 
 type commonSecretResolver struct {
-	client *common.SecretsClient
+	client  *common.ConfigurationClient
+	catalog *sources.Catalog
 }
 
-func (resolver commonSecretResolver) Resolve(ctx context.Context, bearer, projectID string, names ...string) (map[string]string, error) {
-	snapshot, err := resolver.client.ResolveSnapshot(ctx, bearer, projectID, names...)
+func (resolver commonSecretResolver) Resolve(
+	ctx context.Context,
+	bearer, projectID string,
+	names ...string,
+) (map[string]capability.Access, error) {
+	snapshot, err := resolver.client.Snapshot(ctx, bearer, projectID)
 	if err != nil {
 		return nil, err
 	}
-	values := make(map[string]string, len(snapshot.Values))
-	for name, value := range snapshot.Values {
-		values[name] = value.Value
-	}
-	return values, nil
+	return resolver.catalog.ResolveCredentials(snapshot.Values, names...)
 }
 
 func main() {
@@ -49,7 +50,11 @@ func main() {
 }
 
 func run() error {
-	cfg, err := config.Load()
+	catalog, err := sources.Default()
+	if err != nil {
+		return fmt.Errorf("source catalog: %w", err)
+	}
+	cfg, err := config.Load(catalog)
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
 	}
@@ -60,24 +65,37 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	providerRegistry, err := buildRegistry(cfg)
+	providerRegistry, err := buildRegistry(catalog, cfg)
 	if err != nil {
 		return fmt.Errorf("build provider registry: %w", err)
 	}
-	var secretResolver service.SecretResolver
-	if cfg.Sb0rkaAPIBaseURL != "" {
-		client, clientErr := common.NewSecretsClient(common.SecretsConfig{
-			BaseURL:          cfg.Sb0rkaAPIBaseURL,
-			Timeout:          cfg.Server.SourceTimeout,
-			MaxResponseBytes: 1 << 20,
-		})
-		if clientErr != nil {
-			return fmt.Errorf("build Sb0rka Secrets client: %w", clientErr)
-		}
-		secretResolver = commonSecretResolver{client: client}
+	configurationClient, err := common.NewConfigurationClient(cfg.Sb0rkaAPIBaseURL)
+	if err != nil {
+		return fmt.Errorf("configuration client: %w", err)
 	}
-	gatewayService := service.New(providerRegistry, secretResolver, cfg.Server.RequestTimeout, cfg.Server.SourceTimeout)
-	handler := httptransport.NewHandler(cfg, log, gatewayService)
+	secretResolver := commonSecretResolver{client: configurationClient, catalog: catalog}
+
+	gatewayService := service.New(providerRegistry, secretResolver, cfg.Server.RequestTimeout, cfg.Server.SourceTimeout, service.WithEventPagination(cfg.CursorSigningKey, sources.ConfigurationFingerprint(cfg.Sources, sources.BuildOptions{SkipTLSVerify: cfg.SkipTLSVerify})))
+	if err := gatewayService.ValidateEventPagination(); err != nil {
+		return err
+	}
+	var options []httptransport.HandlerOption
+	if cfg.Database.URI != "" {
+		pool, err := corestore.NewPool(cfg.Database.URI, cfg.Database.MaxConns, cfg.Database.ConnMaxLifetime)
+		if err != nil {
+			return fmt.Errorf("configure agent access database: %w", err)
+		}
+		defer pool.Close()
+		if err := pool.Ping(ctx); err != nil {
+			return fmt.Errorf("connect agent access database: %w", err)
+		}
+		cipher, err := agentaccess.NewCipher(cfg.GatewayConfigurationKey)
+		if err != nil {
+			return fmt.Errorf("configure agent source encryption: %w", err)
+		}
+		options = append(options, httptransport.WithAgentAccess(agentaccess.NewRepository(pool.Pgx()), cipher))
+	}
+	handler := httptransport.NewHandler(cfg, log, gatewayService, options...)
 	server := &http.Server{
 		Addr:              net.JoinHostPort(cfg.Server.Addr, cfg.Server.Port),
 		Handler:           handler,
@@ -91,7 +109,7 @@ func run() error {
 	go func() {
 		log.Info("gateway_started",
 			"addr", server.Addr,
-			"auth_disabled", cfg.Auth.Disabled,
+			"auth_audience", "sb0rka-ir-gateway",
 			"registered_sources", len(providerRegistry.Sources()),
 		)
 		if serveErr := server.ListenAndServe(); serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) {
@@ -110,54 +128,6 @@ func run() error {
 	return server.Shutdown(shutdownCtx)
 }
 
-func buildRegistry(cfg config.Config) (*registry.Registry, error) {
-	enabled := make(map[string]bool)
-	for _, sources := range cfg.ProjectSources {
-		for source := range sources {
-			enabled[source] = true
-		}
-	}
-	providers := make([]registry.Provider, 0, len(enabled))
-	if enabled[config.PTMaxPatrolSIEM] {
-		source := cfg.Sources[config.PTMaxPatrolSIEM]
-		provider, err := maxpatrol.NewProvider(maxpatrol.ClientConfig{
-			SIEM: gatewayproxy.HTTPClientConfig{
-				BaseURL: source.BaseURL, Timeout: source.Timeout, TLSCAFile: source.TLSCAFile, SkipTLSVerify: cfg.SkipTLSVerify,
-			},
-			Incidents: gatewayproxy.HTTPClientConfig{
-				BaseURL: source.IncidentsBaseURL, Timeout: source.Timeout, TLSCAFile: source.TLSCAFile, SkipTLSVerify: cfg.SkipTLSVerify,
-			},
-		})
-		if err != nil {
-			return nil, fmt.Errorf("configure %s: %w", config.PTMaxPatrolSIEM, err)
-		}
-		providers = append(providers, provider)
-	}
-	if enabled[config.PTNAD] {
-		source := cfg.Sources[config.PTNAD]
-		transport, err := gatewayproxy.NewHTTPClient(gatewayproxy.HTTPClientConfig{
-			BaseURL: source.BaseURL, Timeout: source.Timeout, TLSCAFile: source.TLSCAFile, SkipTLSVerify: cfg.SkipTLSVerify,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("configure %s transport: %w", config.PTNAD, err)
-		}
-		client, err := ptnad.NewClient(ptnad.Config{BaseURL: source.BaseURL, HTTPClient: transport.Client})
-		if err != nil {
-			return nil, fmt.Errorf("configure %s client: %w", config.PTNAD, err)
-		}
-		storeIDs := make([]int64, 0, len(source.StoreIDs))
-		for _, value := range source.StoreIDs {
-			storeID, parseErr := strconv.ParseInt(value, 10, 64)
-			if parseErr != nil {
-				return nil, fmt.Errorf("configure %s store %q: %w", config.PTNAD, value, parseErr)
-			}
-			storeIDs = append(storeIDs, storeID)
-		}
-		provider, err := ptnad.NewProvider(client, storeIDs)
-		if err != nil {
-			return nil, fmt.Errorf("configure %s provider: %w", config.PTNAD, err)
-		}
-		providers = append(providers, provider.RegistryProvider())
-	}
-	return registry.New(providers...)
+func buildRegistry(catalog *sources.Catalog, cfg config.Config) (*registry.Registry, error) {
+	return catalog.Build(cfg.Sources, sources.BuildOptions{SkipTLSVerify: cfg.SkipTLSVerify})
 }

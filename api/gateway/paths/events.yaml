@@ -5,9 +5,30 @@ info:
 servers:
   - url: .
 security:
+  - agentBearer: []
   - bearerAuth: []
+    configurationToken: []
 
 paths:
+  /api/v1/events/fields:
+    get:
+      tags: [events]
+      summary: List project-available event query fields and languages
+      operationId: listEventFields
+      parameters:
+        - $ref: '../shared/parameters.yaml#/ProjectId'
+      responses:
+        '200':
+          description: Reviewed field vocabulary; no vendor requests are made.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventFieldsResponse'
+        '401': { $ref: '../shared/responses.yaml#/Unauthorized' }
+        '403': { $ref: '../shared/responses.yaml#/Forbidden' }
+        '500': { $ref: '../shared/responses.yaml#/InternalError' }
+        default: { $ref: '../shared/responses.yaml#/ErrorResponse' }
+
   /api/v1/events/search:
     post:
       tags: [events]
@@ -231,6 +252,98 @@ components:
           type: string
           enum: [asc, desc]
 
+    CommonEventFilter:
+      type: object
+      additionalProperties: false
+      description: Positive exact identity filters. Values within each array are OR; nonempty hosts and ips are AND. Existing entities remains an independent OR condition.
+      properties:
+        hosts:
+          type: array
+          maxItems: 100
+          items: { type: string, minLength: 1, maxLength: 253 }
+        ips:
+          type: array
+          maxItems: 100
+          items: { type: string, minLength: 1, maxLength: 253 }
+
+    EventFieldMetadata:
+      type: object
+      required: [name, type, operators, column, sort, group]
+      properties:
+        name: { type: string }
+        type: { type: string }
+        operators:
+          type: array
+          items: { type: string }
+        column: { type: boolean }
+        sort: { type: boolean }
+        group: { type: boolean }
+
+    CommonEventFieldMetadata:
+      type: object
+      required: [name, type, label, operators]
+      properties:
+        name: { type: string }
+        type: { type: string }
+        label: { type: string }
+        operators:
+          type: array
+          items: { type: string }
+
+    CommonFieldPath:
+      type: object
+      additionalProperties: false
+      required: [path]
+      properties:
+        path: { type: string }
+        case_insensitive: { type: boolean }
+
+    CommonFieldMappings:
+      type: object
+      additionalProperties: false
+      description: How common time, host and IP conditions map onto this source. Absent when the source has no field-map entry.
+      required: [time, strategy, host, ip]
+      properties:
+        time: { type: string }
+        strategy:
+          type: string
+          enum: [native, entities]
+        host:
+          type: array
+          items: { $ref: '#/components/schemas/CommonFieldPath' }
+        ip:
+          type: array
+          items: { $ref: '#/components/schemas/CommonFieldPath' }
+
+    SourceEventFields:
+      type: object
+      required: [source_code, source_name, languages, fields, common_filter, bounded]
+      properties:
+        source_code: { type: string }
+        source_name: { type: string }
+        languages:
+          type: array
+          items: { type: string }
+        fields:
+          type: array
+          items: { $ref: '#/components/schemas/EventFieldMetadata' }
+        common_filter: { type: boolean }
+        bounded: { type: boolean }
+        common_mappings:
+          $ref: '#/components/schemas/CommonFieldMappings'
+
+    EventFieldsResponse:
+      type: object
+      required: [mapping_version, common_fields, sources]
+      properties:
+        mapping_version: { type: string }
+        common_fields:
+          type: array
+          items: { $ref: '#/components/schemas/CommonEventFieldMetadata' }
+        sources:
+          type: array
+          items: { $ref: '#/components/schemas/SourceEventFields' }
+
     AggregateEventsRequest:
       type: object
       description: Filters for source-local event group counts.
@@ -252,12 +365,19 @@ components:
           description: Entity conditions; an event matches when it contains at least one listed entity.
           items:
             $ref: '../shared/schemas.yaml#/EntityRef'
+        common_filter:
+          $ref: '#/components/schemas/CommonEventFilter'
+        filter_language:
+          type: string
+          enum: [pt_pdql, wazuh_dql]
+          description: Explicit native predicate syntax and source scope. Omit for the legacy bounded predicate. Does not enable raw vendor pipelines or DSL.
         filter:
           type: string
           maxLength: 4096
           description: >-
-            Bounded source predicate without a query pipeline. Pipeline separators,
-            comments, and control characters are rejected.
+            Native predicate in the explicit filter_language, or the legacy bounded
+            predicate when no language is supplied. Discover fields and operations
+            through events/fields. Pipelines, raw DSL and control characters are rejected.
         group_by:
           type: array
           minItems: 1
@@ -346,19 +466,27 @@ components:
           description: Entity conditions; an event matches when it contains at least one listed entity.
           items:
             $ref: '../shared/schemas.yaml#/EntityRef'
+        common_filter:
+          $ref: '#/components/schemas/CommonEventFilter'
+        filter_language:
+          type: string
+          enum: [pt_pdql, wazuh_dql]
+          description: Explicit native predicate syntax and source scope. Omit for the legacy bounded predicate. Does not enable raw vendor pipelines or DSL.
         filter:
           type: string
           maxLength: 4096
           description: >-
-            Bounded source predicate without a query pipeline. Currently supported by
-            pt-maxpatrol-siem; pipeline separators and control characters are rejected.
+            Native predicate in filter_language syntax: pt_pdql for MaxPatrol,
+            wazuh_dql for the documented bounded Wazuh DQL subset. With no language,
+            uses the legacy bounded predicate. Discover fields and operations through
+            events/fields. Pipelines, raw DSL and control characters are rejected.
         columns:
           type: array
           maxItems: 64
           uniqueItems: true
           description: >-
             Allowlisted source event fields to fetch and expose through canonical event
-            fields or attributes. Currently supported by pt-maxpatrol-siem.
+            fields or attributes. Currently supported by pt-maxpatrol-siem and wazuh.
           items:
             type: string
             minLength: 1
@@ -366,7 +494,7 @@ components:
         sort:
           type: array
           maxItems: 8
-          description: Ordered source event sort rules. Currently supported by pt-maxpatrol-siem.
+          description: Ordered source event sort rules. Currently supported by pt-maxpatrol-siem and wazuh.
           items:
             $ref: '#/components/schemas/EventSort'
         group_by:
@@ -375,7 +503,7 @@ components:
           uniqueItems: true
           description: >-
             Allowlisted source fields whose selected group is searched. Currently supported
-            by pt-maxpatrol-siem.
+            by pt-maxpatrol-siem and wazuh.
           items:
             type: string
             minLength: 1
@@ -385,7 +513,7 @@ components:
           maxItems: 8
           description: >-
             Group values aligned by position with group_by. A null item selects the source
-            null group. Currently supported by pt-maxpatrol-siem.
+            null group. Currently supported by pt-maxpatrol-siem and wazuh.
           items:
             type: string
             nullable: true
@@ -398,7 +526,7 @@ components:
           description: Maximum number of events returned after merging all sources.
         cursor:
           type: string
-          description: Opaque next_cursor from the previous response with the same filters.
+          description: Opaque project-bound next_cursor from the previous response with the same filters. Event cursors expire after five minutes without continuation; start a new search on invalid_cursor.
 
     SearchEventsResponse:
       type: object

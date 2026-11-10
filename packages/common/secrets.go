@@ -139,7 +139,7 @@ func (c *SecretsClient) ResolveSnapshot(
 		} `json:"secrets"`
 	}
 	if err := c.doJSON(ctx, bearer, http.MethodGet,
-		[]string{"projects", projectID, "secrets"}, "list secrets", &listed); err != nil {
+		[]string{"projects", projectID, "secrets"}, "list secrets", nil, &listed); err != nil {
 		return SecretSnapshot{}, err
 	}
 
@@ -183,7 +183,7 @@ func (c *SecretsClient) ResolveSnapshot(
 		if err := c.doJSON(ctx, bearer, http.MethodPost, []string{
 			"projects", projectID, "resources", ref.secretID, "secret", "versions",
 			strconv.Itoa(ref.versionNo), "reveal",
-		}, "reveal secret version", &revealed); err != nil {
+		}, "reveal secret version", nil, &revealed); err != nil {
 			return SecretSnapshot{}, fmt.Errorf("resolve secret %q: %w", name, err)
 		}
 		if revealed.ProjectID != projectID || revealed.SecretID != ref.secretID || revealed.VersionNo != ref.versionNo {
@@ -228,6 +228,7 @@ func (c *SecretsClient) doJSON(
 	method string,
 	path []string,
 	op string,
+	input any,
 	out any,
 ) error {
 	joined, err := url.JoinPath(c.baseURL.String(), path...)
@@ -235,11 +236,21 @@ func (c *SecretsClient) doJSON(
 		return fmt.Errorf("%s: build url: %w", op, err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, method, joined, nil)
+	var encoded []byte
+	if input != nil {
+		encoded, err = json.Marshal(input)
+		if err != nil {
+			return fmt.Errorf("%s: invalid request", op)
+		}
+	}
+	req, err := http.NewRequestWithContext(ctx, method, joined, bytes.NewReader(encoded))
 	if err != nil {
 		return fmt.Errorf("%s: build request: %w", op, err)
 	}
 	req.Header.Set("Accept", "application/json")
+	if input != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
 	req.Header.Set("Authorization", "Bearer "+bearer)
 
 	resp, err := c.http.Do(req)

@@ -40,7 +40,8 @@ func TestInvalidNADFilterReturnsClientErrorBeforeVendorCall(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	handler := NewHandler(config.Config{Auth: config.AuthConfig{Disabled: true}, ProjectSources: map[string]map[string]bool{"aabbccddee": {"pt-nad": true}}}, slog.New(slog.NewTextHandler(io.Discard, nil)), service.New(reg, nadFilterSecrets{}, time.Second, time.Second))
+	cfg := config.Config{}
+	handler := apiHandler(newGatewayServer(cfg, slog.New(slog.NewTextHandler(io.Discard, nil)), service.New(reg, nadFilterSecrets{}, time.Second, time.Second)))
 	for _, kind := range []string{"findings", "sessions"} {
 		response := exportRequest(t, handler, "POST", "/api/v1/"+kind+"/search", "aabbccddee", `{"sources":["pt-nad"],"filter":"(host.port == 2222","time_range":{"from":"2023-06-07T21:00:00Z","to":"2023-06-08T20:59:59Z"}}`)
 		if response.Code != 400 || !strings.Contains(response.Body.String(), "invalid_request") || !strings.Contains(response.Body.String(), "NAD filter") {

@@ -176,7 +176,7 @@ export function buildVisibleGraph(args: {
     .map((e) => {
       const fromAgent = e.origin === 'agent'
       const opacity =
-        e.status === 'proposed' ? 0.45 : e.status === 'rejected' ? 0.2 : 0.85
+        e.status === 'proposed' ? 0.28 : e.status === 'rejected' ? 0.12 : 0.4
       const endpointsDimmed =
         hovering &&
         !hoveredAlertNodeIds.has(e.source_id) &&

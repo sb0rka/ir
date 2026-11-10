@@ -1,0 +1,737 @@
+openapi: 3.0.3
+info:
+  title: IR authentication and integration
+  version: 0.0.1
+servers:
+- url: /api/v1
+security:
+- bearerAuth: []
+paths:
+  /agent-access:
+    parameters:
+    - name: X-Project-ID
+      in: header
+      required: true
+      schema:
+        type: string
+    get:
+      operationId: getIRAgentAccess
+      tags: [authentication]
+      summary: Read the selected project's agent access metadata
+      responses:
+        '200':
+          description: Current agent access metadata without the token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentAccessMetadata'
+        '400':
+          description: Invalid project header
+        '401':
+          description: User authentication required
+        '403':
+          description: Platform consent or role permission required
+        '404':
+          description: Project not found
+        '503':
+          description: Agent access or authorization unavailable
+    post:
+      operationId: createIRAgentAccess
+      tags: [authentication]
+      summary: Create the project's agent access secret and return its token once
+      parameters:
+      - name: Origin
+        in: header
+        required: true
+        description: Exact configured IR web origin
+        schema:
+          type: string
+          format: uri
+      responses:
+        '201':
+          description: Agent access created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentAccessIssued'
+        '400':
+          description: Invalid project header
+        '401':
+          description: User authentication required
+        '403':
+          description: Platform consent or role permission required
+        '404':
+          description: Project not found
+        '409':
+          description: Agent access already exists
+        '503':
+          description: Agent access, configuration or authorization unavailable
+  /agent-access/rotate:
+    post:
+      operationId: rotateIRAgentAccess
+      tags: [authentication]
+      summary: Rotate the project's agent access secret and return its token once
+      parameters:
+      - name: X-Project-ID
+        in: header
+        required: true
+        schema:
+          type: string
+      - name: Origin
+        in: header
+        required: true
+        description: Exact configured IR web origin
+        schema:
+          type: string
+          format: uri
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentAccessRotate'
+      responses:
+        '200':
+          description: Agent access rotated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentAccessIssued'
+        '400':
+          description: Invalid project header or expected version
+        '401':
+          description: User authentication required
+        '403':
+          description: Platform consent or role permission required
+        '404':
+          description: Project or agent access not found
+        '409':
+          description: Version conflict; reload the metadata before rotating
+        '503':
+          description: Agent access, configuration or authorization unavailable
+  /configuration:
+    parameters:
+    - name: X-Project-ID
+      in: header
+      required: true
+      schema:
+        type: string
+    get:
+      operationId: getIRConfiguration
+      tags: [authentication]
+      summary: Read the selected project's IR/SOURCE_CONFIGURATION JSON
+      responses:
+        '200':
+          description: Current configuration or an empty unsaved document
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConfigurationDocument'
+        '401':
+          description: Authentication required
+        '403':
+          description: Configuration consent or role permission required
+        '404':
+          description: Project not found
+        '409':
+          description: Stored text is not a valid IR configuration
+        '503':
+          description: Authorization unavailable
+    put:
+      operationId: putIRConfiguration
+      tags: [authentication]
+      summary: Save the source array as a new IR/SOURCE_CONFIGURATION version tagged source:ir
+      parameters:
+      - name: Origin
+        in: header
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfigurationUpdate'
+      responses:
+        '200':
+          description: Saved version metadata
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConfigurationMetadata'
+        '400':
+          description: Invalid source array, duplicate keys or names, or size limit exceeded
+        '401':
+          description: Authentication required
+        '403':
+          description: Configuration consent or role permission required
+        '404':
+          description: Project not found
+        '409':
+          description: Version conflict; reload before saving
+        '503':
+          description: Authorization unavailable
+  /auth/oidc/init:
+    post:
+      operationId: initIRLogin
+      tags:
+      - authentication
+      summary: Start OIDC login with browser handoff binding
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthorizeResponse'
+        '400':
+          description: Invalid request
+        '401':
+          description: Authentication required
+        '403':
+          description: Consent required
+        '503':
+          description: Authentication or authorization unavailable
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InitLoginRequest'
+      parameters:
+      - name: Origin
+        in: header
+        required: true
+        description: Exact configured IR web origin
+        schema:
+          type: string
+          format: uri
+  /auth/oidc/callback:
+    get:
+      operationId: irLoginCallback
+      tags:
+      - authentication
+      summary: Consume the OIDC callback and redirect with a one-use handoff
+      responses:
+        '400':
+          description: Invalid request
+        '401':
+          description: Authentication required
+        '403':
+          description: Consent required
+        '503':
+          description: Authentication or authorization unavailable
+        '303':
+          description: Redirect to the fixed IR web URL; credentials are never included
+          headers:
+            Location:
+              schema:
+                type: string
+                format: uri
+      security: []
+      parameters:
+      - name: state
+        in: query
+        required: true
+        schema:
+          type: string
+      - name: code
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: error
+        in: query
+        required: false
+        schema:
+          type: string
+  /auth/oidc/redeem:
+    post:
+      operationId: redeemIRLogin
+      tags:
+      - authentication
+      summary: Redeem handoff and set the local HttpOnly refresh cookie
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccessTokenResponse'
+          headers:
+            Set-Cookie:
+              description: Host-only HttpOnly local refresh handle; Secure in production,
+                SameSite=Lax
+              schema:
+                type: string
+        '400':
+          description: Invalid request
+        '401':
+          description: Authentication required
+        '403':
+          description: Consent required
+        '503':
+          description: Authentication or authorization unavailable
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RedeemLoginRequest'
+      parameters:
+      - name: Origin
+        in: header
+        required: true
+        description: Exact configured IR web origin
+        schema:
+          type: string
+          format: uri
+  /auth/refresh:
+    post:
+      operationId: refreshIRSession
+      tags:
+      - authentication
+      summary: Refresh the IR session using its local cookie
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccessTokenResponse'
+          headers:
+            Set-Cookie:
+              description: Host-only HttpOnly local refresh handle; Secure in production,
+                SameSite=Lax
+              schema:
+                type: string
+        '400':
+          description: Invalid request
+        '401':
+          description: Authentication required
+        '403':
+          description: Consent required
+        '503':
+          description: Authentication or authorization unavailable
+      security:
+      - irRefresh: []
+      parameters:
+      - name: Origin
+        in: header
+        required: true
+        description: Exact configured IR web origin
+        schema:
+          type: string
+          format: uri
+  /auth/logout:
+    post:
+      operationId: logoutIRSession
+      tags:
+      - authentication
+      summary: End the current IR and Auth login session
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '400':
+          description: Invalid request
+        '401':
+          description: Authentication required
+        '403':
+          description: Consent required
+        '503':
+          description: Authentication or authorization unavailable
+      security:
+      - irRefresh: []
+      parameters:
+      - name: Origin
+        in: header
+        required: true
+        description: Exact configured IR web origin
+        schema:
+          type: string
+          format: uri
+  /auth/me:
+    get:
+      operationId: getIRProfile
+      tags:
+      - authentication
+      summary: Read the authenticated local IR profile
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthSubject'
+        '400':
+          description: Invalid request
+        '401':
+          description: Authentication required
+        '403':
+          description: Consent required
+        '503':
+          description: Authentication or authorization unavailable
+  /integrations/{integration}/connect:
+    post:
+      operationId: connectIRIntegration
+      tags:
+      - authentication
+      summary: Start separate project and scope consent
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthorizeResponse'
+        '400':
+          description: Invalid request
+        '401':
+          description: Authentication required
+        '403':
+          description: Consent required
+        '503':
+          description: Authentication or authorization unavailable
+      parameters:
+      - name: integration
+        in: path
+        required: true
+        schema:
+          type: string
+          enum:
+          - platform
+          - gateway
+      - name: Origin
+        in: header
+        required: true
+        description: Exact configured IR web origin
+        schema:
+          type: string
+          format: uri
+  /integrations/{integration}/callback:
+    get:
+      operationId: irIntegrationCallback
+      tags:
+      - authentication
+      summary: Redeem a client and session-bound consent callback
+      responses:
+        '400':
+          description: Invalid request
+        '401':
+          description: Authentication required
+        '403':
+          description: Consent required
+        '503':
+          description: Authentication or authorization unavailable
+        '303':
+          description: Redirect to the fixed IR web URL; credentials are never included
+          headers:
+            Location:
+              schema:
+                type: string
+                format: uri
+      security: []
+      parameters:
+      - name: integration
+        in: path
+        required: true
+        schema:
+          type: string
+          enum:
+          - platform
+          - gateway
+      - name: state
+        in: query
+        required: true
+        schema:
+          type: string
+      - name: code
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: error
+        in: query
+        required: false
+        schema:
+          type: string
+  /integrations/{integration}/status:
+    get:
+      operationId: irIntegrationStatus
+      tags:
+      - authentication
+      summary: Read the current grant for this integration
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IntegrationStatus'
+        '400':
+          description: Invalid request
+        '401':
+          description: Authentication required
+        '403':
+          description: Consent required
+        '503':
+          description: Authentication or authorization unavailable
+      parameters:
+      - name: integration
+        in: path
+        required: true
+        schema:
+          type: string
+          enum:
+          - platform
+          - gateway
+  /integrations/{integration}/disconnect:
+    post:
+      operationId: disconnectIRIntegration
+      tags:
+      - authentication
+      summary: Revoke this integration grant across user sessions
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '400':
+          description: Invalid request
+        '401':
+          description: Authentication required
+        '403':
+          description: Consent required
+        '503':
+          description: Authentication or authorization unavailable
+      parameters:
+      - name: integration
+        in: path
+        required: true
+        schema:
+          type: string
+          enum:
+          - platform
+          - gateway
+      - name: Origin
+        in: header
+        required: true
+        description: Exact configured IR web origin
+        schema:
+          type: string
+          format: uri
+  /platform/projects:
+    get:
+      operationId: listIRProjects
+      tags:
+      - authentication
+      summary: List projects through the delegated Platform API
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '400':
+          description: Invalid request
+        '401':
+          description: Authentication required
+        '403':
+          description: Consent required
+        '503':
+          description: Authentication or authorization unavailable
+components:
+  schemas:
+    AgentAccessMetadata:
+      type: object
+      required: [configured]
+      properties:
+        configured:
+          type: boolean
+        secret_id:
+          type: string
+          format: uuid
+        version:
+          type: integer
+          format: int32
+          minimum: 1
+        prefix:
+          type: string
+          minLength: 14
+          maxLength: 14
+        postfix:
+          type: string
+          minLength: 3
+          maxLength: 3
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    AgentAccessIssued:
+      allOf:
+      - $ref: '#/components/schemas/AgentAccessMetadata'
+      - type: object
+        required: [token]
+        properties:
+          token:
+            type: string
+            minLength: 64
+            maxLength: 64
+            pattern: '^s0_ir_agent_[A-Za-z0-9_-]{52}$'
+            description: Returned only by generation and rotation; stored as plaintext in Platform Secrets.
+    AgentAccessRotate:
+      type: object
+      additionalProperties: false
+      required: [expected_version]
+      properties:
+        expected_version:
+          type: integer
+          format: int32
+          minimum: 1
+    ConfigurationMetadata:
+      type: object
+      required: [configured, version]
+      properties:
+        configured:
+          type: boolean
+        version:
+          type: integer
+          format: int32
+          minimum: 0
+        updated_at:
+          type: string
+          format: date-time
+    ConfigurationDocument:
+      allOf:
+      - $ref: '#/components/schemas/ConfigurationMetadata'
+      - type: object
+        required: [value]
+        properties:
+          value:
+            type: string
+            description: Original JSON text, preserving indentation, whitespace, key order and escapes. An absent secret returns '[]'.
+    ConfigurationUpdate:
+      type: array
+      description: Sources with unique nonempty names and string fields; compact UTF-8 JSON at most 64 KiB, request body at most 512 KiB. Original JSON text is preserved. The entire array replaces the previous version; an empty array clears the configuration.
+      items:
+        type: object
+        required: [name]
+        properties:
+          name:
+            type: string
+            minLength: 1
+        additionalProperties:
+          type: string
+    InitLoginRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        app_challenge:
+          type: string
+          minLength: 43
+          maxLength: 43
+      required:
+      - app_challenge
+    RedeemLoginRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        handoff:
+          type: string
+          minLength: 43
+          maxLength: 43
+        app_verifier:
+          type: string
+          minLength: 43
+          maxLength: 43
+      required:
+      - handoff
+      - app_verifier
+    AuthorizeResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        authorize_url:
+          type: string
+          format: uri
+      required:
+      - authorize_url
+    AccessTokenResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        access_token:
+          type: string
+      required:
+      - access_token
+    AuthSubject:
+      type: object
+      required:
+      - subject_id
+      - kind
+      - is_active
+      - user
+      properties:
+        subject_id:
+          type: string
+          format: uuid
+        kind:
+          type: string
+          enum:
+          - user
+        is_active:
+          type: boolean
+        user:
+          type: object
+          required:
+          - user_id
+          - username
+          - email
+          properties:
+            user_id:
+              type: string
+              format: uuid
+            username:
+              type: string
+            email:
+              type: string
+            phone:
+              type: string
+    IntegrationStatus:
+      type: object
+      required:
+      - connected
+      properties:
+        connected:
+          type: boolean
+        delegation_id:
+          type: string
+          format: uuid
+        version:
+          type: integer
+          format: int64
+        audience:
+          type: string
+        scopes:
+          type: array
+          items:
+            type: string
+        project_ids:
+          type: array
+          items:
+            type: string

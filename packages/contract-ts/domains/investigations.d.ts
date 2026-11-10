@@ -309,7 +309,6 @@ export interface components {
             entity_group_proposals?: components["schemas"]["AgentGroupProposal"][];
             /** @description Proposed same_event/composite/sequence/correlation groups; never shared across independent roots. */
             event_group_proposals?: components["schemas"]["AgentGroupProposal"][];
-            som_issue_ids: string[];
             events: components["schemas"]["AgentEventSelection"][];
             entities: components["schemas"]["AgentEntitySelection"][];
             nodes: components["schemas"]["AgentNode"][];

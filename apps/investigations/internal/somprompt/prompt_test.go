@@ -9,7 +9,6 @@ func sampleContext() Context {
 	return Context{
 		ProjectID:       "abcdef1234",
 		InvestigationID: "496f2041-7949-4816-8d07-734de89d121f",
-		SomIssueID:      "11111111-1111-1111-1111-111111111111",
 	}
 }
 
@@ -68,7 +67,7 @@ func TestBuildExpandsURLsAndHeaders(t *testing.T) {
 			t.Errorf("missing %q", want)
 		}
 	}
-	for _, forbidden := range []string{"gateway_base_url", "ACCESS_KEY", "http://gateway:8091", "curl", "Bearer eyJ", `Windows accounts need \\`, "suggested time_range:"} {
+	for _, forbidden := range []string{"gateway_base_url", "ACCESS_KEY", "http://gateway:8091", "curl", "Bearer eyJ", `Windows accounts need \\`, "suggested time_range:", "som_issue", "%s"} {
 		if strings.Contains(got, forbidden) {
 			t.Errorf("prompt leaks forbidden direct-service instruction %q", forbidden)
 		}

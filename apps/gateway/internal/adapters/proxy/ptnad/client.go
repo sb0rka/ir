@@ -361,10 +361,7 @@ func cookieValue(cookieHeader, name string) (string, bool) {
 			continue
 		}
 		if strings.TrimSpace(key) == name {
-			value = strings.TrimSpace(value)
-			if value != "" {
-				return value, true
-			}
+			return strings.TrimSpace(value), true
 		}
 	}
 	return "", false

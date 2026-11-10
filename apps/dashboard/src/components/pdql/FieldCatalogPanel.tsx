@@ -1,6 +1,6 @@
 import { Search } from 'lucide-react'
 import { useRef, useState } from 'react'
-import { usePdqlStore } from '../../store/pdqlStore'
+import { useBuilder } from './queryBuilder'
 import type { ActiveSection } from '../../lib/pdql'
 import { clsx } from '../../lib/utils'
 import { FieldSearchList } from './FieldSearchList'
@@ -12,13 +12,18 @@ const MODES: { id: ActiveSection; label: string }[] = [
 ]
 
 export function FieldCatalogPanel() {
-  const fields = usePdqlStore((s) => s.fields)
-  const frozenFreq = useRef(usePdqlStore.getState().fieldFreq).current
-  const fieldsLoading = usePdqlStore((s) => s.fieldsLoading)
-  const fieldsError = usePdqlStore((s) => s.fieldsError)
-  const activeSection = usePdqlStore((s) => s.activeSection)
-  const setActiveSection = usePdqlStore((s) => s.setActiveSection)
-  const addField = usePdqlStore((s) => s.addField)
+  const builder = useBuilder()
+  const fields = builder.fields.filter((field) => {
+    if (builder.activeSection === 'columns' && field.column === false) return false
+    if (builder.activeSection === 'groups' && field.group === false) return false
+    return true
+  })
+  const frozenFreq = useRef(builder.fieldFreq).current
+  const fieldsLoading = builder.fieldsLoading
+  const fieldsError = builder.fieldsError
+  const activeSection = builder.activeSection
+  const setActiveSection = builder.setActiveSection
+  const addField = builder.addField
   const [query, setQuery] = useState('')
 
   return (

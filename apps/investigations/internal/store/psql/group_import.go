@@ -356,17 +356,17 @@ func importGroupProposalTx(ctx context.Context, tx pgx.Tx, scope model.GroupScop
 			return model.GroupImportResult{}, store.ErrUnknownReference
 		}
 		objects = append(objects, id)
-		a := model.GroupAssertion{InvestigationID: request.InvestigationID, Origin: "agent", OriginRef: strings.Join(request.SomIssueIDs, ","), Method: "agent-proposal", MethodVersion: "1", EvidenceEventIDs: evidence, ValidFrom: spec.ValidFrom, ValidTo: spec.ValidTo, Reason: p.Why}
+		a := model.GroupAssertion{InvestigationID: request.InvestigationID, Origin: "agent", OriginRef: request.Actor, Method: "agent-proposal", MethodVersion: "1", EvidenceEventIDs: evidence, ValidFrom: spec.ValidFrom, ValidTo: spec.ValidTo, Reason: p.Why}
 		g.Members = append(g.Members, model.GroupMember{ID: uuid.NewString(), ObjectID: id, Role: spec.Role, Ordinal: spec.Ordinal, Status: "proposed", Confidence: spec.Confidence, Reason: p.Why, Version: 1, Assertions: []model.GroupAssertion{a}})
 	}
 	if err := grouping.Validate(g); err != nil {
 		return model.GroupImportResult{}, groupDomainError(err)
 	}
 	hash, err := operationHash(struct {
-		Investigation, Family     string
-		Proposal                  model.GroupProposal
-		Objects, Evidence, Issues []string
-	}{request.InvestigationID, family, p, objects, evidence, request.SomIssueIDs})
+		Investigation, Family, Actor string
+		Proposal                     model.GroupProposal
+		Objects, Evidence            []string
+	}{request.InvestigationID, family, request.Actor, p, objects, evidence})
 	if err != nil {
 		return model.GroupImportResult{}, err
 	}
@@ -385,7 +385,7 @@ func importGroupProposalTx(ctx context.Context, tx pgx.Tx, scope model.GroupScop
 	if err = saveGroupTx(ctx, tx, &g); err != nil {
 		return model.GroupImportResult{}, err
 	}
-	if err = recordGroupOperationTx(ctx, tx, scope, "proposal:"+p.ProposalID, hash, "proposal", "agent:"+request.SomIssueIDs[0], p.Why, nil, []model.Group{g}); err != nil {
+	if err = recordGroupOperationTx(ctx, tx, scope, "proposal:"+p.ProposalID, hash, "proposal", "agent:"+request.Actor, p.Why, nil, []model.Group{g}); err != nil {
 		return model.GroupImportResult{}, err
 	}
 	return groupResult(g), nil

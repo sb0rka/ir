@@ -44,8 +44,8 @@ fingerprint.
 
 ## Case requests
 
-All HTTP requests require the current bearer token and `X-Project-ID`. Use only
-project-allowed sources and configured store IDs. Search fans out across those
+All HTTP requests require the current Gateway/configuration bearers and `X-Project-ID`.
+Use sources with current project credentials and configured store IDs. Search fans out across those
 stores; object refs returned by search contain the specific store.
 
 ### NAD 2.1

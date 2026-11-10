@@ -3,17 +3,17 @@ services:
     image: postgres:18
     restart: unless-stopped
     shm_size: 128mb
-    env_file:
-      - .env
     environment:
-      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
       POSTGRES_DB: investigations
+      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "55432:5432"
     volumes:
       - pgdata:/var/lib/postgresql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d investigations"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d investigations"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -21,47 +21,17 @@ services:
     profiles:
       - container-db
 
-  # Migrations
-
-  migrate-inv-schema:
-    build:
-      context: .
-      dockerfile: db/Dockerfile
-    restart: no
-    env_file:
-      - .env
-    environment:
-      POSTGRES_DB: investigations
-      POSTGRES_USER: ${DB_ADMIN_USER}
-      POSTGRES_PASSWORD: ${DB_ADMIN_PASSWORD}
-      POSTGRES_PORT: "5432"
-      DB_INV_SCHEMA_NAME: ${DB_INV_SCHEMA_NAME}
-    command:
-      - /app/migrations/investigations/007-extensions.sql
-      - /app/migrations/investigations/008-schema.sql
-    profiles:
-      - migrate
-  
-  migrate-inv:
-    build:
-      context: .
-      dockerfile: db/Dockerfile
+  migrate:
+    image: postgres:18
     depends_on:
-      migrate-inv-schema:
-        condition: service_completed_successfully
-    restart: no
-    env_file:
-      - .env
-    environment:
-      POSTGRES_DB: investigations
-      POSTGRES_USER: ${DB_ADMIN_USER}
-      POSTGRES_PASSWORD: ${DB_ADMIN_PASSWORD}
-      POSTGRES_PORT: "5432"
-      DB_INV_SCHEMA_NAME: ${DB_INV_SCHEMA_NAME}
-    command:
-      - /app/migrations/investigations/009-version.sql
-      - /app/migrations/investigations/010-initial_schema.sql
-      - /app/migrations/investigations/901-seed_reference.sql
+      postgres:
+        condition: service_healthy
+    command: ["bash", "/migrate.sh"]
+    volumes:
+      - ./db/migrations/investigations:/migrations:ro
+      - ./db/migrations/seed:/migrations-seed:ro
+      - ./deploy/dev/migrate.sh:/migrate.sh:ro
+    restart: "no"
     profiles:
       - migrate
 
@@ -71,87 +41,20 @@ services:
     build:
       context: .
       dockerfile: apps/investigations/Dockerfile
+      additional_contexts:
+        core: ../sb0rka/packages/core
       args:
         BINARY: ir-api
     restart: unless-stopped
     env_file:
-      - .env
-    environment:
-      SERVER_ADDR: "0.0.0.0"
-      SERVER_PORT: "8090"
-      SERVER_CORS_WHITELIST: "${SERVER_CORS_WHITELIST:-http://localhost:5173,http://localhost:3000}"
-      DATABASE_URI: "postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:5432/investigations?search_path=${DB_INV_SCHEMA_NAME}"
-      LOG_FORMAT: "${LOG_FORMAT:-text}"
-      SB0RKA_API_BASE_URL: "${SB0RKA_API_BASE_URL:-http://host.docker.internal:8080}"
-      # Значения — из ir/.env (см. .env.sample). Пустой SOM_API_BASE_URL выключает som-роуты.
-      SOM_API_BASE_URL: "${SOM_API_BASE_URL:-}"
-      SOM_RELAY_BASE_URL: "${SOM_RELAY_BASE_URL:-}"
-      SOM_HOST_ID: "${SOM_HOST_ID:-}"
-      SOM_REPO_ID: "${SOM_REPO_ID:-}"
-      SOM_REPO_PARENT_PATH: "${SOM_REPO_PARENT_PATH:-/tmp}"
-      SOM_REPO_FOLDER_NAME: "${SOM_REPO_FOLDER_NAME:-ir-demo}"
-      SOM_TARGET_BRANCH: "${SOM_TARGET_BRANCH:-main}"
-      SOM_EXECUTOR: "${SOM_EXECUTOR:-OPENCODE}"
-
-      GATEWAY_BASE_URL: "${GATEWAY_BASE_URL:-http://host.docker.internal:8091}"
-      # Приватный ключ общий с Auth/API; IR выводит из него публичную половину.
-      ACCESS_TOKEN_PRIVATE_KEY: "${ACCESS_TOKEN_PRIVATE_KEY:-}"
-      ACCESS_TOKEN_PRIVATE_KEY_FILE_PATH: "${ACCESS_TOKEN_PRIVATE_KEY_FILE_PATH:-}"
-      # Публичный ключ остаётся fallback для раздельной выдачи ключей.
-      ACCESS_TOKEN_PUBLIC_KEY: "${ACCESS_TOKEN_PUBLIC_KEY:-}"
-      ACCESS_TOKEN_PUBLIC_KEY_FILE_PATH: "${ACCESS_TOKEN_PUBLIC_KEY_FILE_PATH:-/keys/access_token_public_key.pem}"
-      ACCESS_TOKEN_ISSUER: "${ACCESS_TOKEN_ISSUER:-auth.local}"
-      ACCESS_TOKEN_AUDIENCE: "${ACCESS_TOKEN_AUDIENCE:-api.local}"
-      ACCESS_TOKEN_KID: "${ACCESS_TOKEN_KID:-ed25519-v1}"
-      ACCESS_TOKEN_TYP: "${ACCESS_TOKEN_TYP:-access+jwt}"
+      - ./apps/investigations/.env
     ports:
-      - "${API_PORT:-8090}:8090"
-    volumes:
-      - ./keys:/keys:ro
+      - "8090:8090"
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    networks:
-      - default
-      - som_selfrun
-    healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8090/ping || exit 1"]
-      interval: 10s
-      timeout: 3s
-      retries: 5
-    profiles:
-      - apps
-
-  openvpn:
-    build:
-      context: docker/openvpn-client
-      dockerfile: Dockerfile
-    restart: unless-stopped
-    cap_add:
-      - NET_ADMIN
-    devices:
-      - /dev/net/tun
-    volumes:
-      - ${OPENVPN_CONFIG_FILE:?set OPENVPN_CONFIG_FILE in .env}:/vpn/vpn.conf:ro
-    ports:
-      - "${GATEWAY_PORT:-8091}:8091"
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-      # Lab VPN DNS may not publish these hosts; set IPs in .env when needed.
-      - "pt-nad.edtechlab.local:${PT_NAD_HOST_IP:-127.0.0.1}"
-      - "mp-siem.edtechlab.local:${PT_SIEM_HOST_IP:-127.0.0.1}"
-    healthcheck:
-      test: ["CMD-SHELL", "ip link show tun0 >/dev/null 2>&1"]
-      interval: 10s
-      timeout: 5s
-      retries: 12
-      start_period: 45s
-    # Gateway shares this netns; join som_selfrun so selfrun can reach :8091.
-    networks:
-      default: {}
-      som_selfrun:
-        aliases:
-          - gateway
-          - openvpn
+      # SB0RKA_AUTH_BASE_URL=http://localhost:8020: reach host-published Auth from the container
+      # without remapping 127.0.0.1 (healthchecks stay on loopback).
+      - "localhost:host-gateway"
     profiles:
       - apps
 
@@ -159,42 +62,20 @@ services:
     build:
       context: .
       dockerfile: apps/gateway/Dockerfile
+      additional_contexts:
+        core: ../sb0rka/packages/core
     restart: unless-stopped
-    # Shares openvpn network namespace so outbound SIEM traffic goes through the VPN tunnel.
-    network_mode: service:openvpn
-    depends_on:
-      openvpn:
-        condition: service_healthy
     env_file:
-      - .env
-    environment:
-      SERVER_ADDR: "0.0.0.0"
-      SERVER_PORT: "${GATEWAY_PORT:-8091}"
-      SERVER_CORS_WHITELIST: "${SERVER_CORS_WHITELIST:-http://localhost:5173,http://localhost:3000}"
-      SB0RKA_API_BASE_URL: "${SB0RKA_API_BASE_URL:-http://host.docker.internal:8080}"
-      ACCESS_TOKEN_PRIVATE_KEY: "${ACCESS_TOKEN_PRIVATE_KEY:-}"
-      ACCESS_TOKEN_PRIVATE_KEY_FILE_PATH: "${ACCESS_TOKEN_PRIVATE_KEY_FILE_PATH:-}"
-      ACCESS_TOKEN_PUBLIC_KEY: "${ACCESS_TOKEN_PUBLIC_KEY:-}"
-      ACCESS_TOKEN_PUBLIC_KEY_FILE_PATH: "${ACCESS_TOKEN_PUBLIC_KEY_FILE_PATH:-/keys/access_token_public_key.pem}"
-      ACCESS_TOKEN_ISSUER: "${ACCESS_TOKEN_ISSUER:-auth.local}"
-      ACCESS_TOKEN_AUDIENCE: "${ACCESS_TOKEN_AUDIENCE:-api.local}"
-      ACCESS_TOKEN_KID: "${ACCESS_TOKEN_KID:-ed25519-v1}"
-      ACCESS_TOKEN_TYP: "${ACCESS_TOKEN_TYP:-access+jwt}"
-      PROJECT_SOURCE_ALLOWLISTS: '${PROJECT_SOURCE_ALLOWLISTS:-{}}'
-      LOG_FORMAT: "${LOG_FORMAT:-text}"
-      SOURCE_PT_MAXPATROL_SIEM_BASE_URL: "${SOURCE_PT_MAXPATROL_SIEM_BASE_URL:-}"
-      SOURCE_PT_MAXPATROL_SIEM_INCIDENTS_BASE_URL: "${SOURCE_PT_MAXPATROL_SIEM_INCIDENTS_BASE_URL:-}"
-      SOURCE_PT_NAD_BASE_URL: "${SOURCE_PT_NAD_BASE_URL:-}"
-      SOURCE_PT_NAD_STORE_IDS: "${SOURCE_PT_NAD_STORE_IDS:-}"
-      GATEWAY_SKIP_TLS_VERIFY: "${GATEWAY_SKIP_TLS_VERIFY:-false}"
-    volumes:
-      - ./keys:/keys:ro
-    healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8091/ping || exit 1"]
-      interval: 10s
-      timeout: 3s
-      retries: 5
-      start_period: 15s
+      - ./apps/gateway/.env
+    ports:
+      - "127.0.0.1:8091:8091"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+      - "localhost:host-gateway"
+      # Lab DNS may not publish these hosts. Compose interpolates the project
+      # .env only; these two addresses are not process settings.
+      - "pt-nad.edtechlab.local:${PT_NAD_HOST_IP:-127.0.0.1}"
+      - "mp-siem.edtechlab.local:${PT_SIEM_HOST_IP:-127.0.0.1}"
     profiles:
       - apps
 
@@ -206,6 +87,3 @@ networks:
     ipam:
       config:
         - subnet: 172.25.0.0/16
-  som_selfrun:
-    external: true
-    name: deploy_default

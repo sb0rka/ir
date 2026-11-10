@@ -11,7 +11,9 @@ vars:
   INVESTIGATIONS_API: api/investigations
   GATEWAY_API: api/gateway
   REDOCLY: npx --yes @redocly/cli@2.5.0
-  CODEGEN: go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@v2.8.0
+  # Deflate embedded-spec зависит от версии Go; фиксируем toolchain генератора,
+  # чтобы обновление Go сервисов не меняло байты неизменённого контракта.
+  CODEGEN: env GOWORK=off GOTOOLCHAIN=go1.26.10 go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@v2.8.0
   IMPL: go run github.com/josharian/impl@v1.5.0
   GOIMPORTS: go run golang.org/x/tools/cmd/goimports@v0.40.0
   OPENAPI_TS: npx --yes openapi-typescript@7.13.0
@@ -117,12 +119,14 @@ tasks:
       # шага, которого в `task gen` быть не должно.
       - for: sources
         cmd: >-
+          test '{{trimSuffix ".yaml" (osBase .ITEM)}}' = authentication && exit 0;
           cd {{.SERVER_DIR}} &&
           { test -s '{{trimSuffix ".yaml" (osBase .ITEM)}}.go' ||
           printf 'package server\n' > '{{trimSuffix ".yaml" (osBase .ITEM)}}.go' ; }
       # impl дописывает только отсутствующие методы, готовый код не трогает.
       - for: sources
         cmd: >-
+          test '{{trimSuffix ".yaml" (osBase .ITEM)}}' = authentication && exit 0;
           cd {{.SERVER_DIR}} && {{.IMPL}} 's *Server'
           {{.MODULE}}/{{trimSuffix ".yaml" (osBase .ITEM)}}.StrictServerInterface
           >> {{trimSuffix ".yaml" (osBase .ITEM)}}.go
@@ -246,7 +250,7 @@ tasks:
   db:migrate:
     desc: Apply investigations database migrations
     cmds:
-      - docker compose --profile migrate run --rm --build migrate-inv
+      - docker compose --profile container-db --profile migrate run --rm migrate
 
   db:down:
     desc: Stop local Postgres

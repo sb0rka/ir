@@ -92,7 +92,7 @@ export function addFilter(
     {
       id: newId('cond'),
       field,
-      op: defaultOpForType(fieldType(fields, field)),
+      op: fields.find((item) => item.name === field)?.operators?.[0] ?? defaultOpForType(fieldType(fields, field)),
       value: '',
       values: [],
       negated: false,

@@ -1,68 +1,57 @@
 import { useState } from 'react'
-import { Button } from './ui'
+import { LoaderCircle } from 'lucide-react'
 
-export function LoginPage({
-  error,
-  onLogin,
-}: {
-  error: string | null
-  onLogin: (login: string, password: string) => Promise<void>
-}) {
-  const [login, setLogin] = useState('')
-  const [password, setPassword] = useState('')
+export function LoginPage({ error, onLogin, loading = false }: { error: string | null; onLogin: () => Promise<void>; loading?: boolean }) {
   const [submitting, setSubmitting] = useState(false)
   const [localError, setLocalError] = useState<string | null>(null)
+  const pending = loading || submitting
+  const alertMessage = !submitting ? localError || error : null
 
   return (
-    <main className="flex min-h-full items-center justify-center px-4 py-10 text-fg">
-      <form
-        className="w-full max-w-sm space-y-3"
-        onSubmit={(event) => {
-          event.preventDefault()
-          if (!login.trim() || !password) return
-          setSubmitting(true)
-          setLocalError(null)
-          void onLogin(login.trim(), password)
-            .catch((reason: unknown) => {
+    <main className="grid min-h-screen place-items-center bg-surface-0 text-fg">
+      <div className="relative w-max min-w-[280px]">
+        <button
+          type="button"
+          className="inline-flex h-10 min-w-[280px] items-center justify-center whitespace-nowrap rounded-xs bg-fg/90 px-8 text-sm font-medium text-surface-0 shadow transition-colors hover:bg-fg focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-fg active:scale-[0.97] disabled:pointer-events-none disabled:opacity-50"
+          disabled={pending}
+          onClick={() => {
+            setSubmitting(true)
+            setLocalError(null)
+            void onLogin().catch((reason: unknown) => {
               setLocalError(reason instanceof Error ? reason.message : 'Не удалось войти')
+              setSubmitting(false)
             })
-            .finally(() => setSubmitting(false))
-        }}
-      >
-        <input
-          autoFocus
-          autoComplete="username"
-          aria-label="Login или email"
-          className="w-full rounded border border-border bg-surface-0 px-3 py-2 font-mono text-sm text-fg outline-none placeholder:text-fg-dim focus:border-fg/40"
-          value={login}
-          onChange={(event) => setLogin(event.target.value)}
-          placeholder="Login или email"
-        />
-        <input
-          autoComplete="current-password"
-          aria-label="Пароль"
-          className="w-full rounded border border-border bg-surface-0 px-3 py-2 font-mono text-sm text-fg outline-none placeholder:text-fg-dim focus:border-fg/40"
-          type="password"
-          value={password}
-          onChange={(event) => setPassword(event.target.value)}
-          placeholder="Пароль"
-        />
-
-        {(localError || error) && (
-          <div className="rounded border border-critical/40 bg-critical/10 px-3 py-2 text-xs text-critical">
-            {localError || error}
+          }}
+        >
+          <span className="flex items-center justify-center gap-4">
+            <span className="flex h-[15px] w-7 shrink-0 items-center justify-center">
+              {pending ? (
+                <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
+              ) : (
+                <span className="h-[15px] w-7" aria-hidden="true">
+                  <img src="https://static.sb0rka.ru/favicon-dark.svg" alt="" className="h-full w-full object-contain dark:hidden" referrerPolicy="no-referrer" />
+                  <img src="https://static.sb0rka.ru/favicon-light.svg" alt="" className="hidden h-full w-full object-contain dark:block" referrerPolicy="no-referrer" />
+                </span>
+              )}
+            </span>
+            <span className="truncate">{submitting ? 'Переход в Sb0rka...' : 'Вход с помощью Sb0rka'}</span>
+          </span>
+        </button>
+        {(loading || alertMessage) && (
+          <div className="absolute inset-x-0 top-full mt-6 space-y-2">
+            {loading && (
+              <p className="text-sm font-normal text-fg-muted" aria-live="polite">
+                Проверка сессии…
+              </p>
+            )}
+            {alertMessage && (
+              <p role="alert" className="text-sm font-normal text-critical">
+                {alertMessage}
+              </p>
+            )}
           </div>
         )}
-
-        <Button
-          className="w-full"
-          type="submit"
-          variant="primary"
-          disabled={submitting || !login.trim() || !password}
-        >
-          {submitting ? 'Вход…' : 'Войти'}
-        </Button>
-      </form>
+      </div>
     </main>
   )
 }

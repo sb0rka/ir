@@ -1,17 +1,13 @@
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { ArrowDown, ArrowUp, ArrowUpDown, ChevronDown, ChevronUp, X } from 'lucide-react'
 import { AGGREGATES, isGroupCountColumn, isGroupDimensionColumn } from '../../lib/pdql'
-import { usePdqlStore } from '../../store/pdqlStore'
+import { useBuilder } from './queryBuilder'
 import { Button } from '../ui'
 import { SectionShell } from './SectionShell'
 import { SortableRow } from './SortableRow'
 
 export function ColumnsSection() {
-  const query = usePdqlStore((s) => s.query)
-  const removeColumn = usePdqlStore((s) => s.removeColumn)
-  const setColumnAggregate = usePdqlStore((s) => s.setColumnAggregate)
-  const setColumnSort = usePdqlStore((s) => s.setColumnSort)
-  const moveColumn = usePdqlStore((s) => s.moveColumn)
+  const { query, removeColumn, setColumnAggregate, setColumnSort, moveColumn } = useBuilder()
   const grouped = query.groups.length > 0
   const visibleColumns = query.columns
     .map((column, index) => ({ column, index }))

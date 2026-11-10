@@ -184,8 +184,9 @@ export function WorkspaceSidebar({ investigationId }: { investigationId: string 
                 key={section.id}
                 type="button"
                 title={expanded ? undefined : section.title}
+                disabled={section.id === 'agent'}
                 onClick={() => setSection(selected ? null : section.id)}
-                className={railBtn(selected)}
+                className={clsx(railBtn(selected), 'disabled:pointer-events-none disabled:opacity-40')}
               >
                 <Icon className="h-4 w-4 shrink-0" />
                 {expanded ? (

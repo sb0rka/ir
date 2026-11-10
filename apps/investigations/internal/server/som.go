@@ -207,7 +207,6 @@ func (s *Server) RunSomIssue(ctx context.Context, request som.RunSomIssueRequest
 		HypothesisID:          hypothesisID,
 		HypothesisStatement:   hypothesisStatement,
 		HypothesisDescription: hypothesisDescription,
-		SomIssueID:            issue.ID,
 		TimeZone:              timeZone,
 	}
 	s.fillResolvedIssueRefs(ctx, scope.ProjectID, investigationID, issue.Title+"\n"+description, &promptContext)

@@ -1,6 +1,6 @@
 module github.com/sb0rka/ir/packages/contract
 
-go 1.25.5
+go 1.27.3
 
 require (
 	github.com/getkin/kin-openapi v0.145.0

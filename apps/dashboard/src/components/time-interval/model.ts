@@ -250,6 +250,21 @@ export function demoDayInterval(timeZone = defaultWorkingTimeZone()): TimeInterv
   return { kind: 'range', from, to }
 }
 
+/** Current calendar day, 00:00:00–23:59:59 in the given zone. */
+export function todayInterval(timeZone = defaultWorkingTimeZone(), now: Date = new Date()): TimeInterval {
+  const parts = instantToParts(now.toISOString(), timeZone)
+  const from = partsToInstant({ ...parts, hour: 0, minute: 0, second: 0 }, timeZone)
+  const to = partsToInstant({ ...parts, hour: 23, minute: 59, second: 59 }, timeZone)
+  if (!from || !to) {
+    const start = new Date(now)
+    start.setUTCHours(0, 0, 0, 0)
+    const end = new Date(now)
+    end.setUTCHours(23, 59, 59, 0)
+    return { kind: 'range', from: start.toISOString(), to: end.toISOString() }
+  }
+  return { kind: 'range', from, to }
+}
+
 export function intervalButtonLabel(value: TimeInterval, timeZone = 'UTC'): string {
   if (value.kind === 'relative' && value.live) {
     const duration = durationLabel(value.duration)

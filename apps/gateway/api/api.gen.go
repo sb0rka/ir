@@ -15,6 +15,24 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
+// Defines values for AggregateEventsRequestFilterLanguage.
+const (
+	AggregateEventsRequestFilterLanguagePtPdql   AggregateEventsRequestFilterLanguage = "pt_pdql"
+	AggregateEventsRequestFilterLanguageWazuhDql AggregateEventsRequestFilterLanguage = "wazuh_dql"
+)
+
+// Valid indicates whether the value is a known member of the AggregateEventsRequestFilterLanguage enum.
+func (e AggregateEventsRequestFilterLanguage) Valid() bool {
+	switch e {
+	case AggregateEventsRequestFilterLanguagePtPdql:
+		return true
+	case AggregateEventsRequestFilterLanguageWazuhDql:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for AnalysisStatus.
 const (
 	Completed AnalysisStatus = "completed"
@@ -66,6 +84,24 @@ func (e Capability) Valid() bool {
 	case CapabilityResponseCatalog:
 		return true
 	case CapabilitySessions:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CommonFieldMappingsStrategy.
+const (
+	Entities CommonFieldMappingsStrategy = "entities"
+	Native   CommonFieldMappingsStrategy = "native"
+)
+
+// Valid indicates whether the value is a known member of the CommonFieldMappingsStrategy enum.
+func (e CommonFieldMappingsStrategy) Valid() bool {
+	switch e {
+	case Entities:
+		return true
+	case Native:
 		return true
 	default:
 		return false
@@ -312,6 +348,24 @@ func (e ObjectResolutionStatus) Valid() bool {
 	}
 }
 
+// Defines values for SearchEventsRequestFilterLanguage.
+const (
+	SearchEventsRequestFilterLanguagePtPdql   SearchEventsRequestFilterLanguage = "pt_pdql"
+	SearchEventsRequestFilterLanguageWazuhDql SearchEventsRequestFilterLanguage = "wazuh_dql"
+)
+
+// Valid indicates whether the value is a known member of the SearchEventsRequestFilterLanguage enum.
+func (e SearchEventsRequestFilterLanguage) Valid() bool {
+	switch e {
+	case SearchEventsRequestFilterLanguagePtPdql:
+		return true
+	case SearchEventsRequestFilterLanguageWazuhDql:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for SessionSeverity.
 const (
 	SessionSeverityCritical SessionSeverity = "critical"
@@ -506,11 +560,17 @@ type AccountUserinfo struct {
 
 // AggregateEventsRequest Filters for source-local event group counts.
 type AggregateEventsRequest struct {
+	// CommonFilter Positive exact identity filters. Values within each array are OR; nonempty hosts and ips are AND. Existing entities remains an independent OR condition.
+	CommonFilter *CommonEventFilter `json:"common_filter,omitempty"`
+
 	// Entities Entity conditions; an event matches when it contains at least one listed entity.
 	Entities *[]EntityRef `json:"entities,omitempty"`
 
-	// Filter Bounded source predicate without a query pipeline. Pipeline separators, comments, and control characters are rejected.
+	// Filter Native predicate in the explicit filter_language, or the legacy bounded predicate when no language is supplied. Discover fields and operations through events/fields. Pipelines, raw DSL and control characters are rejected.
 	Filter *string `json:"filter,omitempty"`
+
+	// FilterLanguage Explicit native predicate syntax and source scope. Omit for the legacy bounded predicate. Does not enable raw vendor pipelines or DSL.
+	FilterLanguage *AggregateEventsRequestFilterLanguage `json:"filter_language,omitempty"`
 
 	// GroupBy Allowlisted source event fields whose values form each group.
 	GroupBy []string `json:"group_by"`
@@ -527,6 +587,9 @@ type AggregateEventsRequest struct {
 	// TimeRange Required occurrence-time interval.
 	TimeRange TimeRange `json:"time_range"`
 }
+
+// AggregateEventsRequestFilterLanguage Explicit native predicate syntax and source scope. Omit for the legacy bounded predicate. Does not enable raw vendor pipelines or DSL.
+type AggregateEventsRequestFilterLanguage string
 
 // AggregateEventsResponse Source-local event groups without cross-source merging.
 type AggregateEventsResponse struct {
@@ -584,6 +647,37 @@ type Artifact struct {
 
 // Capability Operation that a source can perform through the Gateway.
 type Capability string
+
+// CommonEventFieldMetadata defines model for CommonEventFieldMetadata.
+type CommonEventFieldMetadata struct {
+	Label     string   `json:"label"`
+	Name      string   `json:"name"`
+	Operators []string `json:"operators"`
+	Type      string   `json:"type"`
+}
+
+// CommonEventFilter Positive exact identity filters. Values within each array are OR; nonempty hosts and ips are AND. Existing entities remains an independent OR condition.
+type CommonEventFilter struct {
+	Hosts *[]string `json:"hosts,omitempty"`
+	Ips   *[]string `json:"ips,omitempty"`
+}
+
+// CommonFieldMappings How common time, host and IP conditions map onto this source. Absent when the source has no field-map entry.
+type CommonFieldMappings struct {
+	Host     []CommonFieldPath           `json:"host"`
+	Ip       []CommonFieldPath           `json:"ip"`
+	Strategy CommonFieldMappingsStrategy `json:"strategy"`
+	Time     string                      `json:"time"`
+}
+
+// CommonFieldMappingsStrategy defines model for CommonFieldMappings.Strategy.
+type CommonFieldMappingsStrategy string
+
+// CommonFieldPath defines model for CommonFieldPath.
+type CommonFieldPath struct {
+	CaseInsensitive *bool  `json:"case_insensitive,omitempty"`
+	Path            string `json:"path"`
+}
 
 // CorrelationDetails defines model for CorrelationDetails.
 type CorrelationDetails struct {
@@ -739,6 +833,23 @@ type Event struct {
 
 // EventSeverity Severity mapped to the Gateway scale.
 type EventSeverity string
+
+// EventFieldMetadata defines model for EventFieldMetadata.
+type EventFieldMetadata struct {
+	Column    bool     `json:"column"`
+	Group     bool     `json:"group"`
+	Name      string   `json:"name"`
+	Operators []string `json:"operators"`
+	Sort      bool     `json:"sort"`
+	Type      string   `json:"type"`
+}
+
+// EventFieldsResponse defines model for EventFieldsResponse.
+type EventFieldsResponse struct {
+	CommonFields   []CommonEventFieldMetadata `json:"common_fields"`
+	MappingVersion string                     `json:"mapping_version"`
+	Sources        []SourceEventFields        `json:"sources"`
+}
 
 // EventGroup One source-local group and its event count.
 type EventGroup struct {
@@ -1038,28 +1149,34 @@ type SearchEndpointsResponse struct {
 
 // SearchEventsRequest Filters for a normalized multi-source event search.
 type SearchEventsRequest struct {
-	// Columns Allowlisted source event fields to fetch and expose through canonical event fields or attributes. Currently supported by pt-maxpatrol-siem.
+	// Columns Allowlisted source event fields to fetch and expose through canonical event fields or attributes. Currently supported by pt-maxpatrol-siem and wazuh.
 	Columns *[]string `json:"columns,omitempty"`
 
-	// Cursor Opaque next_cursor from the previous response with the same filters.
+	// CommonFilter Positive exact identity filters. Values within each array are OR; nonempty hosts and ips are AND. Existing entities remains an independent OR condition.
+	CommonFilter *CommonEventFilter `json:"common_filter,omitempty"`
+
+	// Cursor Opaque project-bound next_cursor from the previous response with the same filters. Event cursors expire after five minutes without continuation; start a new search on invalid_cursor.
 	Cursor *string `json:"cursor,omitempty"`
 
 	// Entities Entity conditions; an event matches when it contains at least one listed entity.
 	Entities *[]EntityRef `json:"entities,omitempty"`
 
-	// Filter Bounded source predicate without a query pipeline. Currently supported by pt-maxpatrol-siem; pipeline separators and control characters are rejected.
+	// Filter Native predicate in filter_language syntax: pt_pdql for MaxPatrol, wazuh_dql for the documented bounded Wazuh DQL subset. With no language, uses the legacy bounded predicate. Discover fields and operations through events/fields. Pipelines, raw DSL and control characters are rejected.
 	Filter *string `json:"filter,omitempty"`
 
-	// GroupBy Allowlisted source fields whose selected group is searched. Currently supported by pt-maxpatrol-siem.
+	// FilterLanguage Explicit native predicate syntax and source scope. Omit for the legacy bounded predicate. Does not enable raw vendor pipelines or DSL.
+	FilterLanguage *SearchEventsRequestFilterLanguage `json:"filter_language,omitempty"`
+
+	// GroupBy Allowlisted source fields whose selected group is searched. Currently supported by pt-maxpatrol-siem and wazuh.
 	GroupBy *[]string `json:"group_by,omitempty"`
 
-	// GroupValues Group values aligned by position with group_by. A null item selects the source null group. Currently supported by pt-maxpatrol-siem.
+	// GroupValues Group values aligned by position with group_by. A null item selects the source null group. Currently supported by pt-maxpatrol-siem and wazuh.
 	GroupValues *[]*string `json:"group_values,omitempty"`
 
 	// Limit Maximum number of events returned after merging all sources.
 	Limit *int `json:"limit,omitempty"`
 
-	// Sort Ordered source event sort rules. Currently supported by pt-maxpatrol-siem.
+	// Sort Ordered source event sort rules. Currently supported by pt-maxpatrol-siem and wazuh.
 	Sort *[]EventSort `json:"sort,omitempty"`
 
 	// Sources Source codes to query; omit to use every allowed source with event search.
@@ -1068,6 +1185,9 @@ type SearchEventsRequest struct {
 	// TimeRange Required occurrence-time interval.
 	TimeRange TimeRange `json:"time_range"`
 }
+
+// SearchEventsRequestFilterLanguage Explicit native predicate syntax and source scope. Omit for the legacy bounded predicate. Does not enable raw vendor pipelines or DSL.
+type SearchEventsRequestFilterLanguage string
 
 // SearchEventsResponse Merged event page with the entities and relations needed to interpret it.
 type SearchEventsResponse struct {
@@ -1253,6 +1373,19 @@ type SourceError struct {
 	Source string `json:"source"`
 }
 
+// SourceEventFields defines model for SourceEventFields.
+type SourceEventFields struct {
+	Bounded      bool `json:"bounded"`
+	CommonFilter bool `json:"common_filter"`
+
+	// CommonMappings How common time, host and IP conditions map onto this source. Absent when the source has no field-map entry.
+	CommonMappings *CommonFieldMappings `json:"common_mappings,omitempty"`
+	Fields         []EventFieldMetadata `json:"fields"`
+	Languages      []string             `json:"languages"`
+	SourceCode     string               `json:"source_code"`
+	SourceName     string               `json:"source_name"`
+}
+
 // SourceObjectRef Stable source-owned object identity plus the bounded time window needed to resolve it again.
 type SourceObjectRef struct {
 	// ExternalId Identifier assigned by the source. The time window is not part of identity.
@@ -1355,55 +1488,61 @@ type ValidationError = ErrorEnvelope
 
 // CreateArtifactAnalysisParams defines parameters for CreateArtifactAnalysis.
 type CreateArtifactAnalysisParams struct {
-	// XProjectID Sb0rka project whose integration allowlist is used.
+	// XProjectID Selected Sb0rka project. Must match the project agent key or both delegated JWTs.
 	XProjectID ProjectId `json:"X-Project-ID"`
 }
 
 // GetArtifactAnalysisParams defines parameters for GetArtifactAnalysis.
 type GetArtifactAnalysisParams struct {
-	// XProjectID Sb0rka project whose integration allowlist is used.
+	// XProjectID Selected Sb0rka project. Must match the project agent key or both delegated JWTs.
 	XProjectID ProjectId `json:"X-Project-ID"`
 }
 
 // ResolveContextParams defines parameters for ResolveContext.
 type ResolveContextParams struct {
-	// XProjectID Sb0rka project whose integration allowlist is used.
+	// XProjectID Selected Sb0rka project. Must match the project agent key or both delegated JWTs.
 	XProjectID ProjectId `json:"X-Project-ID"`
 }
 
 // SearchEndpointsParams defines parameters for SearchEndpoints.
 type SearchEndpointsParams struct {
-	// XProjectID Sb0rka project whose integration allowlist is used.
+	// XProjectID Selected Sb0rka project. Must match the project agent key or both delegated JWTs.
 	XProjectID ProjectId `json:"X-Project-ID"`
 }
 
 // LookupEntityParams defines parameters for LookupEntity.
 type LookupEntityParams struct {
-	// XProjectID Sb0rka project whose integration allowlist is used.
+	// XProjectID Selected Sb0rka project. Must match the project agent key or both delegated JWTs.
 	XProjectID ProjectId `json:"X-Project-ID"`
 }
 
 // AggregateEventsParams defines parameters for AggregateEvents.
 type AggregateEventsParams struct {
-	// XProjectID Sb0rka project whose integration allowlist is used.
+	// XProjectID Selected Sb0rka project. Must match the project agent key or both delegated JWTs.
+	XProjectID ProjectId `json:"X-Project-ID"`
+}
+
+// ListEventFieldsParams defines parameters for ListEventFields.
+type ListEventFieldsParams struct {
+	// XProjectID Selected Sb0rka project. Must match the project agent key or both delegated JWTs.
 	XProjectID ProjectId `json:"X-Project-ID"`
 }
 
 // SearchEventsParams defines parameters for SearchEvents.
 type SearchEventsParams struct {
-	// XProjectID Sb0rka project whose integration allowlist is used.
+	// XProjectID Selected Sb0rka project. Must match the project agent key or both delegated JWTs.
 	XProjectID ProjectId `json:"X-Project-ID"`
 }
 
 // CreateEvidenceExportParams defines parameters for CreateEvidenceExport.
 type CreateEvidenceExportParams struct {
-	// XProjectID Sb0rka project whose integration allowlist is used.
+	// XProjectID Selected Sb0rka project. Must match the project agent key or both delegated JWTs.
 	XProjectID ProjectId `json:"X-Project-ID"`
 }
 
 // GetEvidenceExportParams defines parameters for GetEvidenceExport.
 type GetEvidenceExportParams struct {
-	// XProjectID Sb0rka project whose integration allowlist is used.
+	// XProjectID Selected Sb0rka project. Must match the project agent key or both delegated JWTs.
 	XProjectID ProjectId `json:"X-Project-ID"`
 }
 
@@ -1414,40 +1553,40 @@ type GetEvidenceContentParams struct {
 	// Limit Optional byte slice length for MCP; omitted streams the full content.
 	Limit *int `form:"limit,omitempty" json:"limit,omitempty"`
 
-	// XProjectID Sb0rka project whose integration allowlist is used.
+	// XProjectID Selected Sb0rka project. Must match the project agent key or both delegated JWTs.
 	XProjectID ProjectId `json:"X-Project-ID"`
 }
 
 // SearchFindingsParams defines parameters for SearchFindings.
 type SearchFindingsParams struct {
-	// XProjectID Sb0rka project whose integration allowlist is used.
+	// XProjectID Selected Sb0rka project. Must match the project agent key or both delegated JWTs.
 	XProjectID ProjectId `json:"X-Project-ID"`
 }
 
 // SearchSessionsParams defines parameters for SearchSessions.
 type SearchSessionsParams struct {
-	// XProjectID Sb0rka project whose integration allowlist is used.
+	// XProjectID Selected Sb0rka project. Must match the project agent key or both delegated JWTs.
 	XProjectID ProjectId `json:"X-Project-ID"`
 }
 
 // ListSourcesParams defines parameters for ListSources.
 type ListSourcesParams struct {
-	// Refresh Bypass cached statuses and reload current project credentials before probing.
+	// Refresh Bypass cached backend statuses. Agent credentials still come from the configuration last saved or reloaded through IR.
 	Refresh *bool `form:"refresh,omitempty" json:"refresh,omitempty"`
 
-	// XProjectID Sb0rka project whose integration allowlist is used.
+	// XProjectID Selected Sb0rka project. Must match the project agent key or both delegated JWTs.
 	XProjectID ProjectId `json:"X-Project-ID"`
 }
 
 // GetSourceAccountUserinfoParams defines parameters for GetSourceAccountUserinfo.
 type GetSourceAccountUserinfoParams struct {
-	// XProjectID Sb0rka project whose integration allowlist is used.
+	// XProjectID Selected Sb0rka project. Must match the project agent key or both delegated JWTs.
 	XProjectID ProjectId `json:"X-Project-ID"`
 }
 
 // ListResponseActionsParams defines parameters for ListResponseActions.
 type ListResponseActionsParams struct {
-	// XProjectID Sb0rka project whose integration allowlist is used.
+	// XProjectID Selected Sb0rka project. Must match the project agent key or both delegated JWTs.
 	XProjectID ProjectId `json:"X-Project-ID"`
 }
 
@@ -1457,7 +1596,7 @@ type GetFindingParams struct {
 	From           time.Time `form:"from" json:"from"`
 	To             time.Time `form:"to" json:"to"`
 
-	// XProjectID Sb0rka project whose integration allowlist is used.
+	// XProjectID Selected Sb0rka project. Must match the project agent key or both delegated JWTs.
 	XProjectID ProjectId `json:"X-Project-ID"`
 }
 
@@ -1470,7 +1609,7 @@ type GetSessionParams struct {
 	From           time.Time `form:"from" json:"from"`
 	To             time.Time `form:"to" json:"to"`
 
-	// XProjectID Sb0rka project whose integration allowlist is used.
+	// XProjectID Selected Sb0rka project. Must match the project agent key or both delegated JWTs.
 	XProjectID ProjectId `json:"X-Project-ID"`
 }
 
@@ -1521,6 +1660,9 @@ type ServerInterface interface {
 	// AggregateEvents Aggregate events into source-local groups
 	// (POST /api/v1/events/aggregate)
 	AggregateEvents(w http.ResponseWriter, r *http.Request, params AggregateEventsParams)
+	// ListEventFields List project-available event query fields and languages
+	// (GET /api/v1/events/fields)
+	ListEventFields(w http.ResponseWriter, r *http.Request, params ListEventFieldsParams)
 	// SearchEvents Search normalized events
 	// (POST /api/v1/events/search)
 	SearchEvents(w http.ResponseWriter, r *http.Request, params SearchEventsParams)
@@ -1539,7 +1681,7 @@ type ServerInterface interface {
 	// SearchSessions Search source-native network sessions
 	// (POST /api/v1/sessions/search)
 	SearchSessions(w http.ResponseWriter, r *http.Request, params SearchSessionsParams)
-	// ListSources List registered sources
+	// ListSources List available sources
 	// (GET /api/v1/sources)
 	ListSources(w http.ResponseWriter, r *http.Request, params ListSourcesParams)
 	// GetSourceAccountUserinfo Get source account userinfo
@@ -1841,6 +1983,51 @@ func (siw *ServerInterfaceWrapper) AggregateEvents(w http.ResponseWriter, r *htt
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.AggregateEvents(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListEventFields operation middleware
+func (siw *ServerInterfaceWrapper) ListEventFields(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListEventFieldsParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "X-Project-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Project-ID")]; found {
+		var XProjectID ProjectId
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Project-ID", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Project-ID", valueList[0], &XProjectID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Project-ID", Err: err})
+			return
+		}
+
+		params.XProjectID = XProjectID
+
+	} else {
+		err := fmt.Errorf("Header parameter X-Project-ID is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Project-ID", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListEventFields(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -2706,6 +2893,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/endpoints/search", wrapper.SearchEndpoints)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/sources/{source}/endpoints/{external_id}/response-actions", wrapper.ListResponseActions)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/entities/lookup", wrapper.LookupEntity)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/events/fields", wrapper.ListEventFields)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/events/search", wrapper.SearchEvents)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/events/aggregate", wrapper.AggregateEvents)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/context/resolve", wrapper.ResolveContext)

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net"
 	"net/url"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -685,15 +684,4 @@ func firstNonZero(values ...int64) int64 {
 		}
 	}
 	return 0
-}
-
-// Stable ordering makes protocol-derived entity material deterministic even if
-// a future vendor response changes array order.
-func sortEndpoints(values []Endpoint) {
-	sort.Slice(values, func(i, j int) bool {
-		if values[i].IP != values[j].IP {
-			return values[i].IP < values[j].IP
-		}
-		return values[i].Port < values[j].Port
-	})
 }

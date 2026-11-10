@@ -12,6 +12,7 @@ export {
   defaultQueueInterval,
   defaultWorkingTimeZone,
   demoDayInterval,
+  todayInterval,
   DEMO_DAY,
   durationFromMs,
   durationMs,

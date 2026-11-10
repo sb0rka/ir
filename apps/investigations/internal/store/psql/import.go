@@ -91,7 +91,7 @@ func importSelectionTx(ctx context.Context, tx pgx.Tx, request model.ImportReque
 	if request.Origin != "analyst" && request.Origin != "agent" {
 		return model.ImportStats{}, store.ErrInvalidValue
 	}
-	if request.Origin == "agent" && len(request.SomIssueIDs) == 0 {
+	if request.Origin == "agent" && strings.TrimSpace(request.Actor) == "" {
 		return model.ImportStats{}, store.ErrInvalidValue
 	}
 
@@ -557,13 +557,13 @@ func importSelectionTx(ctx context.Context, tx pgx.Tx, request model.ImportReque
 				return stats, store.ErrUnknownReference
 			}
 			eventID := eventIDs[*spec.SnapshotEventID]
-			node, inserted, err = upsertNodeTx(ctx, tx, request.InvestigationID, "event", nil, &eventID, "agent", &spec.Why, request.SomIssueIDs)
+			node, inserted, err = upsertNodeTx(ctx, tx, request.InvestigationID, "event", nil, &eventID, "agent", &spec.Why, nil)
 		} else if spec.SnapshotEntityID != nil {
 			if _, supplied := entityInput[*spec.SnapshotEntityID]; !supplied {
 				return stats, store.ErrUnknownReference
 			}
 			entityID := entityIDs[*spec.SnapshotEntityID]
-			node, inserted, err = upsertNodeTx(ctx, tx, request.InvestigationID, "entity", &entityID, nil, "agent", &spec.Why, request.SomIssueIDs)
+			node, inserted, err = upsertNodeTx(ctx, tx, request.InvestigationID, "entity", &entityID, nil, "agent", &spec.Why, nil)
 		} else if spec.EventID != nil {
 			eventID := strings.TrimSpace(*spec.EventID)
 			err = tx.QueryRow(ctx, `SELECT e.id::text
@@ -576,7 +576,7 @@ func importSelectionTx(ctx context.Context, tx pgx.Tx, request model.ImportReque
 				return stats, store.ErrUnknownReference
 			}
 			if err == nil {
-				node, inserted, err = upsertNodeTx(ctx, tx, request.InvestigationID, "event", nil, &eventID, "agent", &spec.Why, request.SomIssueIDs)
+				node, inserted, err = upsertNodeTx(ctx, tx, request.InvestigationID, "event", nil, &eventID, "agent", &spec.Why, nil)
 			}
 		} else if spec.EntityID != nil {
 			entityID := strings.TrimSpace(*spec.EntityID)
@@ -590,13 +590,10 @@ func importSelectionTx(ctx context.Context, tx pgx.Tx, request model.ImportReque
 				return stats, store.ErrUnknownReference
 			}
 			if err == nil {
-				node, inserted, err = upsertNodeTx(ctx, tx, request.InvestigationID, "entity", &entityID, nil, "agent", &spec.Why, request.SomIssueIDs)
+				node, inserted, err = upsertNodeTx(ctx, tx, request.InvestigationID, "entity", &entityID, nil, "agent", &spec.Why, nil)
 			}
 		} else {
 			node, err = graphNodeByIDTx(ctx, tx, request.ProjectID, request.InvestigationID, *spec.NodeID)
-			if err == nil {
-				err = linkNodeIssuesTx(ctx, tx, node.ID, request.SomIssueIDs)
-			}
 		}
 		if err != nil {
 			return stats, err
@@ -608,7 +605,7 @@ func importSelectionTx(ctx context.Context, tx pgx.Tx, request model.ImportReque
 		local[ref] = resolvedNode{Node: node, EventID: node.EventID, NodeType: node.NodeType}
 	}
 
-	originRef := request.SomIssueIDs[0]
+	originRef := request.Actor
 	for _, spec := range request.Edges {
 		source, sourceOK := local[spec.SourceRef]
 		target, targetOK := local[spec.TargetRef]

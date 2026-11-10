@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	coreauthctx "github.com/sb0rka/sb0rka/packages/core/transport/authctx"
 
 	"github.com/sb0rka/ir/apps/investigations/internal/domain/model"
 	"github.com/sb0rka/ir/apps/investigations/internal/gatewayclient"
@@ -185,9 +186,6 @@ func (s *Server) AddAgentResults(ctx context.Context, request investigations.Add
 	if request.Body == nil {
 		return nil, httperr.BadRequest("request body is required")
 	}
-	if len(request.Body.SomIssueIds) == 0 {
-		return nil, httperr.New(http.StatusUnprocessableEntity, httperr.CodeValidation, "som_issue_ids must not be empty")
-	}
 	if _, err := s.db.GetInvestigation(ctx, scope.ProjectID, request.InvestigationId.String()); err != nil {
 		return nil, storeError(err)
 	}
@@ -275,12 +273,10 @@ func (s *Server) commitAgentBatch(
 		ProjectID: scope.ProjectID, InvestigationID: investigationID,
 		Origin: "agent", Selection: resolved.Selection,
 	}
+	input.Actor, _ = coreauthctx.SubjectIDFromContext(ctx)
 	if hypothesisID != nil {
 		input.HypothesisID = hypothesisID
 		input.RequireActiveHypothesis = true
-	}
-	for _, id := range batch.SomIssueIds {
-		input.SomIssueIDs = append(input.SomIssueIDs, id.String())
 	}
 	nodes, skipped, err := s.agentNodesFromBatch(ctx, scope, investigationID, batch.Nodes, eventRefs, entityRefs, eventSources, entitySources, &resolved)
 	if err != nil {
@@ -1064,9 +1060,6 @@ func (s *Server) AddHypothesisAgentResults(ctx context.Context, request investig
 	}
 	if request.Body == nil {
 		return nil, httperr.BadRequest("request body is required")
-	}
-	if len(request.Body.SomIssueIds) == 0 {
-		return nil, validationError("som_issue_ids must not be empty")
 	}
 	investigationID := request.InvestigationId.String()
 	hypothesisID := request.HypothesisId.String()

@@ -231,11 +231,19 @@ func searchEventsRequest(body api.SearchEventsRequest) (service.SearchEventsRequ
 	if err != nil {
 		return service.SearchEventsRequest{}, err
 	}
+	commonFilter, err := commonFilterFromAPI(body.CommonFilter)
+	if err != nil {
+		return service.SearchEventsRequest{}, err
+	}
 	request := service.SearchEventsRequest{
-		Sources: valueOrEmpty(body.Sources), TimeFrom: timeRange.From, TimeTo: timeRange.To,
+		CommonFilter: commonFilter,
+		Sources:      valueOrEmpty(body.Sources), TimeFrom: timeRange.From, TimeTo: timeRange.To,
 		Filter: strings.TrimSpace(stringValue(body.Filter)), Columns: trimmedValues(body.Columns),
 		GroupBy: trimmedValues(body.GroupBy), GroupValues: valueOrEmpty(body.GroupValues),
 		Limit: intValue(body.Limit), Cursor: stringValue(body.Cursor),
+	}
+	if body.FilterLanguage != nil {
+		request.FilterLanguage = string(*body.FilterLanguage)
 	}
 	if err := validateEventSearchControls(request, body.GroupValues != nil); err != nil {
 		return service.SearchEventsRequest{}, err
@@ -275,10 +283,18 @@ func aggregateEventsRequest(body api.AggregateEventsRequest) (service.AggregateE
 	if err != nil {
 		return service.AggregateEventsRequest{}, err
 	}
+	commonFilter, err := commonFilterFromAPI(body.CommonFilter)
+	if err != nil {
+		return service.AggregateEventsRequest{}, err
+	}
 	request := service.AggregateEventsRequest{
-		Sources: valueOrEmpty(body.Sources), TimeRange: timeRange,
+		CommonFilter: commonFilter,
+		Sources:      valueOrEmpty(body.Sources), TimeRange: timeRange,
 		Filter: strings.TrimSpace(stringValue(body.Filter)), GroupBy: trimmedValues(&body.GroupBy),
 		Limit: intValue(body.Limit),
+	}
+	if body.FilterLanguage != nil {
+		request.FilterLanguage = string(*body.FilterLanguage)
 	}
 	if len(request.Filter) > 4096 || strings.ContainsAny(request.Filter, "|;\r\n\x00") ||
 		strings.Contains(request.Filter, "--") || strings.Contains(request.Filter, "/*") || strings.Contains(request.Filter, "*/") {

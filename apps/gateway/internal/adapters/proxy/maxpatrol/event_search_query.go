@@ -80,6 +80,16 @@ func buildEventSearchQuery(request capability.SearchEventsRequest, entityWhere s
 		}
 	}
 
+	for _, tie := range []capability.EventSort{{Field: "time", Direction: "desc"}, {Field: "uuid", Direction: "asc"}} {
+		found := false
+		for _, rule := range sortRules {
+			found = found || rule.Field == tie.Field
+		}
+		if !found {
+			sortRules = append(sortRules, tie)
+		}
+	}
+
 	groupBy, err := validateEventFields("group_by", request.GroupBy, allowed)
 	if err != nil {
 		return eventSearchQuery{}, err

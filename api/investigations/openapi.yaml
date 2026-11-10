@@ -12,6 +12,8 @@ security:
   - bearerAuth: []
 
 tags:
+  - name: authentication
+    description: OIDC sessions, integration consent and project agent access.
   - name: groups
     description: Entity and event groups isolated to one root investigation and its descendants.
   - name: investigations
@@ -35,11 +37,18 @@ tags:
 
 components:
   securitySchemes:
+    irRefresh:
+      type: apiKey
+      in: cookie
+      name: __Host-ir_refresh
+      description: Host-only opaque IR refresh handle (ir_refresh in HTTP development); Origin must match the configured web origin.
     bearerAuth:
       type: http
       scheme: bearer
-      bearerFormat: JWT
       description: >-
-        Access token issued by sb0rka auth and validated with the issuer,
-        audience, key id, and token type configured in the environment.
-        X-Project-ID selects the mandatory project scope.
+        Auth-issued Ed25519 at+jwt access token for the sb0rka-ir audience,
+        or a project agent token beginning with s0_ir_agent_. User JWTs require
+        a local login session, consent and current project RBAC. Agent tokens
+        are checked against the project's active digest and cannot manage
+        configuration, agent access or OIDC sessions.
+        X-Project-ID selects an authorized project; it does not grant access.

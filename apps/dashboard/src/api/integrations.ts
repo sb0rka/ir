@@ -24,8 +24,10 @@ export interface ProjectSource {
 export async function listProjectSources(
   projectId: string,
   refresh = false,
+  signal?: AbortSignal,
 ): Promise<ProjectSource[]> {
   const { data, error, response } = await gatewayClient.GET('/api/v1/sources', {
+    signal,
     params: {
       header: { 'X-Project-ID': projectId },
       query: { refresh },

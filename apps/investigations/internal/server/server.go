@@ -61,7 +61,7 @@ func encodeCursor(at time.Time, id string) string {
 	return base64.RawURLEncoding.EncodeToString(raw)
 }
 
-var _ transport.API = (*Server)(nil)
+var _ transport.DomainAPI = (*Server)(nil)
 
 func New(
 	db store.Database,

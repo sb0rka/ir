@@ -78,7 +78,9 @@ paths:
         default:
           $ref: '#/components/responses/ErrorResponse'
       security:
+        - agentBearer: []
         - bearerAuth: []
+          configurationToken: []
   /api/v1/artifact-analyses:
     post:
       tags:
@@ -117,7 +119,9 @@ paths:
         default:
           $ref: '#/components/responses/ErrorResponse'
       security:
+        - agentBearer: []
         - bearerAuth: []
+          configurationToken: []
   /api/v1/artifact-analyses/{analysis_id}:
     get:
       tags:
@@ -157,7 +161,9 @@ paths:
         default:
           $ref: '#/components/responses/ErrorResponse'
       security:
+        - agentBearer: []
         - bearerAuth: []
+          configurationToken: []
   /api/v1/endpoints/search:
     post:
       tags:
@@ -198,7 +204,9 @@ paths:
         default:
           $ref: '#/components/responses/ErrorResponse'
       security:
+        - agentBearer: []
         - bearerAuth: []
+          configurationToken: []
   /api/v1/sources/{source}/endpoints/{external_id}/response-actions:
     get:
       tags:
@@ -249,7 +257,9 @@ paths:
         default:
           $ref: '#/components/responses/ErrorResponse'
       security:
+        - agentBearer: []
         - bearerAuth: []
+          configurationToken: []
   /api/v1/entities/lookup:
     post:
       tags:
@@ -290,7 +300,36 @@ paths:
         default:
           $ref: '#/components/responses/ErrorResponse'
       security:
+        - agentBearer: []
         - bearerAuth: []
+          configurationToken: []
+  /api/v1/events/fields:
+    get:
+      tags:
+        - events
+      summary: List project-available event query fields and languages
+      operationId: listEventFields
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      responses:
+        '200':
+          description: Reviewed field vocabulary; no vendor requests are made.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventFieldsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+      security:
+        - agentBearer: []
+        - bearerAuth: []
+          configurationToken: []
   /api/v1/events/search:
     post:
       tags:
@@ -331,7 +370,9 @@ paths:
         default:
           $ref: '#/components/responses/ErrorResponse'
       security:
+        - agentBearer: []
         - bearerAuth: []
+          configurationToken: []
   /api/v1/events/aggregate:
     post:
       tags:
@@ -372,7 +413,9 @@ paths:
         default:
           $ref: '#/components/responses/ErrorResponse'
       security:
+        - agentBearer: []
         - bearerAuth: []
+          configurationToken: []
   /api/v1/context/resolve:
     post:
       tags:
@@ -414,7 +457,9 @@ paths:
         default:
           $ref: '#/components/responses/ErrorResponse'
       security:
+        - agentBearer: []
         - bearerAuth: []
+          configurationToken: []
   /api/v1/evidence/exports:
     post:
       tags:
@@ -450,7 +495,9 @@ paths:
         default:
           $ref: '#/components/responses/ErrorResponse'
       security:
+        - agentBearer: []
         - bearerAuth: []
+          configurationToken: []
   /api/v1/evidence/exports/{export_id}:
     get:
       tags:
@@ -476,7 +523,9 @@ paths:
         default:
           $ref: '#/components/responses/ErrorResponse'
       security:
+        - agentBearer: []
         - bearerAuth: []
+          configurationToken: []
   /api/v1/evidence/exports/{export_id}/content:
     get:
       tags:
@@ -535,7 +584,9 @@ paths:
         default:
           $ref: '#/components/responses/ErrorResponse'
       security:
+        - agentBearer: []
         - bearerAuth: []
+          configurationToken: []
   /api/v1/findings/search:
     post:
       tags:
@@ -572,7 +623,9 @@ paths:
         default:
           $ref: '#/components/responses/ErrorResponse'
       security:
+        - agentBearer: []
         - bearerAuth: []
+          configurationToken: []
   /api/v1/sources/{source}/findings/{kind}/{external_id}:
     get:
       tags:
@@ -646,7 +699,9 @@ paths:
         default:
           $ref: '#/components/responses/ErrorResponse'
       security:
+        - agentBearer: []
         - bearerAuth: []
+          configurationToken: []
   /healthz:
     get:
       tags:
@@ -709,7 +764,9 @@ paths:
         default:
           $ref: '#/components/responses/ErrorResponse'
       security:
+        - agentBearer: []
         - bearerAuth: []
+          configurationToken: []
   /api/v1/sources/{source}/sessions/{external_id}:
     get:
       tags:
@@ -775,15 +832,21 @@ paths:
         default:
           $ref: '#/components/responses/ErrorResponse'
       security:
+        - agentBearer: []
         - bearerAuth: []
+          configurationToken: []
   /api/v1/sources:
     get:
       tags:
         - sources
-      summary: List registered sources
+      summary: List available sources
       description: >-
-        Returns project-allowed sources and probes every configured backend or
-        store through a short cache.
+        Returns server-configured sources with usable project credentials. User
+        requests read the current Platform configuration; agent requests use the
+        encrypted copy synchronized by IR on save or reload. Missing or invalid
+        credentials exclude a source without a vendor call. Authorization and
+        availability are checked on every request; backend status probes use a
+        short cache.
       operationId: listSources
       parameters:
         - $ref: '#/components/parameters/ProjectId'
@@ -791,14 +854,14 @@ paths:
           in: query
           required: false
           description: >-
-            Bypass cached statuses and reload current project credentials before
-            probing.
+            Bypass cached backend statuses. Agent credentials still come from
+            the configuration last saved or reloaded through IR.
           schema:
             type: boolean
             default: false
       responses:
         '200':
-          description: Registered sources.
+          description: Sources available to the selected project.
           content:
             application/json:
               schema:
@@ -809,8 +872,8 @@ paths:
                   items:
                     type: array
                     description: >-
-                      External security products registered for use through the
-                      Gateway.
+                      Server-configured security products with usable
+                      credentials for this project.
                     items:
                       $ref: '#/components/schemas/Source'
         '401':
@@ -822,14 +885,38 @@ paths:
         default:
           $ref: '#/components/responses/ErrorResponse'
       security:
+        - agentBearer: []
         - bearerAuth: []
+          configurationToken: []
 components:
   securitySchemes:
+    agentBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: s0_ir_agent_
+      description: >-
+        Project agent key, exactly 64 characters starting with s0_ir_agent_. The
+        active SHA-256 digest and X-Project-ID are checked in the IR database on
+        every request. Source configuration is decrypted from the local project
+        copy; no user session, introspection or configuration token is required.
+        Never forwarded to vendors.
+    configurationToken:
+      type: apiKey
+      in: header
+      name: X-IR-Config-Token
+      description: >-
+        Required only with the user Gateway JWT. Backend-supplied Bearer JWT for
+        sb0rka-api with exactly secrets.read (metadata) and secrets.reveal
+        (value). Its user, session, client and actor must match the Gateway JWT.
+        Never forwarded to vendors.
     bearerAuth:
       type: http
       scheme: bearer
       bearerFormat: JWT
-      description: Sb0rka access token passed as `Bearer <token>`.
+      description: >-
+        User path. Auth-issued delegated access JWT for sb0rka-ir-gateway, with
+        ir.gateway.use, project restrictions and live introspection. Requires
+        configurationToken. Browser clients call Gateway through ir-api.
   schemas:
     AccountUserinfo:
       type: object
@@ -1463,6 +1550,152 @@ components:
           enum:
             - asc
             - desc
+    CommonEventFilter:
+      type: object
+      additionalProperties: false
+      description: >-
+        Positive exact identity filters. Values within each array are OR;
+        nonempty hosts and ips are AND. Existing entities remains an independent
+        OR condition.
+      properties:
+        hosts:
+          type: array
+          maxItems: 100
+          items:
+            type: string
+            minLength: 1
+            maxLength: 253
+        ips:
+          type: array
+          maxItems: 100
+          items:
+            type: string
+            minLength: 1
+            maxLength: 253
+    EventFieldMetadata:
+      type: object
+      required:
+        - name
+        - type
+        - operators
+        - column
+        - sort
+        - group
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+        operators:
+          type: array
+          items:
+            type: string
+        column:
+          type: boolean
+        sort:
+          type: boolean
+        group:
+          type: boolean
+    CommonEventFieldMetadata:
+      type: object
+      required:
+        - name
+        - type
+        - label
+        - operators
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+        label:
+          type: string
+        operators:
+          type: array
+          items:
+            type: string
+    CommonFieldPath:
+      type: object
+      additionalProperties: false
+      required:
+        - path
+      properties:
+        path:
+          type: string
+        case_insensitive:
+          type: boolean
+    CommonFieldMappings:
+      type: object
+      additionalProperties: false
+      description: >-
+        How common time, host and IP conditions map onto this source. Absent
+        when the source has no field-map entry.
+      required:
+        - time
+        - strategy
+        - host
+        - ip
+      properties:
+        time:
+          type: string
+        strategy:
+          type: string
+          enum:
+            - native
+            - entities
+        host:
+          type: array
+          items:
+            $ref: '#/components/schemas/CommonFieldPath'
+        ip:
+          type: array
+          items:
+            $ref: '#/components/schemas/CommonFieldPath'
+    SourceEventFields:
+      type: object
+      required:
+        - source_code
+        - source_name
+        - languages
+        - fields
+        - common_filter
+        - bounded
+      properties:
+        source_code:
+          type: string
+        source_name:
+          type: string
+        languages:
+          type: array
+          items:
+            type: string
+        fields:
+          type: array
+          items:
+            $ref: '#/components/schemas/EventFieldMetadata'
+        common_filter:
+          type: boolean
+        bounded:
+          type: boolean
+        common_mappings:
+          $ref: '#/components/schemas/CommonFieldMappings'
+    EventFieldsResponse:
+      type: object
+      required:
+        - mapping_version
+        - common_fields
+        - sources
+      properties:
+        mapping_version:
+          type: string
+        common_fields:
+          type: array
+          items:
+            $ref: '#/components/schemas/CommonEventFieldMetadata'
+        sources:
+          type: array
+          items:
+            $ref: '#/components/schemas/SourceEventFields'
     AggregateEventsRequest:
       type: object
       description: Filters for source-local event group counts.
@@ -1488,12 +1721,25 @@ components:
             listed entity.
           items:
             $ref: '#/components/schemas/EntityRef'
+        common_filter:
+          $ref: '#/components/schemas/CommonEventFilter'
+        filter_language:
+          type: string
+          enum:
+            - pt_pdql
+            - wazuh_dql
+          description: >-
+            Explicit native predicate syntax and source scope. Omit for the
+            legacy bounded predicate. Does not enable raw vendor pipelines or
+            DSL.
         filter:
           type: string
           maxLength: 4096
           description: >-
-            Bounded source predicate without a query pipeline. Pipeline
-            separators, comments, and control characters are rejected.
+            Native predicate in the explicit filter_language, or the legacy
+            bounded predicate when no language is supplied. Discover fields and
+            operations through events/fields. Pipelines, raw DSL and control
+            characters are rejected.
         group_by:
           type: array
           minItems: 1
@@ -1590,12 +1836,25 @@ components:
             listed entity.
           items:
             $ref: '#/components/schemas/EntityRef'
+        common_filter:
+          $ref: '#/components/schemas/CommonEventFilter'
+        filter_language:
+          type: string
+          enum:
+            - pt_pdql
+            - wazuh_dql
+          description: >-
+            Explicit native predicate syntax and source scope. Omit for the
+            legacy bounded predicate. Does not enable raw vendor pipelines or
+            DSL.
         filter:
           type: string
           maxLength: 4096
           description: >-
-            Bounded source predicate without a query pipeline. Currently
-            supported by pt-maxpatrol-siem; pipeline separators and control
+            Native predicate in filter_language syntax: pt_pdql for MaxPatrol,
+            wazuh_dql for the documented bounded Wazuh DQL subset. With no
+            language, uses the legacy bounded predicate. Discover fields and
+            operations through events/fields. Pipelines, raw DSL and control
             characters are rejected.
         columns:
           type: array
@@ -1604,7 +1863,7 @@ components:
           description: >-
             Allowlisted source event fields to fetch and expose through
             canonical event fields or attributes. Currently supported by
-            pt-maxpatrol-siem.
+            pt-maxpatrol-siem and wazuh.
           items:
             type: string
             minLength: 1
@@ -1614,7 +1873,7 @@ components:
           maxItems: 8
           description: >-
             Ordered source event sort rules. Currently supported by
-            pt-maxpatrol-siem.
+            pt-maxpatrol-siem and wazuh.
           items:
             $ref: '#/components/schemas/EventSort'
         group_by:
@@ -1623,7 +1882,7 @@ components:
           uniqueItems: true
           description: >-
             Allowlisted source fields whose selected group is searched.
-            Currently supported by pt-maxpatrol-siem.
+            Currently supported by pt-maxpatrol-siem and wazuh.
           items:
             type: string
             minLength: 1
@@ -1633,7 +1892,8 @@ components:
           maxItems: 8
           description: >-
             Group values aligned by position with group_by. A null item selects
-            the source null group. Currently supported by pt-maxpatrol-siem.
+            the source null group. Currently supported by pt-maxpatrol-siem and
+            wazuh.
           items:
             type: string
             nullable: true
@@ -1646,7 +1906,10 @@ components:
           description: Maximum number of events returned after merging all sources.
         cursor:
           type: string
-          description: Opaque next_cursor from the previous response with the same filters.
+          description: >-
+            Opaque project-bound next_cursor from the previous response with the
+            same filters. Event cursors expire after five minutes without
+            continuation; start a new search on invalid_cursor.
     SearchEventsResponse:
       type: object
       description: >-
@@ -2412,7 +2675,9 @@ components:
       name: X-Project-ID
       in: header
       required: true
-      description: Sb0rka project whose integration allowlist is used.
+      description: >-
+        Selected Sb0rka project. Must match the project agent key or both
+        delegated JWTs.
       schema:
         type: string
         pattern: ^[a-f0-9]{10,12}$
